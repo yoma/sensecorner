@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>DateSense — Jouw persoonlijke dating coach</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#1a1a1a;display:flex;justify-content:center;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+:root{--r:#AE0000;--rl:#FFF5F5;--g:#F8F9FA;--b:#E5E5E5;--m:#888;--t:#1A1A1A}
+
+/* Phone shell */
+.phone{width:390px;height:844px;background:#fff;border-radius:44px;overflow:hidden;border:10px solid #111;position:relative;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+@media(max-height:900px){.phone{height:calc(100vh - 20px);border-radius:30px}}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;padding:16px 20px 8px;gap:6px;flex-shrink:0;background:#fff}
+.topbar-title{flex:1;font-size:14px;font-weight:600;text-align:center;color:var(--t)}
+.ico{width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none}
+
+/* Logo bar */
+.logobar{display:flex;align-items:center;gap:12px;padding:4px 20px 12px;background:#fff;flex-shrink:0;border-bottom:1px solid var(--b)}
+.avatar{width:50px;height:50px;border-radius:25px;overflow:hidden;flex-shrink:0;border:2px solid var(--b);background:#eee;display:flex;align-items:center;justify-content:center}
+.brand{font-size:24px;font-weight:800;color:var(--t);letter-spacing:-0.5px;line-height:1}
+.brand span.dot{color:var(--r)}
+.tagline{font-size:11px;color:var(--r);font-style:italic;margin-top:2px}
+
+/* Profile bar */
+.profbar{display:flex;align-items:center;gap:8px;padding:10px 20px;background:#fff;border-bottom:1px solid var(--b);flex-shrink:0}
+.pdot{width:8px;height:8px;border-radius:4px;background:var(--r);flex-shrink:0}
+.pname{flex:1;font-size:14px;font-weight:500;color:var(--t)}
+.pswitch{font-size:13px;color:var(--r);cursor:pointer;font-weight:500;background:none;border:none}
+
+/* Main scroll area */
+.main{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
+
+/* Props section */
+.props-wrap{padding:12px 20px 0;flex-shrink:0}
+.prop{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.pn{width:90px;font-size:12px;color:#333;flex-shrink:0}
+.track{flex:1;height:5px;background:var(--b);border-radius:3px;overflow:hidden}
+.fill{height:100%;background:var(--r);border-radius:3px;transition:width .7s cubic-bezier(.4,0,.2,1)}
+.pct{width:34px;font-size:11px;color:var(--r);font-weight:700;text-align:right}
+
+/* Hint */
+.hint{font-size:11px;color:#aaa;text-align:center;line-height:1.6;padding:8px 20px 10px;font-style:italic;border-bottom:1px solid var(--b);flex-shrink:0}
+
+/* Chat */
+.chat{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+.msg-ai{display:flex;flex-direction:column;gap:4px}
+.bbl-ai{background:var(--rl);border:1px solid #FFD5D5;border-radius:14px 14px 14px 4px;padding:12px 14px;font-size:13px;color:#333;line-height:1.6;max-width:90%}
+.bbl-ai .sender{font-size:10px;font-weight:700;color:var(--r);margin-bottom:5px;letter-spacing:.8px}
+.msg-user{display:flex;justify-content:flex-end}
+.bbl-user{background:var(--r);border-radius:14px 14px 4px 14px;padding:12px 14px;font-size:13px;color:#fff;line-height:1.6;max-width:90%}
+
+/* Segments */
+.seg-wrap{background:#fff;border-radius:8px;padding:10px 12px;margin-top:8px;border:1px solid #EEE;font-size:13px;line-height:2.1}
+.seg{border-radius:3px;padding:2px 5px;cursor:pointer;display:inline}
+.seg-own{background:#BBDEFB;color:#0D47A1}
+.seg-contact{background:#FFE0B2;color:#BF360C}
+.seg-legend{font-size:10px;color:#aaa;margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
+.seg-legend span{padding:1px 8px;border-radius:3px}
+
+/* Action buttons */
+.ai-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.aa{padding:8px 14px;border-radius:18px;font-size:12px;border:none;cursor:pointer;font-family:inherit;font-weight:600;transition:opacity .15s}
+.aa:active{opacity:.8}
+.aa.r{background:var(--r);color:#fff}
+.aa.g{background:var(--g);color:#555;border:1px solid var(--b)}
+
+/* Typing indicator */
+.typing{display:flex;align-items:center;gap:5px;padding:12px 14px;background:var(--rl);border:1px solid #FFD5D5;border-radius:14px;width:fit-content}
+.typing span{width:7px;height:7px;border-radius:4px;background:var(--r);animation:bounce .9s infinite}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+
+/* Input bar */
+.inputbar{display:flex;align-items:center;gap:9px;padding:10px 16px;background:#fff;border-top:1px solid var(--b);flex-shrink:0}
+.inputfield{flex:1;background:var(--g);border:none;border-radius:22px;padding:10px 16px;font-size:13px;color:#333;outline:none;font-family:inherit}
+.inputfield::placeholder{color:#bbb}
+.rnd{width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;border:none;transition:transform .1s}
+.rnd:active{transform:scale(.92)}
+.rnd.gr{background:var(--g)}
+.rnd.rd{background:var(--r)}
+
+/* Bottom nav */
+.nav{background:#fff;border-top:1px solid var(--b);display:flex;padding:8px 0 24px;flex-shrink:0}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);transition:color .15s;background:none;border:none}
+.tab.active{color:var(--r)}
+.tab svg{width:21px;height:21px}
+.tab span{font-size:9px;font-weight:600;letter-spacing:.3px}
+
+/* Drawer */
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:50;display:none;cursor:pointer}
+.overlay.show{display:block}
+.drawer{position:absolute;top:0;left:0;width:80%;height:100%;background:#fff;z-index:51;padding:24px 22px;transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto}
+.drawer.open{transform:translateX(0)}
+.drow{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid #F0F0F0;cursor:pointer}
+.drow:active{background:#FAFAFA}
+.badge{background:#F0F0F0;border-radius:10px;padding:2px 9px;font-size:11px;color:var(--m);font-weight:600}
+.dlabel{font-size:10px;font-weight:700;color:var(--m);text-transform:uppercase;letter-spacing:1.1px;margin:16px 0 8px}
+.dlabel:first-child{margin-top:0}
+
+/* Home screen */
+.home-wrap{padding:8px 20px 24px}
+.mic-btn{width:114px;height:114px;border-radius:57px;background:var(--r);display:flex;align-items:center;justify-content:center;margin:12px auto 8px;cursor:pointer;border:none;transition:transform .1s,box-shadow .1s;box-shadow:0 8px 24px rgba(174,0,0,.3)}
+.mic-btn:active{transform:scale(.95);box-shadow:0 4px 12px rgba(174,0,0,.3)}
+.home-sub{font-size:13px;color:var(--m);text-align:center;line-height:1.6;margin-bottom:18px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.btn-r{width:100%;padding:16px 10px;border-radius:13px;border:none;font-size:13px;font-weight:700;cursor:pointer;text-align:center;font-family:inherit;background:var(--r);color:#fff;transition:opacity .15s}
+.btn-r:active{opacity:.85}
+.btn-g{width:100%;padding:16px 10px;border-radius:13px;border:none;font-size:13px;font-weight:500;cursor:pointer;text-align:center;font-family:inherit;background:var(--g);color:#333}
+.sh{font-size:10px;font-weight:700;color:var(--m);text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px}
+.ncard{border-radius:12px;padding:13px 15px;background:var(--g);margin-bottom:9px;border-left:4px solid #999}
+.ncard.s{border-left-color:var(--r)}
+.ncard.a{border-left-color:#E07800}
+.ncard.c{border-left-color:#0066CC}
+.ncat{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:3px}
+.ncard.s .ncat{color:var(--r)}
+.ncard.a .ncat{color:#E07800}
+.ncard.c .ncat{color:#0066CC}
+.ntext{font-size:13px;color:#333;line-height:1.5}
+.nlink{font-size:12px;color:var(--r);margin-top:5px;cursor:pointer;display:block}
+
+/* Senses screen */
+.srow{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--b);cursor:pointer}
+.sdot{width:9px;height:9px;border-radius:5px;background:var(--r);flex-shrink:0}
+
+/* OWN screen */
+.mood-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
+.mbtn{padding:9px 14px;border-radius:20px;background:var(--g);border:1px solid var(--b);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}
+.mbtn.on{background:#FFE8E8;color:var(--r);border-color:#FFD5D5;font-weight:600}
+.cat-row{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;background:var(--g);border-radius:11px;margin-bottom:9px;cursor:pointer}
+
+/* Comparison screen */
+.cmp-row{display:flex;gap:3px;margin-bottom:4px;align-items:stretch}
+.cmp-label{flex:2;font-size:12px;color:#555;padding:10px 10px;background:#FAFAFA;border-radius:8px 0 0 8px;display:flex;align-items:center}
+.cmp-val{flex:1;font-size:12px;text-align:center;padding:10px 6px;display:flex;align-items:center;justify-content:center}
+.cmp-val.t1{background:#FFF5F5;border-radius:0}
+.cmp-val.t2{background:#F5F5FF;border-radius:0 8px 8px 0}
+
+/* API key screen */
+.apikey-wrap{padding:30px 24px}
+.apikey-wrap h2{font-size:18px;font-weight:700;color:var(--t);margin-bottom:8px}
+.apikey-wrap p{font-size:13px;color:#666;line-height:1.6;margin-bottom:20px}
+.apikey-input{width:100%;padding:12px 16px;border:1.5px solid var(--b);border-radius:12px;font-size:13px;font-family:inherit;outline:none;color:var(--t);margin-bottom:12px}
+.apikey-input:focus{border-color:var(--r)}
+.apikey-btn{width:100%;padding:15px;background:var(--r);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.apikey-note{font-size:11px;color:#aaa;margin-top:12px;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="phone" id="app">
+
+  <!-- Overlay + Drawer -->
+  <div class="overlay" id="ovl" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div style="font-size:18px;font-weight:800;color:var(--t);margin-bottom:2px">Mijn Senses</div>
+    <div style="font-size:12px;color:var(--r);margin-bottom:18px">Alle dossiers &amp; gesprekken</div>
+    <div class="dlabel">Persoonlijk</div>
+    <div class="drow" onclick="selectProfile('OWN Sense')"><div style="width:9px;height:9px;border-radius:5px;background:var(--r)"></div><div style="flex:1;font-size:14px;font-weight:500">OWN Sense</div><div class="badge">21</div></div>
+    <div class="dlabel">Contacten</div>
+    <div class="drow" onclick="selectProfile('EliseSense')"><div style="width:9px;height:9px;border-radius:5px;background:var(--r)"></div><div style="flex:1;font-size:14px;font-weight:500">EliseSense</div><div class="badge">5</div></div>
+    <div class="drow" onclick="selectProfile('TomSense')"><div style="width:9px;height:9px;border-radius:5px;background:var(--r)"></div><div style="flex:1;font-size:14px;font-weight:500">TomSense</div><div class="badge">12</div></div>
+    <div class="drow" onclick="selectProfile('LisaSense')"><div style="width:9px;height:9px;border-radius:5px;background:var(--r)"></div><div style="flex:1;font-size:14px;font-weight:500">LisaSense</div><div class="badge">8</div></div>
+    <div class="drow" onclick="selectProfile('Ann-SofieSense')"><div style="width:9px;height:9px;border-radius:5px;background:var(--r)"></div><div style="flex:1;font-size:14px;font-weight:500">Ann-SofieSense</div><div class="badge">3</div></div>
+    <div class="dlabel">Acties</div>
+    <div class="drow" onclick="closeDrawer();showNewSense()"><div style="width:9px;height:9px;border-radius:5px;border:2px solid var(--r)"></div><div style="font-size:14px;color:var(--r);font-weight:600">+ Nieuw Sense aanmaken</div></div>
+  </div>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <button class="ico" id="btnBack" onclick="goHome()" style="visibility:hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.5" width="20" height="20"><polyline points="15,18 9,12 15,6"/></svg>
+    </button>
+    <div class="topbar-title" id="pageTitle">Home</div>
+    <button class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="18" height="18"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
+    <button class="ico" onclick="goScreen('apikey')"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+
+  <!-- Logo bar -->
+  <div class="logobar">
+    <div class="avatar">
+      <svg width="50" height="50" viewBox="0 0 50 50"><rect width="50" height="50" fill="#E0E0E0"/><circle cx="25" cy="19" r="10" fill="#BDBDBD"/><ellipse cx="25" cy="42" rx="17" ry="12" fill="#BDBDBD"/></svg>
+    </div>
+    <div>
+      <div class="brand">Date<span>Sense</span><span class="dot">.</span></div>
+      <div class="tagline">Jouw persoonlijke dating coach</div>
+    </div>
+  </div>
+
+  <!-- Profile bar (vertel screen only) -->
+  <div class="profbar" id="profbar" style="display:none">
+    <button class="ico" onclick="openDrawer()" style="width:20px;height:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="18" height="18"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <div class="pdot"></div>
+    <div class="pname" id="pname">OWN Sense</div>
+    <button class="pswitch" onclick="openDrawer()">Wissel</button>
+  </div>
+
+  <!-- Main content -->
+  <div class="main" id="mainContent"></div>
+
+  <!-- Input bar (vertel screen only) -->
+  <div class="inputbar" id="inputbar" style="display:none">
+    <button class="rnd gr" onclick="quickFill()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <input class="inputfield" id="msgInput" placeholder="Typ, plak of import je berichten..." onkeydown="if(event.key==='Enter')sendMsg()"/>
+    <button class="rnd rd" onclick="sendMsg()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
+    </button>
+    <button class="rnd rd">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+    </button>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="nav">
+    <button class="tab active" id="tab-home" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="tab" id="tab-senses" onclick="goScreen('senses')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Senses</span>
+    </button>
+    <button class="tab" id="tab-own" onclick="goScreen('own')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
+      <span>OWN</span>
+    </button>
+    <button class="tab" id="tab-vertel" onclick="goScreen('vertel')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      <span>Vertel</span>
+    </button>
+    <button class="tab" id="tab-import" onclick="goScreen('import')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>Typ / Import</span>
+    </button>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+var state = {
+  apiKey: localStorage.getItem('ds_apikey') || '',
+  profile: 'OWN Sense',
+  props: {gevoeligheid:75, openheid:60, humor:45, directheid:30, avontuur:20},
+  history: [],
+  busy: false,
+  screen: 'home'
+};
+
+// ── Navigation ─────────────────────────────────────────────────
+function goHome(){ goScreen('home'); }
+
+function goScreen(s){
+  state.screen = s;
+  document.getElementById('pageTitle').textContent = {
+    home:'Home', senses:'Mijn Senses', own:'OWN Sense',
+    vertel:'Vertel', import:'Typ / Import', apikey:'Instellingen', compare:'Vergelijken'
+  }[s] || s;
+
+  var isVertel = s === 'vertel';
+  document.getElementById('profbar').style.display = isVertel ? 'flex' : 'none';
+  document.getElementById('inputbar').style.display = isVertel ? 'flex' : 'none';
+  document.getElementById('btnBack').style.visibility = s === 'home' ? 'hidden' : 'visible';
+
+  ['home','senses','own','vertel','import'].forEach(function(t){
+    document.getElementById('tab-'+t) && document.getElementById('tab-'+t).classList.toggle('active', t===s);
+  });
+
+  var mc = document.getElementById('mainContent');
+  mc.innerHTML = '';
+  var screens = {
+    home: renderHome, senses: renderSenses, own: renderOWN,
+    vertel: renderVertel, import: renderImport, apikey: renderApiKey, compare: renderCompare
+  };
+  if(screens[s]) screens[s](mc);
+  mc.scrollTop = 0;
+}
+
+// ── Drawer ──────────────────────────────────────────────────────
+function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('ovl').classList.add('show'); }
+function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('ovl').classList.remove('show'); }
+function selectProfile(n){ state.profile = n; document.getElementById('pname').textContent = n; closeDrawer(); goScreen('vertel'); }
+function showNewSense(){
+  var n = prompt('Naam voor het nieuwe Sense dossier:');
+  if(n && n.trim()) selectProfile(n.trim()+'Sense');
+}
+
+// ── Render Home ─────────────────────────────────────────────────
+function renderHome(el){
+  el.innerHTML = '<div class="home-wrap">'
+    +'<button class="mic-btn" onclick="goScreen(\'vertel\')">'
+    +'<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>'
+    +'<p class="home-sub">Vertel me wat je voelt of over je contacten.<br>Ik neem het op in het juiste Sense of OWN dossier.</p>'
+    +'<div class="g2"><button class="btn-g" onclick="goScreen(\'import\')">Typ / Import</button><button class="btn-r" onclick="showMenu()">Menu / Extra\'s</button></div>'
+    +'<div class="g2"><button class="btn-r" onclick="goScreen(\'own\')">OWN Sense</button><button class="btn-r" onclick="openDrawer()">Mijn Senses</button></div>'
+    +'<div class="g2"><button class="btn-r" onclick="goScreen(\'compare\')">Advies / Actie</button><button class="btn-r" onclick="goScreen(\'compare\')">Vergelijken</button></div>'
+    +'<div class="sh">Sense meldingen voor jou</div>'
+    +'<div class="ncard s"><div class="ncat">Sense</div><div class="ntext">Lisa lijkt vooral aandacht te zoeken. Patroon herkend in laatste 3 gesprekken.</div><span class="nlink">Lees meer...</span></div>'
+    +'<div class="ncard a"><div class="ncat">Actie</div><div class="ntext">Overweeg om Tom opnieuw een bericht te sturen — al 3 dagen geen reactie.</div><span class="nlink">Lees meer...</span></div>'
+    +'<div class="ncard c"><div class="ncat">Check</div><div class="ntext">Je hebt over Jurgen 2 weken niets gepost — alles oké?</div><span class="nlink">Update...</span></div>'
+    +'</div>';
+}
+
+function showMenu(){
+  var mc = document.getElementById('mainContent');
+  mc.innerHTML = '<div style="padding:20px">'
+    +'<div style="font-size:13px;color:var(--r);font-weight:700;margin-bottom:12px">Hoofdfuncties</div>'
+    +'<div class="g2"><button class="btn-r" onclick="goScreen(\'own\')">OWN Sense</button><button class="btn-r" onclick="openDrawer()">Mijn Senses</button><button class="btn-r" onclick="goScreen(\'compare\')">Advies / Actie</button><button class="btn-r" onclick="goScreen(\'compare\')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div>'
+    +'<div style="font-size:13px;color:var(--r);font-weight:700;margin:20px 0 12px">Extra\'s</div>'
+    +'<div class="g2">'+['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy','Over DateSense','FAQ\'s','Export data','Mijn gegevens'].map(function(x){return'<button class="btn-g">'+x+'</button>'}).join('')+'</div>'
+    +'</div>';
+  document.getElementById('pageTitle').textContent = 'Menu';
+  document.getElementById('btnBack').style.visibility = 'visible';
+}
+
+// ── Render Senses ────────────────────────────────────────────────
+function renderSenses(el){
+  var contacts = [['EliseSense',5,'🟡 Eerste date'],['TomSense',12,'🔴 Geen contact'],['LisaSense',8,'🟢 Meerdere dates'],['Ann-SofieSense',3,'🟡 Eerste date']];
+  el.innerHTML = '<div style="padding:0 20px 24px">'
+    +'<div class="sh">Persoonlijk</div>'
+    +'<div class="srow" onclick="selectProfile(\'OWN Sense\')"><div class="sdot"></div><div style="flex:1"><div style="font-size:14px;font-weight:600">OWN Sense</div><div style="font-size:11px;color:var(--m)">Persoonlijk profiel</div></div><span style="font-size:12px;color:var(--m);margin-right:8px">21 entries</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg></div>'
+    +'<div class="sh">Contacten</div>'
+    +contacts.map(function(c){return'<div class="srow" onclick="selectProfile(\''+c[0]+'\')"><div class="sdot"></div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+c[0]+'</div><div style="font-size:11px;color:var(--m)">'+c[2]+'</div></div><span style="font-size:12px;color:var(--m);margin-right:8px">'+c[1]+' entries</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg></div>'}).join('')
+    +'<div class="srow" style="justify-content:center;border:none;cursor:pointer" onclick="showNewSense()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span style="font-size:14px;font-weight:600;color:var(--r);margin-left:7px">Nieuw Sense aanmaken</span></div>'
+    +'</div>';
+}
+
+// ── Render OWN ───────────────────────────────────────────────────
+function renderOWN(el){
+  var cats = [['Karakter','4/8 gevuld'],['Interesses & Levensstijl','3/6 gevuld'],['Relatievisie & Doelen','2/5 gevuld'],['Gevoelswereld & Behoeften','1/4 gevuld']];
+  var moods = ['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
+  el.innerHTML = '<div style="padding:12px 20px 24px">'
+    +'<div style="font-size:14px;font-weight:600;color:#333;margin-bottom:10px">Hoe voel je je vandaag?</div>'
+    +'<div class="mood-row">'+moods.map(function(m,i){return'<button class="mbtn'+(i===0?' on':'')+'" onclick="this.parentNode.querySelectorAll(\'.mbtn\').forEach(function(b){b.classList.remove(\'on\')});this.classList.add(\'on\')">'+m+'</button>'}).join('')+'</div>'
+    +'<div class="sh">Jouw karakter eigenschappen</div>'
+    +renderPropsHTML()
+    +'<div class="sh">Categorieën</div>'
+    +cats.map(function(c){return'<div class="cat-row"><span style="font-size:14px;font-weight:500">'+c[0]+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:var(--m)">'+c[1]+'</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg></div></div>'}).join('')
+    +'</div>';
+}
+
+function renderPropsHTML(){
+  var keys = ['gevoeligheid','openheid','humor','directheid','avontuur'];
+  var labels = ['Gevoeligheid','Openheid','Humor','Directheid','Avontuur'];
+  return keys.map(function(k,i){
+    var v = state.props[k];
+    return '<div class="prop"><div class="pn">'+labels[i]+'</div><div class="track"><div class="fill" id="fp'+i+'" style="width:'+v+'%"></div></div><div class="pct" id="fpp'+i+'">'+v+'%</div></div>';
+  }).join('');
+}
+
+// ── Render Vertel ────────────────────────────────────────────────
+function renderVertel(el){
+  var keys = ['gevoeligheid','openheid','humor','directheid','avontuur'];
+  var labels = ['Gevoeligheid','Openheid','Humor','Directheid','Avontuur'];
+  var propsHtml = keys.map(function(k,i){
+    var v = state.props[k];
+    return '<div class="prop"><div class="pn">'+labels[i]+'</div><div class="track"><div class="fill" id="vp'+i+'" style="width:'+v+'%"></div></div><div class="pct" id="vpp'+i+'">'+v+'%</div></div>';
+  }).join('');
+
+  el.innerHTML = '<div class="props-wrap">'+propsHtml+'</div>'
+    +'<div class="hint">Vertel me over jezelf... Hoe voel je je? Wat maakt jou uniek?<br>Wees open zodat ik je steeds beter leer kennen. En op maat advies kan geven.</div>'
+    +'<div class="chat" id="chatArea">'
+    +'<div class="msg-ai"><div class="bbl-ai"><div class="sender">DATESENSE</div>Welkom terug! Vertel me wat er in je hoofd zit — over jezelf of over iemand waarmee je contact hebt. Ik sorteer alles automatisch naar het juiste dossier.</div></div>'
+    +(state.history.length === 0 && !state.apiKey ? '<div class="msg-ai"><div class="bbl-ai" style="background:#FFF8E1;border-color:#FFE082"><div class="sender" style="color:#F57F17">LET OP</div>Voeg eerst je Anthropic API key toe via het ⚙️ tandwiel rechtsboven, dan kan ik echt met je praten!</div></div>' : '')
+    +'</div>';
+
+  // Restore chat history
+  if(state.chatMessages && state.chatMessages.length){
+    var chatArea = document.getElementById('chatArea');
+    state.chatMessages.forEach(function(m){
+      var d = document.createElement('div');
+      d.className = m.r === 'user' ? 'msg-user' : 'msg-ai';
+      d.innerHTML = m.r === 'user' ? '<div class="bbl-user">'+m.h+'</div>' : '<div class="bbl-ai"><div class="sender">DATESENSE</div>'+m.h+'</div>';
+      chatArea.appendChild(d);
+    });
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+}
+
+// ── Render Import ────────────────────────────────────────────────
+function renderImport(el){
+  var items = [['📋','Plak tekst','WhatsApp gesprek, notitie, dagboek...'],['📸','Screenshot','Foto van gesprek uploaden'],['🎤','Spraakmemo','Ingesproken bericht transcriberen'],['📧','Email','Email conversatie importeren']];
+  el.innerHTML = '<div style="padding:16px 20px 24px">'
+    +'<div class="sh">Typ of importeer</div>'
+    +items.map(function(x){return'<div style="display:flex;align-items:center;gap:12px;padding:15px 14px;background:var(--g);border-radius:12px;margin-bottom:9px;cursor:pointer" onclick="goScreen(\'vertel\')"><span style="font-size:22px;width:32px;text-align:center;flex-shrink:0">'+x[0]+'</span><div><div style="font-size:14px;font-weight:500">'+x[1]+'</div><div style="font-size:12px;color:var(--m);margin-top:2px">'+x[2]+'</div></div><svg style="margin-left:auto" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg></div>'}).join('')
+    +'<div style="text-align:center;padding:20px 0 0"><div style="font-size:12px;color:var(--m);margin-bottom:12px">of spreek direct in</div>'
+    +'<button class="mic-btn" style="width:76px;height:76px;border-radius:38px;box-shadow:0 6px 18px rgba(174,0,0,.25)" onclick="goScreen(\'vertel\')">'
+    +'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>'
+    +'</button></div></div>';
+}
+
+// ── Render API Key ────────────────────────────────────────────────
+function renderApiKey(el){
+  el.innerHTML = '<div class="apikey-wrap">'
+    +'<h2>API Key instellen</h2>'
+    +'<p>Om DateSensei te activeren heb je een Anthropic API key nodig. Je kan die gratis aanmaken op <strong>console.anthropic.com</strong>.</p>'
+    +'<input class="apikey-input" id="apikeyField" type="password" placeholder="sk-ant-api..." value="'+state.apiKey+'"/>'
+    +'<button class="apikey-btn" onclick="saveApiKey()">Opslaan &amp; activeren</button>'
+    +(state.apiKey ? '<div style="margin-top:14px;padding:12px;background:#F0FFF4;border-radius:10px;font-size:13px;color:#2E7D32">✅ API key is ingesteld — DateSensei is actief!</div>' : '')
+    +'<p class="apikey-note">Je API key wordt lokaal opgeslagen in je browser en nooit gedeeld.<br>Kosten zijn ca. €0.001 per gesprek.</p>'
+    +'</div>';
+}
+
+function saveApiKey(){
+  var k = document.getElementById('apikeyField').value.trim();
+  if(!k){ alert('Vul een geldige API key in.'); return; }
+  state.apiKey = k;
+  localStorage.setItem('ds_apikey', k);
+  alert('✅ API key opgeslagen! DateSensei is nu actief.');
+  goScreen('home');
+}
+
+// ── Render Compare ────────────────────────────────────────────────
+function renderCompare(el){
+  var rows = [['Diepgang gesprekken','💬 Gemiddeld','✅ Goed'],['Balans gevoel/verstand','Voornamelijk gevoel','⭐ Mooie balans'],['Openheid & eerlijkheid','❗ Redelijk','⭐ Zeer open'],['Energie-uitwisseling','✅ Geeft energie','⭐ Geeft én ontvangt'],['Seksuele chemie','⭐ Sterk','⭐ Heel sterk'],['Toekomstvisie','❗ Onzeker','❗ Open, traag'],['Familiegevoel','❌ Laag','⭐ Belangrijk'],['Consistentie','❗ Wisselvallig','✅ Betrouwbaar'],['Behoefte bevestiging','❌ Hoog','⭐ Gematigd']];
+  el.innerHTML = '<div style="padding:16px 20px 24px">'
+    +'<div style="display:flex;gap:6px;margin-bottom:14px">'
+    +'<div style="flex:2"></div>'
+    +'<div style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--r);background:#FFF5F5;padding:8px 4px;border-radius:8px">TomSense<br><span style="font-size:18px;font-weight:800">64%</span></div>'
+    +'<div style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#3949AB;background:#F5F5FF;padding:8px 4px;border-radius:8px">EliseSense<br><span style="font-size:18px;font-weight:800">87%</span></div>'
+    +'</div>'
+    +rows.map(function(r){return'<div class="cmp-row"><div class="cmp-label">'+r[0]+'</div><div class="cmp-val t1">'+r[1]+'</div><div class="cmp-val t2">'+r[2]+'</div></div>'}).join('')
+    +'<div style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:12px;padding:14px;margin-top:16px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--r);margin-bottom:8px;letter-spacing:.5px">AI ANALYSE</div>'
+    +'<div style="font-size:13px;color:#333;line-height:1.6">Gebaseerd op jouw waarden lijkt <strong>EliseSense</strong> momenteel de sterkere match (87% vs 64%). Ze biedt meer balans, openheid en consistentie — drie dingen die jij als prioriteit hebt aangegeven.</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px"><button class="aa r" onclick="goScreen(\'vertel\')">Vertel meer</button><button class="aa g">Export PDF</button></div>'
+    +'</div></div>';
+}
+
+// ── Chat / AI logic ───────────────────────────────────────────────
+function quickFill(){
+  var ex = [
+    'Ik had gisteren een geweldige date met Elise, ze luisterde zo goed naar me.',
+    'Tom heeft al 3 dagen niet gereageerd op mijn bericht.',
+    'Ik merk dat ik steeds directer word in gesprekken, dat voelt goed.',
+    'Lisa stuurde een heel leuk bericht, ik weet niet hoe ik moet reageren.',
+    'Ik voel me onzeker na de date van gisteren maar weet niet waarom.'
+  ];
+  document.getElementById('msgInput').value = ex[Math.floor(Math.random()*ex.length)];
+  document.getElementById('msgInput').focus();
+}
+
+function addMsg(role, html){
+  var chat = document.getElementById('chatArea');
+  if(!chat) return;
+  var d = document.createElement('div');
+  d.className = role === 'user' ? 'msg-user' : 'msg-ai';
+  d.innerHTML = role === 'user'
+    ? '<div class="bbl-user">'+html+'</div>'
+    : '<div class="bbl-ai"><div class="sender">DATESENSE</div>'+html+'</div>';
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  if(!state.chatMessages) state.chatMessages = [];
+  state.chatMessages.push({r:role, h:html});
+}
+
+function showTyping(){
+  var chat = document.getElementById('chatArea');
+  if(!chat) return;
+  var d = document.createElement('div');
+  d.className='msg-ai'; d.id='typingInd';
+  d.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+  chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+}
+function hideTyping(){ var t=document.getElementById('typingInd'); if(t)t.remove(); }
+
+function updateProps(u){
+  if(!u) return;
+  var keys = ['gevoeligheid','openheid','humor','directheid','avontuur'];
+  keys.forEach(function(k,i){
+    if(u[k]!==null && u[k]!==undefined){
+      var v = Math.min(100,Math.max(0,parseInt(u[k])));
+      if(!isNaN(v)){
+        state.props[k] = v;
+        ['vp','fp'].forEach(function(pfx){
+          var el = document.getElementById(pfx+i);
+          if(el) el.style.width = v+'%';
+          var ep = document.getElementById(pfx.replace('p','pp')+i);
+          if(ep) ep.textContent = v+'%';
+        });
+      }
+    }
+  });
+}
+
+async function sendMsg(){
+  if(state.busy) return;
+  if(!state.apiKey){ alert('Voeg eerst je API key toe via het ⚙️ tandwiel rechtsboven!'); return; }
+  var inp = document.getElementById('msgInput');
+  var txt = inp.value.trim();
+  if(!txt) return;
+  inp.value = '';
+  state.busy = true;
+  addMsg('user', txt);
+  state.history.push({role:'user', content:txt});
+  showTyping();
+
+  var p = state.props;
+  var sys = 'Je bent DateSensei, een empathische AI dating coach in de DateSense app. Actief dossier: "'+state.profile+'". '
+    +'Eigenschappen nu: Gevoeligheid '+p.gevoeligheid+'%, Openheid '+p.openheid+'%, Humor '+p.humor+'%, Directheid '+p.directheid+'%, Avontuur '+p.avontuur+'%.\n\n'
+    +'Reageer ALTIJD in het Nederlands. Wees warm, direct, eerlijk. Max 2-3 zinnen reactie.\n\n'
+    +'Geef antwoord als puur geldig JSON (GEEN markdown, GEEN tekst buiten de JSON):\n'
+    +'{"reactie":"...","segmenten":[{"tekst":"...","dossier":"OWN of voornaam persoon"}],"props_update":{"gevoeligheid":null,"openheid":null,"humor":null,"directheid":null,"avontuur":null},"advies_vraag":true}';
+
+  try{
+    var res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version':'2023-06-01'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:800,
+        system:sys,
+        messages:state.history
+      })
+    });
+    var data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    var raw = (data.content&&data.content[0]&&data.content[0].text)||'{}';
+    var clean = raw.replace(/```json|```/g,'').trim();
+    var parsed = JSON.parse(clean);
+    hideTyping();
+    state.history.push({role:'assistant', content:raw});
+    if(parsed.props_update) updateProps(parsed.props_update);
+
+    var html = parsed.reactie || 'Begrepen, ik heb dit opgeslagen.';
+    if(parsed.segmenten && parsed.segmenten.length){
+      html += '<div class="seg-wrap">';
+      parsed.segmenten.forEach(function(s){
+        var own = s.dossier==='OWN'||s.dossier==='OWN Sense';
+        html += '<span class="seg '+(own?'seg-own':'seg-contact')+'" title="→ '+s.dossier+'">'+s.tekst+'</span> ';
+      });
+      html += '<div class="seg-legend"><span style="background:#BBDEFB;color:#0D47A1">OWN Sense</span><span style="background:#FFE0B2;color:#BF360C">Contact dossier</span></div></div>';
+    }
+    if(parsed.advies_vraag){
+      html += '<div class="ai-actions"><button class="aa r" onclick="askAdvice()">Ja, graag advies</button><button class="aa g" onclick="justSave()">Nee, gewoon opslaan</button></div>';
+    }
+    addMsg('ai', html);
+  } catch(e){
+    hideTyping();
+    addMsg('ai','Fout: '+e.message);
+    console.error(e);
+  }
+  state.busy = false;
+}
+
+async function askAdvice(){
+  if(state.busy) return;
+  state.busy = true;
+  state.history.push({role:'user', content:'Ja, graag advies.'});
+  addMsg('user','Ja, graag advies.');
+  showTyping();
+  var sys = 'Je bent DateSensei, empathische AI dating coach. Dossier: "'+state.profile+'". Geef CONCREET eerlijk advies op basis van het gesprek. Max 3-4 zinnen, 1-2 concrete actiestappen. Warm maar direct. Reageer in het Nederlands als gewone tekst (geen JSON).';
+  try{
+    var res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':state.apiKey,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,system:sys,messages:state.history})
+    });
+    var data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    var tekst = (data.content&&data.content[0]&&data.content[0].text)||'Geen advies beschikbaar.';
+    hideTyping();
+    state.history.push({role:'assistant', content:tekst});
+    addMsg('ai','<span style="font-size:10px;font-weight:700;color:var(--r);letter-spacing:.8px">ADVIES</span><br><br>'+tekst);
+  } catch(e){
+    hideTyping();
+    addMsg('ai','Advies fout: '+e.message);
+  }
+  state.busy = false;
+}
+
+function justSave(){
+  addMsg('ai','Opgeslagen in <strong>'+state.profile+'</strong>. Vertel me gerust meer wanneer je klaar bent.');
+  state.history.push({role:'user',content:'Nee, gewoon opslaan.'});
+  state.history.push({role:'assistant',content:'Opgeslagen.'});
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+goScreen('home');
+if(!state.apiKey){
+  setTimeout(function(){
+    var banner = document.createElement('div');
+    banner.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#AE0000;color:white;padding:10px 18px;border-radius:20px;font-size:12px;font-weight:600;z-index:100;cursor:pointer;white-space:nowrap';
+    banner.textContent='⚙️ Stel je API key in om te starten';
+    banner.onclick=function(){document.body.removeChild(banner);goScreen('apikey')};
+    document.body.appendChild(banner);
+    setTimeout(function(){if(document.body.contains(banner))document.body.removeChild(banner)},8000);
+  },1000);
+}
+</script>
+</body>
+</html>
