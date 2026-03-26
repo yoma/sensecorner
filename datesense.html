@@ -1458,12 +1458,19 @@ async function saveOwnCat(catId,silent){
     });
   });
 
+  // Als er niks ingevuld is, sla gewoon op zonder AI
+  if(!allCatText.trim()){
+    S.pdata['OWN Sense']=d;
+    await saveP('OWN Sense',d.props,d.count,d.categories);
+    showAutoSaveIndicator(catId,true);
+    return;
+  }
   try{
-    var sys=`Je bent DateSensei. Analyseer de OWN Sense profieltekst en bepaal de 9 eigenschapspercentages.
-Geef ENKEL geldig JSON terug (geen markdown, geen uitleg):
-{"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X,"stabiliteit":X,"vertrouwen":X,"communicatie":X,"onafhankelijkheid":X}
-Elk getal tussen 0-100. Baseer je op de werkelijke tekst — gebruik lage percentages als er weinig info is.`;
-    var raw=await callAPI(sys,[{role:'user',content:allCatText||'Geen data.'}],200);
+    var sys='Je bent DateSensei. Analyseer de OWN Sense profieltekst en bepaal de 9 eigenschapspercentages.'
+      +' Geef ENKEL geldig JSON (geen markdown, geen uitleg):'
+      +' {"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X,"stabiliteit":X,"vertrouwen":X,"communicatie":X,"onafhankelijkheid":X}'
+      +' Elk getal 0-100. stabiliteit=emotionele stabiliteit, vertrouwen=betrouwbaarheid, communicatie=openheid, onafhankelijkheid=zelfstandigheid.';
+    var raw=await callAPI(sys,[{role:'user',content:allCatText||'Geen data.'}],400);
     var clean=raw.replace(/```json|```/g,'').trim();
     var updates=JSON.parse(clean);
     PK.forEach(k=>{
@@ -1472,7 +1479,14 @@ Elk getal tussen 0-100. Baseer je op de werkelijke tekst — gebruik lage percen
         if(!isNaN(v))d.props[k]=v;
       }
     });
-  }catch(x){console.warn('AI prop update mislukt:',x);}
+  }catch(x){
+    console.error('saveOwnCat AI error:',x.message,x);
+    // Sla toch op ook al mislukte AI
+    S.pdata['OWN Sense']=d;
+    await saveP('OWN Sense',d.props,d.count,d.categories);
+    showAutoSaveIndicator(catId,true);
+    return;
+  }
 
   d.count=(d.count||0);
   S.pdata['OWN Sense']=d;
