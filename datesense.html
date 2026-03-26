@@ -355,9 +355,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <button class="tab" id="tab-vertel" onclick="goScreen('vertel')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg><span>Vertel</span>
     </button>
-    <button class="tab" id="tab-import" onclick="goScreen('import')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Typ/Import</span>
-    </button>
+
   </div>
 </div>
 
@@ -492,6 +490,61 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
 
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
+
+// Verplaats tijdlijn entry naar ander dossier
+function verplaatsEntry(msgId, huidigDossier){
+  // Bouw keuze modal
+  window._verplaatsMsgId=msgId;
+  window._verplaatsVan=huidigDossier;
+  var allDossiers=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
+  var optsHtml='<div class="seg-modal-grid">';
+  window._modalDossiers=allDossiers;
+  allDossiers.forEach(function(p,i){
+    if(p===huidigDossier)return; // Huidige overslaan
+    var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
+    optsHtml+='<button class="seg-modal-btn" style="border-left-color:'+col+'" data-idx="'+i+'" onclick="bevestigVerplaats(window._verplaatsMsgId,window._verplaatsVan,window._modalDossiers[parseInt(this.dataset.idx)])">'
+      +'<span style="flex:1">'+dn(p)+'</span></button>';
+  });
+  optsHtml+='<button class="seg-modal-btn negeer-btn" onclick="verwijderEntry(window._verplaatsMsgId,window._verplaatsVan)">'
+    +'<span style="flex:1">🗑️ Verwijderen</span></button>';
+  optsHtml+='</div>';
+
+  document.getElementById('segModalQuote').innerHTML='<span style="font-size:13px;color:var(--m)">Huidig dossier: <strong>'+dn(huidigDossier)+'</strong></span>';
+  document.getElementById('segModalOpts').innerHTML='<div class="seg-modal-subtitle">Verplaatsen naar:</div>'+optsHtml;
+  document.getElementById('segModal').classList.add('show');
+}
+
+async function bevestigVerplaats(msgId, vanDossier, naarDossier){
+  closeSegModal();
+  if(!S.user||!msgId)return;
+  try{
+    // Update profile_name in Supabase
+    await sb.from('sense_messages').update({profile_name:naarDossier}).eq('id',msgId).eq('user_id',S.user.id);
+    // Update counts
+    var van=S.pdata[vanDossier];
+    var naar=S.pdata[naarDossier]||{props:{...DP},count:0,categories:{}};
+    if(van&&van.count>0){van.count--;await saveP(vanDossier,van.props,van.count,van.categories);}
+    naar.count=(naar.count||0)+1;
+    await ensureP(naarDossier);
+    await saveP(naarDossier,naar.props,naar.count,naar.categories);
+    toast('✓ Verplaatst naar '+dn(naarDossier));
+    // Herlaad tijdlijn
+    await loadTab(vanDossier,'tijdlijn',S.pdata[vanDossier]||{});
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+async function verwijderEntry(msgId, dossier){
+  closeSegModal();
+  if(!confirm('Dit bericht verwijderen uit de tijdlijn?'))return;
+  if(!S.user||!msgId)return;
+  try{
+    await sb.from('sense_messages').delete().eq('id',msgId).eq('user_id',S.user.id);
+    var d=S.pdata[dossier];
+    if(d&&d.count>0){d.count--;await saveP(dossier,d.props,d.count,d.categories);}
+    toast('🗑️ Bericht verwijderd');
+    await loadTab(dossier,'tijdlijn',S.pdata[dossier]||{});
+  }catch(e){toast('Fout: '+e.message);}
+}
 
 function toggleSrcBox(btn){
   var box=btn.nextElementSibling;
@@ -673,12 +726,13 @@ async function saveMsg(pn,role,html){
 async function loadMsgs(pn){
   if(!S.user)return[];
   // Gefilterd op specifiek dossier
-  var {data}=await sb.from('sense_messages')
+  var {data,error}=await sb.from('sense_messages')
     .select('*')
     .eq('user_id',S.user.id)
     .eq('profile_name',pn)
     .order('created_at')
     .limit(50);
+  if(error)throw new Error(error.message);
   return data||[];
 }
 
@@ -698,14 +752,14 @@ function goBack(){
 
 function goScreen(sc){
   S.prev=S.screen;S.screen=sc;
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',import:'Typ / Import',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
-  ['home','senses','own','vertel','import'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
+  ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,import:rImport,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier};
+  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier};
   if(screens[sc])screens[sc](mc);
   mc.scrollTop=0;
   if(S.user)rDrawer();
@@ -1165,7 +1219,19 @@ async function loadTab(name,tab,d){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
     // Gefilterd — alleen dit dossier!
     var msgs=[];
-    try{ msgs=await loadMsgs(name); }catch(e){ console.error('loadMsgs error:',e); }
+    try{
+      // Timeout na 8 seconden
+      var timeoutPromise=new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},8000);});
+      msgs=await Promise.race([loadMsgs(name),timeoutPromise]);
+    }catch(e){
+      console.error('loadMsgs error:',e);
+      cont.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--m)">'
+        +'<div style="font-size:36px;margin-bottom:10px">⚠️</div>'
+        +'<p style="font-size:14px;line-height:1.6">Kon tijdlijn niet laden.<br>Controleer je verbinding en probeer opnieuw.</p>'
+        +'<button class="btn-g" style="margin-top:16px;max-width:200px" onclick="switchTab(\'tijdlijn\')">↻ Opnieuw proberen</button>'
+        +'</div>';
+      return;
+    }
     if(!msgs.length){
       cont.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--m)">
         <div style="font-size:36px;margin-bottom:10px">📋</div>
@@ -1180,12 +1246,14 @@ async function loadTab(name,tab,d){
       var ds=dd!==lastDate?(lastDate=dd,`<div class="hdate">${dd}</div>`):'';
       var isU=m.role==='user';
       var txt=isU?m.html:(m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,180)+(m.html.length>200?'...':''));
+      var msgId=m.id||'';
       return`${ds}<div class="tl-item">
         <div class="tl-dot ${isU?'u':'a'}"></div>
         <div style="flex:1">
           <div class="tl-time">${new Date(m.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})} · ${isU?'Jij':'DateSensei'}</div>
           <div class="tl-text">${txt}</div>
         </div>
+        ${isU?`<button onclick="verplaatsEntry('${msgId}','${name}')" style="flex-shrink:0;padding:5px 10px;background:none;border:1px solid var(--b);border-radius:8px;font-size:12px;color:var(--m);cursor:pointer;font-family:inherit;margin-left:8px">↔</button>`:''}
       </div>`;
     }).join('');
   }
@@ -2053,17 +2121,17 @@ async function sendMsg(){
 
   var sys;
   if(activeDossier){
-    // Gebruiker typt vanuit een specifiek dossier — ALLES gaat daarheen
-    sys='Je bent DateSensei. Verwerk deze tekst als info over '+dn(activeDossier)+'.'
-      +' Wijs ALLE segmenten toe aan "'+activeDossier+'".'
-      +' Alleen als de tekst expliciet "ik" of "mezelf" betreft EN overduidelijk persoonlijk is, gebruik dan "OWN Sense".'
-      +' Geef ENKEL geldig JSON (geen markdown):'
-      +' {"segmenten":[{"tekst":"stuk tekst","dossier":"'+activeDossier+' of OWN Sense","type":"gevoel/feit/patroon"}],"nieuwe_namen":[],"reactie":"korte empathische reactie max 2 zinnen"}';
+    sys='Je bent DateSensei. Zet ALLES in het dossier "'+activeDossier+'".'
+      +' GEEN uitzonderingen. GEEN OWN Sense. GEEN andere dossiers.'
+      +' Elk segment krijgt dossier "'+activeDossier+'".'
+      +' Geef ENKEL geldig JSON (geen markdown, geen uitleg):'
+      +' {"segmenten":[{"tekst":"samenvatting","dossier":"'+activeDossier+'","type":"feit"}],"nieuwe_namen":[],"reactie":"korte reactie max 1 zin"}';
   } else {
-    sys='Je bent DateSensei, een empathische AI dating coach. De gebruiker heeft de volgende dossiers: '+dossierLijst+'.'
-      +' Analyseer de input en wijs elk segment toe aan het meest logische dossier.'
+    sys='Je bent DateSensei. De gebruiker heeft deze dossiers: '+dossierLijst+'.'
+      +' Wijs elk stuk toe aan het meest logische dossier. Splits ENKEL als de tekst over meerdere personen gaat.'
+      +' Als de tekst voornamelijk over één persoon gaat, zet dan ALLES bij die persoon.'
       +' Geef ENKEL geldig JSON (geen markdown):'
-      +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of DossierNaam of NIEUW:Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte empathische reactie max 2 zinnen"}';
+      +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of DossierNaam of NIEUW:Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte reactie max 2 zinnen"}';
   }
 
   try{
@@ -2216,17 +2284,22 @@ async function sendMsg(){
       var bar=document.createElement('div');
       bar.id='segActieBar';
       bar.style.cssText='position:sticky;bottom:0;background:#fff;border-top:2px solid var(--b);padding:12px 16px;display:flex;gap:10px;z-index:20;margin-top:8px';
-      if(needsCheck){
-        bar.innerHTML='<button class="btn-voeg-alles" style="background:#2E7D32" onclick="bevestigAlles()">'
-          +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>'
-          +'Ziet er goed uit!</button>'
-          +'<button class="btn-hoe-werkt" style="background:var(--rl);color:var(--r);border-color:#FFD5D5" onclick="toonHoeWerktDit()">✏️ Aanpassen</button>';
-      } else {
-        bar.innerHTML='<button class="btn-voeg-alles" onclick="bevestigAlles()">'
-          +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>'
-          +'Ziet er goed uit!</button>'
-          +'<button class="btn-hoe-werkt" onclick="toonHoeWerktDit()">✏️ Aanpassen</button>';
-      }
+      // Bouw "Alles naar X" snelknoppen voor betrokken dossiers
+      var dossiersInSegs={};
+      (window._pendingSegmenten||[]).forEach(function(s){if(s.dossier)dossiersInSegs[s.dossier]=true;});
+      var snelKnoppen='';
+      var dosKeys=Object.keys(dossiersInSegs);
+      window._snelDossiers=dosKeys;
+      dosKeys.forEach(function(dos,di){
+        var col=dossierColor(dos);
+        snelKnoppen+='<button data-di="'+di+'" onclick="allesNaarDossier(window._snelDossiers[parseInt(this.dataset.di)])" style="padding:8px 12px;background:#fff;border:2px solid '+col+';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:'+col+'">Alles → '+dn(dos)+'</button>';
+      });
+      bar.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;width:100%">'
+        +'<button class="btn-voeg-alles" style="flex:2;min-width:160px" onclick="bevestigAlles()">'
+        +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>'
+        +'Ziet er goed uit!</button>'
+        +snelKnoppen
+        +'</div>';
       ca.appendChild(bar);
       ca.scrollTop=ca.scrollHeight;
     }
@@ -2348,6 +2421,27 @@ function toonHoeWerktDit(){
   var d=document.createElement('div');d.className='msg-ai';
   d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>De gekleurde stukjes tonen wie iets over jou zegt of over wie het gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Voeg alles toe</strong>.</div>';
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
+}
+
+// Verplaats alle segmenten naar één dossier in één klik
+function allesNaarDossier(dosName){
+  if(!window._pendingSegmenten)return;
+  window._pendingSegmenten.forEach(function(seg){
+    seg.dossier=dosName;
+    seg.negeer=false;
+  });
+  rerenderSegmenten();
+  toast('✓ Alles verplaatst naar '+dn(dosName));
+  // Update snelknoppen
+  var bar=document.getElementById('segActieBar');
+  if(bar){
+    var col=dossierColor(dosName);
+    var firstBtn=bar.querySelector('.btn-voeg-alles');
+    if(firstBtn)firstBtn.style.flex='1';
+    // Remove old snelknoppen
+    var btns=bar.querySelectorAll('button:not(.btn-voeg-alles)');
+    btns.forEach(function(b){b.remove();});
+  }
 }
 
 // Wis de chat na opslaan (voor een verse start)
