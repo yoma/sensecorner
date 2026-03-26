@@ -2251,20 +2251,7 @@ async function bevestigAlles(){
   addMsg('ai',html);
   toast('✅ Opgeslagen in '+(Object.keys(perDossier).length)+' dossier(s)!');
   rDrawer();
-  // Auto-laad volgend WhatsApp chunk als beschikbaar
-  if(window._importChunks&&window._importChunkIdx<window._importChunks.length-1){
-    window._importChunkIdx++;
-    var nextChunk=window._importChunks[window._importChunkIdx];
-    var inp=document.getElementById('msgInput');
-    if(inp&&nextChunk){
-      inp.value=nextChunk;
-      autoResize(inp);
-    }
-    addMsg('ai','⏭️ <strong>Deel '+(window._importChunkIdx+1)+'/'+window._importChunks.length+'</strong> klaar — tik Verstuur om verder te gaan.');
-  } else if(window._importChunks&&window._importChunkIdx>=window._importChunks.length-1){
-    window._importChunks=null;
-    window._importChunkIdx=0;
-  }
+
 }
 
 // Nieuwe persoon toevoegen of negeren
@@ -2312,6 +2299,134 @@ function clearChat(){
   ca.appendChild(d);
   // Welkomstbericht ook in S.vertelMsgs zetten
   S.vertelMsgs.push({role:'ai',html:'Klaar voor het volgende! Wat speelt er?'});
+}
+
+// WhatsApp dialoog — vraag met wie het gesprek is
+function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
+  var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
+
+  // Bouw opties
+  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var optionsHtml='';
+  contacts.forEach(function(p){
+    var selected=matchedDossier===p?'style="border-color:var(--r);background:var(--rl)"':'';
+    var pi=window._waContacts=window._waContacts||[];
+    pi.push(p);
+    var idx=pi.length-1;
+    optionsHtml+='<button class="seg-modal-btn" '+selected+' style="border-left-color:'+dossierColor(p)+';margin-bottom:8px" onclick="startWhatsAppImport(window._waContacts['+idx+'],window._waCleaned)">'
+      +'<span style="flex:1">'+dn(p)+'</span>'+(matchedDossier===p?'<span style="color:var(--r);font-size:12px">herkend</span>':'')
+      +'</button>';
+  });
+
+  window._waCleaned=cleaned;
+  window._waContacts=[];
+
+  // Toon als chat bericht met knoppen
+  var html='<div style="background:#fff;border:1.5px solid var(--b);border-radius:14px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">📋 WHATSAPP IMPORT</div>'
+    +'<div style="font-size:14px;color:#333;margin-bottom:14px">'+lines.length+' berichten geladen. Over wie gaat dit gesprek? Alles gaat naar dat dossier.</div>'
+    +(suggestion?'<div style="font-size:13px;color:var(--m);margin-bottom:10px">🔍 Herkend: <strong>'+suggestion+'</strong></div>':'')
+    +'<div style="margin-bottom:12px">'+optionsHtml+'</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="aa g" style="flex:1" onclick="askNewPersonWA()">+ Nieuwe persoon</button>'
+    +'</div>'
+    +'</div>';
+
+  addMsg('ai',html);
+}
+
+function askNewPersonWA(){
+  // Vervang de knop door een inline invoerveld
+  var btn=document.querySelector('[onclick="askNewPersonWA()"]');
+  if(!btn)return;
+  var container=btn.parentNode;
+  container.innerHTML='<div style="display:flex;gap:8px;align-items:center">'
+    +'<input id="waNewName" type="text" placeholder="Naam van de persoon..." '
+    +'style="flex:1;padding:10px 14px;border:1.5px solid var(--r);border-radius:10px;font-size:15px;font-family:inherit;outline:none" '
+    +'onkeydown="if(event.keyCode===13)confirmNewPersonWA()">' 
+    +'<button class="aa r" onclick="confirmNewPersonWA()">OK</button>'
+    +'</div>';
+  setTimeout(function(){var inp=document.getElementById('waNewName');if(inp)inp.focus();},100);
+}
+
+function confirmNewPersonWA(){
+  var inp=document.getElementById('waNewName');
+  if(!inp||!inp.value.trim())return;
+  var naam=inp.value.trim();
+  var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
+  ensureP(dosName).then(function(){
+    toast('✅ '+naam+' aangemaakt!');
+    startWhatsAppImport(dosName,window._waCleaned);
+  });
+}
+
+function startWhatsAppImport(dosName,cleaned){
+  var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
+  var MAX_CHARS=1800;
+  var chunks=[];
+  var chunk='';
+  lines.forEach(function(l){
+    if((chunk+l).length>MAX_CHARS&&chunk){chunks.push(chunk.trim());chunk=l+'\n';}
+    else chunk+=l+'\n';
+  });
+  if(chunk.trim())chunks.push(chunk.trim());
+
+  addMsg('ai','▶️ Alles gaat naar <strong>'+dn(dosName)+'</strong> — '+lines.length+' berichten in '+chunks.length+' delen worden automatisch verwerkt...');
+  autoVerwerkChunksNaarDossier(chunks,dosName);
+}
+
+async function autoVerwerkChunksNaarDossier(chunks,dosName){
+  if(!S.apiKey){toast('⚠️ API key nodig');return;}
+  S.busy=true;
+  var totalFragments=0;
+
+  // Voortgangsbericht toevoegen
+  var ca=document.getElementById('chatArea');
+  if(ca){
+    var progDiv=document.createElement('div');progDiv.className='msg-ai';progDiv.id='wa-progress';
+    progDiv.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div><span id="wa-prog-txt">Deel 1/'+chunks.length+' verwerken...</span></div>';
+    ca.appendChild(progDiv);ca.scrollTop=ca.scrollHeight;
+  }
+
+  for(var ci=0;ci<chunks.length;ci++){
+    var progTxt=document.getElementById('wa-prog-txt');
+    if(progTxt)progTxt.textContent='Deel '+(ci+1)+'/'+chunks.length+' verwerken...';
+
+    try{
+      // Stuur de tekst rechtstreeks op als één entry in het dossier
+      // Geen AI-segmentatie nodig — alles hoort bij dosName
+      var samenvatSys='Je bent DateSensei. Vat dit deel van een WhatsApp gesprek kort samen in 2-3 zinnen.'
+        +' Focus op: wat er besproken werd, hoe de sfeer was, opvallende dingen.'
+        +' Schrijf in de 3e persoon over '+dn(dosName)+'. Geen opsomming, gewone tekst. Nederlands.';
+      var summary=await callAPI(samenvatSys,[{role:'user',content:chunks[ci]}],300);
+
+      // Sla samenvatting op in het dossier
+      await ensureP(dosName);
+      await saveMsg(dosName,'user',summary);
+      var pd=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+      pd.count=(pd.count||0)+1;
+      S.pdata[dosName]=pd;
+      await saveP(dosName,pd.props,pd.count,pd.categories);
+      totalFragments++;
+
+    }catch(err){
+      console.warn('Chunk '+ci+' error:',err);
+    }
+    await new Promise(function(r){setTimeout(r,400);});
+  }
+
+  // Herbereken eigenschappen op basis van alle nieuwe data
+  herbereken(dosName);
+  updateContactCategories(dosName,chunks.join(' ').substring(0,3000));
+
+  var progEl=document.getElementById('wa-progress');
+  if(progEl){
+    progEl.querySelector('.bbl-ai').innerHTML='<div class="sndr">DATESENSE</div>'
+      +'✅ <strong>Klaar!</strong> '+chunks.length+' delen van het gesprek opgeslagen in <strong>'+dn(dosName)+'</strong>.<br>'
+      +'De eigenschappen en invulvakjes worden nu bijgewerkt.';
+  }
+  rDrawer();
+  S.busy=false;
 }
 
 // Auto-vul categories vanuit timeline als er nog niets ingevuld is
@@ -2544,13 +2659,11 @@ function handleTxtFile(input){
   var reader=new FileReader();
   reader.onload=function(e){
     var tekst=e.target.result;
-    // Behoud namen en tijden — verwijder alleen systeemberichten en lege regels
     var cleaned=tekst
       .split('\n')
       .filter(function(l){
         var t=l.trim();
         if(!t||t.length<3)return false;
-        // Verwijder WhatsApp systeemberichten (geen naam aanwezig)
         if(t.includes('Berichten en oproepen zijn end-to-end'))return false;
         if(t.includes('heb je de groepsafbeelding'))return false;
         if(t.includes('heeft u toegevoegd'))return false;
@@ -2558,37 +2671,39 @@ function handleTxtFile(input){
         return true;
       })
       .join('\n');
+
+    // Probeer naam automatisch te detecteren uit de tekst
+    var detectedName='';
+    var nameMatch=cleaned.match(/\d{1,2}\/\d{1,2}\/\d{4},?\s*\d{1,2}:\d{2}[^-]*-\s*([^:]+):/);
+    if(nameMatch)detectedName=nameMatch[1].trim();
+
+    // Toon bevestigingsdialoog — alles gaat naar één dossier
+    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';}).map(function(p){return dn(p);});
+    var suggestion=detectedName||'';
+    // Check if detected name matches existing contact
+    var matchedDossier='';
+    S.profiles.forEach(function(p){if(p!=='OWN Sense'&&dn(p).toLowerCase()===suggestion.toLowerCase())matchedDossier=p;});
+
+    showWhatsAppDialog(cleaned,suggestion,matchedDossier);
     var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
     var totalLines=lines.length;
-    var inp=document.getElementById('msgInput');
 
-    // Max ~1500 tekens per verwerking — splits lange gesprekken
-    var MAX_CHARS=1500;
-    if(cleaned.length>MAX_CHARS){
-      // Bewaar alle chunks voor gefaseerde verwerking
-      window._importChunks=[];
-      var chunk='';
-      lines.forEach(function(l){
-        if((chunk+l).length>MAX_CHARS&&chunk){
-          window._importChunks.push(chunk.trim());
-          chunk=l+'\n';
-        } else {
-          chunk+=l+'\n';
-        }
-      });
-      if(chunk.trim())window._importChunks.push(chunk.trim());
-      window._importChunkIdx=0;
+    // Splits in chunks en verwerk alles automatisch
+    var MAX_CHARS=1800;
+    var chunks=[];
+    var chunk='';
+    lines.forEach(function(l){
+      if((chunk+l).length>MAX_CHARS&&chunk){
+        chunks.push(chunk.trim());
+        chunk=l+'\n';
+      } else {
+        chunk+=l+'\n';
+      }
+    });
+    if(chunk.trim())chunks.push(chunk.trim());
 
-      // Laad eerste chunk
-      if(inp){inp.value=window._importChunks[0];autoResize(inp);}
-      addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('+totalLines+' berichten, '+window._importChunks.length+' delen).'
-        +'<br>Ik verwerk het in delen. Tik <strong>Verstuur</strong> voor deel 1/'
-        +window._importChunks.length+'. Na elke bevestiging laad ik automatisch het volgende deel.');
-    } else {
-      if(inp){inp.value=cleaned;autoResize(inp);}
-      addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('+totalLines+' berichten).'
-        +'<br>Tik op <strong>Verstuur</strong> om te analyseren — ik herken wie wat zei en sorteer naar het juiste dossier.');
-    }
+    // Altijd eerst vragen over wie het gesprek gaat
+    showWhatsAppDialog(cleaned,suggestion,matchedDossier);
     toast('✅ WhatsApp chat geladen!');
   };
   reader.readAsText(file,'UTF-8');
