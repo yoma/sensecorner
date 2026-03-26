@@ -1235,8 +1235,19 @@ async function saveContactCat(dosName,catId,silent){
 }
 
 async function herbereken(dosName,silent=true){
-  if(!S.apiKey)return;  // Geen API key? Stilletjes skippen
-  if(!silent)toast('⏳ Eigenschappen berekenen...');
+  if(!S.apiKey)return;
+  // Toon subtiele "berekenen..." indicator op de balkjes
+  var propsEl=document.getElementById('contact-props-bars-'+dosName)||document.getElementById('own-props-bars');
+  if(propsEl){
+    var indDiv=document.createElement('div');
+    indDiv.id='herb-ind-'+dosName;
+    indDiv.style.cssText='font-size:12px;color:var(--r);margin-top:4px';
+    indDiv.textContent='↻ Eigenschappen worden bijgewerkt...';
+    // Insert after props bars if not already there
+    if(!document.getElementById('herb-ind-'+dosName)){
+      propsEl.parentNode&&propsEl.parentNode.insertBefore(indDiv,propsEl.nextSibling);
+    }
+  }
   var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
   var cats=d.categories||{};
 
@@ -1275,12 +1286,54 @@ Elk getal 0-100.`;
     S.pdata[dosName]=d;
     // Stuur categories expliciet mee zodat saveP ze nooit kan verliezen
     await saveP(dosName,d.props,d.count,d.categories);
-    // Update balkjes in-place — NOOIT loadTab aanroepen (sluit accordion)
+    // Update balkjes in-place
     var propsBarEl=document.getElementById('contact-props-bars-'+dosName);
-    if(propsBarEl)propsBarEl.innerHTML=renderProps(d.props);
+    if(propsBarEl){
+      propsBarEl.innerHTML=renderProps(d.props);
+    }
     var ownBarEl=document.getElementById('own-props-bars');
     if(ownBarEl&&dosName==='OWN Sense')ownBarEl.innerHTML=renderProps(d.props);
-  }catch(x){if(!silent)toast('Fout: '+x.message);}
+    // Verwijder indicator en toon bevestiging
+    var ind=document.getElementById('herb-ind-'+dosName);
+    if(ind){
+      ind.textContent='✓ Eigenschappen bijgewerkt';
+      ind.style.color='#4CAF50';
+      setTimeout(function(){if(ind&&ind.parentNode)ind.parentNode.removeChild(ind);},3000);
+    }
+    // Update match % in header ook
+    var matchEl=document.querySelector('.match-bar');
+    if(matchEl&&dosName!=='OWN Sense'&&S.screen==='dossier'&&S.viewDossier===dosName){
+      var own=S.pdata['OWN Sense']||{props:{...DP}};
+      var ownHasData=PK.some(function(k){return(own.props[k]||0)>0;});
+      var dHasData=PK.some(function(k){return(d.props[k]||0)>0;});
+      if(ownHasData&&dHasData){
+        var diffs=[];
+        PK.forEach(function(k){
+          var ov=own.props[k]||0,cv=d.props[k]||0;
+          if(ov>0&&cv>0)diffs.push(100-Math.abs(ov-cv));
+          else if(ov>0&&cv===0)diffs.push(50);
+        });
+        if(diffs.length>=1){
+          var pct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
+          pct=Math.min(98,Math.max(10,pct));
+          var lbl=pct>=80?'Sterke match':pct>=60?'Goede match':pct>=40?'Gemiddelde match':'Weinig overlap';
+          var col=pct>=80?'#2E7D32':pct>=60?'#E07800':'#888';
+          matchEl.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
+            +'<span style="font-size:13px;font-weight:600;color:#555">Match met jouw profiel</span>'
+            +'<span style="font-size:22px;font-weight:800;color:'+col+'">'+pct+'%</span>'
+            +'</div>'
+            +'<div style="height:8px;background:var(--b);border-radius:4px;overflow:hidden;margin-bottom:6px">'
+            +'<div style="height:100%;background:'+col+';border-radius:4px;width:'+pct+'%;transition:width .8s ease"></div>'
+            +'</div>'
+            +'<div style="font-size:12px;color:'+col+';font-weight:600">'+lbl+'</div>';
+        }
+      }
+    }
+  }catch(x){
+    console.error('herbereken error:',x);
+    var ind2=document.getElementById('herb-ind-'+dosName);
+    if(ind2){ind2.textContent='⚠️ Kon niet bijwerken';ind2.style.color='#c00';setTimeout(function(){if(ind2&&ind2.parentNode)ind2.parentNode.removeChild(ind2);},3000);}
+  }
 }
 
 // ══ OWN Sense ═════════════════════════════════════════════════════
