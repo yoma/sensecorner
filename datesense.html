@@ -213,6 +213,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .avb-ja{padding:8px 18px;background:#2E7D32;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .avb-nee{padding:8px 18px;background:var(--g);color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 
+/* ══ IMPORT MENU ══ */
+.import-menu{position:fixed;bottom:80px;left:16px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.15);border:1px solid var(--b);z-index:100;overflow:hidden;transform:scale(.95);opacity:0;pointer-events:none;transition:transform .18s ease,opacity .18s ease;transform-origin:bottom left;min-width:220px}
+.import-menu.open{transform:scale(1);opacity:1;pointer-events:all}
+.import-item{display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;font-size:15px;color:var(--t);border-bottom:1px solid #F5F5F5}
+.import-item:last-child{border-bottom:none}
+.import-item:active{background:var(--g)}
+.import-icon{font-size:20px;width:28px;text-align:center;flex-shrink:0}
+
 /* ══ VERTEL REDESIGN ══ */
 .ai-result-box{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-top:8px}
 .ai-result-header{background:var(--r);color:#fff;padding:14px 16px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
@@ -318,7 +326,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <div class="input-bar">
       <div class="input-tip">Typ alles in één keer — ik sorteer het automatisch</div>
       <div class="input-row">
-        <button class="rnd gr" onclick="quickFill()" title="Voorbeeldtekst">
+
+        <button class="rnd gr" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <textarea class="input-area" id="msgInput" placeholder="Vertel me alles wat er in je hoofd zit..." rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
@@ -351,6 +360,35 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     </button>
   </div>
 </div>
+
+<!-- ══ IMPORT MENU ══ -->
+<div class="import-menu" id="importMenu">
+  <div class="import-item" onclick="importWhatsApp()">
+    <div class="import-icon">💬</div>
+    <div>
+      <div style="font-weight:600">WhatsApp export</div>
+      <div style="font-size:12px;color:var(--m)">Plak of upload een .txt bestand</div>
+    </div>
+  </div>
+  <div class="import-item" onclick="importFoto()">
+    <div class="import-icon">📸</div>
+    <div>
+      <div style="font-weight:600">Foto of screenshot</div>
+      <div style="font-size:12px;color:var(--m)">Foto van gesprek uploaden</div>
+    </div>
+  </div>
+  <div class="import-item" onclick="importTekst()">
+    <div class="import-icon">📋</div>
+    <div>
+      <div style="font-weight:600">Tekst plakken</div>
+      <div style="font-size:12px;color:var(--m)">Email, notitie of dagboek</div>
+    </div>
+  </div>
+</div>
+
+<!-- Verborgen file inputs -->
+<input type="file" id="fileInputTxt" accept=".txt" style="display:none" onchange="handleTxtFile(this)">
+<input type="file" id="fileInputImg" accept="image/*" style="display:none" onchange="handleImgFile(this)">
 
 <!-- ══ SEGMENT MODAL ══ -->
 <div class="seg-modal-overlay" id="segModal">
@@ -2429,6 +2467,106 @@ function stopMic(){
   _micActive=false;
   var btn=document.getElementById('micBtn');
   if(btn)btn.style.background='var(--r)';
+}
+
+// ══ Import functies ═════════════════════════════════════════════
+function toggleImportMenu(){
+  var menu=document.getElementById('importMenu');
+  if(!menu)return;
+  menu.classList.toggle('open');
+  // Sluit menu bij klik buiten
+  if(menu.classList.contains('open')){
+    setTimeout(function(){
+      document.addEventListener('click',function closeMenu(e){
+        if(!menu.contains(e.target)&&e.target.id!=='importBtn'){
+          menu.classList.remove('open');
+          document.removeEventListener('click',closeMenu);
+        }
+      });
+    },50);
+  }
+}
+
+function importWhatsApp(){
+  document.getElementById('importMenu').classList.remove('open');
+  document.getElementById('fileInputTxt').click();
+}
+
+function importFoto(){
+  document.getElementById('importMenu').classList.remove('open');
+  document.getElementById('fileInputImg').click();
+}
+
+function importTekst(){
+  document.getElementById('importMenu').classList.remove('open');
+  // Focus textarea en toon tip
+  var inp=document.getElementById('msgInput');
+  if(inp){
+    inp.focus();
+    inp.placeholder='Plak hier je tekst (Ctrl+V of lang indrukken)...';
+    setTimeout(function(){inp.placeholder='Vertel me alles wat er in je hoofd zit...';},4000);
+  }
+  toast('Plak je tekst in het veld (Ctrl+V)');
+}
+
+function handleTxtFile(input){
+  var file=input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var tekst=e.target.result;
+    // WhatsApp format opschonen: verwijder datums en namen
+    var cleaned=tekst
+      .split('\n')
+      .filter(function(l){return l.trim().length>5;})
+      .map(function(l){
+        // Verwijder WhatsApp timestamp "[DD/MM/YYYY, HH:MM:SS] Naam: "
+        return l.replace(/^\[[\d\/,\s:]+\]\s*[^:]+:\s*/,'').replace(/^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*[-]\s*[^:]+:\s*/,'').trim();
+      })
+      .filter(function(l){return l.length>3&&!l.startsWith('<');})
+      .join('\n');
+    var inp=document.getElementById('msgInput');
+    if(inp){
+      inp.value=cleaned.substring(0,2000); // Max 2000 tekens
+      autoResize(inp);
+      inp.focus();
+    }
+    toast('📋 WhatsApp chat geladen — pas aan en verstuur!');
+  };
+  reader.readAsText(file,'UTF-8');
+  input.value=''; // Reset voor hergebruik
+}
+
+async function handleImgFile(input){
+  if(!S.apiKey){toast('⚠️ API key nodig voor foto-analyse');return;}
+  var file=input.files[0];
+  if(!file)return;
+  toast('📸 Foto analyseren...');
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    var base64=e.target.result.split(',')[1];
+    try{
+      var res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',max_tokens:500,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
+            {type:'text',text:'Beschrijf de inhoud van dit gesprek of screenshot in gewone tekst, alsof je het navertelt. Geen namen van de afzender, alleen de inhoud. Max 300 woorden. Nederlands.'}
+          ]}]
+        })
+      });
+      var data=await res.json();
+      if(data.error)throw new Error(data.error.message);
+      var tekst=(data.content&&data.content[0]&&data.content[0].text)||'';
+      var inp=document.getElementById('msgInput');
+      if(inp&&tekst){inp.value=tekst;autoResize(inp);inp.focus();}
+      toast('✅ Foto gelezen — controleer en verstuur!');
+    }catch(x){toast('Fout bij foto-analyse: '+x.message);}
+  };
+  reader.readAsDataURL(file);
+  input.value='';
 }
 
 // ══ Init ══════════════════════════════════════════════════════════
