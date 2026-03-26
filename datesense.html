@@ -406,12 +406,27 @@ function renderProps(props){
 
 // ══ Auth ═════════════════════════════════════════════════════════
 async function init(){
-  var {data:{session}}=await sb.auth.getSession();
-  if(session){S.user=session.user;await loadAll();goScreen('home');}
-  else goScreen('login');
+  try{
+    var {data:{session}}=await sb.auth.getSession();
+    if(session){
+      S.user=session.user;
+      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      goScreen('home');
+    } else {
+      goScreen('login');
+    }
+  }catch(e){
+    console.error('init error:',e);
+    goScreen('login');
+  }
   sb.auth.onAuthStateChange(async(ev,ses)=>{
-    if(ev==='SIGNED_IN'&&ses){S.user=ses.user;await loadAll();goScreen('home');}
-    else if(ev==='SIGNED_OUT'){S.user=null;S.profiles=[];S.pdata={};goScreen('login');}
+    if(ev==='SIGNED_IN'&&ses){
+      S.user=ses.user;
+      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      goScreen('home');
+    } else if(ev==='SIGNED_OUT'){
+      S.user=null;S.profiles=['OWN Sense'];S.pdata={};goScreen('login');
+    }
   });
 }
 
@@ -445,8 +460,8 @@ async function loadAll(){
       {gevoeligheid:75,openheid:60,humor:45,directheid:30,avontuur:20},
       {gevoeligheid:75,openheid:65,humor:45,directheid:35,avontuur:20}
     ];
-    function isOldDefault(props){
-      return OLD_DEFAULTS.some(d=>PK.every(k=>props[k]===d[k]));
+    function isOldDefault(p){
+      return OLD_DEFAULTS.some(function(d){return PK.every(function(k){return p[k]===d[k];});});
     }
     data.forEach(p=>{
       if(p.name!=='OWN Sense')S.profiles.push(p.name);
@@ -697,11 +712,12 @@ async function loadTab(name,tab,d){
     var hasData=PK.some(k=>(d.props[k]||0)>0);
     var isOwnDossier=name==='OWN Sense';
     var cats=d.categories||{};
+    var personName=name.replace('Sense','').trim();
 
-    // Contact invulvakjes definitie
+    // Contact invulcategorieën definitie
     var CONTACT_CATS=[
       {id:'karakter_contact',title:'Karakter & Persoonlijkheid',icon:'🧠',prompts:[
-        {q:`Hoe zou jij ${name.replace('Sense','')} omschrijven?`,ph:'Bv: open, gesloten, grappig, serieus...'},
+        {q:'Hoe zou jij '+personName+' omschrijven?',ph:'Bv: open, gesloten, grappig, serieus...'},
         {q:'Hoe gedraagt hij/zij zich in gesprekken?',ph:'Bv: luistert goed, praat veel, vermijdt onderwerp...'},
         {q:'Wat zijn opvallende eigenschappen of gewoontes?',ph:'Bv: altijd te laat, erg ambitieus, warm naar anderen...'}
       ]},
@@ -719,68 +735,79 @@ async function loadTab(name,tab,d){
 
     function contactCatProgress(catId){
       var catData=cats[catId]||{};
-      var cat=CONTACT_CATS.find(c=>c.id===catId);
+      var cat=CONTACT_CATS.find(function(c){return c.id===catId;});
       if(!cat)return{filled:0,total:0};
-      return{filled:cat.prompts.filter((_,i)=>(catData['a'+i]||'').trim().length>0).length,total:cat.prompts.length};
+      var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+      return{filled:filled,total:cat.prompts.length};
     }
 
-    var contactFilled=CONTACT_CATS.reduce((s,c)=>s+contactCatProgress(c.id).filled,0);
-    var contactTotal=CONTACT_CATS.reduce((s,c)=>s+c.prompts.length,0);
+    var contactFilled=CONTACT_CATS.reduce(function(s,c){return s+contactCatProgress(c.id).filled;},0);
+    var contactTotal=CONTACT_CATS.reduce(function(s,c){return s+c.prompts.length;},0);
 
-    var propsHtml=renderProps(d.props);
-    var ownTip=isOwnDossier?`<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">
-  💡 <strong>Vul je profiel in</strong> via de <strong>OWN</strong> tab onderaan om je eigenschappen automatisch te berekenen.
-  <div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="goScreen('own')">→ Naar OWN Sense</button></div>
-</div>`:'';
-    var resetBtn=isOwnDossier&&hasData?`<button onclick="resetOwnProps()" style="margin-bottom:16px;padding:8px 16px;background:#FFF0F0;color:var(--r);border:1px solid #FFD5D5;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↺ Reset naar 0%</button>`:'';
+    // Bouw HTML
+    var html='';
 
-    // Contact-dossier categorieën HTML
-    var contactCatsHtml='';
+    // Eigenschappen
+    html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:12px">Eigenschappen</div>';
+    html+=renderProps(d.props);
+
+    // OWN: reset knop + tip
+    if(isOwnDossier){
+      if(hasData){
+        html+='<button onclick="resetOwnProps()" style="margin-bottom:16px;padding:8px 16px;background:#FFF0F0;color:var(--r);border:1px solid #FFD5D5;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↺ Reset naar 0%</button>';
+      }
+      html+='<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">';
+      html+='💡 <strong>Vul je profiel in</strong> via de <strong>OWN</strong> tab onderaan om je eigenschappen automatisch te berekenen.';
+      html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="goScreen(\'own\')">→ Naar OWN Sense</button></div>';
+      html+='</div>';
+    }
+
+    // Contact: invulcategorieën
     if(!isOwnDossier){
-      contactCatsHtml=`
-<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over ${name.replace('Sense','')}?</div>
-<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>
-<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">
-  <span style="font-size:13px;color:#555">${contactFilled}/${contactTotal} vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>
-</div>
-${CONTACT_CATS.map(cat=>{
-  var prog=contactCatProgress(cat.id);
-  var catData=cats[cat.id]||{};
-  var filled=prog.filled>0;
-  return \`<div class="own-cat \${filled?'filled':''}" id="cc-\${cat.id}">
-  <div class="own-cat-head" onclick="toggleContactCat('\${cat.id}')">
-    <div class="own-cat-icon">\${cat.icon}</div>
-    <div class="own-cat-info">
-      <div class="own-cat-title">\${cat.title}</div>
-      <div class="own-cat-prog \${prog.filled===prog.total?'done':''}">\${prog.filled}/\${prog.total} vragen beantwoord\${prog.filled===prog.total?' ✓':''}</div>
-    </div>
-    <div class="own-cat-arrow">›</div>
-  </div>
-  <div class="own-cat-body">
-    \${cat.prompts.map((p,i)=>\`
-      <div class="own-q-label">\${p.q}</div>
-      <textarea class="own-ta" id="cc-\${cat.id}-a\${i}" placeholder="\${p.ph}" rows="2" oninput="autoResize(this)">\${catData['a'+i]||''}</textarea>
-    \`).join('')}
-    <button class="own-save-btn" onclick="saveContactCat('\${name}','\${cat.id}')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>
-      Opslaan
-    </button>
-  </div>
-</div>\`;
-}).join('')}`;
+      html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
+      html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
+      html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
+      html+='<span style="font-size:13px;color:#555">'+contactFilled+'/'+contactTotal+' vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>';
+      html+='</div>';
+
+      CONTACT_CATS.forEach(function(cat){
+        var prog=contactCatProgress(cat.id);
+        var catData=cats[cat.id]||{};
+        var isFilled=prog.filled>0;
+        html+='<div class="own-cat '+(isFilled?'filled':'')+'" id="cc-'+cat.id+'">';
+        html+='<div class="own-cat-head" onclick="toggleContactCat(\''+cat.id+'\')">';
+        html+='<div class="own-cat-icon">'+cat.icon+'</div>';
+        html+='<div class="own-cat-info">';
+        html+='<div class="own-cat-title">'+cat.title+'</div>';
+        html+='<div class="own-cat-prog '+(prog.filled===prog.total?'done':'')+'">';
+        html+=prog.filled+'/'+prog.total+' vragen beantwoord'+(prog.filled===prog.total?' ✓':'');
+        html+='</div></div>';
+        html+='<div class="own-cat-arrow">›</div>';
+        html+='</div>'; // own-cat-head
+        html+='<div class="own-cat-body">';
+        cat.prompts.forEach(function(p,i){
+          var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          html+='<div class="own-q-label">'+p.q+'</div>';
+          html+='<textarea class="own-ta" id="cc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" oninput="autoResize(this)">'+saved+'</textarea>';
+        });
+        html+='<button class="own-save-btn" onclick="saveContactCat(\''+name+'\',\''+cat.id+'\')">';
+        html+='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan</button>';
+        html+='</div>'; // own-cat-body
+        html+='</div>'; // own-cat
+      });
     }
 
-    cont.innerHTML=`
-<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:12px">Eigenschappen</div>
-${propsHtml}
-${resetBtn}
-${ownTip}
-${contactCatsHtml}
-<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 10px">Status</div>
-<div style="background:var(--g);border-radius:12px;padding:14px 16px;font-size:14px;color:#555;line-height:1.6;border:1px solid var(--b)">
-  ${d.count} entries opgeslagen${d.lastActive?` · Laatste: ${timeAgo(d.lastActive)}`:''}
-</div>
-${!isOwnDossier?`<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="goScreen('vertel')">✏️ Voeg toe</button><button class="btn-g" onclick="switchTab('advies')">💡 Advies</button></div></div>`:''}`;
+    // Status
+    html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 10px">Status</div>';
+    html+='<div style="background:var(--g);border-radius:12px;padding:14px 16px;font-size:14px;color:#555;line-height:1.6;border:1px solid var(--b)">';
+    html+=d.count+' entries opgeslagen'+(d.lastActive?' · Laatste: '+timeAgo(d.lastActive):'');
+    html+='</div>';
+
+    if(!isOwnDossier){
+      html+='<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="goScreen(\'vertel\')">✏️ Voeg toe</button><button class="btn-g" onclick="switchTab(\'advies\')">💡 Advies</button></div></div>';
+    }
+
+    cont.innerHTML=html;
   }
   else if(tab==='tijdlijn'){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
