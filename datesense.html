@@ -366,8 +366,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <div class="import-item" onclick="importWhatsApp()">
     <div class="import-icon">💬</div>
     <div>
-      <div style="font-weight:600">WhatsApp export</div>
-      <div style="font-size:12px;color:var(--m)">Plak of upload een .txt bestand</div>
+      <div style="font-weight:600">WhatsApp importeren</div>
+      <div style="font-size:12px;color:var(--m)">Upload je .txt bestand van WhatsApp</div>
     </div>
   </div>
   <div class="import-item" onclick="importFoto()">
@@ -2044,9 +2044,27 @@ async function sendMsg(){
     +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte empathische reactie max 2 zinnen"}';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:txt}],1000);
+    var raw=await callAPI(sys,[{role:'user',content:txt}],2000);
     var clean=raw.replace(/```json|```/g,'').trim();
-    var parsed=JSON.parse(clean);
+    // Fix afgekapte JSON door te sluiten
+    if(!clean.endsWith('}')){
+      // Probeer JSON te repareren
+      var lastBrace=clean.lastIndexOf('}');
+      if(lastBrace>0)clean=clean.substring(0,lastBrace+1);
+      // Zorg dat arrays gesloten zijn
+      if((clean.match(/\[/g)||[]).length>(clean.match(/\]/g)||[]).length){
+        clean+=']'.repeat((clean.match(/\[/g)||[]).length-(clean.match(/\]/g)||[]).length);
+      }
+      if((clean.match(/\{/g)||[]).length>(clean.match(/\}/g)||[]).length){
+        clean+='}'.repeat((clean.match(/\{/g)||[]).length-(clean.match(/\}/g)||[]).length);
+      }
+    }
+    var parsed;
+    try{parsed=JSON.parse(clean);}
+    catch(jsonErr){
+      // Fallback: maak een simpel segment van de hele tekst
+      parsed={segmenten:[{tekst:txt.substring(0,200),dossier:'OWN Sense',type:'feit'}],nieuwe_namen:[],reactie:'De tekst was te lang om volledig te analyseren. Probeer een kortere tekst.'};
+    }
     hideT();
 
     // Verwerk nieuwe namen
@@ -2232,7 +2250,21 @@ async function bevestigAlles(){
 
   addMsg('ai',html);
   toast('✅ Opgeslagen in '+(Object.keys(perDossier).length)+' dossier(s)!');
-  rDrawer(); // refresh badges
+  rDrawer();
+  // Auto-laad volgend WhatsApp chunk als beschikbaar
+  if(window._importChunks&&window._importChunkIdx<window._importChunks.length-1){
+    window._importChunkIdx++;
+    var nextChunk=window._importChunks[window._importChunkIdx];
+    var inp=document.getElementById('msgInput');
+    if(inp&&nextChunk){
+      inp.value=nextChunk;
+      autoResize(inp);
+    }
+    addMsg('ai','⏭️ <strong>Deel '+(window._importChunkIdx+1)+'/'+window._importChunks.length+'</strong> klaar — tik Verstuur om verder te gaan.');
+  } else if(window._importChunks&&window._importChunkIdx>=window._importChunks.length-1){
+    window._importChunks=null;
+    window._importChunkIdx=0;
+  }
 }
 
 // Nieuwe persoon toevoegen of negeren
@@ -2526,16 +2558,37 @@ function handleTxtFile(input){
         return true;
       })
       .join('\n');
-    // Stuur direct naar AI als het een WhatsApp export is
+    var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
+    var totalLines=lines.length;
     var inp=document.getElementById('msgInput');
-    if(inp){
-      inp.value=cleaned.substring(0,3000);
-      autoResize(inp);
+
+    // Max ~1500 tekens per verwerking — splits lange gesprekken
+    var MAX_CHARS=1500;
+    if(cleaned.length>MAX_CHARS){
+      // Bewaar alle chunks voor gefaseerde verwerking
+      window._importChunks=[];
+      var chunk='';
+      lines.forEach(function(l){
+        if((chunk+l).length>MAX_CHARS&&chunk){
+          window._importChunks.push(chunk.trim());
+          chunk=l+'\n';
+        } else {
+          chunk+=l+'\n';
+        }
+      });
+      if(chunk.trim())window._importChunks.push(chunk.trim());
+      window._importChunkIdx=0;
+
+      // Laad eerste chunk
+      if(inp){inp.value=window._importChunks[0];autoResize(inp);}
+      addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('+totalLines+' berichten, '+window._importChunks.length+' delen).'
+        +'<br>Ik verwerk het in delen. Tik <strong>Verstuur</strong> voor deel 1/'
+        +window._importChunks.length+'. Na elke bevestiging laad ik automatisch het volgende deel.');
+    } else {
+      if(inp){inp.value=cleaned;autoResize(inp);}
+      addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('+totalLines+' berichten).'
+        +'<br>Tik op <strong>Verstuur</strong> om te analyseren — ik herken wie wat zei en sorteer naar het juiste dossier.');
     }
-    // Bevestiging tonen
-    addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('
-      +cleaned.split('\n').filter(function(l){return l.trim().length>0;}).length
-      +' berichten). Tik op verstuur om het te analyseren — de AI herkent wie wat zei en sorteert alles naar het juiste dossier.');
     toast('✅ WhatsApp chat geladen!');
   };
   reader.readAsText(file,'UTF-8');
