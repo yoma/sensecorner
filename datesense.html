@@ -848,16 +848,40 @@ async function rDossier(el){
   if(!isOwn&&matchPct!==null&&matchPct>=0){
     var matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
     var matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
-    header+=`<div class="match-bar">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:600;color:#555">Match met jouw profiel</span>
-        <span style="font-size:22px;font-weight:800;color:${matchColor}">${matchPct}%</span>
-      </div>
-      <div style="height:8px;background:var(--b);border-radius:4px;overflow:hidden;margin-bottom:6px">
-        <div style="height:100%;background:${matchColor};border-radius:4px;width:${matchPct}%;transition:width .8s ease"></div>
-      </div>
-      <div style="font-size:12px;color:${matchColor};font-weight:600">${matchLabel}</div>
-    </div>`;
+
+    // Bereken per eigenschap de grootste gelijkenissen en verschillen voor uitleg
+    var own2=S.pdata['OWN Sense']||{props:{...DP}};
+    var goedMatch=[],slecht=[];
+    PK.forEach(function(k,i){
+      var ov=own2.props[k]||0,cv=d.props[k]||0;
+      if(ov>0&&cv>0){
+        var diff=Math.abs(ov-cv);
+        if(diff<=20)goedMatch.push(PL[i]);
+        else if(diff>=40)slecht.push(PL[i]);
+      }
+    });
+    var reden='';
+    if(goedMatch.length&&slecht.length){
+      reden='Jullie lijken sterk op elkaar in <strong>'+goedMatch.slice(0,2).join(' & ')+'</strong>, maar verschillen meer op <strong>'+slecht.slice(0,2).join(' & ')+'</strong>.';
+    } else if(goedMatch.length){
+      reden='Jullie lijken sterk op elkaar in <strong>'+goedMatch.slice(0,3).join(', ')+'</strong>.';
+    } else if(slecht.length){
+      reden='Jullie verschillen behoorlijk op <strong>'+slecht.slice(0,2).join(' & ')+'</strong>.';
+    } else {
+      reden='Voeg meer info toe voor een gedetailleerde uitleg.';
+    }
+
+    header+='<div class="match-bar">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
+      +'<span style="font-size:13px;font-weight:600;color:#555">Match met jouw profiel</span>'
+      +'<span style="font-size:22px;font-weight:800;color:'+matchColor+'">'+matchPct+'%</span>'
+      +'</div>'
+      +'<div style="height:8px;background:var(--b);border-radius:4px;overflow:hidden;margin-bottom:8px">'
+      +'<div style="height:100%;background:'+matchColor+';border-radius:4px;width:'+matchPct+'%;transition:width .8s ease"></div>'
+      +'</div>'
+      +'<div style="font-size:12px;color:'+matchColor+';font-weight:700;margin-bottom:4px">'+matchLabel+'</div>'
+      +'<div style="font-size:13px;color:#555;line-height:1.6">'+reden+'</div>'
+      +'</div>';
   } else if(!isOwn&&(matchPct===null||matchPct===-1)){
     var matchMsg=matchPct===-1
       ?'Vul eerst je <strong>OWN Sense</strong> profiel in om een match te berekenen.'
@@ -950,7 +974,6 @@ async function loadTab(name,tab,d){
     // OWN: reset knop + tip
     if(isOwnDossier){
       if(hasData){
-        html+='<button onclick="resetOwnProps()" style="margin-bottom:16px;padding:8px 16px;background:#FFF0F0;color:var(--r);border:1px solid #FFD5D5;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↺ Reset naar 0%</button>';
       }
       html+='<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">';
       html+='💡 <strong>Vul je profiel in</strong> via de <strong>OWN</strong> tab onderaan om je eigenschappen automatisch te berekenen.';
@@ -1317,15 +1340,28 @@ Elk getal 0-100.`;
           var pct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
           pct=Math.min(98,Math.max(10,pct));
           var lbl=pct>=80?'Sterke match':pct>=60?'Goede match':pct>=40?'Gemiddelde match':'Weinig overlap';
-          var col=pct>=80?'#2E7D32':pct>=60?'#E07800':'#888';
+          var col2=pct>=80?'#2E7D32':pct>=60?'#E07800':'#888';
+          var goed2=[],slecht2=[];
+          PK.forEach(function(k,i){
+            var ov2=own.props[k]||0,cv2=d.props[k]||0;
+            if(ov2>0&&cv2>0){
+              if(Math.abs(ov2-cv2)<=20)goed2.push(PL[i]);
+              else if(Math.abs(ov2-cv2)>=40)slecht2.push(PL[i]);
+            }
+          });
+          var red2=goed2.length&&slecht2.length
+            ?'Sterk gelijk in <strong>'+goed2.slice(0,2).join(' & ')+'</strong>, verschil in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.'
+            :goed2.length?'Goed gelijk in <strong>'+goed2.slice(0,3).join(', ')+'</strong>.'
+            :slecht2.length?'Groot verschil in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.':'';
           matchEl.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
             +'<span style="font-size:13px;font-weight:600;color:#555">Match met jouw profiel</span>'
-            +'<span style="font-size:22px;font-weight:800;color:'+col+'">'+pct+'%</span>'
+            +'<span style="font-size:22px;font-weight:800;color:'+col2+'">'+pct+'%</span>'
             +'</div>'
-            +'<div style="height:8px;background:var(--b);border-radius:4px;overflow:hidden;margin-bottom:6px">'
-            +'<div style="height:100%;background:'+col+';border-radius:4px;width:'+pct+'%;transition:width .8s ease"></div>'
+            +'<div style="height:8px;background:var(--b);border-radius:4px;overflow:hidden;margin-bottom:8px">'
+            +'<div style="height:100%;background:'+col2+';border-radius:4px;width:'+pct+'%;transition:width .8s ease"></div>'
             +'</div>'
-            +'<div style="font-size:12px;color:'+col+';font-weight:600">'+lbl+'</div>';
+            +'<div style="font-size:12px;color:'+col2+';font-weight:700;margin-bottom:4px">'+lbl+'</div>'
+            +(red2?'<div style="font-size:13px;color:#555;line-height:1.6">'+red2+'</div>':'');
         }
       }
     }
@@ -1944,8 +1980,8 @@ async function bevestigAlles(){
       await updateEigenschappenAI(dossier,samengevat);
     } else {
       await saveP(dossier,pd.props,pd.count,pd.categories);
-      // Automatisch eigenschappen herberekenen op de achtergrond
-      herbereken(dossier);
+      // Auto-vul invulvakjes + herbereken op achtergrond
+      updateContactCategories(dossier,samengevat);
     }
   }
 
@@ -2018,6 +2054,56 @@ function clearChat(){
   ca.appendChild(d);
   // Welkomstbericht ook in S.vertelMsgs zetten
   S.vertelMsgs.push({role:'ai',html:'Klaar voor het volgende! Wat speelt er?'});
+}
+
+// Auto-vul invulvakjes van contact-dossier op basis van Vertel tekst
+async function updateContactCategories(dosName,tekst){
+  if(!S.apiKey)return;
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+  if(!d.categories)d.categories={};
+  var personName=dn(dosName);
+
+  var sys='Je bent DateSensei. Analyseer de tekst over "'+personName+'" en vul de passende antwoorden in op de invulvragen.'
+    +' Geef ENKEL geldig JSON (geen markdown):'
+    +'{"karakter_contact":{"a0":"","a1":"","a2":""},"patronen_contact":{"a0":"","a1":"","a2":""},"gevoel_contact":{"a0":"","a1":"","a2":""}}'
+    +' Vragen:'
+    +' karakter_contact: a0=Hoe zou jij '+personName+' omschrijven?, a1=Hoe gedraagt hij/zij zich in gesprekken?, a2=Wat zijn opvallende eigenschappen of gewoontes?'
+    +' patronen_contact: a0=Welke patronen merk je op?, a1=Hoe reageert hij/zij op emoties of conflict?, a2=Is hij/zij consistent in woorden en daden?'
+    +' gevoel_contact: a0=Hoe voel jij je bij deze persoon?, a1=Wat trekt jou aan in hem/haar?, a2=Wat stoort of twijfelt je?'
+    +' Laat velden leeg ("") als de tekst er geen info over geeft.'
+    +' Schrijf bondig (max 1 zin per veld). Combineer met bestaande antwoorden als die er al zijn.';
+
+  try{
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande info: '+JSON.stringify(d.categories)+'\nNieuwe tekst: '+tekst}],600);
+    var clean=raw.replace(/```json|```/g,'').trim();
+    var updates=JSON.parse(clean);
+
+    // Merge: nieuwe info wint altijd — het is de meest recente observatie
+    // Als er al een waarde was, combineer oud + nieuw zodat evolutie zichtbaar blijft
+    ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
+      if(!updates[catId])return;
+      if(!d.categories[catId])d.categories[catId]={};
+      ['a0','a1','a2'].forEach(function(ak){
+        var newVal=(updates[catId][ak]||'').trim();
+        var oldVal=(d.categories[catId][ak]||'').trim();
+        if(!newVal)return; // AI had geen nieuwe info voor dit veld
+        if(!oldVal){
+          d.categories[catId][ak]=newVal; // Leeg veld: gewoon invullen
+        } else if(newVal.toLowerCase()!==oldVal.toLowerCase()){
+          // Combineer: toon evolutie (nieuwste eerst)
+          d.categories[catId][ak]=newVal+' (eerder: '+oldVal+')';
+        }
+        // Gelijk: niets veranderen
+      });
+    });
+
+    S.pdata[dosName]=d;
+    await saveP(dosName,d.props,d.count,d.categories);
+    // Trigger herbereken met nieuwe categorieën
+    herbereken(dosName);
+  }catch(x){
+    console.warn('updateContactCategories error:',x);
+  }
 }
 
 async function updateEigenschappenAI(dossier,tekst){
