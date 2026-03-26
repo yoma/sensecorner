@@ -958,13 +958,22 @@ async function rDossier(el){
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
   await loadTab(name,S.viewTab,d);
 
-  // Herbereken altijd bij openen als er data is — zorgt dat props actueel zijn
+  // Herbereken alleen als count veranderd is tov vorige keer
   if(!isOwn&&S.apiKey){
-    var hasAnyData=d.count>0||(d.categories&&Object.values(d.categories).some(function(c){
+    if(!S.herberekenCache)S.herberekenCache={};
+    var lastCount=S.herberekenCache[name]||0;
+    var currentCount=d.count||0;
+    var hasCatData=d.categories&&Object.values(d.categories).some(function(c){
       return Object.values(c||{}).some(function(v){return(v||'').trim().length>0;});
-    }));
-    if(hasAnyData){
-      herbereken(name); // stil op achtergrond
+    });
+    var needsRecalc=currentCount!==lastCount||(hasCatData&&!PK.some(function(k){return(d.props[k]||0)>0;}));
+    if(needsRecalc){
+      S.herberekenCache[name]=currentCount;
+      herbereken(name);
+    }
+    // Auto-vul invulvakjes als er timeline data is maar categories leeg zijn
+    if(currentCount>0&&!hasCatData){
+      autoVulCategoriesFromTimeline(name);
     }
   }
 }
@@ -1423,8 +1432,10 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
     // Altijd meest recente categories gebruiken uit memory
     d.categories=(S.pdata[dosName]&&S.pdata[dosName].categories)||d.categories||{};
     S.pdata[dosName]=d;
-    // Stuur categories expliciet mee zodat saveP ze nooit kan verliezen
     await saveP(dosName,d.props,d.count,d.categories);
+    // Reset herbereken cache zodat volgende openen weet dat props up-to-date zijn
+    if(!S.herberekenCache)S.herberekenCache={};
+    S.herberekenCache[dosName]=d.count||0;
     // Update balkjes in-place
     var propsBarEl=document.getElementById('contact-props-bars-'+dosName);
     if(propsBarEl){
@@ -2234,6 +2245,17 @@ function clearChat(){
   ca.appendChild(d);
   // Welkomstbericht ook in S.vertelMsgs zetten
   S.vertelMsgs.push({role:'ai',html:'Klaar voor het volgende! Wat speelt er?'});
+}
+
+// Auto-vul categories vanuit timeline als er nog niets ingevuld is
+async function autoVulCategoriesFromTimeline(dosName){
+  if(!S.apiKey)return;
+  var msgs=[];
+  try{msgs=await loadMsgs(dosName);}catch(e){return;}
+  var tekst=msgs.filter(function(m){return m.role==='user';})
+    .map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim();}).join(' ');
+  if(!tekst.trim())return;
+  await updateContactCategories(dosName,tekst);
 }
 
 // Auto-vul invulvakjes van contact-dossier op basis van Vertel tekst
