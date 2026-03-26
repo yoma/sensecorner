@@ -252,9 +252,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .own-ta{width:100%;padding:12px 14px;border:1.5px solid var(--b);border-radius:11px;font-size:14px;font-family:inherit;color:var(--t);resize:none;outline:none;min-height:72px;line-height:1.5;background:#fff}
 .own-ta:focus{border-color:var(--r);background:#fff}
 .own-ta::placeholder{color:#ccc}
-.own-save-btn{width:100%;padding:13px;background:var(--r);color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px}
-.own-save-btn:active{opacity:.8}
-.own-save-btn:disabled{opacity:.5;pointer-events:none}
+.own-save-btn{display:none} /* hidden — auto-save replaces this */
+.autosave-indicator{font-size:12px;color:#aaa;text-align:right;margin-top:6px;min-height:18px;transition:color .3s}
+.autosave-indicator.saving{color:var(--r)}
+.autosave-indicator.saved{color:#4CAF50}
 .own-last-saved{font-size:12px;color:#2E7D32;text-align:center;margin-top:8px;display:none}
 </style>
 </head>
@@ -894,8 +895,7 @@ async function loadTab(name,tab,d){
           html+='<div class="own-q-label">'+p.q+'</div>';
           html+='<textarea class="own-ta" id="cc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" oninput="autoResize(this)">'+saved+'</textarea>';
         });
-        html+='<button class="own-save-btn" onclick="saveContactCat(\''+name+'\',\''+cat.id+'\')">';
-        html+='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan</button>';
+        html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
         html+='</div>'; // own-cat-body
         html+='</div>'; // own-cat
       });
@@ -916,7 +916,8 @@ async function loadTab(name,tab,d){
   else if(tab==='tijdlijn'){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
     // Gefilterd — alleen dit dossier!
-    var msgs=await loadMsgs(name);
+    var msgs=[];
+    try{ msgs=await loadMsgs(name); }catch(e){ console.error('loadMsgs error:',e); }
     if(!msgs.length){
       cont.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--m)">
         <div style="font-size:36px;margin-bottom:10px">📋</div>
@@ -941,25 +942,70 @@ async function loadTab(name,tab,d){
     }).join('');
   }
   else if(tab==='advies'){
-    cont.innerHTML=`<div style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI ADVIES</div>
-      <div id="advTxt" style="font-size:15px;color:#333;line-height:1.6">${d.count>0?'Klik voor een analyse van dit dossier.':'Voeg eerst entries toe voor advies.'}</div>
-      ${d.count>0?`<button class="aa r" style="margin-top:14px" onclick="genAdvies('${name}')">Genereer advies</button>`:''}
-    </div>`;
+    // Laad vorig advies uit cache als beschikbaar
+    var cachedAdvies=S.adviesCache&&S.adviesCache[name];
+    cont.innerHTML='<div style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI ADVIES</div>'
+      +'<div id="advTxt" style="font-size:15px;color:#333;line-height:1.6">'
+      +(cachedAdvies||'<div class="typing"><span></span><span></span><span></span></div>')
+      +'</div>'
+      +(cachedAdvies?'<button class="aa g" style="margin-top:14px" id="advRefreshBtn">↻ Vernieuwen</button>':'')
+      +'</div>';
+    // Koppel vernieuwen knop
+    var rb=document.getElementById('advRefreshBtn');
+    if(rb){(function(n){rb.onclick=function(){genAdvies(n);};})(name);}
+    // Auto-genereer als geen cache
+    if(!cachedAdvies&&d.count>0){
+      genAdvies(name);
+    } else if(!cachedAdvies&&d.count===0){
+      document.getElementById('advTxt').textContent='Voeg eerst entries toe via Vertel voor een analyse.';
+    }
   }
 }
 
 async function genAdvies(name){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
-  var box=document.getElementById('advTxt');if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+  var box=document.getElementById('advTxt');
+  if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
   var d=S.pdata[name]||{props:{...DP}};
-  var msgs=await loadMsgs(name);
-  var ctx=msgs.slice(-10).filter(m=>m.role==='user').map(m=>m.html.replace(/<[^>]*>/g,' ').trim()).join('\n');
-  var sys=`Je bent DateSensei, empathische AI dating coach. Analyseer dossier "${name}" en geef concreet eerlijk advies. Nederlands. Max 5 zinnen, 2 concrete actiestappen.`;
+  var msgs=[];
+  try{msgs=await loadMsgs(name);}catch(e){}
+  var ctx=msgs.slice(-15).filter(function(m){return m.role==='user';}).map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim();}).join('\n');
+  var catTxt='';
+  if(d.categories){
+    Object.values(d.categories).forEach(function(cat){
+      Object.values(cat).forEach(function(v){if(v&&v.trim())catTxt+=v+' ';});
+    });
+  }
+  var sys='Je bent DateSensei, empathische AI dating coach. '
+    +(name==='OWN Sense'
+      ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten voor de gebruiker. Wees warm, direct en eerlijk.'
+      :'Analyseer dossier "'+dn(name)+'" volledig: wat weet je over deze persoon, hoe verloopt het contact, wat zijn patronen? Geef 2 concrete adviezen.')
+    +' Maximaal 6 zinnen. Nederlands.';
+  var userContent='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify(d.props);
+  if(catTxt)userContent+='\nIngevulde info: '+catTxt;
+  if(ctx)userContent+='\nRecente entries:\n'+ctx;
   try{
-    var t=await callAPI(sys,[{role:'user',content:`Dossier: ${name}\nEigenschappen: ${JSON.stringify(d.props)}\nRecente entries:\n${ctx||'Geen entries.'}`}],600);
-    if(box)box.innerHTML=t.replace(/\n/g,'<br>');
-  }catch(x){if(box)box.innerHTML='<span style="color:red">Fout: '+x.message+'</span>';}
+    var t=await callAPI(sys,[{role:'user',content:userContent}],700);
+    var ts=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    var result=t.replace(/\n/g,'<br>');
+    if(box)box.innerHTML=result+'<div style="font-size:11px;color:#bbb;margin-top:12px">Gegenereerd om '+ts+'</div>';
+    // Cache opslaan
+    if(!S.adviesCache)S.adviesCache={};
+    S.adviesCache[name]=result+'<div style="font-size:11px;color:#bbb;margin-top:12px">Gegenereerd om '+ts+'</div>';
+    // Toon vernieuwen knop
+    var par=box.parentNode;
+    var renBtn=par&&par.querySelector('.aa.g');
+    if(!renBtn&&par){
+      var nb=document.createElement('button');
+      nb.className='aa g';nb.style.marginTop='14px';
+      nb.textContent='↻ Vernieuwen';
+      nb.onclick=function(){genAdvies(name);};
+      par.appendChild(nb);
+    }
+  }catch(x){
+    if(box)box.innerHTML='<span style="color:red">Kon geen advies genereren: '+x.message+'</span>';
+  }
 }
 
 async function resetOwnProps(){
@@ -973,6 +1019,29 @@ async function resetOwnProps(){
   await loadTab('OWN Sense',S.viewTab,d);
 }
 
+// ══ Auto-save ════════════════════════════════════════════════════
+var _autoSaveTimers={};
+
+function scheduleAutoSave(type,dosName,catId){
+  var key=type+':'+dosName+':'+catId;
+  clearTimeout(_autoSaveTimers[key]);
+  // Toon "Bezig..." indicator
+  var ind=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
+  if(ind){ind.textContent='...';ind.className='autosave-indicator saving';}
+  _autoSaveTimers[key]=setTimeout(function(){
+    if(type==='own')saveOwnCat(catId,true);
+    else saveContactCat(dosName,catId,true);
+  },1400);
+}
+
+function showAutoSaveIndicator(catId,ok){
+  var ind=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
+  if(!ind)return;
+  ind.textContent=ok?'✓ Opgeslagen':'Fout bij opslaan';
+  ind.className='autosave-indicator '+(ok?'saved':'');
+  if(ok)setTimeout(function(){if(ind){ind.textContent='';ind.className='autosave-indicator';}},2500);
+}
+
 // ══ Contact categorieën helpers ══════════════════════════════════
 function toggleContactCat(catId){
   var el=document.getElementById('cc-'+catId);
@@ -981,7 +1050,7 @@ function toggleContactCat(catId){
   if(el.classList.contains('open'))el.querySelectorAll('.own-ta').forEach(ta=>autoResize(ta));
 }
 
-async function saveContactCat(dosName,catId){
+async function saveContactCat(dosName,catId,silent){
   var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
   if(!d.categories)d.categories={};
   var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
@@ -1004,8 +1073,9 @@ async function saveContactCat(dosName,catId){
     if(progEl){progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');progEl.className='own-cat-prog'+(filled===3?' done':'');}
     if(filled>0)catEl.classList.add('filled');
   }
-  toast('💾 Opgeslagen — eigenschappen worden bijgewerkt...');
+  showAutoSaveIndicator(catId,true);
   // Automatisch herberekenen op de achtergrond
+  if(!silent)toast('💾 Eigenschappen worden bijgewerkt...');
   herbereken(dosName);
 }
 
@@ -1117,13 +1187,9 @@ ${OWN_CATS.map(cat=>{
   <div class="own-cat-body">
     ${cat.prompts.map((p,i)=>`
       <div class="own-q-label">${p.q}</div>
-      <textarea class="own-ta" id="oc-${cat.id}-a${i}" placeholder="${p.ph}" rows="2" oninput="autoResize(this)">${catData['a'+i]||''}</textarea>
+      <textarea class="own-ta" id="oc-${cat.id}-a${i}" placeholder="${p.ph}" rows="2" data-catid="${cat.id}" data-type="own" oninput="autoResize(this);scheduleAutoSave('own','OWN Sense','${cat.id}')">${catData['a'+i]||''}</textarea>
     `).join('')}
-    <button class="own-save-btn" id="oc-save-${cat.id}" onclick="saveOwnCat('${cat.id}')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>
-      Opslaan & eigenschappen updaten
-    </button>
-    <div class="own-last-saved" id="oc-saved-${cat.id}">✓ Opgeslagen</div>
+    <div class="autosave-indicator" id="oc-saved-${cat.id}"></div>
   </div>
 </div>`;
 }).join('')}
@@ -1148,7 +1214,7 @@ function toggleCat(catId){
   }
 }
 
-async function saveOwnCat(catId){
+async function saveOwnCat(catId,silent){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
   var btn=document.getElementById('oc-save-'+catId);
   if(btn){btn.disabled=true;btn.textContent='Bezig...';}
@@ -1217,10 +1283,22 @@ Elk getal tussen 0-100. Baseer je op de werkelijke tekst — gebruik lage percen
   // Herlaad eigenschappen balk
   var propsContainer=document.querySelector('#mainContent .prop')?.parentNode;
   // Herender de hele OWN pagina om balkjes te updaten
-  toast('✅ Opgeslagen & eigenschappen bijgewerkt!');
-  // Herlaad sectie
+  showAutoSaveIndicator(catId,true);
+  if(!silent)toast('✅ Eigenschappen bijgewerkt!');
+  // Update balkjes live zonder volledige herlaad
   var mc=document.getElementById('mainContent');
-  if(mc&&S.screen==='own'){rOWN(mc);}
+  if(mc&&S.screen==='own'){
+    // Update alleen de balkjes, niet de hele pagina (behoudt open categorieën)
+    var propsSection=mc.querySelector('.prop')?.closest('div[style]');
+    if(!propsSection){rOWN(mc);}
+    else{
+      var newProps=renderProps(S.pdata['OWN Sense']?.props||DP);
+      var propsCont=mc.querySelector('.prop')?.parentNode;
+      if(propsCont)propsCont.innerHTML=newProps;
+    }
+  } else if(mc&&S.screen==='dossier'&&S.viewTab==='overzicht'){
+    await loadTab(S.viewDossier,'overzicht',S.pdata[S.viewDossier]||{props:{...DP}});
+  }
 }
 
 // ══ VERTEL scherm ════════════════════════════════════════════════
@@ -1602,10 +1680,18 @@ Geef ENKEL geldig JSON terug (geen markdown, geen uitleg):
 
   }catch(x){
     hideT();
-    addMsg('ai','Er ging iets mis: '+x.message);
-    console.error(x);
+    var errMsg=x.message||'Onbekende fout';
+    if(errMsg.includes('401')||errMsg.includes('api_key')||errMsg.includes('authentication')){
+      addMsg('ai','⚠️ API key is ongeldig of verlopen. Controleer je key via ⚙️ instellingen.');
+    } else if(errMsg.includes('fetch')||errMsg.includes('network')){
+      addMsg('ai','⚠️ Geen verbinding. Controleer je internet en probeer opnieuw.');
+    } else {
+      addMsg('ai','Er ging iets mis: '+errMsg);
+    }
+    console.error('sendMsg error:',x);
+  } finally {
+    S.busy=false;
   }
-  S.busy=false;
 }
 
 // ══ Bevestig & Opslaan ════════════════════════════════════════════
@@ -1809,6 +1895,21 @@ function stopMic(){
 }
 
 // ══ Init ══════════════════════════════════════════════════════════
+// Event delegation: auto-save voor contact categorieën via data attributen
+document.addEventListener('input',function(e){
+  var ta=e.target;
+  if(!ta.classList.contains('own-ta'))return;
+  // Contact categorie textareas hebben id="cc-CATID-aN"
+  var m=ta.id.match(/^cc-(.+)-a\d+$/);
+  if(m){
+    var catId=m[1];
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
 init();
 </script>
 </body>
