@@ -928,9 +928,16 @@ async function rDossier(el){
         +'</div></div>';
 
       // Stats grid
+      // Bereken hoeveel invulvakjes al ingevuld zijn
+      var catsFilled=0;
+      if(d.categories){
+        ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
+          Object.values(d.categories[cid]||{}).forEach(function(v){if((v||'').trim())catsFilled++;});
+        });
+      }
       header+='<div class="stats-grid">'
-        +'<div class="stat-card"><div class="stat-num">'+msgCount+'</div><div class="stat-lbl">Entries</div></div>'
-        +'<div class="stat-card"><div class="stat-num">'+(daysKnown>0?daysKnown+'d':'—')+'</div><div class="stat-lbl">Bijgehouden</div></div>'
+        +'<div class="stat-card"><div class="stat-num">'+msgCount+'</div><div class="stat-lbl">Berichten over haar/hem</div></div>'
+        +'<div class="stat-card"><div class="stat-num">'+catsFilled+'/9</div><div class="stat-lbl">Profiel ingevuld</div></div>'
         +'</div>';
     } else {
       var matchMsg2=matchPct===-1
@@ -973,7 +980,7 @@ async function switchTab(tab){
 
 async function loadTab(name,tab,d){
   var cont=document.getElementById('tabContent');if(!cont)return;
-  // Ensure we have the latest data from memory (categories might have been updated)
+  // Altijd de meest recente data uit memory gebruiken
   if(S.pdata[name])d=S.pdata[name];
   if(tab==='overzicht'){
     try{
@@ -1075,6 +1082,33 @@ async function loadTab(name,tab,d){
     }
 
     cont.innerHTML=html;
+
+    // Auto-open ingevulde categorieën + vul textareas in
+    if(!isOwnDossier){
+      ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
+        var catData=(d.categories||{})[catId]||{};
+        var hasFilled=Object.values(catData).some(function(v){return(v||'').trim().length>0;});
+        if(!hasFilled)return;
+        var catEl=document.getElementById('cc-'+catId);
+        if(!catEl)return;
+        catEl.classList.add('open','filled');
+        [0,1,2].forEach(function(i){
+          var ta=document.getElementById('cc-'+catId+'-a'+i);
+          if(ta&&catData['a'+i]){ta.value=catData['a'+i];autoResize(ta);}
+        });
+        var filled=Object.values(catData).filter(function(v){return(v||'').trim().length>0;}).length;
+        var progEl=catEl.querySelector('.own-cat-prog');
+        if(progEl){progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');progEl.className='own-cat-prog'+(filled===3?' done':'');}
+      });
+      // Update totaalteller
+      var totalF=0;
+      ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
+        Object.values((d.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())totalF++;});
+      });
+      cont.querySelectorAll('div,span').forEach(function(el){
+        if(el.textContent.match(/^\d+\/9 vragen/))el.textContent=totalF+'/9 vragen beantwoord · eigenschappen worden automatisch bijgewerkt';
+      });
+    }
     }catch(err){
       console.error('loadTab overzicht error:',err);
       cont.innerHTML='<div style="padding:20px;color:red;font-size:13px">Fout bij laden: '+err.message+'</div>';
