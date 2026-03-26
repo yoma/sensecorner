@@ -440,14 +440,23 @@ async function loadAll(){
   if(!data||!data.length){
     await ensureP('OWN Sense');
   } else {
+    // Patronen van oude hardcoded defaults
+    var OLD_DEFAULTS=[
+      {gevoeligheid:75,openheid:60,humor:45,directheid:30,avontuur:20},
+      {gevoeligheid:75,openheid:65,humor:45,directheid:35,avontuur:20}
+    ];
+    function isOldDefault(props){
+      return OLD_DEFAULTS.some(d=>PK.every(k=>props[k]===d[k]));
+    }
     data.forEach(p=>{
       if(p.name!=='OWN Sense')S.profiles.push(p.name);
-      // props starten altijd op 0 als ze niet bestaan
-      var defaultProps={...DP};
       var savedProps=p.props||{};
-      // Merge — behoud opgeslagen waarden maar gebruik 0 als default
       var mergedProps={};
       PK.forEach(k=>{mergedProps[k]=savedProps[k]!==undefined?savedProps[k]:0;});
+      // Reset automatisch als het de oude hardcoded defaults zijn
+      if(!savedProps._v && isOldDefault(mergedProps)){
+        PK.forEach(k=>{mergedProps[k]=0;});
+      }
       S.pdata[p.name]={
         props:mergedProps,
         count:p.entry_count||0,
@@ -472,7 +481,7 @@ async function ensureP(name){
 async function saveP(name,props,count,categories){
   if(!S.user)return;
   sync('s');
-  var propsToSave={...props};
+  var propsToSave={...props,_v:1};  // _v:1 = bewust opgeslagen, nooit auto-reset
   if(categories)propsToSave.categories=categories;
   await sb.from('sense_profiles').upsert(
     {user_id:S.user.id,name,props:propsToSave,entry_count:count,last_active:new Date().toISOString()},
@@ -686,14 +695,92 @@ async function loadTab(name,tab,d){
   var cont=document.getElementById('tabContent');if(!cont)return;
   if(tab==='overzicht'){
     var hasData=PK.some(k=>(d.props[k]||0)>0);
+    var isOwnDossier=name==='OWN Sense';
+    var cats=d.categories||{};
+
+    // Contact invulvakjes definitie
+    var CONTACT_CATS=[
+      {id:'karakter_contact',title:'Karakter & Persoonlijkheid',icon:'🧠',prompts:[
+        {q:`Hoe zou jij ${name.replace('Sense','')} omschrijven?`,ph:'Bv: open, gesloten, grappig, serieus...'},
+        {q:'Hoe gedraagt hij/zij zich in gesprekken?',ph:'Bv: luistert goed, praat veel, vermijdt onderwerp...'},
+        {q:'Wat zijn opvallende eigenschappen of gewoontes?',ph:'Bv: altijd te laat, erg ambitieus, warm naar anderen...'}
+      ]},
+      {id:'patronen_contact',title:'Patronen & Gedrag',icon:'🔄',prompts:[
+        {q:'Welke patronen merk je op?',ph:'Bv: trekt zich terug als het spannend wordt, blaast warm en koud...'},
+        {q:'Hoe reageert hij/zij op emoties of conflict?',ph:'Bv: vermijdt conflict, wordt defensief, blijft rustig...'},
+        {q:'Is hij/zij consistent in woorden en daden?',ph:'Bv: zegt X maar doet Y, of altijd betrouwbaar...'}
+      ]},
+      {id:'gevoel_contact',title:'Jouw Gevoel bij Hem/Haar',icon:'❤️',prompts:[
+        {q:'Hoe voel jij je bij deze persoon?',ph:'Bv: energiek, onzeker, rustig, geprikkeld...'},
+        {q:'Wat trekt jou aan in hem/haar?',ph:'Bv: humor, diepgang, energie, uiterlijk...'},
+        {q:'Wat stoort of twijfelt je?',ph:'Bv: reageert traag, weinig initiatief, onduidelijkheid...'}
+      ]}
+    ];
+
+    function contactCatProgress(catId){
+      var catData=cats[catId]||{};
+      var cat=CONTACT_CATS.find(c=>c.id===catId);
+      if(!cat)return{filled:0,total:0};
+      return{filled:cat.prompts.filter((_,i)=>(catData['a'+i]||'').trim().length>0).length,total:cat.prompts.length};
+    }
+
+    var contactFilled=CONTACT_CATS.reduce((s,c)=>s+contactCatProgress(c.id).filled,0);
+    var contactTotal=CONTACT_CATS.reduce((s,c)=>s+c.prompts.length,0);
+
+    var propsHtml=renderProps(d.props);
+    var ownTip=isOwnDossier?`<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">
+  💡 <strong>Vul je profiel in</strong> via de <strong>OWN</strong> tab onderaan om je eigenschappen automatisch te berekenen.
+  <div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="goScreen('own')">→ Naar OWN Sense</button></div>
+</div>`:'';
+    var resetBtn=isOwnDossier&&hasData?`<button onclick="resetOwnProps()" style="margin-bottom:16px;padding:8px 16px;background:#FFF0F0;color:var(--r);border:1px solid #FFD5D5;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↺ Reset naar 0%</button>`:'';
+
+    // Contact-dossier categorieën HTML
+    var contactCatsHtml='';
+    if(!isOwnDossier){
+      contactCatsHtml=`
+<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over ${name.replace('Sense','')}?</div>
+<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>
+<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">
+  <span style="font-size:13px;color:#555">${contactFilled}/${contactTotal} vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>
+</div>
+${CONTACT_CATS.map(cat=>{
+  var prog=contactCatProgress(cat.id);
+  var catData=cats[cat.id]||{};
+  var filled=prog.filled>0;
+  return \`<div class="own-cat \${filled?'filled':''}" id="cc-\${cat.id}">
+  <div class="own-cat-head" onclick="toggleContactCat('\${cat.id}')">
+    <div class="own-cat-icon">\${cat.icon}</div>
+    <div class="own-cat-info">
+      <div class="own-cat-title">\${cat.title}</div>
+      <div class="own-cat-prog \${prog.filled===prog.total?'done':''}">\${prog.filled}/\${prog.total} vragen beantwoord\${prog.filled===prog.total?' ✓':''}</div>
+    </div>
+    <div class="own-cat-arrow">›</div>
+  </div>
+  <div class="own-cat-body">
+    \${cat.prompts.map((p,i)=>\`
+      <div class="own-q-label">\${p.q}</div>
+      <textarea class="own-ta" id="cc-\${cat.id}-a\${i}" placeholder="\${p.ph}" rows="2" oninput="autoResize(this)">\${catData['a'+i]||''}</textarea>
+    \`).join('')}
+    <button class="own-save-btn" onclick="saveContactCat('\${name}','\${cat.id}')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+      Opslaan
+    </button>
+  </div>
+</div>\`;
+}).join('')}`;
+    }
+
     cont.innerHTML=`
 <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:12px">Eigenschappen</div>
-${renderProps(d.props)}
+${propsHtml}
+${resetBtn}
+${ownTip}
+${contactCatsHtml}
 <div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 10px">Status</div>
 <div style="background:var(--g);border-radius:12px;padding:14px 16px;font-size:14px;color:#555;line-height:1.6;border:1px solid var(--b)">
   ${d.count} entries opgeslagen${d.lastActive?` · Laatste: ${timeAgo(d.lastActive)}`:''}
 </div>
-${name!=='OWN Sense'?`<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="goScreen('vertel')">✏️ Voeg toe</button><button class="btn-g" onclick="switchTab('advies')">💡 Advies</button></div></div>`:''}`;
+${!isOwnDossier?`<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="goScreen('vertel')">✏️ Voeg toe</button><button class="btn-g" onclick="switchTab('advies')">💡 Advies</button></div></div>`:''}`;
   }
   else if(tab==='tijdlijn'){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
@@ -742,6 +829,99 @@ async function genAdvies(name){
     var t=await callAPI(sys,[{role:'user',content:`Dossier: ${name}\nEigenschappen: ${JSON.stringify(d.props)}\nRecente entries:\n${ctx||'Geen entries.'}`}],600);
     if(box)box.innerHTML=t.replace(/\n/g,'<br>');
   }catch(x){if(box)box.innerHTML='<span style="color:red">Fout: '+x.message+'</span>';}
+}
+
+async function resetOwnProps(){
+  if(!confirm('Reset alle eigenschappen naar 0%? Je ingevulde categorieën blijven bewaard.'))return;
+  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{}};
+  PK.forEach(k=>{d.props[k]=0;});
+  S.pdata['OWN Sense']=d;
+  await saveP('OWN Sense',d.props,d.count,d.categories);
+  toast('↺ Eigenschappen gereset naar 0%');
+  // Herlaad tab
+  await loadTab('OWN Sense',S.viewTab,d);
+}
+
+// ══ Contact categorieën helpers ══════════════════════════════════
+function toggleContactCat(catId){
+  var el=document.getElementById('cc-'+catId);
+  if(!el)return;
+  el.classList.toggle('open');
+  if(el.classList.contains('open'))el.querySelectorAll('.own-ta').forEach(ta=>autoResize(ta));
+}
+
+async function saveContactCat(dosName,catId){
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+  if(!d.categories)d.categories={};
+  var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
+  // Verzamel antwoorden voor dit catId
+  var answers={};
+  var ta0=document.getElementById('cc-'+catId+'-a0');
+  var ta1=document.getElementById('cc-'+catId+'-a1');
+  var ta2=document.getElementById('cc-'+catId+'-a2');
+  if(ta0)answers['a0']=ta0.value.trim();
+  if(ta1)answers['a1']=ta1.value.trim();
+  if(ta2)answers['a2']=ta2.value.trim();
+  d.categories[catId]=answers;
+  S.pdata[dosName]=d;
+  await saveP(dosName,d.props,d.count,d.categories);
+  // Update progress indicator
+  var filled=Object.values(answers).filter(v=>v.length>0).length;
+  var catEl=document.getElementById('cc-'+catId);
+  if(catEl){
+    var progEl=catEl.querySelector('.own-cat-prog');
+    if(progEl){progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');progEl.className='own-cat-prog'+(filled===3?' done':'');}
+    if(filled>0)catEl.classList.add('filled');
+  }
+  toast('💾 Opgeslagen — eigenschappen worden bijgewerkt...');
+  // Automatisch herberekenen op de achtergrond
+  herbereken(dosName);
+}
+
+async function herbereken(dosName,silent=true){
+  if(!S.apiKey)return;  // Geen API key? Stilletjes skippen
+  if(!silent)toast('⏳ Eigenschappen berekenen...');
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+  var cats=d.categories||{};
+
+  // Verzamel alle manuele invoer
+  var manualText='';
+  Object.entries(cats).forEach(([catId,answers])=>{
+    Object.values(answers).forEach(v=>{if(v&&v.trim())manualText+=v.trim()+' ';});
+  });
+
+  // Verzamel opgeslagen berichten
+  var msgs=await loadMsgs(dosName);
+  var msgText=msgs.slice(-20).filter(m=>m.role==='user').map(m=>m.html.replace(/<[^>]*>/g,' ').trim()).join(' ');
+
+  var combinedContext=(manualText+' '+msgText).trim();
+  if(!combinedContext){toast('Voeg eerst info toe via de invulvakjes of via Vertel.');return;}
+
+  var sys=`Je bent DateSensei. Analyseer alles wat beschikbaar is over "${dosName.replace('Sense','')}" en schat de 5 eigenschappen in.
+Gebruik 0 als er werkelijk geen info is voor een eigenschap.
+Geef ENKEL geldig JSON (geen markdown):
+{"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X}
+Elk getal 0-100.`;
+
+  try{
+    var raw=await callAPI(sys,[{role:'user',content:combinedContext}],200);
+    var clean=raw.replace(/```json|```/g,'').trim();
+    var updates=JSON.parse(clean);
+    PK.forEach(k=>{
+      if(updates[k]!==undefined&&updates[k]!==null){
+        var v=Math.min(100,Math.max(0,parseInt(updates[k])));
+        if(!isNaN(v))d.props[k]=v;
+      }
+    });
+    d.props._v=1;
+    S.pdata[dosName]=d;
+    await saveP(dosName,d.props,d.count,d.categories);
+    if(!silent)toast('✅ Eigenschappen bijgewerkt!');
+    // Herlaad overzicht tab als het zichtbaar is
+    if(S.screen==='dossier'&&S.viewDossier===dosName&&S.viewTab==='overzicht'){
+      await loadTab(dosName,'overzicht',d);
+    }
+  }catch(x){if(!silent)toast('Fout: '+x.message);}
 }
 
 // ══ OWN Sense ═════════════════════════════════════════════════════
@@ -1276,7 +1456,9 @@ async function bevestigAlles(){
     if(dossier==='OWN Sense'){
       await updateEigenschappenAI(dossier,samengevat);
     } else {
-      await saveP(dossier,pd.props,pd.count);
+      await saveP(dossier,pd.props,pd.count,pd.categories);
+      // Automatisch eigenschappen herberekenen op de achtergrond
+      herbereken(dossier);
     }
   }
 
