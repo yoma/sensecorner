@@ -2030,21 +2030,18 @@ async function sendMsg(){
 
   var dossierLijst=S.profiles.join(', ');
 
-  var sys=`Je bent DateSensei, een empathische AI dating coach. De gebruiker heeft de volgende dossiers: ${dossierLijst}.
-
-Analyseer de input en splits in segmenten. Elk segment hoort bij:
-- "OWN Sense": over de gebruiker zelf
-- Een bestaand dossier (bv. "EliseSense"): over die persoon
-- "NIEUW:Naam": nieuwe naam zonder dossier
-
-Geef ENKEL geldig JSON terug (geen markdown, geen uitleg):
-{
-  "segmenten": [
-    {"tekst":"stuk tekst","dossier":"OWN Sense of DossierNaam of NIEUW:Naam","type":"gevoel/feit/patroon"}
-  ],
-  "nieuwe_namen": ["Naam1"],
-  "reactie": "korte empathische reactie in het Nederlands (max 2 zinnen)"
-}`;
+  var isWhatsApp=txt.includes(' - ')&&(txt.includes(': ')&&(txt.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/)||txt.match(/\d{2}:\d{2}/)));
+  var sys='Je bent DateSensei, een empathische AI dating coach. De gebruiker heeft de volgende dossiers: '+dossierLijst+'.'
+    +(isWhatsApp
+      ? ' Dit is een WhatsApp gesprek export. De namen voor de ":" zijn de sprekers. Analyseer het gesprek en splits in segmenten PER BERICHT.'
+        +' Gebruik de namen om te bepalen of iets over de gebruiker gaat (eigen berichten) of over/van een ander (contact).'
+      : ' Analyseer de input en splits in segmenten.')
+    +' Elk segment hoort bij:'
+    +' "OWN Sense": over/van de gebruiker zelf'
+    +' Een bestaand dossier (bv. "EliseSense"): over die persoon of van die persoon'
+    +' "NIEUW:Naam": nieuwe naam zonder dossier'
+    +' Geef ENKEL geldig JSON (geen markdown):'
+    +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte empathische reactie max 2 zinnen"}';
 
   try{
     var raw=await callAPI(sys,[{role:'user',content:txt}],1000);
@@ -2515,26 +2512,34 @@ function handleTxtFile(input){
   var reader=new FileReader();
   reader.onload=function(e){
     var tekst=e.target.result;
-    // WhatsApp format opschonen: verwijder datums en namen
+    // Behoud namen en tijden — verwijder alleen systeemberichten en lege regels
     var cleaned=tekst
       .split('\n')
-      .filter(function(l){return l.trim().length>5;})
-      .map(function(l){
-        // Verwijder WhatsApp timestamp "[DD/MM/YYYY, HH:MM:SS] Naam: "
-        return l.replace(/^\[[\d\/,\s:]+\]\s*[^:]+:\s*/,'').replace(/^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*[-]\s*[^:]+:\s*/,'').trim();
+      .filter(function(l){
+        var t=l.trim();
+        if(!t||t.length<3)return false;
+        // Verwijder WhatsApp systeemberichten (geen naam aanwezig)
+        if(t.includes('Berichten en oproepen zijn end-to-end'))return false;
+        if(t.includes('heb je de groepsafbeelding'))return false;
+        if(t.includes('heeft u toegevoegd'))return false;
+        if(t.startsWith('<'))return false;
+        return true;
       })
-      .filter(function(l){return l.length>3&&!l.startsWith('<');})
       .join('\n');
+    // Stuur direct naar AI als het een WhatsApp export is
     var inp=document.getElementById('msgInput');
     if(inp){
-      inp.value=cleaned.substring(0,2000); // Max 2000 tekens
+      inp.value=cleaned.substring(0,3000);
       autoResize(inp);
-      inp.focus();
     }
-    toast('📋 WhatsApp chat geladen — pas aan en verstuur!');
+    // Bevestiging tonen
+    addMsg('ai','📋 <strong>WhatsApp gesprek geladen</strong> ('
+      +cleaned.split('\n').filter(function(l){return l.trim().length>0;}).length
+      +' berichten). Tik op verstuur om het te analyseren — de AI herkent wie wat zei en sorteert alles naar het juiste dossier.');
+    toast('✅ WhatsApp chat geladen!');
   };
   reader.readAsText(file,'UTF-8');
-  input.value=''; // Reset voor hergebruik
+  input.value='';
 }
 
 async function handleImgFile(input){
