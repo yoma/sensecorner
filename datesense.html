@@ -1287,14 +1287,14 @@ async function herbereken(dosName,silent=true){
   var combinedContext=(manualText+' '+msgText).trim();
   if(!combinedContext){toast('Voeg eerst info toe via de invulvakjes of via Vertel.');return;}
 
-  var sys=`Je bent DateSensei. Analyseer alles wat beschikbaar is over "${dosName.replace('Sense','')}" en schat de 9 eigenschappen in.
-Gebruik 0 als er werkelijk geen info is voor een eigenschap.
-Geef ENKEL geldig JSON (geen markdown):
+  var sys=`Je bent DateSensei. Analyseer alles wat beschikbaar is over "${dn(dosName)}" en schat de 9 eigenschappen in op basis van de tekst.
+BELANGRIJK: gebruik ENKEL info die expliciet in de tekst staat. Bij weinig of onduidelijke info gebruik je 0 — gok nooit.
+Geef ENKEL geldig JSON (geen markdown, geen uitleg):
 {"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X,"stabiliteit":X,"vertrouwen":X,"communicatie":X,"onafhankelijkheid":X}
-Elk getal 0-100.`;
+0=geen info. 100=maximaal. stabiliteit=em.stabiliteit. vertrouwen=betrouwbaarheid. communicatie=openheid in communicatie. onafhankelijkheid=zelfstandigheid.`;
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:combinedContext}],200);
+    var raw=await callAPI(sys,[{role:'user',content:combinedContext}],300);
     var clean=raw.replace(/```json|```/g,'').trim();
     var updates=JSON.parse(clean);
     PK.forEach(k=>{
@@ -2063,7 +2063,8 @@ async function updateContactCategories(dosName,tekst){
   if(!d.categories)d.categories={};
   var personName=dn(dosName);
 
-  var sys='Je bent DateSensei. Analyseer de tekst over "'+personName+'" en vul de passende antwoorden in op de invulvragen.'
+  var sys='Je bent DateSensei. Analyseer de tekst over "'+personName+'" en vul ALLEEN in wat de tekst expliciet vermeldt.'
+    +' Laat velden leeg ("") als de tekst er NIETS over zegt — gok nooit.'
     +' Geef ENKEL geldig JSON (geen markdown):'
     +'{"karakter_contact":{"a0":"","a1":"","a2":""},"patronen_contact":{"a0":"","a1":"","a2":""},"gevoel_contact":{"a0":"","a1":"","a2":""}}'
     +' Vragen:'
@@ -2099,7 +2100,41 @@ async function updateContactCategories(dosName,tekst){
 
     S.pdata[dosName]=d;
     await saveP(dosName,d.props,d.count,d.categories);
-    // Trigger herbereken met nieuwe categorieën
+
+    // Refresh open accordion textareas in DOM met nieuwe waarden
+    ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
+      if(!d.categories[catId])return;
+      ['a0','a1','a2'].forEach(function(ak){
+        var ta=document.getElementById('cc-'+catId+'-'+ak);
+        if(ta&&!ta.value.trim()&&d.categories[catId][ak]){
+          ta.value=d.categories[catId][ak];
+          autoResize(ta);
+          // Flash het veld zodat gebruiker ziet dat het ingevuld werd
+          ta.style.background='#F0FFF4';
+          ta.style.borderColor='#A5D6A7';
+          setTimeout(function(){ta.style.background='';ta.style.borderColor='';},2000);
+        }
+      });
+      // Update progress teller
+      var progEl=document.querySelector('#cc-'+catId+' .own-cat-prog');
+      if(progEl){
+        var filled=Object.values(d.categories[catId]||{}).filter(function(v){return(v||'').trim().length>0;}).length;
+        progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');
+        progEl.className='own-cat-prog'+(filled===3?' done':'');
+        if(filled>0){var catEl=document.getElementById('cc-'+catId);if(catEl)catEl.classList.add('filled');}
+      }
+    });
+    // Update algemene progress teller
+    var totalFilled=0;
+    ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
+      Object.values(d.categories[catId]||{}).forEach(function(v){if((v||'').trim())totalFilled++;});
+    });
+    var totalProgEl=document.querySelector('[style*="vragen beantwoord"]');
+    if(totalProgEl&&totalProgEl.tagName==='SPAN'){
+      totalProgEl.textContent=totalFilled+'/9 vragen beantwoord · eigenschappen worden automatisch bijgewerkt';
+    }
+
+    // Trigger herbereken
     herbereken(dosName);
   }catch(x){
     console.warn('updateContactCategories error:',x);
