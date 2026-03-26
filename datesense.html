@@ -2023,6 +2023,24 @@ async function sendMsg(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
   var txt=inp.value.trim();if(!txt)return;
+
+  // Als geen actief dossier: detecteer of tekst voornamelijk over één persoon gaat
+  if(!S.vertelFrom&&txt.length>200){
+    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+    var bestMatch=null,bestCount=0;
+    contacts.forEach(function(p){
+      var naam=dn(p);
+      var regex=new RegExp('\\b'+naam+'\\b','gi');
+      var count=(txt.match(regex)||[]).length;
+      if(count>bestCount){bestCount=count;bestMatch=p;}
+    });
+    if(bestMatch&&bestCount>=2){
+      // Vraag bevestiging
+      var confirmDossier=confirm('Dit lijkt voornamelijk over '+dn(bestMatch)+' te gaan ('+bestCount+'x genoemd). Alles naar '+dn(bestMatch)+'?');
+      if(confirmDossier){S.vertelFrom=bestMatch;}
+    }
+  }
+
   inp.value='';inp.style.height='auto';S.busy=true;
 
   addMsg('user',txt);
@@ -2072,10 +2090,23 @@ async function sendMsg(){
     }
     hideT();
 
-    // Verwerk nieuwe namen
+    // Verwerk nieuwe namen — alleen als het dossier nog niet bestaat
     for(var naam of (parsed.nieuwe_namen||[])){
       var nm=naam.endsWith('Sense')?naam:naam+'Sense';
-      await ensureP(nm);
+      // Check of naam al bestaat (case-insensitive)
+      var alBestaand=S.profiles.some(function(p){
+        return dn(p).toLowerCase()===naam.toLowerCase()||p.toLowerCase()===nm.toLowerCase();
+      });
+      if(!alBestaand)await ensureP(nm);
+      else {
+        // Hernoem naar bestaand dossier in segmenten
+        window._pendingSegmenten&&window._pendingSegmenten.forEach(function(seg){
+          if(seg.dossier===nm){
+            var bestaand=S.profiles.find(function(p){return dn(p).toLowerCase()===naam.toLowerCase();});
+            if(bestaand)seg.dossier=bestaand;
+          }
+        });
+      }
     }
 
     // Bouw gekleurde segmenten
@@ -2716,9 +2747,23 @@ function handleTxtFile(input){
     // Toon bevestigingsdialoog — alles gaat naar één dossier
     var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';}).map(function(p){return dn(p);});
     var suggestion=detectedName||'';
-    // Check if detected name matches existing contact
+    // Check if detected name matches existing contact (case-insensitive, partial match)
     var matchedDossier='';
-    S.profiles.forEach(function(p){if(p!=='OWN Sense'&&dn(p).toLowerCase()===suggestion.toLowerCase())matchedDossier=p;});
+    S.profiles.forEach(function(p){
+      if(p==='OWN Sense')return;
+      var pName=dn(p).toLowerCase();
+      var sug=suggestion.toLowerCase();
+      if(pName===sug||pName.includes(sug)||sug.includes(pName))matchedDossier=p;
+    });
+    // Also scan full text for any known contact name
+    if(!matchedDossier){
+      S.profiles.forEach(function(p){
+        if(p==='OWN Sense')return;
+        var pName=dn(p);
+        var regex=new RegExp('\\b'+pName+'\\b','i');
+        if(regex.test(cleaned))matchedDossier=p;
+      });
+    }
 
     showWhatsAppDialog(cleaned,suggestion,matchedDossier);
     var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
