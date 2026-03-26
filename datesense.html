@@ -436,23 +436,40 @@ function timeAgo(iso){
 }
 
 // Render eigenschappen (alleen als er data is)
-function renderProps(props){
+function renderProps(props,showSource){
   var hasData=PK.some(k=>(props[k]||0)>0);
   if(!hasData){
-    return`<div class="prop-empty">
-      <div class="prop-empty-icon">📊</div>
-      <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:6px">Nog geen eigenschappen ingeschat</div>
-      <div class="prop-empty-text">Voeg meer entries toe via <strong>Vertel</strong>, of vul<br>de categorieën in bij <strong>OWN Sense</strong>.</div>
-    </div>`;
+    return'<div class="prop-empty">'
+      +'<div class="prop-empty-icon">📊</div>'
+      +'<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:6px">Nog geen eigenschappen ingeschat</div>'
+      +'<div class="prop-empty-text">Voeg meer info toe via de invulvakjes of via <strong>Vertel</strong>.</div>'
+      +'</div>';
   }
-  return PK.map((k,i)=>{
+  var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
-    return`<div class="prop">
-      <div class="pn">${PL[i]}</div>
-      <div class="track"><div class="fill" style="width:${v}%"></div></div>
-      <div class="pct">${v}%</div>
-    </div>`;
+    var barColor=v===0?'var(--b)':'var(--r)';
+    return'<div class="prop">'
+      +'<div class="pn">'+PL[i]+'</div>'
+      +'<div class="track"><div class="fill" style="width:'+v+'%;background:'+barColor+'"></div></div>'
+      +'<div class="pct" style="color:'+(v===0?'#ccc':'var(--r)')+'">'+v+'%</div>'
+      +'</div>';
   }).join('');
+
+  // Bronnen uitleg
+  var srcId='src'+Math.floor(Math.random()*99999);
+  var srcHtml='<div style="margin-top:10px">'
+    +'<button onclick="var el=document.getElementById(\"'+srcId+'\");el.style.display=el.style.display?\"\":\"block\"" '
+    +'style="font-size:12px;color:var(--m);background:none;border:none;cursor:pointer;padding:4px 0;font-family:inherit">'
+    +'\u2139\uFE0F Hoe worden deze berekend?</button>'
+    +'<div id="'+srcId+'" style="display:none;margin-top:8px;padding:12px 14px;background:var(--g);border-radius:10px;font-size:13px;color:#555;line-height:1.7;border:1px solid var(--b)">'
+    +'<strong>Berekend door AI</strong> op basis van:<br>'
+    +'&bull; Jouw invulvakjes (karakter, patronen, gevoel)<br>'
+    +'&bull; Opgeslagen berichten via Vertel<br>'
+    +'&bull; 0% = onvoldoende info voor die eigenschap<br>'
+    +'&bull; Meer info = nauwkeuriger schatting'
+    +'</div></div>';
+
+  return barsHtml+srcHtml;
 }
 
 // ══ Auth ═════════════════════════════════════════════════════════
@@ -838,6 +855,19 @@ async function rDossier(el){
 
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
   await loadTab(name,S.viewTab,d);
+
+  // Auto-herbereken als nieuwe props (stabiliteit etc.) nog 0 zijn maar er wel data is
+  if(!isOwn&&S.apiKey){
+    var newProps=['stabiliteit','vertrouwen','communicatie','onafhankelijkheid'];
+    var newAllZero=newProps.every(function(k){return(d.props[k]||0)===0;});
+    var hasData=PK.some(function(k){return(d.props[k]||0)>0;})||d.count>0;
+    var hasCats=d.categories&&Object.values(d.categories).some(function(c){
+      return Object.values(c).some(function(v){return(v||'').trim().length>0;});
+    });
+    if(newAllZero&&(hasData||hasCats)){
+      herbereken(name); // stil op achtergrond, update balkjes in-place
+    }
+  }
 }
 
 async function switchTab(tab){
