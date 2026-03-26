@@ -251,7 +251,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .btn-negeer-p{flex:1;padding:9px;background:#F5F5F5;color:#666;border:1px solid #ddd;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* Actie knoppen onderaan */
-.result-actions{padding:14px 16px;display:flex;gap:10px}
+.result-actions{padding:14px 16px;display:flex;gap:10px;position:sticky;bottom:0;background:#fff;border-top:1px solid var(--b);z-index:10}
 .btn-voeg-alles{flex:2;padding:16px;background:var(--r);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-voeg-alles:active{opacity:.85}
 .btn-hoe-werkt{flex:1;padding:16px;background:#F5F5F5;color:#555;border:1px solid var(--b);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -927,7 +927,7 @@ async function rDossier(el){
     header+='<div style="font-size:12px;color:var(--m);margin-top:2px">Laatste update: '+timeAgo(d.lastActive)+'</div>';
   }
   header+='</div>';
-  header+='<button style="padding:8px 14px;background:var(--r);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="goScreen(\'vertel\')">🎤 Vertel</button>';
+  header+='<button style="padding:8px 14px;background:var(--r);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="S.vertelFrom=\''+name+'\';goScreen(\'vertel\')">🎤 Vertel</button>';
   header+='</div>';
 
   if(!isOwn){
@@ -1125,7 +1125,7 @@ async function loadTab(name,tab,d){
     html+='</div>';
 
     if(!isOwnDossier){
-      html+='<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="goScreen(\'vertel\')">🎤 Vertel</button><button class="btn-g" onclick="switchTab(\'advies\')">💡 Advies</button></div></div>';
+      html+='<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="S.vertelFrom=S.viewDossier;goScreen(\'vertel\')">🎤 Vertel</button><button class="btn-g" onclick="switchTab(\'advies\')">💡 Advies</button></div></div>';
     }
 
     cont.innerHTML=html;
@@ -2030,18 +2030,16 @@ async function sendMsg(){
 
   var dossierLijst=S.profiles.join(', ');
 
-  var isWhatsApp=txt.includes(' - ')&&(txt.includes(': ')&&(txt.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/)||txt.match(/\d{2}:\d{2}/)));
+  // Detecteer actief dossier — als gebruiker vanuit een dossier naar Vertel gaat, gebruik dat als standaard
+  var activeDossier=(S.vertelFrom&&S.vertelFrom!=='OWN Sense')?S.vertelFrom:(S.viewDossier&&S.viewDossier!=='OWN Sense'?S.viewDossier:null);
+
   var sys='Je bent DateSensei, een empathische AI dating coach. De gebruiker heeft de volgende dossiers: '+dossierLijst+'.'
-    +(isWhatsApp
-      ? ' Dit is een WhatsApp gesprek export. De namen voor de ":" zijn de sprekers. Analyseer het gesprek en splits in segmenten PER BERICHT.'
-        +' Gebruik de namen om te bepalen of iets over de gebruiker gaat (eigen berichten) of over/van een ander (contact).'
-      : ' Analyseer de input en splits in segmenten.')
-    +' Elk segment hoort bij:'
-    +' "OWN Sense": over/van de gebruiker zelf'
-    +' Een bestaand dossier (bv. "EliseSense"): over die persoon of van die persoon'
-    +' "NIEUW:Naam": nieuwe naam zonder dossier'
+    +(activeDossier
+      ? ' De gebruiker typt vanuit het dossier van '+dn(activeDossier)+'. Wijs ALLES toe aan '+activeDossier+', tenzij de tekst expliciet over iemand anders gaat.'
+      : ' Analyseer de input. Wijs elk stuk toe aan het meest logische dossier.')
+    +' Standaard: als iets niet duidelijk over een specifiek persoon gaat, kies dan OWN Sense.'
     +' Geef ENKEL geldig JSON (geen markdown):'
-    +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte empathische reactie max 2 zinnen"}';
+    +' {"segmenten":[{"tekst":"stuk tekst","dossier":"OWN Sense of DossierNaam of NIEUW:Naam","type":"gevoel/feit/patroon"}],"nieuwe_namen":["Naam1"],"reactie":"korte empathische reactie max 2 zinnen"}';
 
   try{
     var raw=await callAPI(sys,[{role:'user',content:txt}],2000);
@@ -2172,6 +2170,7 @@ async function sendMsg(){
 
     addMsg('ai',parsed.reactie+'<br>'+resultHtml);
 
+  S.vertelFrom=null; // Reset na versturen
   }catch(x){
     hideT();
     var errMsg=x.message||'Onbekende fout';
@@ -2320,6 +2319,10 @@ function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
 
   window._waCleaned=cleaned;
   window._waContacts=[];
+  // Reset chat voor frisse import weergave
+  S.vertelMsgs=[];
+  var ca=document.getElementById('chatArea');
+  if(ca)ca.innerHTML='';
 
   // Toon als chat bericht met knoppen
   var html='<div style="background:#fff;border:1.5px solid var(--b);border-radius:14px;padding:16px">'
