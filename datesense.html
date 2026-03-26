@@ -829,11 +829,12 @@ async function rDossier(el){
   }
   header+='</div>';
 
-  var tabs=`<div class="tabs-bar">
-    <div class="dtab ${S.viewTab==='overzicht'?'active':''}" onclick="switchTab('overzicht')">Overzicht</div>
-    <div class="dtab ${S.viewTab==='tijdlijn'?'active':''}" onclick="switchTab('tijdlijn')">Tijdlijn</div>
-    <div class="dtab ${S.viewTab==='advies'?'active':''}" onclick="switchTab('advies')">Advies</div>
-  </div>`;
+  var vt=S.viewTab;
+  var tabs='<div class="tabs-bar">'
+    +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" onclick="switchTab(\'overzicht\')">Overzicht</div>'
+    +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
+    +'<div class="dtab '+(vt==="advies"?"active":"")+'" onclick="switchTab(\'advies\')">Advies</div>'
+    +'</div>';
 
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
   await loadTab(name,S.viewTab,d);
@@ -851,6 +852,7 @@ async function switchTab(tab){
 async function loadTab(name,tab,d){
   var cont=document.getElementById('tabContent');if(!cont)return;
   if(tab==='overzicht'){
+    try{
     var hasData=PK.some(k=>(d.props[k]||0)>0);
     var isOwnDossier=name==='OWN Sense';
     var cats=d.categories||{};
@@ -950,6 +952,10 @@ async function loadTab(name,tab,d){
     }
 
     cont.innerHTML=html;
+    }catch(err){
+      console.error('loadTab overzicht error:',err);
+      cont.innerHTML='<div style="padding:20px;color:red;font-size:13px">Fout bij laden: '+err.message+'</div>';
+    }
   }
   else if(tab==='tijdlijn'){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
