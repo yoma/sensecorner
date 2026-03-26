@@ -575,8 +575,15 @@ async function ensureP(name){
 async function saveP(name,props,count,categories){
   if(!S.user)return;
   sync('s');
-  var propsToSave={...props,_v:1};  // _v:1 = bewust opgeslagen, nooit auto-reset
-  if(categories)propsToSave.categories=categories;
+  var propsToSave={...props,_v:1};
+  // ALTIJD categories meegeven — nooit overschrijven met leeg object
+  // Gebruik: meegegeven categories > huidige in memory > bestaande in propsToSave
+  var safeCats=categories||
+    (S.pdata[name]&&Object.keys(S.pdata[name].categories||{}).length>0?S.pdata[name].categories:null)||
+    null;
+  if(safeCats&&Object.keys(safeCats).length>0)propsToSave.categories=safeCats;
+  // Verwijder lege categories key
+  if(propsToSave.categories&&Object.keys(propsToSave.categories).length===0)delete propsToSave.categories;
   await sb.from('sense_profiles').upsert(
     {user_id:S.user.id,name,props:propsToSave,entry_count:count,last_active:new Date().toISOString()},
     {onConflict:'user_id,name'}
@@ -807,24 +814,27 @@ async function rDossier(el){
   // Match % = gemiddelde van hoe dicht contact-props bij OWN props liggen
   // Alleen voor properties waar beide > 0 zijn
   var matchPct=null;
-  if(!isOwn&&hasData){
+  if(!isOwn){
     var own=S.pdata['OWN Sense']||{props:{...DP}};
     var ownHasData=PK.some(function(k){return(own.props[k]||0)>0;});
-    if(ownHasData){
+    if(!ownHasData){
+      matchPct=-1; // OWN Sense nog niet ingevuld
+    } else if(!hasData){
+      matchPct=-2; // Contact nog geen props — wel OWN ingevuld
+    } else {
+      // Bereken match op basis van beschikbare overlappende properties
       var diffs=[];
       PK.forEach(function(k){
         var ov=own.props[k]||0,cv=d.props[k]||0;
         if(ov>0&&cv>0)diffs.push(100-Math.abs(ov-cv));
+        else if(ov>0&&cv===0){diffs.push(50);} // onbekend = neutraal
       });
-      if(diffs.length>=3){
+      if(diffs.length>=1){
         matchPct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
-        matchPct=Math.min(98,Math.max(12,matchPct));
+        matchPct=Math.min(98,Math.max(10,matchPct));
       } else {
-        // Niet genoeg data voor echte vergelijking — toon "onbekend"
-        matchPct=-1;
+        matchPct=-2;
       }
-    } else {
-      matchPct=-1; // OWN Sense nog niet ingevuld
     }
   }
 
@@ -851,8 +861,8 @@ async function rDossier(el){
   } else if(!isOwn&&(matchPct===null||matchPct===-1)){
     var matchMsg=matchPct===-1
       ?'Vul eerst je <strong>OWN Sense</strong> profiel in om een match te berekenen.'
-      :'Voeg meer info toe om een match te berekenen.';
-    header+=`<div class="match-bar"><div style="font-size:13px;color:var(--m);line-height:1.6">📊 ${matchMsg}</div></div>`;
+      :'Voeg invulvakjes in of vertel meer over '+dn(name)+' om een match te berekenen.';
+    header+='<div class="match-bar"><div style="font-size:13px;color:var(--m);line-height:1.6">📊 '+matchMsg+'</div></div>';
   }
   header+='</div>';
 
@@ -1260,10 +1270,10 @@ Elk getal 0-100.`;
       }
     });
     d.props._v=1;
-    // Preserve categories from current S.pdata (don't overwrite with stale data)
-    var currentCats=(S.pdata[dosName]&&S.pdata[dosName].categories)||d.categories||{};
-    d.categories=currentCats;
+    // Altijd meest recente categories gebruiken uit memory
+    d.categories=(S.pdata[dosName]&&S.pdata[dosName].categories)||d.categories||{};
     S.pdata[dosName]=d;
+    // Stuur categories expliciet mee zodat saveP ze nooit kan verliezen
     await saveP(dosName,d.props,d.count,d.categories);
     // Update balkjes in-place — NOOIT loadTab aanroepen (sluit accordion)
     var propsBarEl=document.getElementById('contact-props-bars-'+dosName);
