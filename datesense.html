@@ -546,11 +546,16 @@ async function loadAll(){
       if(!savedProps._v && isOldDefault(mergedProps)){
         PK.forEach(k=>{mergedProps[k]=0;});
       }
+      // Categories stored nested in props JSON — extract separately
+      var loadedCats=savedProps.categories||{};
+      // Clean categories: remove _v flag from props
+      delete mergedProps._v;
+      delete mergedProps.categories;
       S.pdata[p.name]={
         props:mergedProps,
         count:p.entry_count||0,
         lastActive:p.last_active,
-        categories:savedProps.categories||{}
+        categories:loadedCats
       };
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
@@ -886,6 +891,8 @@ async function switchTab(tab){
 
 async function loadTab(name,tab,d){
   var cont=document.getElementById('tabContent');if(!cont)return;
+  // Ensure we have the latest data from memory (categories might have been updated)
+  if(S.pdata[name])d=S.pdata[name];
   if(tab==='overzicht'){
     try{
     var hasData=PK.some(k=>(d.props[k]||0)>0);
@@ -1188,7 +1195,9 @@ function toggleContactCat(catId){
 }
 
 async function saveContactCat(dosName,catId,silent){
-  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+  // Always work with the most current pdata to avoid overwriting other categories
+  if(!S.pdata[dosName])S.pdata[dosName]={props:{...DP},count:0,categories:{}};
+  var d=S.pdata[dosName];
   if(!d.categories)d.categories={};
   var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
   // Verzamel antwoorden voor dit catId
@@ -1251,6 +1260,9 @@ Elk getal 0-100.`;
       }
     });
     d.props._v=1;
+    // Preserve categories from current S.pdata (don't overwrite with stale data)
+    var currentCats=(S.pdata[dosName]&&S.pdata[dosName].categories)||d.categories||{};
+    d.categories=currentCats;
     S.pdata[dosName]=d;
     await saveP(dosName,d.props,d.count,d.categories);
     // Update balkjes in-place — NOOIT loadTab aanroepen (sluit accordion)
