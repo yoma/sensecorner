@@ -524,7 +524,7 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
-// Verplaats tijdlijn entry naar ander dossier
+// Verplaats tijdlijn bericht naar ander dossier
 function verplaatsEntry(msgId, huidigDossier){
   // Bouw keuze modal
   window._verplaatsMsgId=msgId;
@@ -713,7 +713,7 @@ async function loadAll(){
       delete mergedProps.categories;
       S.pdata[p.name]={
         props:mergedProps,
-        count:p.entry_count||0,
+        count:p.bericht_count||0,
         lastActive:p.last_active,
         categories:loadedCats
       };
@@ -725,7 +725,7 @@ async function loadAll(){
 async function ensureP(name){
   if(!S.user||S.pdata[name])return;
   await sb.from('sense_profiles').upsert(
-    {user_id:S.user.id,name,props:{...DP},entry_count:0},
+    {user_id:S.user.id,name,props:{...DP},bericht_count:0},
     {onConflict:'user_id,name'}
   );
   S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{}};
@@ -745,7 +745,7 @@ async function saveP(name,props,count,categories){
   // Verwijder lege categories key
   if(propsToSave.categories&&Object.keys(propsToSave.categories).length===0)delete propsToSave.categories;
   await sb.from('sense_profiles').upsert(
-    {user_id:S.user.id,name,props:propsToSave,entry_count:count,last_active:new Date().toISOString()},
+    {user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()},
     {onConflict:'user_id,name'}
   );
   if(S.pdata[name]){
@@ -760,7 +760,10 @@ async function saveP(name,props,count,categories){
 // Berichten per dossier opslaan/laden (gefilterd op profile_name!)
 async function saveMsg(pn,role,html){
   if(!S.user)return;
+  sync('s');
+  sync('s');
   await sb.from('sense_messages').insert({user_id:S.user.id,profile_name:pn,role,html});
+  sync('ok');
 }
 
 async function loadMsgs(pn){
@@ -876,7 +879,7 @@ function rHome(el){
       if(days>=5)notes.push({type:'c',name:p,msg:'Al '+days+' dagen niets over <strong>'+p.replace('Sense','')+'</strong> genoteerd.',link:'Vertel iets →',action:"goScreen('vertel')"});
     }
     if(d.count>0&&d.count%5===0&&d.count<=20){
-      notes.push({type:'s',name:p,msg:'<strong>'+p.replace('Sense','')+'</strong> heeft '+d.count+' entries. Klaar voor een analyse?',link:'Bekijk dossier →',action:"viewDossier('"+p+"')"});
+      notes.push({type:'s',name:p,msg:'<strong>'+p.replace('Sense','')+'</strong> heeft '+d.count+' berichten. Klaar voor een analyse?',link:'Bekijk dossier →',action:"viewDossier('"+p+"')"});
     }
   });
   // Max 2 meldingen tonen
@@ -931,7 +934,7 @@ function rSenses(el){
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
 <div class="srow" onclick="viewDossier('OWN Sense')">
   <div class="sdot" style="background:${SEG_DOT_COLORS[0]}"></div>
-  <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · ${own.count} entries</div></div>
+  <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · ${own.count} berichten</div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
 </div>`;
   if(cs.length){
@@ -944,7 +947,7 @@ function rSenses(el){
         <div class="sdot" style="background:${col}"></div>
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
           <div style="font-size:15px;font-weight:700">${p}</div>
-          <div style="font-size:13px;color:var(--m)">${la} · ${d.count} entries</div>
+          <div style="font-size:13px;color:var(--m)">${la} · ${d.count} berichten</div>
         </div>
         <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
       </div>`;
@@ -1215,7 +1218,7 @@ async function loadTab(name,tab,d){
     // Status
     html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 10px">Status</div>';
     html+='<div style="background:var(--g);border-radius:12px;padding:14px 16px;font-size:14px;color:#555;line-height:1.6;border:1px solid var(--b)">';
-    html+=d.count+' entries opgeslagen'+(d.lastActive?' · Laatste: '+timeAgo(d.lastActive):'');
+    html+=d.count+' berichten opgeslagen'+(d.lastActive?' · Laatste: '+timeAgo(d.lastActive):'');
     html+='</div>';
 
     if(!isOwnDossier){
@@ -1275,7 +1278,7 @@ async function loadTab(name,tab,d){
     if(!msgs.length){
       cont.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--m)">
         <div style="font-size:36px;margin-bottom:10px">📋</div>
-        <p style="font-size:14px;line-height:1.6">Nog geen entries voor <strong>${name}</strong>.<br>Ga naar Vertel om iets toe te voegen.</p>
+        <p style="font-size:14px;line-height:1.6">Nog geen berichten voor <strong>${name}</strong>.<br>Ga naar Vertel om iets toe te voegen.</p>
         <button class="btn-r" style="margin-top:16px;max-width:200px" onclick="goScreen('vertel')">Vertel iets</button>
       </div>`;
       return;
@@ -1381,7 +1384,7 @@ async function genAdvies(name,forced){
     +' Maximaal 5 zinnen advies. Nederlands.';
   var userContent='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify(d.props);
   if(catTxt)userContent+='\nIngevulde info: '+catTxt;
-  if(ctx)userContent+='\nRecente entries:\n'+ctx;
+  if(ctx)userContent+='\nRecente berichten:\n'+ctx;
   try{
     var t=await callAPI(sys,[{role:'user',content:userContent}],700);
     var ts=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
@@ -1547,7 +1550,7 @@ async function herbereken(dosName,silent=true){
 
   // Verzamel alle manuele invoer
   var manualText='';
-  Object.entries(cats).forEach(([catId,answers])=>{
+  Object.berichten(cats).forEach(([catId,answers])=>{
     Object.values(answers).forEach(v=>{if(v&&v.trim())manualText+=v.trim()+' ';});
   });
 
@@ -1719,7 +1722,7 @@ ${OWN_CATS.map(cat=>{
 
 <div class="sh">Activiteit</div>
 <div style="background:var(--g);border-radius:14px;padding:16px;font-size:14px;color:#555;border:1px solid var(--b)">
-  ${d.count>0?d.count+' entries opgeslagen.':'Nog geen entries.'}
+  ${d.count>0?d.count+' berichten opgeslagen.':'Nog geen berichten.'}
   <span style="color:var(--r);cursor:pointer;font-weight:600" onclick="goScreen('vertel')"> Vertel iets →</span>
 </div>
 
@@ -1961,7 +1964,7 @@ function rCompare(el){
     if(v1===0&&v2===0)return`<div class="cmp-row"><div class="cmp-lbl">${PL[i]}</div><div class="cmp-v t1" style="color:#ccc">—</div><div class="cmp-v t2" style="color:#ccc">—</div></div>`;
     return`<div class="cmp-row"><div class="cmp-lbl">${PL[i]}</div><div class="cmp-v t1">${v1>=v2&&v1>0?'⭐ ':''}${v1}%</div><div class="cmp-v t2">${v2>v1&&v2>0?'⭐ ':''}${v2}%</div></div>`;
   }).join('');
-  el.innerHTML=`<div style="padding:16px 16px 32px"><div style="display:flex;gap:8px;margin-bottom:16px"><div style="flex:2"></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:var(--r);background:#FFF5F5;padding:10px 6px;border-radius:12px">${c1}<br><span style="font-size:22px;font-weight:800">${d1.count||0}</span><br><span style="font-size:11px">entries</span></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:#3949AB;background:#F5F5FF;padding:10px 6px;border-radius:12px">${c2}<br><span style="font-size:22px;font-weight:800">${d2.count||0}</span><br><span style="font-size:11px">entries</span></div></div>${rows}<div id="cmpBox" style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px;margin-top:18px"><div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI ANALYSE</div><div style="font-size:15px;color:#333;line-height:1.6">Voeg meer data toe voor een betere analyse.</div><div style="display:flex;gap:10px;margin-top:14px"><button class="aa r" onclick="cmpAdvies('${c1}','${c2}')">AI Analyse</button><button class="aa g" onclick="viewDossier('${c1}')">Open ${c1}</button></div></div></div>`;
+  el.innerHTML=`<div style="padding:16px 16px 32px"><div style="display:flex;gap:8px;margin-bottom:16px"><div style="flex:2"></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:var(--r);background:#FFF5F5;padding:10px 6px;border-radius:12px">${c1}<br><span style="font-size:22px;font-weight:800">${d1.count||0}</span><br><span style="font-size:11px">berichten</span></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:#3949AB;background:#F5F5FF;padding:10px 6px;border-radius:12px">${c2}<br><span style="font-size:22px;font-weight:800">${d2.count||0}</span><br><span style="font-size:11px">berichten</span></div></div>${rows}<div id="cmpBox" style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px;margin-top:18px"><div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI ANALYSE</div><div style="font-size:15px;color:#333;line-height:1.6">Voeg meer data toe voor een betere analyse.</div><div style="display:flex;gap:10px;margin-top:14px"><button class="aa r" onclick="cmpAdvies('${c1}','${c2}')">AI Analyse</button><button class="aa g" onclick="viewDossier('${c1}')">Open ${c1}</button></div></div></div>`;
 }
 
 async function cmpAdvies(c1,c2){
@@ -2117,8 +2120,8 @@ function rerenderSegmenten(){
   var cardsEl=document.querySelector('.dossier-cards');
   if(cardsEl){
     var cardsHtml='';
-    Object.entries(telPerDossier).forEach(function(entry){
-      var d=entry[0],cnt=entry[1];
+    Object.berichten(telPerDossier).forEach(function(bericht){
+      var d=bericht[0],cnt=bericht[1];
       var col=dossierColor(d);
       cardsHtml+='<div class="dossier-card" style="border-color:'+col+'">';
       cardsHtml+='<div class="dossier-card-num" style="color:'+col+'">'+cnt+'</div>';
@@ -2161,10 +2164,15 @@ async function sendMsg(){
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
 
-  var sys='Je bent DateSensei, een warme empathische dating coach. Je luistert, stelt vragen en geeft advies.'
-    +' Praat als een vriend die verstand heeft van relaties en zelfkennis.'
-    +' Reageer kort en to-the-point (max 3 zinnen). Stel één gerichte vraag als het past.'
-    +' Nederlands. Geen opsommingen, gewone tekst.';
+  var coachCtx=buildCoachContext();
+  var sys='Je bent DateSensei, de persoonlijke dating coach van de gebruiker.'
+    +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
+    +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
+    +' Reageer warm, direct en eerlijk als een goede vriend.'
+    +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
+    +' CONTEXT: '+coachCtx;
+
+
 
   try{
     var messages=[...history,{role:'user',content:txt}];
@@ -2234,7 +2242,7 @@ async function bevestigAlles(){
   });
 
   // Sla op per dossier
-  for(var [dossier,teksten] of Object.entries(perDossier)){
+  for(var [dossier,teksten] of Object.berichten(perDossier)){
     await ensureP(dossier);
     var samengevat=teksten.join(' ');
     await saveMsg(dossier,'user',samengevat);
@@ -2257,8 +2265,8 @@ async function bevestigAlles(){
   // Toon bevestiging
   var html='<div class="saved-confirm">';
   html+='<div class="saved-confirm-title">✅ Opgeslagen!</div>';
-  Object.entries(perDossier).forEach(function(entry){
-    var doss=entry[0], teksten=entry[1];
+  Object.berichten(perDossier).forEach(function(bericht){
+    var doss=bericht[0], teksten=bericht[1];
     var col=dossierColor(doss);
     html+='<div class="saved-row"><div class="saved-dot" style="background:'+col+'"></div>';
     html+='<span><strong>'+dn(doss)+'</strong> — '+teksten.length+' fragment'+(teksten.length>1?'s':'')+' opgeslagen</span></div>';
@@ -2441,7 +2449,7 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
     if(progTxt)progTxt.textContent='Deel '+(ci+1)+'/'+chunks.length+' verwerken...';
 
     try{
-      // Stuur de tekst rechtstreeks op als één entry in het dossier
+      // Stuur de tekst rechtstreeks op als één bericht in het dossier
       // Geen AI-segmentatie nodig — alles hoort bij dosName
       var samenvatSys='Je bent DateSensei. Vat dit deel van een WhatsApp gesprek kort samen in 2-3 zinnen.'
         +' Focus op: wat er besproken werd, hoe de sfeer was, opvallende dingen.'
@@ -2599,7 +2607,7 @@ async function updateEigenschappenAI(dossier,tekst){
 async function askAdviceNow(){
   if(!S.apiKey||S.busy)return;S.busy=true;
   showT();
-  // Gebruik recent opgeslagen entries als context
+  // Gebruik recent opgeslagen berichten als context
   var allCtx='';
   for(var p of S.profiles){
     var msgs=await loadMsgs(p);
@@ -2802,6 +2810,56 @@ async function handleImgFile(input){
   };
   reader.readAsDataURL(file);
   input.value='';
+}
+
+// ══ Coach Context ════════════════════════════════════════════════
+
+function buildCoachContext(){
+  var lines=[];
+  var own=S.pdata['OWN Sense']||{props:{},categories:{}};
+  var ownProps=[];
+  PK.forEach(function(k,i){if((own.props[k]||0)>0)ownProps.push(PL[i]+':'+(own.props[k]||0)+'%');});
+  var ownCat='';
+  if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
+  lines.push('JOUW PROFIEL:');
+  if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
+  if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
+
+  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  if(contacts.length){
+    lines.push('');
+    lines.push('JOUW CONTACTEN:');
+    contacts.forEach(function(p){
+      var d=S.pdata[p]||{props:{},count:0,categories:{}};
+      var props=[];
+      PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
+      var cat='';
+      if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
+      var line=dn(p)+': '+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
+      lines.push(line);
+      // Voeg recente tijdlijn-berichten toe (async laden kan niet hier — gebruik gecachte msgs)
+      if(S._ctxMsgs&&S._ctxMsgs[p]&&S._ctxMsgs[p].length){
+        var recent=S._ctxMsgs[p].slice(-5).map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim().substring(0,100);});
+        lines.push('  Recente observaties: '+recent.join(' | '));
+      }
+    });
+  }
+  return lines.join('\n');
+}
+
+// Laad recente berichten voor context (eenmalig bij init)
+async function laadContextMsgs(){
+  if(!S.user||!S.profiles.length)return;
+  S._ctxMsgs={};
+  for(var p of S.profiles){
+    if(p==='OWN Sense')continue;
+    try{
+      var {data}=await sb.from('sense_messages')
+        .select('html').eq('user_id',S.user.id).eq('profile_name',p)
+        .eq('role','user').order('created_at',{ascending:false}).limit(5);
+      if(data)S._ctxMsgs[p]=data.reverse();
+    }catch(e){}
+  }
 }
 
 // ══ Sidebar & Sessies ═══════════════════════════════════════════
