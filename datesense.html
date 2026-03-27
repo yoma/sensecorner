@@ -318,6 +318,17 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .save-modal-opt:active{opacity:.75}
 .save-modal-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0;background:#ccc}
 
+/* Profielgegevens modal */
+.profile-modal-overlay{position:fixed;inset:0;z-index:330;display:none;align-items:flex-end;justify-content:center}
+.profile-modal-overlay.show{display:flex}
+.profile-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.profile-modal-sheet{position:relative;z-index:1;width:min(560px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + var(--sb));max-height:82vh;overflow:auto;box-shadow:0 -8px 24px rgba(0,0,0,.16)}
+.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.profile-field{width:100%;padding:11px 12px;border:1px solid var(--b);border-radius:10px;font-size:13px;font-family:inherit}
+.profile-field.full{grid-column:1/-1}
+.profile-photo-row{display:flex;align-items:center;gap:10px;margin:10px 0 12px}
+.profile-avatar{width:46px;height:46px;border-radius:23px;background:#eceff3;border:1px solid #d8dde3;object-fit:cover}
+
 /* ══ OWN SENSE CATEGORIEËN ══ */
 .own-cat{background:#fff;border:1.5px solid var(--b);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:border-color .2s}
 .own-cat.filled{border-color:#C8E6C9}
@@ -361,7 +372,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
   <!-- Logobar -->
   <div class="logobar">
-    <div class="av"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
+    <div class="av" id="ownAvatarWrap"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
     <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach</div></div>
   </div>
 
@@ -444,6 +455,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 <!-- Verborgen file inputs -->
 <input type="file" id="fileInputTxt" accept=".txt" style="display:none" onchange="handleTxtFile(this)">
 <input type="file" id="fileInputImg" accept="image/*" style="display:none" onchange="handleImgFile(this)">
+<input type="file" id="profilePhotoInput" accept="image/*" style="display:none" onchange="handleProfilePhotoInput(this)">
 
 <!-- ══ SEGMENT MODAL ══ -->
 <div class="seg-modal-overlay" id="segModal">
@@ -478,6 +490,25 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <div class="save-modal-title" id="dossierPickTitle">Kies dossier</div>
     <div class="save-modal-sub" id="dossierPickSub">Selecteer een dossier.</div>
     <div id="dossierPickOpts"></div>
+  </div>
+</div>
+
+<!-- ══ PROFIELGEGEVENS MODAL ══ -->
+<div class="profile-modal-overlay" id="profileModal">
+  <div class="profile-modal-bg" onclick="closeProfileModal()"></div>
+  <div class="profile-modal-sheet">
+    <div class="save-modal-title" id="profileModalTitle">Profielgegevens</div>
+    <div class="save-modal-sub">Optioneel, helpt DateSense gerichter adviseren.</div>
+    <div class="profile-photo-row">
+      <img id="profileModalAvatar" class="profile-avatar" alt="profiel foto"/>
+      <button class="coach-save-other" onclick="chooseProfilePhoto()">Foto kiezen</button>
+      <span id="profilePhotoStatus" style="font-size:12px;color:#7b8088"></span>
+    </div>
+    <div class="profile-grid" id="profileModalFields"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-r" style="padding:12px 10px" onclick="saveProfileMetaForm()">Opslaan</button>
+      <button class="btn-g" style="padding:12px 10px" onclick="closeProfileModal()">Sluiten</button>
+    </div>
   </div>
 </div>
 
@@ -558,6 +589,8 @@ var S={
   timelineLimitByDossier:{}
 };
 
+var _profileModalFor='OWN Sense';
+
 // Segment modal state
 var _segModalIdx=-1;
 
@@ -580,12 +613,64 @@ function setSessAssignMap(map){
   try{localStorage.setItem('ds_sess_assign_map',JSON.stringify(map||{}));}catch(e){}
 }
 
+function getMetaFor(name){
+  var d=S.pdata[name]||{};
+  return d.meta||{};
+}
+
+function renderOwnAvatar(){
+  var wrap=document.getElementById('ownAvatarWrap');
+  if(!wrap)return;
+  var ownMeta=getMetaFor('OWN Sense');
+  if(ownMeta.photo_url){
+    wrap.innerHTML='<img src="'+ownMeta.photo_url+'" alt="OWN foto" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+  }else{
+    wrap.innerHTML='<svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg>';
+  }
+}
+
+function getOwnNameTokens(){
+  var set=new Set(['ik','jij','you','mij','me']);
+  try{
+    var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
+    if(first)set.add(String(first).toLowerCase());
+    var email=(S.user&&S.user.email)||'';
+    var local=email.split('@')[0]||'';
+    if(local){
+      local.split(/[._\-0-9]+/).forEach(function(part){
+        if(part&&part.length>=2)set.add(part.toLowerCase());
+      });
+    }
+  }catch(e){}
+  return set;
+}
+
 function detectNieuweNaam(tekst){
   var existing=S.profiles.map(function(p){return dn(p).toLowerCase();});
-  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die']);
-  var hits=(tekst.match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g)||[])
+  var own=getOwnNameTokens();
+  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die','date','datesense']);
+
+  // 1) Sterk signaal: chatlabels "Naam:"
+  var labelHits=(String(tekst||'').match(/\b([A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,})\s*:/g)||[])
+    .map(function(m){return m.replace(':','').trim();})
+    .filter(function(w){
+      var low=w.toLowerCase();
+      return !stop.has(low)&&!own.has(low)&&!existing.includes(low);
+    });
+  if(labelHits.length){
+    var lc={};
+    labelHits.forEach(function(h){lc[h]=(lc[h]||0)+1;});
+    var bestLabel=Object.entries(lc).sort(function(a,b){return b[1]-a[1];})[0];
+    if(bestLabel&&bestLabel[0])return bestLabel[0];
+  }
+
+  // 2) Fallback: gewone hoofdletterwoorden
+  var hits=(String(tekst||'').match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g)||[])
     .map(function(w){return w.trim();})
-    .filter(function(w){return !stop.has(w.toLowerCase())&&!existing.includes(w.toLowerCase());});
+    .filter(function(w){
+      var low=w.toLowerCase();
+      return !stop.has(low)&&!own.has(low)&&!existing.includes(low);
+    });
   if(!hits.length)return'';
   var counts={};
   hits.forEach(function(h){counts[h]=(counts[h]||0)+1;});
@@ -937,14 +1022,17 @@ async function loadAll(){
         PK.forEach(k=>{mergedProps[k]=0;});
       }
       var loadedCats=savedProps.categories||{};
+      var loadedMeta=savedProps.meta||{};
       delete mergedProps._v;
       delete mergedProps.categories;
+      delete mergedProps.meta;
       S.pdata[p.name]={
         props:mergedProps,
         count:p.bericht_count||0,
         lastActive:p.last_active,
         categories:loadedCats,
-        summary:p.summary||''
+        summary:p.summary||'',
+        meta:loadedMeta
       };
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
@@ -957,11 +1045,11 @@ async function ensureP(name){
     {user_id:S.user.id,name,props:{...DP},bericht_count:0},
     {onConflict:'user_id,name'}
   );
-  S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{}};
+  S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:{}};
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
 }
 
-async function saveP(name,props,count,categories,summary){
+async function saveP(name,props,count,categories,summary,meta){
   if(!S.user)return;
   sync('s');
   var propsToSave={...props,_v:1};
@@ -971,8 +1059,11 @@ async function saveP(name,props,count,categories,summary){
     (S.pdata[name]&&Object.keys(S.pdata[name].categories||{}).length>0?S.pdata[name].categories:null)||
     null;
   if(safeCats&&Object.keys(safeCats).length>0)propsToSave.categories=safeCats;
+  var safeMeta=meta||(S.pdata[name]&&S.pdata[name].meta)||null;
+  if(safeMeta&&Object.keys(safeMeta).length>0)propsToSave.meta=safeMeta;
   // Verwijder lege categories key
   if(propsToSave.categories&&Object.keys(propsToSave.categories).length===0)delete propsToSave.categories;
+  if(propsToSave.meta&&Object.keys(propsToSave.meta).length===0)delete propsToSave.meta;
   var _upsert={user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()};
   if(summary)_upsert.summary=summary;
   await sb.from('sense_profiles').upsert(_upsert,{onConflict:'user_id,name'});
@@ -981,8 +1072,10 @@ async function saveP(name,props,count,categories,summary){
     S.pdata[name].count=count;
     S.pdata[name].lastActive=new Date().toISOString();
     if(categories)S.pdata[name].categories=categories;
+    if(meta)S.pdata[name].meta=meta;
   }
   sync('ok');
+  renderOwnAvatar();
 }
 
 // Berichten per dossier opslaan/laden (gefilterd op profile_name!)
@@ -1043,6 +1136,7 @@ function goScreen(sc){
   var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier};
   if(screens[sc])screens[sc](mc);
   mc.scrollTop=0;
+  renderOwnAvatar();
   if(S.user)rDrawer();
 }
 
@@ -1054,7 +1148,7 @@ function rDrawer(){
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
 <div class="dlbl">Persoonlijk</div>
 <div class="drow" onclick="viewDossier('OWN Sense')">
-  <div style="width:10px;height:10px;border-radius:5px;background:${SEG_DOT_COLORS[0]}"></div>
+  ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense</div>
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
 </div>`;
@@ -1063,7 +1157,7 @@ function rDrawer(){
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0};
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="drow" onclick="viewDossier('${p}')"><div style="width:10px;height:10px;border-radius:5px;background:${col}"></div><div style="flex:1;font-size:15px;font-weight:600">${p}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count}</div></div>`;
+      h+=`<div class="drow" onclick="viewDossier('${p}')">${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${p}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count}</div></div>`;
     });
   }
   h+=`<div class="dlbl">Acties</div>
@@ -1076,6 +1170,95 @@ function closeDrawer(){document.getElementById('drawer').classList.remove('open'
 function viewDossier(name){S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');}
 async function viewDossierTijdlijn(name){
   S.viewDossier=name;S.viewTab='tijdlijn';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');
+}
+
+function openProfileModal(name){
+  _profileModalFor=name||'OWN Sense';
+  var modal=document.getElementById('profileModal');
+  var title=document.getElementById('profileModalTitle');
+  var avatar=document.getElementById('profileModalAvatar');
+  var status=document.getElementById('profilePhotoStatus');
+  var fields=document.getElementById('profileModalFields');
+  if(!modal||!title||!avatar||!fields)return;
+  var meta=getMetaFor(_profileModalFor);
+  function escA(v){
+    return String(v||'')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+  title.textContent='Profielgegevens - '+dn(_profileModalFor);
+  avatar.src=meta.photo_url||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect width="46" height="46" fill="%23eceff3"/></svg>';
+  status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
+  fields.innerHTML=''
+    +'<input class="profile-field" id="pf_displayName" placeholder="Naam" value="'+escA(meta.display_name)+'">'
+    +'<input class="profile-field" id="pf_age" placeholder="Leeftijd" value="'+escA(meta.age)+'">'
+    +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'">'
+    +'<input class="profile-field" id="pf_city" placeholder="Regio / woonplaats" value="'+escA(meta.city)+'">'
+    +'<input class="profile-field full" id="pf_intent" placeholder="Intentie (bv. serieuze relatie)" value="'+escA(meta.intent)+'">';
+  modal.classList.add('show');
+}
+
+function closeProfileModal(){
+  var modal=document.getElementById('profileModal');
+  if(modal)modal.classList.remove('show');
+}
+
+function chooseProfilePhoto(){
+  var inp=document.getElementById('profilePhotoInput');
+  if(inp)inp.click();
+}
+
+async function handleProfilePhotoInput(input){
+  var file=input.files&&input.files[0];
+  if(!file||!S.user)return;
+  var status=document.getElementById('profilePhotoStatus');
+  if(status)status.textContent='Uploaden...';
+  try{
+    var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
+    var path=S.user.id+'/'+safeName+'_'+Date.now()+'.'+ext;
+    var up=await sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    if(up.error)throw up.error;
+    var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
+    var url=(pub&&pub.data&&pub.data.publicUrl)||'';
+    if(!url)throw new Error('Kon foto URL niet maken');
+    var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
+    d.meta=d.meta||{};
+    d.meta.photo_url=url;
+    S.pdata[_profileModalFor]=d;
+    await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
+    var av=document.getElementById('profileModalAvatar');
+    if(av)av.src=url;
+    if(status)status.textContent='Foto toegevoegd';
+    toast('✅ Foto opgeslagen');
+  }catch(e){
+    console.warn('handleProfilePhotoInput error:',e);
+    if(status)status.textContent='Upload mislukt';
+    toast('Foto upload mislukt');
+  }finally{
+    input.value='';
+  }
+}
+
+async function saveProfileMetaForm(){
+  var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+  d.meta.display_name=v('pf_displayName');
+  d.meta.age=v('pf_age');
+  d.meta.birthdate=v('pf_birthdate');
+  d.meta.city=v('pf_city');
+  d.meta.intent=v('pf_intent');
+  S.pdata[_profileModalFor]=d;
+  await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
+  closeProfileModal();
+  if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
+  else if(S.screen==='own'&&_profileModalFor==='OWN Sense')goScreen('own');
+  else renderOwnAvatar();
+  toast('✅ Profielgegevens opgeslagen');
 }
 
 async function newSenseFromDrawer(){
@@ -1172,21 +1355,21 @@ function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size
 // ══ Senses lijst ═════════════════════════════════════════════════
 function rSenses(el){
   var cs=S.profiles.filter(p=>p!=='OWN Sense');
-  var own=S.pdata['OWN Sense']||{count:0};
+  var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
 <div class="srow" onclick="viewDossier('OWN Sense')">
-  <div class="sdot" style="background:${SEG_DOT_COLORS[0]}"></div>
+  ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
 </div>`;
   if(cs.length){
     h+='<div class="sh">Contacten</div>';
     cs.forEach((p,i)=>{
-      var d=S.pdata[p]||{count:0,lastActive:null};
+      var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
       h+=`<div class="srow">
-        <div class="sdot" style="background:${col}"></div>
+        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
           <div style="font-size:15px;font-weight:700">${p}</div>
           <div style="font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span></div>
@@ -1253,12 +1436,22 @@ async function rDossier(el){
   // Naam + badge + knop
   header+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">';
   if(!isOwn){
-    // Avatar cirkel met initiaal
-    var initial=personName2.charAt(0).toUpperCase();
-    var ci2=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
-    var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
-    var avatarCol=avatarColors[ci2%avatarColors.length];
-    header+='<div style="width:44px;height:44px;border-radius:22px;background:'+avatarCol+';color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>';
+    var pMeta=d.meta||{};
+    if(pMeta.photo_url){
+      header+='<img src="'+pMeta.photo_url+'" alt="'+personName2+'" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
+    }else{
+      // Avatar cirkel met initiaal
+      var initial=personName2.charAt(0).toUpperCase();
+      var ci2=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
+      var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
+      var avatarCol=avatarColors[ci2%avatarColors.length];
+      header+='<div style="width:44px;height:44px;border-radius:22px;background:'+avatarCol+';color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>';
+    }
+  }else{
+    var ownM=d.meta||{};
+    if(ownM.photo_url){
+      header+='<img src="'+ownM.photo_url+'" alt="OWN foto" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
+    }
   }
   header+='<div style="flex:1">';
   header+='<div style="font-size:18px;font-weight:800;color:var(--t)">'+personName2+'</div>';
@@ -1267,6 +1460,7 @@ async function rDossier(el){
   }
   header+='</div>';
   header+='<button style="padding:8px 14px;background:var(--r);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="S.vertelFrom=\''+name+'\';goScreen(\'vertel\')">🎤 Vertel</button>';
+  header+='<button style="padding:8px 10px;background:#fff;color:#555;border:1px solid var(--b);border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openProfileModal(\''+name+'\')">Profielgegevens</button>';
   header+='</div>';
 
   if(!isOwn){
@@ -1943,6 +2137,9 @@ function rOWN(el){
 
 <!-- Eigen eigenschappen -->
 <div class="sh">Jouw eigenschappen</div>
+<div style="display:flex;justify-content:flex-end;margin:-8px 0 10px">
+  <button class="coach-save-other" onclick="openProfileModal('OWN Sense')">Profielgegevens beheren</button>
+</div>
 <div id="own-props-bars" style="margin-bottom:20px">${renderProps(d.props)}</div>
 
 <!-- Profiel compleetheid -->
@@ -3198,12 +3395,15 @@ async function updateDossierSummary(dosName){
 
 function buildCoachContext(){
   var lines=[];
-  var own=S.pdata['OWN Sense']||{props:{},categories:{}};
+  var own=S.pdata['OWN Sense']||{props:{},categories:{},meta:{}};
   var ownProps=[];
   PK.forEach(function(k,i){if((own.props[k]||0)>0)ownProps.push(PL[i]+':'+(own.props[k]||0)+'%');});
   var ownCat='';
   if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
+  var ownMeta=own.meta||{};
+  var ownMetaParts=[ownMeta.display_name,ownMeta.age?('leeftijd '+ownMeta.age):'',ownMeta.intent].filter(Boolean);
   lines.push('JOUW PROFIEL:');
+  if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
   if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
 
@@ -3212,17 +3412,19 @@ function buildCoachContext(){
     lines.push('');
     lines.push('JOUW CONTACTEN:');
     contacts.forEach(function(p){
-      var d=S.pdata[p]||{props:{},count:0,categories:{}};
+      var d=S.pdata[p]||{props:{},count:0,categories:{},meta:{}};
       var props=[];
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
+      var meta=d.meta||{};
+      var metaShort=[meta.display_name,meta.age?('leeftijd '+meta.age):'',meta.intent].filter(Boolean).join(', ');
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
       // Gebruik samenvatting als die beschikbaar is, anders props + cat
       var summary=d.summary||(S._ctxMsgs&&S._ctxMsgs[p+'_summary'])||'';
       if(summary){
-        lines.push(dn(p)+': '+summary.substring(0,200));
+        lines.push(dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+summary.substring(0,200));
       } else {
-        var line=dn(p)+': '+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
+        var line=dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
         lines.push(line);
       }
     });
@@ -3232,8 +3434,11 @@ function buildCoachContext(){
 
 async function buildDossierContextForAI(dosName){
   if(!dosName||!S.user||dosName==='OWN Sense')return'';
-  var d=S.pdata[dosName]||{props:{},categories:{},summary:''};
+  var d=S.pdata[dosName]||{props:{},categories:{},summary:'',meta:{}};
   var lines=[];
+  var m=d.meta||{};
+  var mLine=[m.display_name,m.age?('leeftijd '+m.age):'',m.birthdate,m.city,m.intent].filter(Boolean).join(', ');
+  if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
   if(d.summary)lines.push('Samenvatting '+dn(dosName)+': '+d.summary.substring(0,500));
   var catTxt='';
   if(d.categories){
