@@ -592,6 +592,7 @@ const OWN_CATS=[
 var S={
   user:null,
   apiKey:localStorage.getItem('ds_ak')||'',
+  adviceTone:localStorage.getItem('ds_advice_tone')||'eerlijk',
   screen:'home',prev:'home',
   busy:false,
   profiles:[],
@@ -718,6 +719,25 @@ function computePhotoMatchPct(a,b){
   var vals=keys.map(function(k){return 100-Math.abs((a[k]||50)-(b[k]||50));});
   var avg=Math.round(vals.reduce(function(x,y){return x+y;},0)/vals.length);
   return Math.max(10,Math.min(98,avg));
+}
+
+function buildPhotoMatchBreakdown(a,b){
+  if(!a||!b)return null;
+  var dims=[
+    {k:'openheid',l:'Open blik'},
+    {k:'glimlach',l:'Glimlach'},
+    {k:'energie',l:'Energie'},
+    {k:'verzorging',l:'Verzorging'},
+    {k:'benaderbaarheid',l:'Benaderbaarheid'}
+  ];
+  var rows=dims.map(function(d){
+    var av=parseInt(a[d.k]||50,10),bv=parseInt(b[d.k]||50,10);
+    var diff=Math.abs(av-bv);
+    return{label:d.l,a:av,b:bv,diff:diff,close:100-diff};
+  });
+  var best=rows.slice().sort(function(x,y){return x.diff-y.diff;}).slice(0,2);
+  var worst=rows.slice().sort(function(x,y){return y.diff-x.diff;}).slice(0,2);
+  return{rows:rows,best:best,worst:worst};
 }
 
 async function analyseerFotoVoorDossier(dosName){
@@ -2150,11 +2170,19 @@ async function loadTab(name,tab,d){
       var ownPa=ownMeta.photo_analysis||null;
       if(pa&&ownPa){
         var pm=computePhotoMatchPct(ownPa,pa);
+        var br=buildPhotoMatchBreakdown(ownPa,pa);
         var mc=pm>=80?'#2E7D32':pm>=60?'#E07800':'#777';
+        var bestTxt=br?br.best.map(function(r){return r.label+' (Δ'+r.diff+')';}).join(', '):'';
+        var worstTxt=br?br.worst.map(function(r){return r.label+' (Δ'+r.diff+')';}).join(', '):'';
+        var rowsTxt=br?br.rows.map(function(r){
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;color:#6a6f77;margin-top:3px"><span>'+r.label+'</span><span>jij '+r.a+'% · ander '+r.b+'% · verschil '+r.diff+'</span></div>';
+        }).join(''):'';
         html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px">'
           +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#333;font-weight:700">Photo match</span><span style="font-size:18px;font-weight:800;color:'+mc+'">'+pm+'%</span></div>'
           +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+pm+'%;background:'+mc+'"></div></div>'
           +'<div style="font-size:12px;color:#666;line-height:1.5;margin-top:8px">Indicatieve visuele match op basis van openheid, glimlach, energie, verzorging en benaderbaarheid.</div>'
+          +(br?'<div style="font-size:12px;color:#555;line-height:1.5;margin-top:8px"><strong>Sterk gelijk in:</strong> '+bestTxt+'<br><strong>Groot verschil in:</strong> '+worstTxt+'</div>':'')
+          +(rowsTxt?'<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e3e6eb">'+rowsTxt+'</div>':'')
           +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:4px">Alleen ondersteunend signaal, niet doorslaggevend.</div>'
           +'</div>';
       } else {
@@ -2239,10 +2267,18 @@ async function genAdvies(name,forced){
     });
   }
   var isOwnAdv=name==='OWN Sense';
+  var tone=S.adviceTone||'eerlijk';
+  var toneInstr=tone==='streng'
+    ?'Wees streng, direct en eerlijk. Als de huidige info zwakke match of risico toont, zeg dat expliciet.'
+    :tone==='zacht'
+      ?'Wees warm en voorzichtig, maar blijf eerlijk.'
+      :'Wees warm, direct en eerlijk.';
   var sys='Je bent DateSensei, empathische AI dating coach. '
     +(isOwnAdv
-      ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten. Wees warm, direct en eerlijk.'
+      ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
       :'Analyseer dossier "'+dn(name)+'": karakter, patronen, jouw gevoel. Geef 2 concrete adviezen.')
+    +' '+toneInstr
+    +' Geef daarnaast op NIEUWE REGEL exact dit formaat: REDFLAGS:score;reden1|reden2|reden3 (score 0-100, hoger=meer risico).'
     +' Daarna geef je op een NIEUWE REGEL exact dit formaat:'
     +' ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg'
     +' (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀)'
@@ -2253,12 +2289,30 @@ async function genAdvies(name,forced){
   try{
     var t=await callAPI(sys,[{role:'user',content:userContent}],700);
     var ts=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
-    // Splits advies en acties
-    var parts=t.split('ACTIES:');
-    var adviesTxt=parts[0].trim();
-    var actiesTxt=parts[1]?parts[1].trim():'';
+    var redMatch=t.match(/REDFLAGS:([^\n]+)/i);
+    var actMatch=t.match(/ACTIES:([\s\S]*)/i);
+    var adviesTxt=t
+      .replace(/REDFLAGS:[^\n]*/ig,'')
+      .replace(/ACTIES:[\s\S]*/ig,'')
+      .trim();
+    var actiesTxt=actMatch&&actMatch[1]?actMatch[1].trim():'';
     var result=adviesTxt.split('\n').join('<br>');
-    if(box)box.innerHTML=result;
+    var redHtml='';
+    if(redMatch&&redMatch[1]){
+      var redRaw=redMatch[1].trim();
+      var seg=redRaw.split(';');
+      var redScore=Math.max(0,Math.min(100,parseInt(seg[0],10)||0));
+      var redReasons=(seg[1]||'').split('|').map(function(x){return x.trim();}).filter(Boolean).slice(0,3);
+      var rc=redScore>=65?'#C62828':redScore>=35?'#E07800':'#2E7D32';
+      redHtml='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:#333">Red flags score</span><span style="font-size:18px;font-weight:800;color:'+rc+'">'+redScore+'%</span></div>'
+        +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+redScore+'%;background:'+rc+'"></div></div>'
+        +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">0-34 laag · 35-64 aandacht · 65-100 hoog</div>'
+        +(redReasons.length?'<div style="font-size:12px;color:#555;line-height:1.6;margin-top:8px"><strong>Waarom:</strong> '+redReasons.join(' · ')+'</div>':'')
+        +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:4px">Indicatief op basis van huidige data.</div>'
+        +'</div>';
+    }
+    if(box)box.innerHTML=redHtml+result;
 
     // Render aanbevolen acties
     var actiesContainer=document.getElementById('actiesContainer');
@@ -2285,7 +2339,7 @@ async function genAdvies(name,forced){
     // Cache opslaan met count en timestamp
     if(!S.adviesCache)S.adviesCache={};
     var d2=S.pdata[name]||{count:0};
-    S.adviesCache[name]={html:result,ts:'Gegenereerd om '+ts,count:d2.count||0};
+    S.adviesCache[name]={html:(redHtml+result),ts:'Gegenereerd om '+ts,count:d2.count||0};
     // Update footer
     var footer=document.querySelector('#adviesBox [style*="border-top"]');
     if(footer){
@@ -2838,7 +2892,13 @@ function rSettings(el){
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
 <input class="form-input" id="akField" type="password" placeholder="sk-ant-api..." value="${S.apiKey||''}"/>
-<button class="form-btn" onclick="saveKey()">Opslaan &amp; activeren</button>
+<div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Adviesstijl</div>
+<select class="form-input" id="adviceToneField">
+  <option value="zacht" ${S.adviceTone==='zacht'?'selected':''}>Zacht</option>
+  <option value="eerlijk" ${S.adviceTone==='eerlijk'?'selected':''}>Eerlijk</option>
+  <option value="streng" ${S.adviceTone==='streng'?'selected':''}>Streng</option>
+</select>
+<button class="form-btn" onclick="saveSettings()">Opslaan instellingen</button>
 ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-radius:12px;font-size:15px;color:#2E7D32">✅ API key actief!</div>':''}
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
@@ -2847,7 +2907,20 @@ ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-r
 </div></div>`;
 }
 
-function saveKey(){var k=document.getElementById('akField').value.trim();if(!k){alert('Vul een geldige key in.');return;}S.apiKey=k;localStorage.setItem('ds_ak',k);toast('✅ API key opgeslagen!');goScreen('home');}
+function saveSettings(){
+  var kEl=document.getElementById('akField');
+  var tEl=document.getElementById('adviceToneField');
+  var k=kEl?kEl.value.trim():'';
+  var t=tEl?tEl.value:'eerlijk';
+  if(k){
+    S.apiKey=k;
+    localStorage.setItem('ds_ak',k);
+  }
+  S.adviceTone=(t==='zacht'||t==='streng')?t:'eerlijk';
+  localStorage.setItem('ds_advice_tone',S.adviceTone);
+  toast('✅ Instellingen opgeslagen');
+  goScreen('home');
+}
 
 // ══ Compare ══════════════════════════════════════════════════════
 function rCompare(el){
