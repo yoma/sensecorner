@@ -591,6 +591,7 @@ var S={
 
 var _profileModalFor='OWN Sense';
 var _profileUploadBusy=false;
+var _photoAnalysisBusy={};
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -638,6 +639,100 @@ function updateProfileAgePreview(){
   if(!bd||!ageEl)return;
   var age=calcAgeFromBirthdate(bd.value);
   ageEl.value=age||'';
+}
+
+function escHTML(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function toBase64FromBlob(blob){
+  return new Promise(function(resolve,reject){
+    var r=new FileReader();
+    r.onload=function(){resolve(String(r.result||'').split(',')[1]||'');};
+    r.onerror=function(){reject(new Error('Kon afbeelding niet lezen'));};
+    r.readAsDataURL(blob);
+  });
+}
+
+function parseFirstJSONObject(txt){
+  var s=String(txt||'').trim();
+  try{return JSON.parse(s);}catch(e){}
+  var st=s.indexOf('{');
+  var en=s.lastIndexOf('}');
+  if(st>=0&&en>st){
+    try{return JSON.parse(s.substring(st,en+1));}catch(e){}
+  }
+  return null;
+}
+
+function normalizePhotoAnalysis(obj){
+  var o=obj||{};
+  function n(v){
+    var x=parseInt(v,10);
+    if(isNaN(x))x=50;
+    return Math.max(0,Math.min(100,x));
+  }
+  return{
+    openheid:n(o.openheid),
+    glimlach:n(o.glimlach),
+    energie:n(o.energie),
+    verzorging:n(o.verzorging),
+    benaderbaarheid:n(o.benaderbaarheid),
+    mood:String(o.mood||'Neutraal'),
+    summary:String(o.summary||'')
+  };
+}
+
+function computePhotoMatchPct(a,b){
+  if(!a||!b)return null;
+  var keys=['openheid','glimlach','energie','verzorging','benaderbaarheid'];
+  var vals=keys.map(function(k){return 100-Math.abs((a[k]||50)-(b[k]||50));});
+  var avg=Math.round(vals.reduce(function(x,y){return x+y;},0)/vals.length);
+  return Math.max(10,Math.min(98,avg));
+}
+
+async function analyseerFotoVoorDossier(dosName){
+  if(!dosName||!S.user)return;
+  if(!S.apiKey){toast('⚠️ API key nodig voor foto-analyse');return;}
+  if(_photoAnalysisBusy[dosName])return;
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  if(!d.meta.photo_url){toast('Voeg eerst een foto toe in Profielgegevens');return;}
+  _photoAnalysisBusy[dosName]=true;
+  toast('📸 Foto analyseren...');
+  try{
+    var resp=await fetch(d.meta.photo_url);
+    if(!resp.ok)throw new Error('Kon foto niet ophalen');
+    var blob=await resp.blob();
+    var b64=await toBase64FromBlob(blob);
+    var prompt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
+      +'openheid (0-100), glimlach (0-100), energie (0-100), verzorging (0-100), benaderbaarheid (0-100), '
+      +'mood (korte tekst), summary (max 2 zinnen in het Nederlands).';
+    var raw=await callAPI('',[{role:'user',content:[
+      {type:'image',source:{type:'base64',media_type:(blob.type||'image/jpeg'),data:b64}},
+      {type:'text',text:prompt}
+    ]}],500);
+    var parsed=parseFirstJSONObject(raw);
+    if(!parsed)throw new Error('Kon AI foto-analyse niet lezen');
+    d.meta.photo_analysis=normalizePhotoAnalysis(parsed);
+    d.meta.photo_analysis_updated_at=new Date().toISOString();
+    S.pdata[dosName]=d;
+    await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
+    if(S.screen==='dossier'&&S.viewDossier===dosName&&S.viewTab==='foto'){
+      await loadTab(dosName,'foto',d);
+    }
+    toast('✅ Foto-analyse opgeslagen');
+  }catch(e){
+    console.warn('analyseerFotoVoorDossier error:',e);
+    toast(e&&e.message?e.message:'Foto-analyse mislukt');
+  }finally{
+    _photoAnalysisBusy[dosName]=false;
+  }
 }
 
 function renderOwnAvatar(){
@@ -1552,6 +1647,7 @@ async function rDossier(el){
   var tabs='<div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
+    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Foto</div>'
     +'<div class="dtab '+(vt==="advies"?"active":"")+'" onclick="switchTab(\'advies\')">Advies</div>'
     +'</div>';
 
@@ -1584,7 +1680,7 @@ async function switchTab(tab){
     S.timelineLimitByDossier[S.viewDossier]=50;
   }
   document.querySelectorAll('.dtab').forEach(t=>{
-    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','advies':'Advies'};
+    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Foto','advies':'Advies'};
     t.classList.toggle('active',t.textContent===map[tab]);
   });
   await loadTab(S.viewDossier,tab,S.pdata[S.viewDossier]||{props:{...DP},count:0,categories:{}});
@@ -1788,6 +1884,66 @@ async function loadTab(name,tab,d){
     if(msgs.length>=tlLimit2&&tlLimit2<500){
       cont.innerHTML+='<div style="text-align:center;margin-top:14px"><button class="btn-g" style="max-width:220px" onclick="laadOudereTijdlijn(\''+name+'\')">Laad ouder</button></div>';
     }
+  }
+  else if(tab==='foto'){
+    var meta=(d&&d.meta)||{};
+    var pa=meta.photo_analysis||null;
+    var isOwnPhoto=name==='OWN Sense';
+    var html='';
+    html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">Foto-analyse</div>';
+    if(!meta.photo_url){
+      html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:14px 16px;color:var(--m);font-size:14px;line-height:1.6">'
+        +'Nog geen foto toegevoegd. Voeg eerst een foto toe in Profielgegevens.'
+        +'<div style="margin-top:10px"><button class="btn-g" style="max-width:210px" onclick="openProfileModal(\''+name+'\')">Profielgegevens openen</button></div>'
+        +'</div>';
+      cont.innerHTML=html;
+      return;
+    }
+    html+='<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 12px;margin-bottom:12px">'
+      +'<img src="'+meta.photo_url+'" alt="foto" style="width:68px;height:68px;border-radius:12px;object-fit:cover;border:1px solid var(--b)">'
+      +'<div style="flex:1">'
+      +'<div style="font-size:13px;color:#444;font-weight:700">'+dn(name)+'</div>'
+      +'<div style="font-size:12px;color:var(--m)">'+(pa&&meta.photo_analysis_updated_at?('Laatst geanalyseerd: '+timeAgo(meta.photo_analysis_updated_at)):'Nog niet geanalyseerd')+'</div>'
+      +'</div>'
+      +'<button class="btn-r" style="max-width:170px;padding:10px 12px" onclick="analyseerFotoVoorDossier(\''+name+'\')">Analyseer foto</button>'
+      +'</div>';
+    if(pa){
+      function meter(label,val){
+        var c=val>=75?'#2E7D32':val>=55?'#E07800':'#999';
+        return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#555"><span>'+label+'</span><span style="font-weight:700;color:'+c+'">'+val+'%</span></div>'
+          +'<div style="height:6px;background:#eceff3;border-radius:6px;overflow:hidden"><div style="height:100%;width:'+val+'%;background:'+c+'"></div></div></div>';
+      }
+      html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+        +'<div style="font-size:13px;color:#333;font-weight:700;margin-bottom:8px">AI observaties</div>'
+        +meter('Open blik',pa.openheid)
+        +meter('Glimlach',pa.glimlach)
+        +meter('Energie',pa.energie)
+        +meter('Verzorging',pa.verzorging)
+        +meter('Benaderbaarheid',pa.benaderbaarheid)
+        +'<div style="font-size:12px;color:#666;margin-top:8px"><strong>Mood:</strong> '+escHTML(pa.mood||'')+'</div>'
+        +'<div style="font-size:13px;color:#444;line-height:1.6;margin-top:6px">'+escHTML(pa.summary||'')+'</div>'
+        +'</div>';
+    } else {
+      html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:12px 14px;color:var(--m);font-size:13px">Klik op <strong>Analyseer foto</strong> om een optionele foto-inschatting te maken.</div>';
+    }
+    if(!isOwnPhoto){
+      var ownMeta=((S.pdata['OWN Sense']||{}).meta)||{};
+      var ownPa=ownMeta.photo_analysis||null;
+      if(pa&&ownPa){
+        var pm=computePhotoMatchPct(ownPa,pa);
+        var mc=pm>=80?'#2E7D32':pm>=60?'#E07800':'#777';
+        html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#333;font-weight:700">Photo match</span><span style="font-size:18px;font-weight:800;color:'+mc+'">'+pm+'%</span></div>'
+          +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+pm+'%;background:'+mc+'"></div></div>'
+          +'<div style="font-size:12px;color:#666;line-height:1.5;margin-top:8px">Indicatieve visuele match op basis van openheid, glimlach, energie, verzorging en benaderbaarheid.</div>'
+          +'</div>';
+      } else {
+        html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:12px 14px;color:var(--m);font-size:13px">'
+          +'Photo match verschijnt zodra zowel <strong>OWN Sense</strong> als dit dossier een foto-analyse hebben.'
+          +'</div>';
+      }
+    }
+    cont.innerHTML=html;
   }
   else if(tab==='advies'){
     if(!S.adviesCache)S.adviesCache={};
@@ -3432,6 +3588,9 @@ function buildCoachContext(){
   var ownMeta=own.meta||{};
   var ownAge=calcAgeFromBirthdate(ownMeta.birthdate)||ownMeta.age||'';
   var ownMetaParts=[ownMeta.display_name,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
+  if(ownMeta.photo_analysis&&ownMeta.photo_analysis.summary){
+    ownMetaParts.push('foto: '+String(ownMeta.photo_analysis.summary).substring(0,80));
+  }
   lines.push('JOUW PROFIEL:');
   if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
@@ -3448,14 +3607,15 @@ function buildCoachContext(){
       var meta=d.meta||{};
       var metaAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
       var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',meta.intent].filter(Boolean).join(', ');
+      var photoShort=(meta.photo_analysis&&meta.photo_analysis.summary)?(' | foto: '+String(meta.photo_analysis.summary).substring(0,80)):'';
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
       // Gebruik samenvatting als die beschikbaar is, anders props + cat
       var summary=d.summary||(S._ctxMsgs&&S._ctxMsgs[p+'_summary'])||'';
       if(summary){
-        lines.push(dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+summary.substring(0,200));
+        lines.push(dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+summary.substring(0,200)+photoShort);
       } else {
-        var line=dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
+        var line=dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'')+photoShort;
         lines.push(line);
       }
     });
@@ -3471,6 +3631,11 @@ async function buildDossierContextForAI(dosName){
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
   var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,m.intent].filter(Boolean).join(', ');
   if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
+  if(m.photo_analysis){
+    var ptxt='Foto-analyse: mood '+(m.photo_analysis.mood||'')+', openheid '+(m.photo_analysis.openheid||0)+'%, glimlach '+(m.photo_analysis.glimlach||0)+'%, energie '+(m.photo_analysis.energie||0)+'%, verzorging '+(m.photo_analysis.verzorging||0)+'%, benaderbaarheid '+(m.photo_analysis.benaderbaarheid||0)+'%';
+    if(m.photo_analysis.summary)ptxt+=' | '+String(m.photo_analysis.summary).substring(0,180);
+    lines.push(ptxt);
+  }
   if(d.summary)lines.push('Samenvatting '+dn(dosName)+': '+d.summary.substring(0,500));
   var catTxt='';
   if(d.categories){
