@@ -810,7 +810,8 @@ function renderOwnAvatar(){
 function getProfileMetaCompletion(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
-  var keys=['display_name','birthdate','city','intent','photo_url'];
+  // Dossiernaam is vast; enkel echte profielvelden tellen mee.
+  var keys=['birthdate','city','intent','photo_url'];
   var filled=keys.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
   return{filled:filled,total:keys.length,complete:filled===keys.length};
 }
@@ -1460,7 +1461,7 @@ function openProfileModal(name){
   avatar.src=meta.photo_url||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect width="46" height="46" fill="%23eceff3"/></svg>';
   status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
   fields.innerHTML=''
-    +'<input class="profile-field" id="pf_displayName" placeholder="Naam" value="'+escA(meta.display_name)+'">'
+    +'<input class="profile-field" value="'+escA(dn(_profileModalFor))+'" readonly>'
     +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'" oninput="updateProfileAgePreview()">'
     +'<input class="profile-field" id="pf_age_auto" placeholder="Leeftijd (auto)" value="'+escA(calcAgeFromBirthdate(meta.birthdate)||meta.age)+'" readonly>'
     +'<input class="profile-field" id="pf_city" placeholder="Regio / woonplaats" value="'+escA(meta.city)+'">'
@@ -1588,7 +1589,6 @@ async function saveProfileMetaForm(){
   var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
   function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
-  d.meta.display_name=v('pf_displayName');
   d.meta.birthdate=v('pf_birthdate');
   d.meta.age=calcAgeFromBirthdate(d.meta.birthdate);
   d.meta.city=v('pf_city');
@@ -1835,9 +1835,9 @@ async function rDossier(el){
         if(ov>0&&cv>0){var diff=Math.abs(ov-cv);if(diff<=20)goedMatch.push(PL[i]);else if(diff>=40)slecht.push(PL[i]);}
       });
       var reden=goedMatch.length&&slecht.length
-        ?'Sterk gelijk in <strong>'+goedMatch.slice(0,2).join(' & ')+'</strong> · verschil in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
-        :goedMatch.length?'Sterk gelijk in <strong>'+goedMatch.slice(0,3).join(', ')+'</strong>'
-        :slecht.length?'Groot verschil in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
+        ?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,2).join(' & ')+'</strong> · meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
+        :goedMatch.length?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,3).join(', ')+'</strong>'
+        :slecht.length?'Meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
         :'Voeg meer info toe voor een analyse';
 
       // SVG donut
@@ -2617,9 +2617,9 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
             }
           });
           var red2=goed2.length&&slecht2.length
-            ?'Sterk gelijk in <strong>'+goed2.slice(0,2).join(' & ')+'</strong>, verschil in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.'
-            :goed2.length?'Goed gelijk in <strong>'+goed2.slice(0,3).join(', ')+'</strong>.'
-            :slecht2.length?'Groot verschil in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.':'';
+            ?'Meest gelijkaardig in <strong>'+goed2.slice(0,2).join(' & ')+'</strong>, meeste afstand in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.'
+            :goed2.length?'Meest gelijkaardig in <strong>'+goed2.slice(0,3).join(', ')+'</strong>.'
+            :slecht2.length?'Meeste afstand in <strong>'+slecht2.slice(0,2).join(' & ')+'</strong>.':'';
           matchEl.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
             +'<span style="font-size:13px;font-weight:600;color:#555">Match met jouw profiel</span>'
             +'<span style="font-size:22px;font-weight:800;color:'+col2+'">'+pct+'%</span>'
