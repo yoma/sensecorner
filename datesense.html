@@ -706,16 +706,15 @@ async function loadAll(){
       if(!savedProps._v && isOldDefault(mergedProps)){
         PK.forEach(k=>{mergedProps[k]=0;});
       }
-      // Categories stored nested in props JSON — extract separately
       var loadedCats=savedProps.categories||{};
-      // Clean categories: remove _v flag from props
       delete mergedProps._v;
       delete mergedProps.categories;
       S.pdata[p.name]={
         props:mergedProps,
         count:p.bericht_count||0,
         lastActive:p.last_active,
-        categories:loadedCats
+        categories:loadedCats,
+        summary:p.summary||''
       };
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
@@ -732,7 +731,7 @@ async function ensureP(name){
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
 }
 
-async function saveP(name,props,count,categories){
+async function saveP(name,props,count,categories,summary){
   if(!S.user)return;
   sync('s');
   var propsToSave={...props,_v:1};
@@ -744,10 +743,9 @@ async function saveP(name,props,count,categories){
   if(safeCats&&Object.keys(safeCats).length>0)propsToSave.categories=safeCats;
   // Verwijder lege categories key
   if(propsToSave.categories&&Object.keys(propsToSave.categories).length===0)delete propsToSave.categories;
-  await sb.from('sense_profiles').upsert(
-    {user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()},
-    {onConflict:'user_id,name'}
-  );
+  var _upsert={user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()};
+  if(summary)_upsert.summary=summary;
+  await sb.from('sense_profiles').upsert(_upsert,{onConflict:'user_id,name'});
   if(S.pdata[name]){
     S.pdata[name].props=props;
     S.pdata[name].count=count;
@@ -900,7 +898,16 @@ function rHome(el){
   }
 
   el.innerHTML=`
-<div style="display:flex;flex-direction:column;align-items:center;padding:28px 24px 32px;text-align:center">
+<div>
+<div style="position:relative;height:200px;overflow:hidden;border-radius:0 0 20px 20px;margin-bottom:8px">
+  <img src="https://yoma.github.io/sensecorner/hero.jpg" style="width:100%;height:100%;object-fit:cover;object-position:center 30%" onerror="this.style.display:none">
+  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.6) 100%)"></div>
+  <div style="position:absolute;bottom:18px;left:20px;right:20px">
+    <div style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px">DateSense.</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.85);font-style:italic;margin-top:2px">Jouw persoonlijke dating coach</div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding:20px 24px 32px;text-align:center">
 
   <div style="font-size:15px;color:var(--m);margin-bottom:24px;font-weight:500">
     ${firstName?'Hoi <strong style="color:var(--t)">'+firstName+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
@@ -2812,6 +2819,51 @@ async function handleImgFile(input){
   input.value='';
 }
 
+// ══ Auto-samenvatting per dossier ════════════════════════════════
+
+async function updateDossierSummary(dosName){
+  if(!S.apiKey||dosName==='OWN Sense')return;
+  var d=S.pdata[dosName]||{props:{},count:0,categories:{},summary:''};
+
+  // Verzamel alle beschikbare info
+  var infoLines=[];
+  if(d.categories){
+    Object.values(d.categories).forEach(function(cat){
+      Object.values(cat||{}).forEach(function(v){if((v||'').trim())infoLines.push(v.trim());});
+    });
+  }
+
+  // Haal laatste 10 berichten op
+  var msgs=[];
+  try{
+    var {data}=await sb.from('sense_messages')
+      .select('html').eq('user_id',S.user.id).eq('profile_name',dosName)
+      .eq('role','user').order('created_at',{ascending:false}).limit(10);
+    if(data)msgs=data.map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim();}).filter(function(t){return t.length>5;});
+  }catch(e){}
+
+  if(!infoLines.length&&!msgs.length)return;
+
+  var allInfo=infoLines.concat(msgs).join(' | ').substring(0,1500);
+
+  try{
+    var sys='Maak een compacte samenvatting van max 5 sleutelpunten over deze persoon.'
+      +' Gebruik korte zinnen of keywords. Geen opsomming met bullets, gewoon komma-gescheiden.'
+      +' Focus op: karakter, gedrag, status contact, opvallende dingen, jouw gevoel erbij.'
+      +' Max 150 woorden. Nederlands.';
+    var raw=await callAPI(sys,[{role:'user',content:'Info over '+dn(dosName)+': '+allInfo}],200);
+    if(raw&&raw.trim()){
+      d.summary=raw.trim();
+      S.pdata[dosName]=d;
+      // Sla op in Supabase
+      await saveP(dosName,d.props,d.count,d.categories,d.summary);
+      // Update context cache
+      if(!S._ctxMsgs)S._ctxMsgs={};
+      S._ctxMsgs[dosName+'_summary']=raw.trim();
+    }
+  }catch(e){console.warn('updateDossierSummary error:',e);}
+}
+
 // ══ Coach Context ════════════════════════════════════════════════
 
 function buildCoachContext(){
@@ -2835,12 +2887,13 @@ function buildCoachContext(){
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
-      var line=dn(p)+': '+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
-      lines.push(line);
-      // Voeg recente tijdlijn-berichten toe (async laden kan niet hier — gebruik gecachte msgs)
-      if(S._ctxMsgs&&S._ctxMsgs[p]&&S._ctxMsgs[p].length){
-        var recent=S._ctxMsgs[p].slice(-5).map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim().substring(0,100);});
-        lines.push('  Recente observaties: '+recent.join(' | '));
+      // Gebruik samenvatting als die beschikbaar is, anders props + cat
+      var summary=d.summary||(S._ctxMsgs&&S._ctxMsgs[p+'_summary'])||'';
+      if(summary){
+        lines.push(dn(p)+': '+summary.substring(0,200));
+      } else {
+        var line=dn(p)+': '+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'');
+        lines.push(line);
       }
     });
   }
@@ -3031,7 +3084,7 @@ async function _doOpslaan(sid,tekst,dossier){
   S.pdata[dossier]=pd;
   await saveP(dossier,pd.props,pd.count,pd.categories);
   if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);}
+  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
   rDrawer();
   if(window._saveData)delete window._saveData[sid];
 }
