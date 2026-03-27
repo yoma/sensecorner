@@ -2220,20 +2220,7 @@ async function rVertel(el){
 
   ca.scrollTop=ca.scrollHeight;
   updateVertelSaveModeUI();
-  if(S._forceFreshVertel){
-    S._forceFreshVertel=false;
-    if(S.user){
-      try{
-        var {data}=await sb.from('sense_sessions')
-          .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
-          .select().single();
-        if(data)S.currentSessionId=data.id;
-      }catch(e){
-        console.warn('fresh vertel sessie error:',e);
-        S.currentSessionId=null;
-      }
-    }
-  }
+  if(S._forceFreshVertel)S._forceFreshVertel=false;
 }
 
 function rImport(el){
@@ -2523,9 +2510,10 @@ async function sendMsg(){
 
     // Sla sessie-bericht op in Supabase (stil als geen sessie)
     try{
-      if(S.currentSessionId){
-        await saveSessionMsg(S.currentSessionId,'user',txt);
-        await saveSessionMsg(S.currentSessionId,'ai',raw);
+      var sid=await ensureActiveSessionForMessage(txt);
+      if(sid){
+        await saveSessionMsg(sid,'user',txt);
+        await saveSessionMsg(sid,'ai',raw);
       }
     }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
     S.vertelMsgs=S.vertelMsgs||[];
@@ -3360,27 +3348,10 @@ async function nieuwGesprek(){
   if(bulk){bulk.style.display='none';bulk.innerHTML='';}
   S.vertelMsgs=[];
   window._sessieKoppelData=[];
+  S.currentSessionId=null;
 
-  // Maak nieuwe sessie aan in Supabase
-  if(!S.user){
-    toast('✏️ Nieuw gesprek gestart');
-    return;
-  }
-  try{
-    var {data}=await sb.from('sense_sessions')
-      .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
-      .select().single();
-    if(data){
-      S.currentSessionId=data.id;
-      toast('✏️ Nieuw gesprek gestart');
-      laadSessies();
-    }
-  }catch(e){
-    console.warn('nieuwGesprek error:',e);
-    // Fallback: lokaal gesprek blijft bruikbaar zonder sessie-opslag.
-    S.currentSessionId=null;
-    toast('Nieuw gesprek gestart (zonder opslag)');
-  }
+  // Geen DB-opslag zonder echte input; sessie wordt pas aangemaakt bij eerste verzonden bericht.
+  toast('✏️ Nieuw gesprek gestart');
 }
 
 async function laadSessie(sessionId){
@@ -3532,6 +3503,26 @@ async function saveSessionMsg(sessionId,role,content){
   }catch(e){console.warn('saveSessionMsg:',e);}
 }
 
+async function ensureActiveSessionForMessage(previewText){
+  if(!S.user)return null;
+  if(S.currentSessionId)return S.currentSessionId;
+  try{
+    var preview=buildSessionPreview(previewText||'Nieuw gesprek');
+    var {data,error}=await sb.from('sense_sessions')
+      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString()})
+      .select().single();
+    if(error)throw error;
+    if(data&&data.id){
+      S.currentSessionId=data.id;
+      laadSessies();
+      return data.id;
+    }
+  }catch(e){
+    console.warn('ensureActiveSessionForMessage error:',e);
+  }
+  return null;
+}
+
 async function updateSessiePreview(sessionId,tekst){
   if(!S.user||!sessionId)return;
   var preview=buildSessionPreview(tekst);
@@ -3551,18 +3542,9 @@ async function initSessie(){
       .select('*').eq('user_id',S.user.id)
       .order('updated_at',{ascending:false}).limit(1);
     if(error)throw error;
-    if(data&&data.length){
-      var lastDate=new Date(data[0].updated_at).toDateString();
-      if(lastDate===new Date().toDateString()){
-        S.currentSessionId=data[0].id;
-        return;
-      }
-    }
-    // Maak nieuwe sessie
-    var {data:ns,error:ne}=await sb.from('sense_sessions')
-      .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
-      .select().single();
-    if(!ne&&ns)S.currentSessionId=ns.id;
+    // Geen automatische lege sessies meer aanmaken.
+    // Alleen bestaande laatste sessie gebruiken als referentie.
+    if(data&&data.length)S.currentSessionId=data[0].id;
   }catch(e){
     console.warn('initSessie stil gefaald:',e);
     // Geen fallback ID — sessie wordt gewoon niet bewaard
