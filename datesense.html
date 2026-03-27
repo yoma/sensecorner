@@ -643,6 +643,7 @@ async function init(){
     if(session){
       S.user=session.user;
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      initSessie(); // Na auth — sessie aanmaken
       goScreen('home');
     } else {
       goScreen('login');
@@ -1913,7 +1914,6 @@ async function rVertel(el){
       ca.appendChild(w);
     }
   } else {
-    initSessie();
     // Herstel berichten van deze sessie (inclusief niet-bevestigde items)
     S.vertelMsgs.forEach(function(m){
       var d=document.createElement('div');
@@ -2153,10 +2153,12 @@ async function sendMsg(){
     if(bestM&&bestC>=1)voorgesteldDossier=bestM;
   }
 
-  // Bouw gespreksgeschiedenis voor context
+  // Bouw gespreksgeschiedenis — strip HTML tags en beperk lengte
   var history=[];
-  (S.vertelMsgs||[]).slice(-10).forEach(function(m){
-    history.push({role:m.role==='user'?'user':'assistant',content:m.html.replace(/<[^>]*>/g,' ').trim()});
+  (S.vertelMsgs||[]).slice(-8).forEach(function(m){
+    var tekst=m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    if(tekst.length>500)tekst=tekst.substring(0,500);
+    if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
 
   var sys='Je bent DateSensei, een warme empathische dating coach. Je luistert, stelt vragen en geeft advies.'
@@ -2169,11 +2171,13 @@ async function sendMsg(){
     var raw=await callAPI(sys,messages,400);
     hideT();
 
-    // Sla sessie-bericht op in Supabase
-    if(S.currentSessionId){
-      await saveSessionMsg(S.currentSessionId,'user',txt);
-      await saveSessionMsg(S.currentSessionId,'ai',raw);
-    }
+    // Sla sessie-bericht op in Supabase (stil als geen sessie)
+    try{
+      if(S.currentSessionId){
+        await saveSessionMsg(S.currentSessionId,'user',txt);
+        await saveSessionMsg(S.currentSessionId,'ai',raw);
+      }
+    }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
     S.vertelMsgs=S.vertelMsgs||[];
     S.vertelMsgs.push({role:'user',html:txt});
     S.vertelMsgs.push({role:'ai',html:raw});
@@ -2904,26 +2908,27 @@ async function updateSessiePreview(sessionId,tekst){
 }
 
 async function initSessie(){
-  if(!S.user)return;
-  // Controleer of er al een actieve sessie is, anders maak een nieuwe
+  if(!S.user||S.currentSessionId)return;
   try{
-    var {data}=await sb.from('sense_sessions')
+    var {data,error}=await sb.from('sense_sessions')
       .select('*').eq('user_id',S.user.id)
       .order('updated_at',{ascending:false}).limit(1);
-    if(data&&data.length&&!S.currentSessionId){
-      // Gebruik meest recente sessie alleen als die van vandaag is
+    if(error)throw error;
+    if(data&&data.length){
       var lastDate=new Date(data[0].updated_at).toDateString();
       if(lastDate===new Date().toDateString()){
         S.currentSessionId=data[0].id;
-      } else {
-        await nieuwGesprek();
+        return;
       }
-    } else if(!S.currentSessionId){
-      await nieuwGesprek();
     }
+    // Maak nieuwe sessie
+    var {data:ns,error:ne}=await sb.from('sense_sessions')
+      .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
+      .select().single();
+    if(!ne&&ns)S.currentSessionId=ns.id;
   }catch(e){
-    // Tabellen bestaan nog niet — stil falen
-    console.warn('initSessie (tabellen nog aanmaken):',e);
+    console.warn('initSessie stil gefaald:',e);
+    // Geen fallback ID — sessie wordt gewoon niet bewaard
   }
 }
 
