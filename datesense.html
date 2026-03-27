@@ -606,6 +606,7 @@ var _profileModalFor='OWN Sense';
 var _profileUploadBusy=false;
 var _photoAnalysisBusy={};
 var _analysisPhotoFor='OWN Sense';
+var _analysisUploadBusy=false;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -1076,6 +1077,7 @@ function renderProps(props,showSource,opt){
   var hasData=PK.some(k=>(props[k]||0)>0);
   var o=opt||{};
   var compact=o.compact!==false;
+  var extras=Array.isArray(o.extra)?o.extra:[];
   if(!hasData){
     return'<div class="prop-empty">'
       +'<div class="prop-empty-icon">📊</div>'
@@ -1083,25 +1085,32 @@ function renderProps(props,showSource,opt){
       +'<div class="prop-empty-text">Voeg meer info toe via de invulvakjes of via <strong>Vertel</strong>.</div>'
       +'</div>';
   }
-  if(compact){
-    var sorted=PK.map(function(k,i){return{k:k,label:PL[i],v:props[k]||0};})
-      .sort(function(a,b){return b.v-a.v;})
-      .slice(0,6);
-    var fullRows=PK.map(function(k,i){
-      var v=props[k]||0;
-      return'<div class="prop">'
-        +'<div class="pn">'+PL[i]+'</div>'
-        +'<div class="track"><div class="fill" style="width:'+v+'%"></div></div>'
-        +'<div class="pct">'+v+'%</div>'
-        +'</div>';
-    }).join('');
-    var uid='p'+Math.floor(Math.random()*99999);
-    var compactHtml='<div class="props-compact">'+sorted.map(function(it){
+  function toItemsAll(){
+    var base=PK.map(function(k,i){return{k:k,label:PL[i],v:props[k]||0};});
+    extras.forEach(function(e,idx){
+      if(!e)return;
+      var vv=parseInt(e.v,10);
+      if(isNaN(vv))return;
+      base.push({k:'extra_'+idx,label:String(e.label||'Extra'),v:Math.max(0,Math.min(100,vv))});
+    });
+    return base;
+  }
+  function renderPills(items){
+    return'<div class="props-compact">'+items.map(function(it){
       return'<div class="prop-pill">'
         +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
         +'<div class="prop-pill-track"><div class="prop-pill-fill" style="width:'+it.v+'%"></div></div>'
         +'</div>';
-    }).join('')+'</div>'
+    }).join('')+'</div>';
+  }
+  if(compact){
+    var allItems=toItemsAll();
+    var sorted=allItems.slice()
+      .sort(function(a,b){return b.v-a.v;})
+      .slice(0,6);
+    var fullRows=renderPills(allItems);
+    var uid='p'+Math.floor(Math.random()*99999);
+    var compactHtml=renderPills(sorted)
     +'<div style="margin:2px 0 8px"><button class="props-toggle" onclick="togglePropsFull(this,\''+uid+'\')">Toon alle 9 eigenschappen <span class="chev">▾</span></button></div>'
     +'<div id="'+uid+'" class="props-full" style="margin-top:4px">'+fullRows+'</div>';
     if(showSource===false)return compactHtml;
@@ -1417,14 +1426,20 @@ function chooseAnalysisPhoto(dosName){
 
 async function handleAnalysisPhotoInput(input){
   var file=input.files&&input.files[0];
-  if(!file||!S.user)return;
+  if(!file||!S.user||_analysisUploadBusy)return;
   var dos=_analysisPhotoFor||S.viewDossier;
   if(!dos)return;
+  _analysisUploadBusy=true;
+  toast('Foto uploaden...');
   try{
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
-    var up=await sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    var uploadPromise=sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    var timeoutPromise=new Promise(function(_,reject){
+      setTimeout(function(){reject(new Error('Upload timeout na 25s. Probeer opnieuw.'));},25000);
+    });
+    var up=await Promise.race([uploadPromise,timeoutPromise]);
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -1443,6 +1458,7 @@ async function handleAnalysisPhotoInput(input){
     toast(e&&e.message?e.message:'Analysefoto upload mislukt');
   }finally{
     input.value='';
+    _analysisUploadBusy=false;
   }
 }
 
@@ -1891,7 +1907,15 @@ async function loadTab(name,tab,d){
 
     // Eigenschappen
     html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:12px">Eigenschappen</div>';
-    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props)+'</div>';
+    var extraMetrics=[];
+    if(!isOwnDossier){
+      var ownMetaX=((S.pdata['OWN Sense']||{}).meta)||{};
+      var ownPaX=ownMetaX.photo_analysis||null;
+      var contactPaX=((d.meta||{}).photo_analysis)||null;
+      var pmX=computePhotoMatchPct(ownPaX,contactPaX);
+      if(pmX!==null)extraMetrics.push({label:'Fotoanalyse',v:pmX});
+    }
+    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{extra:extraMetrics})+'</div>';
 
     // OWN: reset knop + tip
     if(isOwnDossier){
@@ -2050,14 +2074,14 @@ async function loadTab(name,tab,d){
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
     if(analysisPhotos.length){
       analysisPhotos.forEach(function(u,i){
-        html+='<div style="position:relative"><img src="'+u+'" alt="analysefoto '+(i+1)+'" style="width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--b)"><button onclick="verwijderAnalysisPhoto(\''+name+'\','+i+')" style="position:absolute;right:-6px;top:-6px;width:18px;height:18px;border-radius:9px;border:none;background:#222;color:#fff;font-size:11px;cursor:pointer">×</button></div>';
+        html+='<div style="position:relative"><img src="'+u+'" alt="analysefoto '+(i+1)+'" style="width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--b)"><button onclick="verwijderAnalysisPhoto(null,'+i+')" style="position:absolute;right:-6px;top:-6px;width:18px;height:18px;border-radius:9px;border:none;background:#222;color:#fff;font-size:11px;cursor:pointer">×</button></div>';
       });
     }else{
       html+='<span style="font-size:12px;color:var(--m)">Nog geen aparte analysefoto toegevoegd.</span>';
     }
     html+='</div>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      +'<button class="btn-g" style="max-width:220px;padding:9px 12px" onclick="chooseAnalysisPhoto(\''+name+'\')">+ Analysefoto toevoegen</button>'
+      +'<button class="btn-g" style="max-width:220px;padding:9px 12px" onclick="chooseAnalysisPhoto()">+ Analysefoto toevoegen</button>'
       +(hasFallbackProfile?'<span style="font-size:12px;color:var(--m);align-self:center">Fallback: profielfoto wordt gebruikt als er geen analysefoto is.</span>':'')
       +'</div>';
     html+='</div>';
@@ -2327,12 +2351,15 @@ async function saveContactCat(dosName,catId,silent){
   var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
   // Verzamel antwoorden voor dit catId
   var answers={};
+  var foundFields=0;
   var ta0=document.getElementById('cc-'+catId+'-a0');
   var ta1=document.getElementById('cc-'+catId+'-a1');
   var ta2=document.getElementById('cc-'+catId+'-a2');
-  if(ta0)answers['a0']=ta0.value.trim();
-  if(ta1)answers['a1']=ta1.value.trim();
-  if(ta2)answers['a2']=ta2.value.trim();
+  if(ta0){answers['a0']=ta0.value.trim();foundFields++;}
+  if(ta1){answers['a1']=ta1.value.trim();foundFields++;}
+  if(ta2){answers['a2']=ta2.value.trim();foundFields++;}
+  // Als de tab net hertekend is en velden even niet bestaan: nooit bestaande data overschrijven met leeg.
+  if(foundFields===0)return;
   d.categories[catId]=answers;
   S.pdata[dosName]=d;
   await saveP(dosName,d.props,d.count,d.categories);
