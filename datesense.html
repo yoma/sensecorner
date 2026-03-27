@@ -467,6 +467,16 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   </div>
 </div>
 
+<!-- ══ DOSSIER KEUZE MODAL (voor sessie-koppeling) ══ -->
+<div class="save-modal-overlay" id="dossierPickModal">
+  <div class="save-modal-bg" onclick="closeDossierPickModal()"></div>
+  <div class="save-modal-sheet">
+    <div class="save-modal-title" id="dossierPickTitle">Kies dossier</div>
+    <div class="save-modal-sub" id="dossierPickSub">Selecteer een dossier.</div>
+    <div id="dossierPickOpts"></div>
+  </div>
+</div>
+
 <script>
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -632,6 +642,42 @@ function setSaveModeForced(dossier){
   setForcedDossier(dossier);
   closeSaveModeModal();
   toast('✅ Altijd opslaan bij '+dn(dossier));
+}
+
+function openDossierPickModal(title,sub,type,payload){
+  var modal=document.getElementById('dossierPickModal');
+  var titleEl=document.getElementById('dossierPickTitle');
+  var subEl=document.getElementById('dossierPickSub');
+  var opts=document.getElementById('dossierPickOpts');
+  if(!modal||!titleEl||!subEl||!opts)return;
+  titleEl.textContent=title||'Kies dossier';
+  subEl.textContent=sub||'Selecteer een dossier.';
+  window._dossierPickCtx={type:type,payload:payload||null};
+  var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
+  var html='';
+  all.forEach(function(p,i){
+    var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
+    html+='<button class="save-modal-opt" onclick="selectDossierFromPick(\''+p.replace(/'/g,"\\'")+'\')">'
+      +'<span class="save-modal-dot" style="background:'+col+'"></span>'
+      +'<span style="flex:1">'+dn(p)+'</span></button>';
+  });
+  opts.innerHTML=html;
+  modal.classList.add('show');
+}
+
+function closeDossierPickModal(){
+  var modal=document.getElementById('dossierPickModal');
+  if(modal)modal.classList.remove('show');
+}
+
+async function selectDossierFromPick(dossier){
+  var ctx=window._dossierPickCtx||{};
+  closeDossierPickModal();
+  if(ctx.type==='single'){
+    await koppelSessieMsgNaar(ctx.payload,dossier,false);
+  }else if(ctx.type==='bulk'){
+    await koppelAlleOngekoppeldNaar(dossier,ctx.payload||[]);
+  }
 }
 
 // Verplaats tijdlijn bericht naar ander dossier
@@ -908,7 +954,11 @@ function goBack(){
 }
 
 function goScreen(sc){
+  var prevScreen=S.screen;
   S.prev=S.screen;S.screen=sc;
+  if(sc==='vertel'&&prevScreen!=='vertel'){
+    S._forceFreshVertel=true;
+  }
   var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
@@ -2032,6 +2082,11 @@ async function saveOwnCat(catId,silent){
 // Wordt alleen geleegd na bevestigen (bevestigAlles) of handmatig (clearChat).
 
 async function rVertel(el){
+  if(S._forceFreshVertel){
+    S.vertelMsgs=[];
+    window._sessieKoppelData=[];
+    S.currentSessionId=null;
+  }
   el.innerHTML=`
 <div style="flex:1;overflow-y:auto;padding:0 0 8px" id="chatWrap">
   <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--b)">
@@ -2088,6 +2143,20 @@ async function rVertel(el){
 
   ca.scrollTop=ca.scrollHeight;
   updateVertelSaveModeUI();
+  if(S._forceFreshVertel){
+    S._forceFreshVertel=false;
+    if(S.user){
+      try{
+        var {data}=await sb.from('sense_sessions')
+          .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
+          .select().single();
+        if(data)S.currentSessionId=data.id;
+      }catch(e){
+        console.warn('fresh vertel sessie error:',e);
+        S.currentSessionId=null;
+      }
+    }
+  }
 }
 
 function rImport(el){
@@ -2324,6 +2393,10 @@ async function sendMsg(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
   var txt=inp.value.trim();if(!txt)return;
+  var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
+  if(txt.length>2800){
+    toast('Lang bericht gedetecteerd: AI verwerkt een ingekorte context voor snelheid.');
+  }
   inp.value='';inp.style.height='auto';S.busy=true;
 
   addMsg('user',txt);
@@ -2345,13 +2418,14 @@ async function sendMsg(){
 
   // Bouw gespreksgeschiedenis — strip HTML tags en beperk lengte
   var history=[];
-  (S.vertelMsgs||[]).slice(-8).forEach(function(m){
+  (S.vertelMsgs||[]).slice(-4).forEach(function(m){
     var tekst=m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-    if(tekst.length>500)tekst=tekst.substring(0,500);
+    if(tekst.length>300)tekst=tekst.substring(0,300);
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
 
   var coachCtx=buildCoachContext();
+  if(coachCtx.length>1200)coachCtx=coachCtx.substring(0,1200);
   var sys='Je bent DateSensei, de persoonlijke dating coach van de gebruiker.'
     +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
@@ -2363,8 +2437,10 @@ async function sendMsg(){
 
   try{
     var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
-    var messages=[...history,{role:'user',content:txt}];
+    if(dossierCtx&&dossierCtx.length>1200)dossierCtx=dossierCtx.substring(0,1200);
+    var messages=[...history,{role:'user',content:txtForAI}];
     var fullSys=sys+(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'');
+    if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var raw=await callAPI(fullSys,messages,400);
     hideT();
 
@@ -3301,18 +3377,20 @@ async function koppelAlleOngekoppeld(){
   var arr=window._sessieKoppelData||[];
   var targets=arr.map(function(x,i){return {item:x,idx:i};}).filter(function(x){return !x.item.dossier;});
   if(!targets.length){toast('Alles is al gekoppeld');return;}
-  var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
-  var lines=['Kies dossier voor ALLE ongekoppelde berichten:'];
-  all.forEach(function(p,i){lines.push((i+1)+' = '+dn(p));});
-  var ans=prompt(lines.join('\n'),'1');
-  if(ans===null)return;
-  var n=parseInt(String(ans).trim(),10);
-  if(isNaN(n)||n<1||n>all.length){toast('Ongeldige keuze');return;}
-  var dossier=all[n-1];
-  for(var t of targets){
-    await koppelSessieMsgNaar(t.idx,dossier,true);
+  openDossierPickModal(
+    'Koppel alle ongekoppelde',
+    'Kies 1 dossier voor alle '+targets.length+' ongekoppelde berichten.',
+    'bulk',
+    targets.map(function(t){return t.idx;})
+  );
+}
+
+async function koppelAlleOngekoppeldNaar(dossier,targetIdxs){
+  var idxs=targetIdxs||[];
+  for(var i=0;i<idxs.length;i++){
+    await koppelSessieMsgNaar(idxs[i],dossier,true);
   }
-  toast('✅ '+targets.length+' berichten gekoppeld aan '+dn(dossier));
+  toast('✅ '+idxs.length+' berichten gekoppeld aan '+dn(dossier));
   await laadSessie(S.currentSessionId);
 }
 
@@ -3320,15 +3398,12 @@ async function koppelSessieMsg(idx){
   var arr=window._sessieKoppelData||[];
   var item=arr[idx];
   if(!item||!S.user)return;
-  var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
-  var lines=['Kies dossier:'];
-  all.forEach(function(p,i){lines.push((i+1)+' = '+dn(p));});
-  var ans=prompt(lines.join('\n'),'1');
-  if(ans===null)return;
-  var n=parseInt(String(ans).trim(),10);
-  if(isNaN(n)||n<1||n>all.length){toast('Ongeldige keuze');return;}
-  var dossier=all[n-1];
-  await koppelSessieMsgNaar(idx,dossier,false);
+  openDossierPickModal(
+    'Kies dossier',
+    'Aan welk dossier wil je dit sessiebericht koppelen?',
+    'single',
+    idx
+  );
 }
 
 async function koppelSessieMsgNaar(idx,dossier,silent){
