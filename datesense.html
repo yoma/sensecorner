@@ -229,12 +229,16 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .sidebar-section{font-size:11px;font-weight:700;color:#7b8088;letter-spacing:1px;padding:12px 16px 6px}
 .sidebar-sessions{flex:1;overflow-y:auto;padding:0 8px 16px}
 .sess-row{display:flex;align-items:stretch;gap:6px;margin-bottom:6px}
-.sess-item{flex:1;min-height:60px;padding:10px 10px;border-radius:10px;cursor:pointer;margin-bottom:0;border:1px solid #d7dbe1;background:#eceff3;display:flex;flex-direction:column;justify-content:center}
+.sess-item{flex:1;min-height:68px;padding:10px 10px;border-radius:10px;cursor:pointer;margin-bottom:0;border:1px solid #d7dbe1;background:#eceff3;display:flex;flex-direction:column;justify-content:center}
 .sess-item:hover{background:#e6eaf0}
 .sess-item.active{background:#e3e8ef;border-color:#AE0000}
 .sess-date{font-size:11px;color:#8a9099;margin-bottom:3px}
-.sess-preview{font-size:13px;color:#2d3136;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sess-del{width:30px;min-width:30px;min-height:60px;border:1px solid #d7dbe1;border-radius:10px;background:#eceff3;color:#7d858f;cursor:pointer;font-size:14px}
+.sess-preview{
+  font-size:13px;color:#2d3136;line-height:1.35;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  min-height:34px
+}
+.sess-del{width:30px;min-width:30px;min-height:68px;border:1px solid #d7dbe1;border-radius:10px;background:#eceff3;color:#7d858f;cursor:pointer;font-size:14px}
 .sess-del:hover{color:#2d3136;background:#e6eaf0}
 
 /* ══ COACH CHAT UI ══ */
@@ -576,6 +580,53 @@ function setSessAssignMap(map){
   try{localStorage.setItem('ds_sess_assign_map',JSON.stringify(map||{}));}catch(e){}
 }
 
+function detectNieuweNaam(tekst){
+  var existing=S.profiles.map(function(p){return dn(p).toLowerCase();});
+  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die']);
+  var hits=(tekst.match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g)||[])
+    .map(function(w){return w.trim();})
+    .filter(function(w){return !stop.has(w.toLowerCase())&&!existing.includes(w.toLowerCase());});
+  if(!hits.length)return'';
+  var counts={};
+  hits.forEach(function(h){counts[h]=(counts[h]||0)+1;});
+  var best=Object.entries(counts).sort(function(a,b){return b[1]-a[1];})[0];
+  return best?best[0]:'';
+}
+
+function guessHoofdDossierNaam(tekst){
+  var t=String(tekst||'');
+  var forced=getForcedDossier();
+  if(forced)return dn(forced);
+  if(S.vertelFrom)return dn(S.vertelFrom);
+  var found='';
+  (S.profiles||[]).forEach(function(p){
+    if(found||p==='OWN Sense')return;
+    var n=dn(p);
+    try{
+      var re=new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i');
+      if(re.test(t))found=n;
+    }catch(e){}
+  });
+  if(found)return found;
+  return detectNieuweNaam(t);
+}
+
+function buildSessionPreview(tekst){
+  var clean=String(tekst||'').replace(/\s+/g,' ').trim();
+  if(!clean)return'Nieuw gesprek';
+  var hoofd=guessHoofdDossierNaam(clean);
+  var body=clean
+    .replace(/^[^a-zA-ZÀ-ÖØ-öø-ÿ0-9]+/,'')
+    .replace(/^(hey|hoi|hallo)\b[:,!\-\s]*/i,'')
+    .trim();
+  if(body.length>44)body=body.substring(0,44).trim()+'…';
+  if(hoofd){
+    var out=hoofd+': '+body;
+    return out.length>58?out.substring(0,58).trim()+'…':out;
+  }
+  return body.length>58?body.substring(0,58).trim()+'…':body;
+}
+
 function getForcedDossier(){
   var v=localStorage.getItem('ds_force_dossier')||'';
   if(!v)return'';
@@ -655,6 +706,14 @@ function openDossierPickModal(title,sub,type,payload){
   window._dossierPickCtx={type:type,payload:payload||null};
   var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
   var html='';
+  if(type==='save'){
+    var sug=payload&&payload.suggestedName?payload.suggestedName:'';
+    if(sug){
+      html+='<button class="save-modal-opt" onclick="createNewDossierFromPick(true)"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Maak '+sug+' aan</strong><br><span style="font-size:12px;color:#666">Nieuw dossier en meteen opslaan</span></span></button>';
+    }
+    html+='<button class="save-modal-opt" onclick="createNewDossierFromPick(false)"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nieuw dossier...</strong><br><span style="font-size:12px;color:#666">Voer zelf een naam in</span></span></button>';
+    html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Bestaande dossiers</div>';
+  }
   all.forEach(function(p,i){
     var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
     html+='<button class="save-modal-opt" onclick="selectDossierFromPick(\''+p.replace(/'/g,"\\'")+'\')">'
@@ -677,7 +736,22 @@ async function selectDossierFromPick(dossier){
     await koppelSessieMsgNaar(ctx.payload,dossier,false);
   }else if(ctx.type==='bulk'){
     await koppelAlleOngekoppeldNaar(dossier,ctx.payload||[]);
+  }else if(ctx.type==='save'){
+    await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
   }
+}
+
+async function createNewDossierFromPick(useSuggested){
+  var ctx=window._dossierPickCtx||{};
+  if(ctx.type!=='save')return;
+  var suggested=ctx.payload&&ctx.payload.suggestedName?ctx.payload.suggestedName:'';
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  if(inputName===null)return;
+  var base=String(inputName||'').trim();
+  if(!base){toast('Naam is leeg');return;}
+  var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  closeDossierPickModal();
+  await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
 }
 
 // Verplaats tijdlijn bericht naar ander dossier
@@ -2090,10 +2164,13 @@ async function rVertel(el){
   el.innerHTML=`
 <div style="flex:1;overflow-y:auto;padding:0 0 8px" id="chatWrap">
   <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--b)">
-    <button onclick="openSidebar()" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-      <div style="width:20px;height:2px;background:#333;border-radius:2px"></div>
-      <div style="width:20px;height:2px;background:#333;border-radius:2px"></div>
-      <div style="width:20px;height:2px;background:#333;border-radius:2px"></div>
+    <button onclick="openSidebar()" title="Open chatsessies" style="background:#f2f3f5;border:1px solid var(--b);cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-radius:10px;font-family:inherit">
+      <span style="display:flex;flex-direction:column;gap:3px">
+        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
+        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
+        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
+      </span>
+      <span style="font-size:12px;font-weight:700;color:#333">Sessies</span>
     </button>
     <div style="flex:1">
       <div style="font-size:15px;font-weight:700;color:var(--t)" id="sessieTitle">Nieuw gesprek</div>
@@ -2459,17 +2536,19 @@ async function sendMsg(){
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier);
       addMsg('ai',raw+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
     }else{
-      // Toon AI antwoord + opslaan-balk
+    // Toon AI antwoord + opslaan-balk
       var saveId='sv'+Date.now();
       window._saveData=window._saveData||{};
-      window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier};
+      var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(txt):'';
+      window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam};
       var saveLbl=voorgesteldDossier
         ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
         :'Opslaan in een dossier?';
       var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
         +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
         +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
-        +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Opslaan')+'</button>'
+        +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
+        +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
         +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
         +'</div>';
 
@@ -3351,7 +3430,10 @@ async function laadSessie(sessionId){
     if(ca)ca.scrollTop=ca.scrollHeight;
     updateSessBulkBar();
     var t=document.getElementById('sessieTitle');
-    if(t&&data[0])t.textContent=data[0].content.substring(0,40)+'...';
+    if(t&&data[0]){
+      var firstUser=(data.find(function(x){return x.role==='user';})||data[0]);
+      t.textContent=buildSessionPreview(firstUser.content||'');
+    }
   }catch(e){console.warn('laadSessie error:',e);}
 }
 
@@ -3452,7 +3534,7 @@ async function saveSessionMsg(sessionId,role,content){
 
 async function updateSessiePreview(sessionId,tekst){
   if(!S.user||!sessionId)return;
-  var preview=tekst.substring(0,60);
+  var preview=buildSessionPreview(tekst);
   var t=document.getElementById('sessieTitle');
   if(t)t.textContent=preview;
   try{
@@ -3498,23 +3580,32 @@ async function opslaanInDossier(sid){
 }
 
 function kiesAnderDossier(sid){
-  // Toon dossier-keuze inline
-  var bar=document.getElementById(sid);
-  if(!bar)return;
-  var optsHtml='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
-  window._saveKiesSid=sid;
-  S.profiles.forEach(function(p,i){
-    var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
-    optsHtml+='<button data-p="'+p+'" style="padding:6px 12px;border:2px solid '+col+';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:#333;font-family:inherit" onclick="_opslaanKeuze(this.dataset.p)">'+dn(p)+'</button>';
-  });
-  optsHtml+='</div>';
-  bar.innerHTML='<span style="font-size:13px;font-weight:700;color:#333">Opslaan bij:</span>'+optsHtml;
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  openDossierPickModal(
+    'Opslaan bij dossier',
+    'Kies een bestaand dossier of maak een nieuw dossier.',
+    'save',
+    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||''}
+  );
 }
 
 async function _opslaanKeuze(dossier){
   var sid=window._saveKiesSid;
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
+  await _doOpslaan(sid,data.tekst,dossier);
+}
+
+async function maakNieuwDossierEnOpslaan(sid,useSuggested){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  var suggested=data.suggestedName||'';
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  if(inputName===null)return;
+  var base=String(inputName||'').trim();
+  if(!base){toast('Naam is leeg');return;}
+  var dossier=base.endsWith('Sense')?base:(base+'Sense');
   await _doOpslaan(sid,data.tekst,dossier);
 }
 
