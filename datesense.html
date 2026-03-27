@@ -674,6 +674,15 @@ function toBase64FromBlob(blob){
   });
 }
 
+function withTimeout(promise,ms,msg){
+  return Promise.race([
+    promise,
+    new Promise(function(_,reject){
+      setTimeout(function(){reject(new Error(msg||('Timeout na '+ms+'ms')));},ms);
+    })
+  ]);
+}
+
 function parseFirstJSONObject(txt){
   var s=String(txt||'').trim();
   try{return JSON.parse(s);}catch(e){}
@@ -1435,11 +1444,11 @@ async function handleAnalysisPhotoInput(input){
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
-    var uploadPromise=sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
-    var timeoutPromise=new Promise(function(_,reject){
-      setTimeout(function(){reject(new Error('Upload timeout na 25s. Probeer opnieuw.'));},25000);
-    });
-    var up=await Promise.race([uploadPromise,timeoutPromise]);
+    var up=await withTimeout(
+      sb.storage.from('datesense-photos').upload(path,file,{upsert:true}),
+      25000,
+      'Upload timeout na 25s. Probeer opnieuw.'
+    );
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -1450,7 +1459,11 @@ async function handleAnalysisPhotoInput(input){
     d.meta.analysis_photos.unshift(url);
     d.meta.analysis_photos=d.meta.analysis_photos.filter(function(u,i,a){return u&&a.indexOf(u)===i;}).slice(0,3);
     S.pdata[dos]=d;
-    await saveP(dos,d.props,d.count,d.categories,d.summary,d.meta);
+    await withTimeout(
+      saveP(dos,d.props,d.count,d.categories,d.summary,d.meta),
+      12000,
+      'Opslaan timeout. Probeer opnieuw.'
+    );
     if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto')await loadTab(dos,'foto',d);
     toast('✅ Analysefoto toegevoegd');
   }catch(e){
@@ -1486,11 +1499,11 @@ async function handleProfilePhotoInput(input){
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/'+safeName+'_'+Date.now()+'.'+ext;
-    var uploadPromise=sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
-    var timeoutPromise=new Promise(function(_,reject){
-      setTimeout(function(){reject(new Error('Upload timeout na 25s. Probeer opnieuw.'));},25000);
-    });
-    var up=await Promise.race([uploadPromise,timeoutPromise]);
+    var up=await withTimeout(
+      sb.storage.from('datesense-photos').upload(path,file,{upsert:true}),
+      25000,
+      'Upload timeout na 25s. Probeer opnieuw.'
+    );
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -1499,7 +1512,12 @@ async function handleProfilePhotoInput(input){
     d.meta=d.meta||{};
     d.meta.photo_url=url;
     S.pdata[_profileModalFor]=d;
-    await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
+    if(status)status.textContent='Opslaan...';
+    await withTimeout(
+      saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta),
+      12000,
+      'Opslaan timeout. Foto staat mogelijk al in storage; probeer nogmaals op Opslaan.'
+    );
     var av=document.getElementById('profileModalAvatar');
     if(av)av.src=url;
     if(status)status.textContent='Foto toegevoegd';
