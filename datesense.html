@@ -590,6 +590,7 @@ var S={
 };
 
 var _profileModalFor='OWN Sense';
+var _profileUploadBusy=false;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -616,6 +617,27 @@ function setSessAssignMap(map){
 function getMetaFor(name){
   var d=S.pdata[name]||{};
   return d.meta||{};
+}
+
+function calcAgeFromBirthdate(birthdate){
+  var raw=String(birthdate||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return'';
+  var b=new Date(raw+'T00:00:00');
+  if(isNaN(b.getTime()))return'';
+  var now=new Date();
+  var age=now.getFullYear()-b.getFullYear();
+  var m=now.getMonth()-b.getMonth();
+  if(m<0||(m===0&&now.getDate()<b.getDate()))age--;
+  if(age<0||age>120)return'';
+  return String(age);
+}
+
+function updateProfileAgePreview(){
+  var bd=document.getElementById('pf_birthdate');
+  var ageEl=document.getElementById('pf_age_auto');
+  if(!bd||!ageEl)return;
+  var age=calcAgeFromBirthdate(bd.value);
+  ageEl.value=age||'';
 }
 
 function renderOwnAvatar(){
@@ -1194,10 +1216,11 @@ function openProfileModal(name){
   status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
   fields.innerHTML=''
     +'<input class="profile-field" id="pf_displayName" placeholder="Naam" value="'+escA(meta.display_name)+'">'
-    +'<input class="profile-field" id="pf_age" placeholder="Leeftijd" value="'+escA(meta.age)+'">'
-    +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'">'
+    +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'" oninput="updateProfileAgePreview()">'
+    +'<input class="profile-field" id="pf_age_auto" placeholder="Leeftijd (auto)" value="'+escA(calcAgeFromBirthdate(meta.birthdate)||meta.age)+'" readonly>'
     +'<input class="profile-field" id="pf_city" placeholder="Regio / woonplaats" value="'+escA(meta.city)+'">'
     +'<input class="profile-field full" id="pf_intent" placeholder="Intentie (bv. serieuze relatie)" value="'+escA(meta.intent)+'">';
+  updateProfileAgePreview();
   modal.classList.add('show');
 }
 
@@ -1213,14 +1236,19 @@ function chooseProfilePhoto(){
 
 async function handleProfilePhotoInput(input){
   var file=input.files&&input.files[0];
-  if(!file||!S.user)return;
+  if(!file||!S.user||_profileUploadBusy)return;
+  _profileUploadBusy=true;
   var status=document.getElementById('profilePhotoStatus');
   if(status)status.textContent='Uploaden...';
   try{
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/'+safeName+'_'+Date.now()+'.'+ext;
-    var up=await sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    var uploadPromise=sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    var timeoutPromise=new Promise(function(_,reject){
+      setTimeout(function(){reject(new Error('Upload timeout na 25s. Probeer opnieuw.'));},25000);
+    });
+    var up=await Promise.race([uploadPromise,timeoutPromise]);
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -1237,9 +1265,10 @@ async function handleProfilePhotoInput(input){
   }catch(e){
     console.warn('handleProfilePhotoInput error:',e);
     if(status)status.textContent='Upload mislukt';
-    toast('Foto upload mislukt');
+    toast(e&&e.message?e.message:'Foto upload mislukt');
   }finally{
     input.value='';
+    _profileUploadBusy=false;
   }
 }
 
@@ -1248,8 +1277,8 @@ async function saveProfileMetaForm(){
   d.meta=d.meta||{};
   function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
   d.meta.display_name=v('pf_displayName');
-  d.meta.age=v('pf_age');
   d.meta.birthdate=v('pf_birthdate');
+  d.meta.age=calcAgeFromBirthdate(d.meta.birthdate);
   d.meta.city=v('pf_city');
   d.meta.intent=v('pf_intent');
   S.pdata[_profileModalFor]=d;
@@ -3401,7 +3430,8 @@ function buildCoachContext(){
   var ownCat='';
   if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
   var ownMeta=own.meta||{};
-  var ownMetaParts=[ownMeta.display_name,ownMeta.age?('leeftijd '+ownMeta.age):'',ownMeta.intent].filter(Boolean);
+  var ownAge=calcAgeFromBirthdate(ownMeta.birthdate)||ownMeta.age||'';
+  var ownMetaParts=[ownMeta.display_name,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
   lines.push('JOUW PROFIEL:');
   if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
@@ -3416,7 +3446,8 @@ function buildCoachContext(){
       var props=[];
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
       var meta=d.meta||{};
-      var metaShort=[meta.display_name,meta.age?('leeftijd '+meta.age):'',meta.intent].filter(Boolean).join(', ');
+      var metaAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
+      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',meta.intent].filter(Boolean).join(', ');
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
       // Gebruik samenvatting als die beschikbaar is, anders props + cat
@@ -3437,7 +3468,8 @@ async function buildDossierContextForAI(dosName){
   var d=S.pdata[dosName]||{props:{},categories:{},summary:'',meta:{}};
   var lines=[];
   var m=d.meta||{};
-  var mLine=[m.display_name,m.age?('leeftijd '+m.age):'',m.birthdate,m.city,m.intent].filter(Boolean).join(', ');
+  var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
+  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,m.intent].filter(Boolean).join(', ');
   if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
   if(d.summary)lines.push('Samenvatting '+dn(dosName)+': '+d.summary.substring(0,500));
   var catTxt='';
