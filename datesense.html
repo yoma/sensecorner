@@ -534,6 +534,17 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
+function getSessAssignMap(){
+  try{
+    var raw=localStorage.getItem('ds_sess_assign_map');
+    var parsed=raw?JSON.parse(raw):{};
+    return parsed&&typeof parsed==='object'?parsed:{};
+  }catch(e){return{};}
+}
+function setSessAssignMap(map){
+  try{localStorage.setItem('ds_sess_assign_map',JSON.stringify(map||{}));}catch(e){}
+}
+
 function getForcedDossier(){
   var v=localStorage.getItem('ds_force_dossier')||'';
   if(!v)return'';
@@ -814,8 +825,10 @@ async function saveMsg(pn,role,html){
   if(!S.user)return;
   sync('s');
   sync('s');
-  await sb.from('sense_messages').insert({user_id:S.user.id,profile_name:pn,role,html});
+  var {data,error}=await sb.from('sense_messages').insert({user_id:S.user.id,profile_name:pn,role,html}).select('id').single();
+  if(error)throw new Error(error.message);
   sync('ok');
+  return data||null;
 }
 
 async function loadMsgs(pn,opt){
@@ -1131,7 +1144,7 @@ async function rDossier(el){
         });
       }
       header+='<div class="stats-grid">'
-        +'<div class="stat-card"><div class="stat-num">'+msgCount+'</div><div class="stat-lbl">Berichten over haar/hem</div></div>'
+        +'<div class="stat-card" style="cursor:pointer" onclick="switchTab(\'tijdlijn\')"><div class="stat-num">'+msgCount+'</div><div class="stat-lbl">Berichten over haar/hem</div></div>'
         +'<div class="stat-card"><div class="stat-num">'+catsFilled+'/9</div><div class="stat-lbl">Profiel ingevuld</div></div>'
         +'</div>';
     } else {
@@ -1988,6 +2001,7 @@ async function rVertel(el){
     </div>
     <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="kiesVertelSaveMode()">Modus</button>
   </div>
+  <div id="sessBulkBar" style="display:none;padding:8px 16px;border-bottom:1px solid var(--b);background:#fafbfc"></div>
   <div class="chat" id="chatArea"></div>
 </div>`;
 
@@ -3149,8 +3163,12 @@ async function nieuwGesprek(){
       var t=document.getElementById('sessieTitle');
       if(t)t.textContent='Nieuw gesprek';
       toast('✏️ Nieuw gesprek gestart');
+      laadSessies();
     }
-  }catch(e){console.warn('nieuwGesprek error:',e);}
+  }catch(e){
+    console.warn('nieuwGesprek error:',e);
+    toast('Nieuw gesprek starten mislukt');
+  }
 }
 
 async function laadSessie(sessionId){
@@ -3166,13 +3184,127 @@ async function laadSessie(sessionId){
       .order('created_at').limit(50);
     if(!data||!data.length){if(ca)ca.innerHTML='';return;}
     if(ca)ca.innerHTML='';
-    data.forEach(function(m){
+    function escSess(s){
+      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    var assignMap=getSessAssignMap();
+    window._sessieKoppelData=[];
+    data.forEach(function(m,idx){
       S.vertelMsgs.push({role:m.role,html:m.content});
-      addMsg(m.role==='user'?'user':'ai',m.content);
+      if(m.role==='user'){
+        var nextAi='';
+        for(var j=idx+1;j<data.length;j++){
+          if(data[j].role==='ai'){nextAi=data[j].content||'';break;}
+          if(data[j].role==='user')break;
+        }
+        var kIdx=window._sessieKoppelData.length;
+        var a=assignMap[m.id]||{};
+        window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
+        var userWrap=document.createElement('div');
+        userWrap.className='msg-user';
+        userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
+          +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
+          +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
+          +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
+          +'</div></div>';
+        if(ca)ca.appendChild(userWrap);
+      } else {
+        var aiWrap=document.createElement('div');
+        aiWrap.className='msg-ai';
+        aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
+        if(ca)ca.appendChild(aiWrap);
+      }
     });
+    if(ca)ca.scrollTop=ca.scrollHeight;
+    updateSessBulkBar();
     var t=document.getElementById('sessieTitle');
     if(t&&data[0])t.textContent=data[0].content.substring(0,40)+'...';
   }catch(e){console.warn('laadSessie error:',e);}
+}
+
+function updateSessBulkBar(){
+  var bar=document.getElementById('sessBulkBar');
+  if(!bar)return;
+  var arr=window._sessieKoppelData||[];
+  var unc=arr.filter(function(x){return !x.dossier;}).length;
+  if(!arr.length){bar.style.display='none';bar.innerHTML='';return;}
+  bar.style.display='block';
+  bar.innerHTML='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666;flex:1">'+unc+' ongekoppeld van '+arr.length+' user-berichten</span>'
+    +'<button class="coach-save-other" onclick="koppelAlleOngekoppeld()">Koppel alle ongekoppelde</button></div>';
+}
+
+function openGekoppeldDossierFromSess(idx){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!item.dossier)return;
+  viewDossier(item.dossier);
+}
+
+async function koppelAlleOngekoppeld(){
+  var arr=window._sessieKoppelData||[];
+  var targets=arr.map(function(x,i){return {item:x,idx:i};}).filter(function(x){return !x.item.dossier;});
+  if(!targets.length){toast('Alles is al gekoppeld');return;}
+  var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
+  var lines=['Kies dossier voor ALLE ongekoppelde berichten:'];
+  all.forEach(function(p,i){lines.push((i+1)+' = '+dn(p));});
+  var ans=prompt(lines.join('\n'),'1');
+  if(ans===null)return;
+  var n=parseInt(String(ans).trim(),10);
+  if(isNaN(n)||n<1||n>all.length){toast('Ongeldige keuze');return;}
+  var dossier=all[n-1];
+  for(var t of targets){
+    await koppelSessieMsgNaar(t.idx,dossier,true);
+  }
+  toast('✅ '+targets.length+' berichten gekoppeld aan '+dn(dossier));
+  await laadSessie(S.currentSessionId);
+}
+
+async function koppelSessieMsg(idx){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!S.user)return;
+  var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
+  var lines=['Kies dossier:'];
+  all.forEach(function(p,i){lines.push((i+1)+' = '+dn(p));});
+  var ans=prompt(lines.join('\n'),'1');
+  if(ans===null)return;
+  var n=parseInt(String(ans).trim(),10);
+  if(isNaN(n)||n<1||n>all.length){toast('Ongeldige keuze');return;}
+  var dossier=all[n-1];
+  await koppelSessieMsgNaar(idx,dossier,false);
+}
+
+async function koppelSessieMsgNaar(idx,dossier,silent){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!S.user)return;
+  try{
+    var map=getSessAssignMap();
+    var m=map[item.sessionMsgId]||{};
+    if(m.senseMsgId){
+      await sb.from('sense_messages').update({profile_name:dossier}).eq('id',m.senseMsgId).eq('user_id',S.user.id);
+    }else{
+      var payload=(item.text||'')+((item.aiText||'')?('\n'+item.aiText):'');
+      var inserted=await _doOpslaan(null,payload,dossier);
+      if(inserted&&inserted.id)m.senseMsgId=inserted.id;
+    }
+    m.dossier=dossier;
+    map[item.sessionMsgId]=m;
+    setSessAssignMap(map);
+    item.dossier=dossier;
+    item.senseMsgId=m.senseMsgId||null;
+    var lbl=document.getElementById('sessAssignLbl-'+idx);
+    if(lbl)lbl.textContent='📌 Gekoppeld aan '+dn(dossier);
+    if(!silent){
+      toast('✅ Gekoppeld aan '+dn(dossier));
+      await laadSessie(S.currentSessionId);
+    }else{
+      updateSessBulkBar();
+    }
+  }catch(e){
+    console.warn('koppelSessieMsg error:',e);
+    if(!silent)toast('Koppelen mislukt');
+  }
 }
 
 async function saveSessionMsg(sessionId,role,content){
@@ -3258,7 +3390,7 @@ async function _doOpslaan(sid,tekst,dossier){
   var bar=document.getElementById(sid);
   if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
   await ensureP(dossier);
-  await saveMsg(dossier,'user',tekst);
+  var inserted=await saveMsg(dossier,'user',tekst);
   var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
   pd.count=(pd.count||0)+1;
   S.pdata[dossier]=pd;
@@ -3267,6 +3399,7 @@ async function _doOpslaan(sid,tekst,dossier){
   else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
   rDrawer();
   if(sid&&window._saveData)delete window._saveData[sid];
+  return inserted;
 }
 
 // ══ Init ══════════════════════════════════════════════════════════
