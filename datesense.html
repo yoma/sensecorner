@@ -77,7 +77,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* Dossier detail */
 .tabs-bar{display:flex;border-bottom:1px solid var(--b);background:#fff;flex-shrink:0}
-.dtab{flex:1;padding:13px 4px;text-align:center;font-size:var(--fs-sm);font-weight:600;color:var(--m);cursor:pointer;border-bottom:3px solid transparent}
+.dtab{flex:1;padding:12px 4px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.1px;color:var(--m);cursor:pointer;border-bottom:3px solid transparent}
 .dtab.active{color:var(--r);border-bottom-color:var(--r)}
 .prop{display:flex;align-items:center;gap:10px;margin-bottom:11px}
 .pn{width:96px;font-size:var(--fs-sm);color:#333;flex-shrink:0}
@@ -90,6 +90,18 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .prop-empty{text-align:center;padding:22px 16px;background:var(--g);border-radius:var(--rad-md);margin-bottom:14px;border:1px solid var(--b)}
 .prop-empty-icon{font-size:28px;margin-bottom:8px}
 .prop-empty-text{font-size:var(--fs-sm);color:var(--m);line-height:1.6}
+.props-compact{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.prop-pill{border:1px solid var(--b);background:#fff;border-radius:10px;padding:8px 10px}
+.prop-pill-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.prop-pill-name{font-size:12px;color:#444;line-height:1.2}
+.prop-pill-val{font-size:12px;font-weight:800;color:var(--r)}
+.prop-pill-track{height:5px;background:#eceff3;border-radius:5px;overflow:hidden}
+.prop-pill-fill{height:100%;background:var(--r);border-radius:5px;transition:width .5s ease}
+.props-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--m);background:#fff;border:1px solid var(--b);border-radius:999px;padding:6px 10px;cursor:pointer;font-family:inherit}
+.props-toggle .chev{display:inline-block;transition:transform .22s ease}
+.props-toggle.open .chev{transform:rotate(180deg)}
+.props-full{max-height:0;opacity:0;overflow:hidden;transition:max-height .28s ease,opacity .22s ease}
+.props-full.open{max-height:420px;opacity:1}
 
 /* ══ VERTEL scherm ══ */
 .chat{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
@@ -456,6 +468,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 <input type="file" id="fileInputTxt" accept=".txt" style="display:none" onchange="handleTxtFile(this)">
 <input type="file" id="fileInputImg" accept="image/*" style="display:none" onchange="handleImgFile(this)">
 <input type="file" id="profilePhotoInput" accept="image/*" style="display:none" onchange="handleProfilePhotoInput(this)">
+<input type="file" id="analysisPhotoInput" accept="image/*" style="display:none" onchange="handleAnalysisPhotoInput(this)">
 
 <!-- ══ SEGMENT MODAL ══ -->
 <div class="seg-modal-overlay" id="segModal">
@@ -592,6 +605,7 @@ var S={
 var _profileModalFor='OWN Sense';
 var _profileUploadBusy=false;
 var _photoAnalysisBusy={};
+var _analysisPhotoFor='OWN Sense';
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -702,24 +716,41 @@ async function analyseerFotoVoorDossier(dosName){
   if(_photoAnalysisBusy[dosName])return;
   var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
-  if(!d.meta.photo_url){toast('Voeg eerst een foto toe in Profielgegevens');return;}
+  var analysisPhotos=(d.meta.analysis_photos||[]).filter(function(u){return!!u;}).slice(0,3);
+  var targets=analysisPhotos.length?analysisPhotos:(d.meta.photo_url?[d.meta.photo_url]:[]);
+  if(!targets.length){toast('Voeg eerst een analysefoto of profielfoto toe');return;}
   _photoAnalysisBusy[dosName]=true;
   toast('📸 Foto analyseren...');
   try{
-    var resp=await fetch(d.meta.photo_url);
-    if(!resp.ok)throw new Error('Kon foto niet ophalen');
-    var blob=await resp.blob();
-    var b64=await toBase64FromBlob(blob);
-    var prompt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
+    var analyses=[];
+    for(var i=0;i<targets.length;i++){
+      var resp=await fetch(targets[i]);
+      if(!resp.ok)continue;
+      var blob=await resp.blob();
+      var b64=await toBase64FromBlob(blob);
+      var prompt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
       +'openheid (0-100), glimlach (0-100), energie (0-100), verzorging (0-100), benaderbaarheid (0-100), '
       +'mood (korte tekst), summary (max 2 zinnen in het Nederlands).';
-    var raw=await callAPI('',[{role:'user',content:[
-      {type:'image',source:{type:'base64',media_type:(blob.type||'image/jpeg'),data:b64}},
-      {type:'text',text:prompt}
-    ]}],500);
-    var parsed=parseFirstJSONObject(raw);
-    if(!parsed)throw new Error('Kon AI foto-analyse niet lezen');
-    d.meta.photo_analysis=normalizePhotoAnalysis(parsed);
+      var raw=await callAPI('',[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:(blob.type||'image/jpeg'),data:b64}},
+        {type:'text',text:prompt}
+      ]}],500);
+      var parsed=parseFirstJSONObject(raw);
+      if(parsed)analyses.push(normalizePhotoAnalysis(parsed));
+    }
+    if(!analyses.length)throw new Error('Kon AI foto-analyse niet lezen');
+    function avg(k){
+      return Math.round(analyses.reduce(function(sum,x){return sum+(x[k]||50);},0)/analyses.length);
+    }
+    d.meta.photo_analysis={
+      openheid:avg('openheid'),
+      glimlach:avg('glimlach'),
+      energie:avg('energie'),
+      verzorging:avg('verzorging'),
+      benaderbaarheid:avg('benaderbaarheid'),
+      mood:analyses[0].mood||'Neutraal',
+      summary:(analyses[0].summary||'')+(analyses.length>1?' (gemiddelde van '+analyses.length+' foto\'s)':'')
+    };
     d.meta.photo_analysis_updated_at=new Date().toISOString();
     S.pdata[dosName]=d;
     await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
@@ -1016,6 +1047,21 @@ function toggleSrcBox(btn){
   if(box)box.style.display=box.style.display==='block'?'none':'block';
 }
 
+function togglePropsFull(btn,id){
+  var f=document.getElementById(id);
+  if(!f)return;
+  var open=f.classList.contains('open');
+  if(open){
+    f.classList.remove('open');
+    btn.classList.remove('open');
+    btn.innerHTML='Toon alle 9 eigenschappen <span class="chev">▾</span>';
+  }else{
+    f.classList.add('open');
+    btn.classList.add('open');
+    btn.innerHTML='Verberg volledige lijst <span class="chev">▾</span>';
+  }
+}
+
 function timeAgo(iso){
   var d=Math.floor((Date.now()-new Date(iso))/1000);
   if(d<60)return'Zojuist';
@@ -1026,14 +1072,48 @@ function timeAgo(iso){
 }
 
 // Render eigenschappen (alleen als er data is)
-function renderProps(props,showSource){
+function renderProps(props,showSource,opt){
   var hasData=PK.some(k=>(props[k]||0)>0);
+  var o=opt||{};
+  var compact=o.compact!==false;
   if(!hasData){
     return'<div class="prop-empty">'
       +'<div class="prop-empty-icon">📊</div>'
       +'<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:6px">Nog geen eigenschappen ingeschat</div>'
       +'<div class="prop-empty-text">Voeg meer info toe via de invulvakjes of via <strong>Vertel</strong>.</div>'
       +'</div>';
+  }
+  if(compact){
+    var sorted=PK.map(function(k,i){return{k:k,label:PL[i],v:props[k]||0};})
+      .sort(function(a,b){return b.v-a.v;})
+      .slice(0,6);
+    var fullRows=PK.map(function(k,i){
+      var v=props[k]||0;
+      return'<div class="prop">'
+        +'<div class="pn">'+PL[i]+'</div>'
+        +'<div class="track"><div class="fill" style="width:'+v+'%"></div></div>'
+        +'<div class="pct">'+v+'%</div>'
+        +'</div>';
+    }).join('');
+    var uid='p'+Math.floor(Math.random()*99999);
+    var compactHtml='<div class="props-compact">'+sorted.map(function(it){
+      return'<div class="prop-pill">'
+        +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
+        +'<div class="prop-pill-track"><div class="prop-pill-fill" style="width:'+it.v+'%"></div></div>'
+        +'</div>';
+    }).join('')+'</div>'
+    +'<div style="margin:2px 0 8px"><button class="props-toggle" onclick="togglePropsFull(this,\''+uid+'\')">Toon alle 9 eigenschappen <span class="chev">▾</span></button></div>'
+    +'<div id="'+uid+'" class="props-full" style="margin-top:4px">'+fullRows+'</div>';
+    if(showSource===false)return compactHtml;
+    var srcIdC='src'+Math.floor(Math.random()*99999);
+    var srcHtmlC='<div style="margin-top:6px">'
+      +'<button onclick="toggleSrcBox(this)" '
+      +'style="font-size:12px;color:var(--m);background:none;border:none;cursor:pointer;padding:4px 0;font-family:inherit;text-decoration:underline">'
+      +'ℹ️ Hoe worden deze berekend?</button>'
+      +'<div id="'+srcIdC+'" style="display:none;margin-top:8px;padding:12px 14px;background:var(--g);border-radius:10px;font-size:13px;color:#555;line-height:1.7;border:1px solid var(--b)">'
+      +'<strong>Berekend door AI</strong> op basis van invulvakjes en opgeslagen berichten. Meer info geeft nauwkeurigere schattingen.'
+      +'</div></div>';
+    return compactHtml+srcHtmlC;
   }
   var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
@@ -1329,6 +1409,57 @@ function chooseProfilePhoto(){
   if(inp)inp.click();
 }
 
+function chooseAnalysisPhoto(dosName){
+  _analysisPhotoFor=dosName||S.viewDossier||'OWN Sense';
+  var inp=document.getElementById('analysisPhotoInput');
+  if(inp)inp.click();
+}
+
+async function handleAnalysisPhotoInput(input){
+  var file=input.files&&input.files[0];
+  if(!file||!S.user)return;
+  var dos=_analysisPhotoFor||S.viewDossier;
+  if(!dos)return;
+  try{
+    var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
+    var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
+    var up=await sb.storage.from('datesense-photos').upload(path,file,{upsert:true});
+    if(up.error)throw up.error;
+    var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
+    var url=(pub&&pub.data&&pub.data.publicUrl)||'';
+    if(!url)throw new Error('Kon analysefoto URL niet maken');
+    var d=S.pdata[dos]||{props:{...DP},count:0,categories:{},meta:{}};
+    d.meta=d.meta||{};
+    if(!Array.isArray(d.meta.analysis_photos))d.meta.analysis_photos=[];
+    d.meta.analysis_photos.unshift(url);
+    d.meta.analysis_photos=d.meta.analysis_photos.filter(function(u,i,a){return u&&a.indexOf(u)===i;}).slice(0,3);
+    S.pdata[dos]=d;
+    await saveP(dos,d.props,d.count,d.categories,d.summary,d.meta);
+    if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto')await loadTab(dos,'foto',d);
+    toast('✅ Analysefoto toegevoegd');
+  }catch(e){
+    console.warn('handleAnalysisPhotoInput error:',e);
+    toast(e&&e.message?e.message:'Analysefoto upload mislukt');
+  }finally{
+    input.value='';
+  }
+}
+
+async function verwijderAnalysisPhoto(dosName,idx){
+  var dos=dosName||S.viewDossier;
+  if(!dos)return;
+  var d=S.pdata[dos]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  var arr=(d.meta.analysis_photos||[]).slice();
+  if(idx<0||idx>=arr.length)return;
+  arr.splice(idx,1);
+  d.meta.analysis_photos=arr;
+  S.pdata[dos]=d;
+  await saveP(dos,d.props,d.count,d.categories,d.summary,d.meta);
+  if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto')await loadTab(dos,'foto',d);
+}
+
 async function handleProfilePhotoInput(input){
   var file=input.files&&input.files[0];
   if(!file||!S.user||_profileUploadBusy)return;
@@ -1527,6 +1658,8 @@ async function rDossier(el){
   // Match % = gemiddelde van hoe dicht contact-props bij OWN props liggen
   // Alleen voor properties waar beide > 0 zijn
   var matchPct=null;
+  var traitMatchPct=null;
+  var photoMatchPct=null;
   if(!isOwn){
     var own=S.pdata['OWN Sense']||{props:{...DP}};
     var ownHasData=PK.some(function(k){return(own.props[k]||0)>0;});
@@ -1543,11 +1676,24 @@ async function rDossier(el){
         else if(ov>0&&cv===0){diffs.push(50);} // onbekend = neutraal
       });
       if(diffs.length>=1){
-        matchPct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
-        matchPct=Math.min(98,Math.max(10,matchPct));
+        traitMatchPct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
+        traitMatchPct=Math.min(98,Math.max(10,traitMatchPct));
+        matchPct=traitMatchPct;
       } else {
         matchPct=-2;
       }
+    }
+    var ownMeta=((S.pdata['OWN Sense']||{}).meta)||{};
+    var ownPa=ownMeta.photo_analysis||null;
+    var contactPa=((d.meta||{}).photo_analysis)||null;
+    if(ownPa&&contactPa){
+      photoMatchPct=computePhotoMatchPct(ownPa,contactPa);
+      if(matchPct>=0){
+        matchPct=Math.round((matchPct*0.75)+(photoMatchPct*0.25));
+      }else{
+        matchPct=photoMatchPct;
+      }
+      matchPct=Math.min(98,Math.max(10,matchPct));
     }
   }
 
@@ -1620,6 +1766,12 @@ async function rDossier(el){
         +'<div class="donut-pct" style="color:'+matchColor+'">'+matchPct+'%</div>'
         +'<div class="donut-lbl" style="color:'+matchColor+'">'+matchLabel+'</div>'
         +'<div class="donut-reden">'+reden+'</div>'
+        +((traitMatchPct||photoMatchPct)?'<div style="font-size:12px;color:#777;margin-top:6px">'
+          +(traitMatchPct?('Eigenschappen: <strong>'+traitMatchPct+'%</strong>'):'')
+          +(traitMatchPct&&photoMatchPct?' · ':'')
+          +(photoMatchPct?('Fotoanalyse: <strong>'+photoMatchPct+'%</strong>'):'')
+          +(traitMatchPct&&photoMatchPct?' <span style="color:#999">(75/25)</span>':'')
+          +'</div>':'')
         +'</div></div>';
 
       // Stats grid
@@ -1647,7 +1799,7 @@ async function rDossier(el){
   var tabs='<div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
-    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Foto</div>'
+    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Fotoanalyse</div>'
     +'<div class="dtab '+(vt==="advies"?"active":"")+'" onclick="switchTab(\'advies\')">Advies</div>'
     +'</div>';
 
@@ -1680,7 +1832,7 @@ async function switchTab(tab){
     S.timelineLimitByDossier[S.viewDossier]=50;
   }
   document.querySelectorAll('.dtab').forEach(t=>{
-    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Foto','advies':'Advies'};
+    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Fotoanalyse','advies':'Advies'};
     t.classList.toggle('active',t.textContent===map[tab]);
   });
   await loadTab(S.viewDossier,tab,S.pdata[S.viewDossier]||{props:{...DP},count:0,categories:{}});
@@ -1889,23 +2041,42 @@ async function loadTab(name,tab,d){
     var meta=(d&&d.meta)||{};
     var pa=meta.photo_analysis||null;
     var isOwnPhoto=name==='OWN Sense';
+    var analysisPhotos=(meta.analysis_photos||[]).filter(function(u){return!!u;}).slice(0,3);
+    var hasFallbackProfile=!!meta.photo_url;
     var html='';
-    html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">Foto-analyse</div>';
-    if(!meta.photo_url){
+    html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">Fotoanalyse</div>';
+    html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+    html+='<div style="font-size:13px;color:#444;font-weight:700;margin-bottom:8px">Analysefoto\'s (max 3)</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+    if(analysisPhotos.length){
+      analysisPhotos.forEach(function(u,i){
+        html+='<div style="position:relative"><img src="'+u+'" alt="analysefoto '+(i+1)+'" style="width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--b)"><button onclick="verwijderAnalysisPhoto(\''+name+'\','+i+')" style="position:absolute;right:-6px;top:-6px;width:18px;height:18px;border-radius:9px;border:none;background:#222;color:#fff;font-size:11px;cursor:pointer">×</button></div>';
+      });
+    }else{
+      html+='<span style="font-size:12px;color:var(--m)">Nog geen aparte analysefoto toegevoegd.</span>';
+    }
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button class="btn-g" style="max-width:220px;padding:9px 12px" onclick="chooseAnalysisPhoto(\''+name+'\')">+ Analysefoto toevoegen</button>'
+      +(hasFallbackProfile?'<span style="font-size:12px;color:var(--m);align-self:center">Fallback: profielfoto wordt gebruikt als er geen analysefoto is.</span>':'')
+      +'</div>';
+    html+='</div>';
+    if(!analysisPhotos.length&&!hasFallbackProfile){
       html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:14px 16px;color:var(--m);font-size:14px;line-height:1.6">'
-        +'Nog geen foto toegevoegd. Voeg eerst een foto toe in Profielgegevens.'
+        +'Nog geen foto beschikbaar. Voeg een analysefoto toe of zet eerst een profielfoto.'
         +'<div style="margin-top:10px"><button class="btn-g" style="max-width:210px" onclick="openProfileModal(\''+name+'\')">Profielgegevens openen</button></div>'
         +'</div>';
       cont.innerHTML=html;
       return;
     }
+    var previewPhoto=analysisPhotos[0]||meta.photo_url;
     html+='<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 12px;margin-bottom:12px">'
-      +'<img src="'+meta.photo_url+'" alt="foto" style="width:68px;height:68px;border-radius:12px;object-fit:cover;border:1px solid var(--b)">'
+      +'<img src="'+previewPhoto+'" alt="foto" style="width:68px;height:68px;border-radius:12px;object-fit:cover;border:1px solid var(--b)">'
       +'<div style="flex:1">'
       +'<div style="font-size:13px;color:#444;font-weight:700">'+dn(name)+'</div>'
       +'<div style="font-size:12px;color:var(--m)">'+(pa&&meta.photo_analysis_updated_at?('Laatst geanalyseerd: '+timeAgo(meta.photo_analysis_updated_at)):'Nog niet geanalyseerd')+'</div>'
       +'</div>'
-      +'<button class="btn-r" style="max-width:170px;padding:10px 12px" onclick="analyseerFotoVoorDossier(\''+name+'\')">Analyseer foto</button>'
+      +'<button class="btn-r" style="max-width:170px;padding:10px 12px" onclick="analyseerFotoVoorDossier(\''+name+'\')">Analyseer foto\'s</button>'
       +'</div>';
     if(pa){
       function meter(label,val){
@@ -1915,6 +2086,7 @@ async function loadTab(name,tab,d){
       }
       html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
         +'<div style="font-size:13px;color:#333;font-weight:700;margin-bottom:8px">AI observaties</div>'
+        +'<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px">Indicatief: visuele indruk, geen objectieve diagnose.</div>'
         +meter('Open blik',pa.openheid)
         +meter('Glimlach',pa.glimlach)
         +meter('Energie',pa.energie)
@@ -1936,6 +2108,7 @@ async function loadTab(name,tab,d){
           +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#333;font-weight:700">Photo match</span><span style="font-size:18px;font-weight:800;color:'+mc+'">'+pm+'%</span></div>'
           +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+pm+'%;background:'+mc+'"></div></div>'
           +'<div style="font-size:12px;color:#666;line-height:1.5;margin-top:8px">Indicatieve visuele match op basis van openheid, glimlach, energie, verzorging en benaderbaarheid.</div>'
+          +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:4px">Alleen ondersteunend signaal, niet doorslaggevend.</div>'
           +'</div>';
       } else {
         html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:12px 14px;color:var(--m);font-size:13px">'
