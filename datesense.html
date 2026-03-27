@@ -303,6 +303,17 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .seg-modal-btn.negeer-btn.active{background:#F5F5F5;border-color:#ddd}
 .seg-modal-check{margin-left:auto;font-size:16px;flex-shrink:0}
 
+/* Vertel opslagmodus modal */
+.save-modal-overlay{position:fixed;inset:0;z-index:320;display:none;align-items:flex-end;justify-content:center}
+.save-modal-overlay.show{display:flex}
+.save-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.save-modal-sheet{position:relative;z-index:1;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + var(--sb));max-height:78vh;overflow:auto;box-shadow:0 -8px 24px rgba(0,0,0,.16)}
+.save-modal-title{font-size:16px;font-weight:800;color:var(--t);margin-bottom:4px}
+.save-modal-sub{font-size:13px;color:#666;line-height:1.5;margin-bottom:12px}
+.save-modal-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px}
+.save-modal-opt:active{opacity:.75}
+.save-modal-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0;background:#ccc}
+
 /* ══ OWN SENSE CATEGORIEËN ══ */
 .own-cat{background:#fff;border:1.5px solid var(--b);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:border-color .2s}
 .own-cat.filled{border-color:#C8E6C9}
@@ -446,6 +457,16 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   </div>
 </div>
 
+<!-- ══ VERTEL OPSLAGMODUS MODAL ══ -->
+<div class="save-modal-overlay" id="saveModeModal">
+  <div class="save-modal-bg" onclick="closeSaveModeModal()"></div>
+  <div class="save-modal-sheet">
+    <div class="save-modal-title">Opslagmodus kiezen</div>
+    <div class="save-modal-sub">Kies hoe Vertel nieuwe berichten aan dossiers koppelt.</div>
+    <div id="saveModeModalOpts"></div>
+  </div>
+</div>
+
 <script>
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -571,39 +592,46 @@ function updateVertelSaveModeUI(){
   }
 }
 function kiesVertelSaveMode(){
+  openSaveModeModal();
+}
+
+function openSaveModeModal(){
+  var modal=document.getElementById('saveModeModal');
+  var opts=document.getElementById('saveModeModalOpts');
+  if(!modal||!opts)return;
+  var forced=getForcedDossier();
   var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
-  var lines=[
-    'Kies opslagmodus voor Vertel:',
-    '0 = Altijd vragen (aanbevolen)',
-    ''
-  ];
-  all.forEach(function(p,i){lines.push((i+1)+' = Altijd opslaan bij '+dn(p));});
-  var forcedNow=getForcedDossier();
-  var defaultPick='0';
-  if(forcedNow){
-    var idxNow=all.indexOf(forcedNow);
-    if(idxNow>=0)defaultPick=String(idxNow+1);
-  }
-  var ans=prompt(lines.join('\n'),defaultPick);
-  if(ans===null)return;
-  var pick=ans.trim();
-  if(!pick||pick==='0'){setForcedDossier('');toast('Opslagmodus: Altijd vragen');return;}
-  var idx=parseInt(pick,10);
-  if(!isNaN(idx)&&idx>=1&&idx<=all.length){
-    setForcedDossier(all[idx-1]);
-    toast('✅ Altijd opslaan bij '+dn(all[idx-1]));
-    return;
-  }
-  var normalized=pick.toLowerCase();
-  var found=all.find(function(p){
-    return p.toLowerCase()===normalized||dn(p).toLowerCase()===normalized;
+  var html='';
+  html+='<button class="save-modal-opt" onclick="setSaveModeAskAlways()"><span class="save-modal-dot" style="background:'+(!forced?'#AE0000':'#bbb')+'"></span><span><strong>Altijd vragen</strong><br><span style="font-size:12px;color:#666">Na elk AI-antwoord kies jij zelf het dossier.</span></span></button>';
+  html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Altijd opslaan bij</div>';
+  all.forEach(function(p,i){
+    var active=forced===p;
+    var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
+    html+='<button class="save-modal-opt" onclick="setSaveModeForced(\''+p.replace(/'/g,"\\'")+'\')">'
+      +'<span class="save-modal-dot" style="background:'+(active?'#AE0000':col)+'"></span>'
+      +'<span style="flex:1">'+dn(p)+'</span>'
+      +(active?'<span style="font-size:12px;color:#AE0000;font-weight:700">Actief</span>':'')
+      +'</button>';
   });
-  if(found){
-    setForcedDossier(found);
-    toast('✅ Altijd opslaan bij '+dn(found));
-  }else{
-    toast('Onbekende keuze');
-  }
+  opts.innerHTML=html;
+  modal.classList.add('show');
+}
+
+function closeSaveModeModal(){
+  var modal=document.getElementById('saveModeModal');
+  if(modal)modal.classList.remove('show');
+}
+
+function setSaveModeAskAlways(){
+  setForcedDossier('');
+  closeSaveModeModal();
+  toast('Opslagmodus: Altijd vragen');
+}
+
+function setSaveModeForced(dossier){
+  setForcedDossier(dossier);
+  closeSaveModeModal();
+  toast('✅ Altijd opslaan bij '+dn(dossier));
 }
 
 // Verplaats tijdlijn bericht naar ander dossier
