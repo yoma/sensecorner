@@ -559,22 +559,39 @@ function setForcedDossier(v){
 }
 function updateVertelSaveModeUI(){
   var el=document.getElementById('vertelSaveMode');
+  var hint=document.getElementById('vertelSaveHint');
   if(!el)return;
   var forced=getForcedDossier();
-  el.textContent=forced?('Auto-opslag: '+dn(forced)):'Auto-opslag: uit (vragen)';
+  if(forced){
+    el.textContent='Opslagmodus: Altijd opslaan bij '+dn(forced);
+    if(hint)hint.textContent='Nieuwe berichten worden automatisch aan dit dossier gekoppeld.';
+  }else{
+    el.textContent='Opslagmodus: Altijd vragen';
+    if(hint)hint.textContent='Na elk AI-antwoord kies jij eerst in welk dossier het wordt opgeslagen.';
+  }
 }
 function kiesVertelSaveMode(){
   var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
-  var lines=['Kies auto-opslag modus:','0 = Uit (altijd vragen)'];
-  all.forEach(function(p,i){lines.push((i+1)+' = '+dn(p));});
-  var ans=prompt(lines.join('\n'),'0');
+  var lines=[
+    'Kies opslagmodus voor Vertel:',
+    '0 = Altijd vragen (aanbevolen)',
+    ''
+  ];
+  all.forEach(function(p,i){lines.push((i+1)+' = Altijd opslaan bij '+dn(p));});
+  var forcedNow=getForcedDossier();
+  var defaultPick='0';
+  if(forcedNow){
+    var idxNow=all.indexOf(forcedNow);
+    if(idxNow>=0)defaultPick=String(idxNow+1);
+  }
+  var ans=prompt(lines.join('\n'),defaultPick);
   if(ans===null)return;
   var pick=ans.trim();
-  if(!pick||pick==='0'){setForcedDossier('');toast('Auto-opslag uitgezet');return;}
+  if(!pick||pick==='0'){setForcedDossier('');toast('Opslagmodus: Altijd vragen');return;}
   var idx=parseInt(pick,10);
   if(!isNaN(idx)&&idx>=1&&idx<=all.length){
     setForcedDossier(all[idx-1]);
-    toast('✅ Auto-opslag op '+dn(all[idx-1]));
+    toast('✅ Altijd opslaan bij '+dn(all[idx-1]));
     return;
   }
   var normalized=pick.toLowerCase();
@@ -583,7 +600,7 @@ function kiesVertelSaveMode(){
   });
   if(found){
     setForcedDossier(found);
-    toast('✅ Auto-opslag op '+dn(found));
+    toast('✅ Altijd opslaan bij '+dn(found));
   }else{
     toast('Onbekende keuze');
   }
@@ -1997,9 +2014,10 @@ async function rVertel(el){
     </button>
     <div style="flex:1">
       <div style="font-size:15px;font-weight:700;color:var(--t)" id="sessieTitle">Nieuw gesprek</div>
-      <div style="font-size:11px;color:#888;margin-top:2px" id="vertelSaveMode">Auto-opslag: uit (vragen)</div>
+      <div style="font-size:11px;color:#666;margin-top:2px" id="vertelSaveMode">Opslagmodus: Altijd vragen</div>
+      <div style="font-size:11px;color:#9aa0a8;margin-top:1px" id="vertelSaveHint">Na elk AI-antwoord kies jij eerst in welk dossier het wordt opgeslagen.</div>
     </div>
-    <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="kiesVertelSaveMode()">Modus</button>
+    <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="kiesVertelSaveMode()">Opslag</button>
   </div>
   <div id="sessBulkBar" style="display:none;padding:8px 16px;border-bottom:1px solid var(--b);background:#fafbfc"></div>
   <div class="chat" id="chatArea"></div>
@@ -3149,25 +3167,36 @@ async function verwijderSessie(sessionId){
 
 async function nieuwGesprek(){
   closeSidebar();
+  // Altijd direct zichtbare reset in UI, ook als DB traag/faalt.
+  if(S.screen!=='vertel')goScreen('vertel');
+  var ca=document.getElementById('chatArea');
+  if(ca)ca.innerHTML='';
+  var t=document.getElementById('sessieTitle');
+  if(t)t.textContent='Nieuw gesprek';
+  var bulk=document.getElementById('sessBulkBar');
+  if(bulk){bulk.style.display='none';bulk.innerHTML='';}
+  S.vertelMsgs=[];
+  window._sessieKoppelData=[];
+
   // Maak nieuwe sessie aan in Supabase
-  if(!S.user)return;
+  if(!S.user){
+    toast('✏️ Nieuw gesprek gestart');
+    return;
+  }
   try{
     var {data}=await sb.from('sense_sessions')
       .insert({user_id:S.user.id,preview:'Nieuw gesprek',updated_at:new Date().toISOString()})
       .select().single();
     if(data){
       S.currentSessionId=data.id;
-      S.vertelMsgs=[];
-      var ca=document.getElementById('chatArea');
-      if(ca)ca.innerHTML='';
-      var t=document.getElementById('sessieTitle');
-      if(t)t.textContent='Nieuw gesprek';
       toast('✏️ Nieuw gesprek gestart');
       laadSessies();
     }
   }catch(e){
     console.warn('nieuwGesprek error:',e);
-    toast('Nieuw gesprek starten mislukt');
+    // Fallback: lokaal gesprek blijft bruikbaar zonder sessie-opslag.
+    S.currentSessionId=null;
+    toast('Nieuw gesprek gestart (zonder opslag)');
   }
 }
 
