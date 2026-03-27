@@ -1291,11 +1291,19 @@ async function loadTab(name,tab,d){
       return;
     }
     var lastDate='';
+    function escTL(s){
+      return String(s==null?'':s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+    }
     cont.innerHTML=msgs.map(m=>{
       var dd=new Date(m.created_at).toLocaleDateString('nl-BE',{day:'numeric',month:'long',year:'numeric'});
       var ds=dd!==lastDate?(lastDate=dd,`<div class="hdate">${dd}</div>`):'';
       var isU=m.role==='user';
-      var txt=isU?m.html:(m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,180)+(m.html.length>200?'...':''));
+      var txt=isU?escTL(m.html):(m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,180)+(m.html.length>200?'...':''));
       var msgId=m.id||'';
       return`${ds}<div class="tl-item">
         <div class="tl-dot ${isU?'u':'a'}"></div>
@@ -1557,7 +1565,7 @@ async function herbereken(dosName,silent=true){
 
   // Verzamel alle manuele invoer
   var manualText='';
-  Object.berichten(cats).forEach(([catId,answers])=>{
+      Object.entries(cats).forEach(([catId,answers])=>{
     Object.values(answers).forEach(v=>{if(v&&v.trim())manualText+=v.trim()+' ';});
   });
 
@@ -1984,21 +1992,50 @@ async function cmpAdvies(c1,c2){
 
 // ══ API call ══════════════════════════════════════════════════════
 async function callAPI(sys,msgs,maxTok){
-  var res=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs})
-  });
-  var data=await res.json();
-  if(data.error)throw new Error(data.error.message);
-  return(data.content&&data.content[0]&&data.content[0].text)||'';
+  // Guard against hanging browser requests so the UI never stays stuck on typing.
+  var controller=new AbortController();
+  var timeoutMs=30000;
+  var timer=setTimeout(function(){controller.abort();},timeoutMs);
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),
+      signal:controller.signal
+    });
+    var data=await res.json();
+    if(!res.ok){
+      var apiMsg=(data&&data.error&&data.error.message)||('HTTP '+res.status);
+      throw new Error(apiMsg);
+    }
+    if(data.error)throw new Error(data.error.message);
+    var txt=(data.content&&data.content[0]&&data.content[0].text)||'';
+    if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');
+    return txt;
+  }catch(e){
+    if(e&&e.name==='AbortError'){
+      throw new Error('AI request timeout (30s). Probeer opnieuw.');
+    }
+    throw e;
+  }finally{
+    clearTimeout(timer);
+  }
 }
 
 // ══ Chat helpers ══════════════════════════════════════════════════
 function addMsg(role,html){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var d=document.createElement('div');d.className=role==='user'?'msg-user':'msg-ai';
-  d.innerHTML=role==='user'?`<div class="bbl-user">${html}</div>`:`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}</div>`;
+  function esc(s){
+    return String(s==null?'':s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+  // Escape alleen user's raw input; AI output mag (voor nu) wel HTML bevatten.
+  d.innerHTML=role==='user'?`<div class="bbl-user">${esc(html)}</div>`:`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}</div>`;
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
   // Bewaar in sessie zodat de chat bewaard blijft bij navigeren weg/terug
   if(!S.vertelMsgs)S.vertelMsgs=[];
@@ -2127,7 +2164,7 @@ function rerenderSegmenten(){
   var cardsEl=document.querySelector('.dossier-cards');
   if(cardsEl){
     var cardsHtml='';
-    Object.berichten(telPerDossier).forEach(function(bericht){
+    Object.entries(telPerDossier).forEach(function(bericht){
       var d=bericht[0],cnt=bericht[1];
       var col=dossierColor(d);
       cardsHtml+='<div class="dossier-card" style="border-color:'+col+'">';
@@ -2249,7 +2286,7 @@ async function bevestigAlles(){
   });
 
   // Sla op per dossier
-  for(var [dossier,teksten] of Object.berichten(perDossier)){
+  for(var [dossier,teksten] of Object.entries(perDossier)){
     await ensureP(dossier);
     var samengevat=teksten.join(' ');
     await saveMsg(dossier,'user',samengevat);
@@ -2272,7 +2309,7 @@ async function bevestigAlles(){
   // Toon bevestiging
   var html='<div class="saved-confirm">';
   html+='<div class="saved-confirm-title">✅ Opgeslagen!</div>';
-  Object.berichten(perDossier).forEach(function(bericht){
+  Object.entries(perDossier).forEach(function(bericht){
     var doss=bericht[0], teksten=bericht[1];
     var col=dossierColor(doss);
     html+='<div class="saved-row"><div class="saved-dot" style="background:'+col+'"></div>';
