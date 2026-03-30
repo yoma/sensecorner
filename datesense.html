@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:53">
+<meta name="ds-build" content="v2026-03-30-1 15:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3128,8 +3128,8 @@ async function loadTab(name,tab,d){
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
-    var sb=document.getElementById('advSuggestUpdateBtn');
-    if(sb){(function(n){sb.onclick=function(){genAdvies(n,true);};})(name);}
+    var suggestBtn=document.getElementById('advSuggestUpdateBtn');
+    if(suggestBtn){(function(n){suggestBtn.onclick=function(){genAdvies(n,true);};})(name);}
     hydrateActieItems(name);
 
     // Genereer enkel automatisch als er nog geen advies bestaat.
@@ -5317,4 +5317,52 @@ async function _opslaanKeuze(dossier){
   await _doOpslaan(sid,data.tekst,dossier);
 }
 
-async function m
+async function maakNieuwDossierEnOpslaan(sid,useSuggested){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  var suggested=data.suggestedName||'';
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  if(inputName===null)return;
+  var base=String(inputName||'').trim();
+  if(!base){toast('Naam is leeg');return;}
+  var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  await _doOpslaan(sid,data.tekst,dossier);
+}
+
+async function _doOpslaan(sid,tekst,dossier){
+  var bar=document.getElementById(sid);
+  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+  await ensureP(dossier);
+  var inserted=await saveMsg(dossier,'user',tekst);
+  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
+  pd.count=(pd.count||0)+1;
+  S.pdata[dossier]=pd;
+  await saveP(dossier,pd.props,pd.count,pd.categories);
+  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
+  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+  rDrawer();
+  if(sid&&window._saveData)delete window._saveData[sid];
+  return inserted;
+}
+
+// ══ Init ══════════════════════════════════════════════════════════
+// Event delegation: auto-save voor contact categorieën via data attributen
+document.addEventListener('input',function(e){
+  var ta=e.target;
+  if(!ta.classList.contains('own-ta'))return;
+  // Contact categorie textareas hebben id="cc-CATID-aN"
+  var m=ta.id.match(/^cc-(.+)-a\d+$/);
+  if(m){
+    var catId=m[1];
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+init();
+</script>
+</body>
+</html>
