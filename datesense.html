@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:07">
+<meta name="ds-build" content="v2026-03-30-1 15:11">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1620,7 +1620,7 @@ function goBack(){
 function goScreen(sc){
   var prevScreen=S.screen;
   // Protect screens when not authenticated
-  if(!S.user && ['senses','own','vertel','compare','dossier'].includes(sc)){
+  if(!S.user && ['senses','own','vertel','compare','dossier','notifications'].includes(sc)){
     sc='login';
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
@@ -1632,14 +1632,14 @@ function goScreen(sc){
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
   ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier};
+  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -1911,6 +1911,28 @@ function isDossierNotificationsEnabled(name){
   var m=d.meta||{};
   return m.notifications_muted!==true;
 }
+function getDossierStage(name){
+  if(!name||name==='OWN Sense')return'virtueel';
+  var d=S.pdata[name]||{};
+  var m=d.meta||{};
+  var s=String(m.dating_stage||'virtueel').toLowerCase();
+  if(['virtueel','eerste_date','meerdere_dates','geen_contact'].indexOf(s)===-1)return'virtueel';
+  return s;
+}
+function stageLabel(s){
+  if(s==='eerste_date')return'Eerste date';
+  if(s==='meerdere_dates')return'Meerdere dates';
+  if(s==='geen_contact')return'Geen contact meer';
+  return'Virtueel';
+}
+async function setDossierStage(name,stage){
+  if(!name||name==='OWN Sense')return;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  d.meta.dating_stage=stage;
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
 async function toggleDossierNotifications(name){
   if(!name||name==='OWN Sense')return;
   var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
@@ -1986,6 +2008,13 @@ async function reopenDossier(name){
   toast('🔄 '+dn(name)+' opnieuw actief');
   goScreen('senses');
 }
+async function updateDossierStageFromUI(name){
+  var el=document.getElementById('dosStageSel');
+  if(!el)return;
+  var v=String(el.value||'virtueel');
+  await setDossierStage(name,v);
+  toast('Status: '+stageLabel(v));
+}
 
 function buildCoachTasks(){
   var tasks=[];
@@ -1993,26 +2022,31 @@ function buildCoachTasks(){
     if(!isDossierNotificationsEnabled(p))return;
     var d=S.pdata[p]||{};
     var person=dn(p).replace('Sense','');
+    var stage=getDossierStage(p);
     var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):999;
-    if(days>=7){
-      tasks.push({id:'check-stale-'+p,type:'c',msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+    if(days>=7&&stage!=='geen_contact'){
+      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':'medium'),msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
     var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
     var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
     if((d.count||0)>=8&&adviceOld){
-      tasks.push({id:'actie-advies-'+p,type:'a',msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis)){
-      tasks.push({id:'sense-foto-'+p,type:'s',msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong> ontbreekt nog.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+      tasks.push({id:'sense-foto-'+p,type:'s',prio:'low',msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong> ontbreekt nog.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+    }
+    if(stage==='geen_contact'&&days<=30){
+      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
   });
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
   if(ownMissingProfile){
-    tasks.push({id:'check-own-profile',type:'a',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open profielgegevens →',action:"goScreen('own');setTimeout(function(){openProfileModal('OWN Sense');},120)"});
+    tasks.push({id:'check-own-profile',type:'a',prio:'high',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open profielgegevens →',action:"goScreen('own');setTimeout(function(){openProfileModal('OWN Sense');},120)"});
   }
   return tasks;
 }
+function prioWeight(p){return p==='high'?3:(p==='medium'?2:1);}
 
 // ══ Home ═════════════════════════════════════════════════════════
 function rHome(el){
@@ -2084,8 +2118,11 @@ function rHome(el){
       +'</div>';
     notes.forEach(function(n){
       var colors={s:'var(--r)',a:'#E07800',c:'#0066CC'};
+      var pr=(n.prio||'low');
+      var prTxt=(pr==='high'?'High':(pr==='medium'?'Medium':'Low'));
+      var prCol=(pr==='high'?'#B42318':(pr==='medium'?'#A55B00':'#005A9E'));
       notesHtml+=`<div class="ncard ${n.type}" style="margin-bottom:10px">
-        <div class="ncat">${n.type==='s'?'Sense':n.type==='a'?'Actie':'Check'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div class="ncat">${n.type==='s'?'Sense':n.type==='a'?'Actie':'Check'}</div><div style="font-size:11px;color:${prCol};font-weight:700">${prTxt}</div></div>
         <div class="ntext">${n.msg}</div>
         <span class="nlink" onclick="${n.action}">${n.link}</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
@@ -2127,6 +2164,40 @@ function rHome(el){
 
 function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button class="btn-g" onclick="doSignOut()">Uitloggen</button></div></div>`;}
 
+function rNotifications(el){
+  var q=(S.notificationsFilter||'all');
+  var state=_coachState();
+  var now=Date.now();
+  var items=buildCoachTasks().map(function(t){
+    var st=state[t.id]||null;
+    var status='open';
+    if(st&&st.until&&st.until>now)status=(st.mode==='snooze'?'snoozed':'done');
+    return {...t,status:status};
+  });
+  if(q!=='all')items=items.filter(function(t){return t.type===q;});
+  items.sort(function(a,b){return prioWeight(b.prio||'low')-prioWeight(a.prio||'low');});
+  var chips='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px">'
+    +'<button class="coach-save-other" style="'+(q==='all'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'all\';goScreen(\'notifications\')">Alles</button>'
+    +'<button class="coach-save-other" style="'+(q==='s'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'s\';goScreen(\'notifications\')">SENSE</button>'
+    +'<button class="coach-save-other" style="'+(q==='a'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'a\';goScreen(\'notifications\')">ACTIE</button>'
+    +'<button class="coach-save-other" style="'+(q==='c'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'c\';goScreen(\'notifications\')">CHECK</button>'
+    +'</div>';
+  var body=items.length?items.map(function(n){
+    var pr=(n.prio||'low');
+    var prTxt=(pr==='high'?'High':(pr==='medium'?'Medium':'Low'));
+    var prCol=(pr==='high'?'#B42318':(pr==='medium'?'#A55B00':'#005A9E'));
+    return `<div class="ncard ${n.type}" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div class="ncat">${n.type==='s'?'Sense':n.type==='a'?'Actie':'Check'}</div>
+        <div style="font-size:11px;color:${prCol};font-weight:700">${prTxt} · ${n.status}</div>
+      </div>
+      <div class="ntext">${n.msg}</div>
+      <span class="nlink" onclick="${n.action}">${n.link}</span>
+    </div>`;
+  }).join(''):'<div style="font-size:13px;color:#8a8f97;padding:8px 2px">Geen meldingen in deze filter.</div>';
+  el.innerHTML=`<div style="padding:16px 16px 32px"><div class="sh">Mijn meldingen</div>${chips}${body}</div>`;
+}
+
 // ══ Senses lijst ═════════════════════════════════════════════════
 function rSenses(el){
   var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
@@ -2150,7 +2221,7 @@ function rSenses(el){
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
           <div style="font-size:15px;font-weight:700">${p}</div>
-          <div style="font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span> <span style="font-size:10px;font-weight:700;color:#1B5E20;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:999px;padding:2px 6px">Actief ✓</span></div>
         </div>
         <div style="display:flex;gap:6px">
           <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
@@ -2280,6 +2351,15 @@ async function rDossier(el){
   header+='<div style="font-size:18px;font-weight:800;color:var(--t)">'+personName2+'</div>';
   if(!isOwn&&d.lastActive){
     header+='<div style="font-size:12px;color:var(--m);margin-top:2px">Laatste update: '+timeAgo(d.lastActive)+'</div>';
+  }
+  if(!isOwn){
+    var stageNow=getDossierStage(name);
+    header+='<div style="margin-top:6px"><select id="dosStageSel" onchange="updateDossierStageFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
+      +'<option value="virtueel" '+(stageNow==='virtueel'?'selected':'')+'>Virtueel</option>'
+      +'<option value="eerste_date" '+(stageNow==='eerste_date'?'selected':'')+'>Eerste date</option>'
+      +'<option value="meerdere_dates" '+(stageNow==='meerdere_dates'?'selected':'')+'>Meerdere dates</option>'
+      +'<option value="geen_contact" '+(stageNow==='geen_contact'?'selected':'')+'>Geen contact meer</option>'
+      +'</select></div>';
   }
   header+='</div>';
   var metaComp=getProfileMetaCompletion(name);
@@ -3562,7 +3642,7 @@ function rSettings(el){
   var extraHtml=''
     +renderSettingsTile('⚙️','Instellingen','Algemene voorkeuren','settings-placeholder')
     +renderSettingsTile('💳','Abonnement','Plan en facturatie','subscription-placeholder')
-    +renderSettingsTile('🔔','Meldingen','Notificaties beheren','notifications-placeholder')
+    +renderSettingsTile('🔔','Meldingen','Notificaties beheren','notifications')
     +renderSettingsTile('💬','Feedback','Stuur je suggestie','feedback-placeholder')
     +renderSettingsTile('🛟','Help & Support','Hulp en contact','support-placeholder')
     +renderSettingsTile('🔒','Privacy','Data en rechten','privacy-placeholder')
@@ -3623,6 +3703,7 @@ async function exportAllData(){
 
 function settingsAction(action){
   if(action==='my-data'){openProfileModal('OWN Sense');return;}
+  if(action==='notifications'){goScreen('notifications');return;}
   if(action==='export'){exportAllData();return;}
   if(action==='about'){
     var aboutMsg=[
