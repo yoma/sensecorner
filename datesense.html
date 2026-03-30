@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 14:12">
+<meta name="ds-build" content="v2026-03-30-1 14:24">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1229,8 +1229,40 @@ function touchPropUpdates(meta,prevProps,nextProps){
       changed=true;
     }
   });
-  if(changed)m.prop_updates=pu;
+  if(changed){
+    m.prop_updates=pu;
+    m.props_updated_at=nowIso;
+  }
   return m;
+}
+
+function getPropsUpdatedAt(meta){
+  var m=meta||{};
+  if(m.props_updated_at)return m.props_updated_at;
+  var pu=(m.prop_updates&&typeof m.prop_updates==='object')?m.prop_updates:{};
+  var latest='';
+  Object.keys(pu).forEach(function(k){
+    var v=String(pu[k]||'');
+    if(v&&(!latest||v>latest))latest=v;
+  });
+  return latest;
+}
+
+function getFieldUpdate(meta,scope,catId,aKey){
+  var m=meta||{};
+  var f=(m.field_updates&&m.field_updates[scope]&&m.field_updates[scope][catId])||{};
+  return f[aKey]||'';
+}
+
+function getCategoryUpdate(meta,scope,catId){
+  var m=meta||{};
+  var f=(m.field_updates&&m.field_updates[scope]&&m.field_updates[scope][catId])||{};
+  var latest='';
+  Object.keys(f).forEach(function(k){
+    var v=String(f[k]||'');
+    if(v&&(!latest||v>latest))latest=v;
+  });
+  return latest;
 }
 
 // Render eigenschappen (alleen als er data is)
@@ -1259,9 +1291,8 @@ function renderProps(props,showSource,opt){
   }
   function renderPills(items){
     return'<div class="props-compact">'+items.map(function(it){
-      var upd=(it.k&&propUpdates[it.k])?fmtPropUpdate(propUpdates[it.k]):'Nog niet';
       return'<div class="prop-pill">'
-        +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+' <span style="font-size:10px;color:#9a9a9a;font-weight:600">('+upd+')</span></div><div class="prop-pill-val">'+it.v+'%</div></div>'
+        +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
         +'</div>';
     }).join('')+'</div>';
   }
@@ -1289,12 +1320,10 @@ function renderProps(props,showSource,opt){
   var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
     var barColor=v===0?'var(--b)':'var(--r)';
-    var upd=(propUpdates&&propUpdates[k])?fmtPropUpdate(propUpdates[k]):'Nog niet';
     return'<div class="prop">'
       +'<div class="pn">'+PL[i]+'</div>'
       +'<div class="track"><div class="fill" style="width:'+v+'%;background:'+barColor+'"></div></div>'
       +'<div class="pct" style="color:'+(v===0?'#ccc':'var(--r)')+'">'+v+'%</div>'
-      +'<div style="font-size:10px;color:#9a9a9a;min-width:90px;text-align:right">Upd '+upd+'</div>'
       +'</div>';
   }).join('');
 
@@ -2226,7 +2255,11 @@ async function loadTab(name,tab,d){
     var html='';
 
     // Eigenschappen
-    html+='<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:12px">Eigenschappen</div>';
+    var propsLastIso=getPropsUpdatedAt(d.meta||{});
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">'
+      +'<div style="font-size:14px;font-weight:700;color:#333">Eigenschappen</div>'
+      +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
+      +'</div>';
     var extraMetrics=[];
     if(!isOwnDossier){
       var ownMetaX=((S.pdata['OWN Sense']||{}).meta)||{};
@@ -2272,7 +2305,9 @@ async function loadTab(name,tab,d){
         html+='<div class="own-cat-head" onclick="toggleCat(\''+cat.id+'\')">';
         html+='<div class="own-cat-icon">'+cat.icon+'</div>';
         html+='<div class="own-cat-info">';
+        var ownCatUpd=getCategoryUpdate(d.meta||{},'own',cat.id);
         html+='<div class="own-cat-title">'+cat.title+'</div>';
+        html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(ownCatUpd)+'</div>';
         html+='<div class="own-cat-prog '+(filled===cat.prompts.length?'done':'')+'">'+filled+'/'+cat.prompts.length+' vragen beantwoord'+(filled===cat.prompts.length?' ✓':'')+'</div>';
         html+='</div>';
         html+='<div class="own-cat-arrow">›</div>';
@@ -2280,7 +2315,8 @@ async function loadTab(name,tab,d){
         html+='<div class="own-cat-body">';
         cat.prompts.forEach(function(p,i){
           var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          html+='<div class="own-q-label">'+p.q+'</div>';
+          var ownFieldUpd=getFieldUpdate(d.meta||{},'own',cat.id,'a'+i);
+          html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(ownFieldUpd)+'</span></div>';
           html+='<textarea class="own-ta" id="oc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" data-catid="'+cat.id+'" data-type="own" oninput="autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')">'+saved+'</textarea>';
           html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
         });
@@ -2337,7 +2373,9 @@ async function loadTab(name,tab,d){
         html+='<div class="own-cat-head" onclick="toggleContactCat(\''+cat.id+'\')">';
         html+='<div class="own-cat-icon">'+cat.icon+'</div>';
         html+='<div class="own-cat-info">';
+        var contactCatUpd=getCategoryUpdate(d.meta||{},'contact',cat.id);
         html+='<div class="own-cat-title">'+cat.title+'</div>';
+        html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(contactCatUpd)+'</div>';
         html+='<div class="own-cat-prog '+(prog.filled===prog.total?'done':'')+'">';
         html+=prog.filled+'/'+prog.total+' vragen beantwoord'+(prog.filled===prog.total?' ✓':'');
         html+='</div></div>';
@@ -2346,7 +2384,8 @@ async function loadTab(name,tab,d){
         html+='<div class="own-cat-body">';
         cat.prompts.forEach(function(p,i){
           var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          html+='<div class="own-q-label">'+p.q+'</div>';
+          var contactFieldUpd=getFieldUpdate(d.meta||{},'contact',cat.id,'a'+i);
+          html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
           html+='<textarea class="own-ta" id="cc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" oninput="autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')">'+saved+'</textarea>';
           html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
         });
@@ -2815,6 +2854,8 @@ async function saveContactCat(dosName,catId,silent){
   if(!S.pdata[dosName])S.pdata[dosName]={props:{...DP},count:0,categories:{}};
   var d=S.pdata[dosName];
   if(!d.categories)d.categories={};
+  d.meta=d.meta||{};
+  var prevCat={...(d.categories[catId]||{})};
   var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
   // Verzamel antwoorden voor dit catId
   var answers={};
@@ -2828,8 +2869,17 @@ async function saveContactCat(dosName,catId,silent){
   // Als de tab net hertekend is en velden even niet bestaan: nooit bestaande data overschrijven met leeg.
   if(foundFields===0)return;
   d.categories[catId]=answers;
+  if(!d.meta.field_updates)d.meta.field_updates={};
+  if(!d.meta.field_updates.contact)d.meta.field_updates.contact={};
+  if(!d.meta.field_updates.contact[catId])d.meta.field_updates.contact[catId]={};
+  var nowIso=new Date().toISOString();
+  ['a0','a1','a2'].forEach(function(aKey){
+    if((prevCat[aKey]||'')!==(answers[aKey]||'')){
+      d.meta.field_updates.contact[catId][aKey]=nowIso;
+    }
+  });
   S.pdata[dosName]=d;
-  await saveP(dosName,d.props,d.count,d.categories);
+  await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
   // Update progress indicator
   var filled=Object.values(answers).filter(v=>v.length>0).length;
   var catEl=document.getElementById('cc-'+catId);
@@ -2991,7 +3041,10 @@ function rOWN(el){
 </div>
 
 <!-- Eigen eigenschappen -->
-<div class="sh">Jouw eigenschappen</div>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+  <div class="sh" style="margin:0">Jouw eigenschappen</div>
+  <div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: ${fmtPropUpdate(getPropsUpdatedAt(d.meta||{}))}</div>
+</div>
 <div style="display:flex;justify-content:flex-end;margin:-8px 0 10px">
   <button class="coach-save-other" onclick="openProfileModal('OWN Sense')">Profielgegevens beheren</button>
 </div>
@@ -3021,18 +3074,20 @@ ${(()=>{
   var isComplete=(prog.filled===prog.total);
   var shouldOpen=!firstOpenDone&&!isComplete;
   if(shouldOpen)firstOpenDone=true;
+  var catLast=getCategoryUpdate(d.meta||{},'own',cat.id);
   return`<div class="own-cat ${shouldOpen?'open ':''}${isFilled?'filled':''}" id="oc-${cat.id}">
   <div class="own-cat-head" onclick="toggleCat('${cat.id}')">
     <div class="own-cat-icon">${cat.icon}</div>
     <div class="own-cat-info">
       <div class="own-cat-title">${cat.title}</div>
+      <div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: ${fmtPropUpdate(catLast)}</div>
       <div class="own-cat-prog ${prog.filled===prog.total?'done':''}">${prog.filled}/${prog.total} vragen beantwoord${prog.filled===prog.total?' ✓':''}</div>
     </div>
     <div class="own-cat-arrow">›</div>
   </div>
   <div class="own-cat-body">
     ${cat.prompts.map((p,i)=>`
-      <div class="own-q-label">${p.q}</div>
+      <div class="own-q-label">${p.q} <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: ${fmtPropUpdate(getFieldUpdate(d.meta||{},'own',cat.id,'a'+i))}</span></div>
       <textarea class="own-ta" id="oc-${cat.id}-a${i}" placeholder="${p.ph}" rows="2" data-catid="${cat.id}" data-type="own" oninput="autoResize(this);scheduleAutoSave('own','OWN Sense','${cat.id}',${i});if(${i}===cat.prompts.length-1)scheduleOwnVoorstel(this.value,'${cat.id}')">${catData['a'+i]||''}</textarea>
       <div class="autosave-indicator" id="oc-field-${cat.id}-a${i}"></div>
     `).join('')}
@@ -3141,7 +3196,18 @@ async function saveOwnCat(catId,silent){
   if(!d.categories)d.categories={};
   d.meta=d.meta||{};
   var prevProps={...d.props};
+  var prevCat={...(d.categories[catId]||{})};
   d.categories[catId]=answers;
+  if(!d.meta.field_updates)d.meta.field_updates={};
+  if(!d.meta.field_updates.own)d.meta.field_updates.own={};
+  if(!d.meta.field_updates.own[catId])d.meta.field_updates.own[catId]={};
+  var nowIso=new Date().toISOString();
+  cat.prompts.forEach(function(_,i){
+    var aKey='a'+i;
+    if((prevCat[aKey]||'')!==(answers[aKey]||'')){
+      d.meta.field_updates.own[catId][aKey]=nowIso;
+    }
+  });
 
   // Vraag AI om eigenschappen te updaten op basis van ALLE categorieën
   var allCatText='';
