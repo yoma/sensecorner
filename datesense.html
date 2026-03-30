@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 14:58">
+<meta name="ds-build" content="v2026-03-30-1 15:07">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1905,6 +1905,22 @@ function getActiveContactNames(){
     return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';
   });
 }
+function isDossierNotificationsEnabled(name){
+  if(!name||name==='OWN Sense')return true;
+  var d=S.pdata[name]||{};
+  var m=d.meta||{};
+  return m.notifications_muted!==true;
+}
+async function toggleDossierNotifications(name){
+  if(!name||name==='OWN Sense')return;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  d.meta.notifications_muted=!d.meta.notifications_muted;
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+  toast(d.meta.notifications_muted?'🔕 Meldingen uit voor '+dn(name):'🔔 Meldingen aan voor '+dn(name));
+  goScreen('senses');
+}
 
 async function setDossierLifecycle(name,status){
   if(!name||name==='OWN Sense')return;
@@ -1938,12 +1954,28 @@ function coachTaskSnooze(id,hours){
 
 async function markDossierOnHold(name){
   if(!name||name==='OWN Sense')return;
+  var ok=confirm(
+    'On hold zetten voor '+dn(name)+'?\n\n'
+    +'- Dossier blijft bewaard\n'
+    +'- Geen coach meldingen meer op Home\n'
+    +'- Niet mee in actieve AI-context\n'
+    +'- Je kan later altijd heropenen'
+  );
+  if(!ok)return;
   await setDossierLifecycle(name,'on_hold');
   toast('⏸️ '+dn(name)+' op on hold gezet');
   goScreen('senses');
 }
 async function closeDossier(name){
   if(!name||name==='OWN Sense')return;
+  var ok=confirm(
+    'Dossier afsluiten voor '+dn(name)+'?\n\n'
+    +'- Status wordt "Afgesloten"\n'
+    +'- Geen actieve opvolging/meldingen meer\n'
+    +'- Dossier blijft zichtbaar bij "On hold / Afgesloten"\n'
+    +'- Je kan dit nog heropenen'
+  );
+  if(!ok)return;
   await setDossierLifecycle(name,'closed');
   toast('✅ '+dn(name)+' afgesloten');
   goScreen('senses');
@@ -1958,19 +1990,20 @@ async function reopenDossier(name){
 function buildCoachTasks(){
   var tasks=[];
   getActiveContactNames().forEach(function(p){
+    if(!isDossierNotificationsEnabled(p))return;
     var d=S.pdata[p]||{};
     var person=dn(p).replace('Sense','');
     var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):999;
     if(days>=7){
-      tasks.push({id:'check-stale-'+p,type:'c',msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+      tasks.push({id:'check-stale-'+p,type:'c',msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
     var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
     var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
     if((d.count||0)>=8&&adviceOld){
-      tasks.push({id:'actie-advies-'+p,type:'a',msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-advies-'+p,type:'a',msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis)){
-      tasks.push({id:'sense-foto-'+p,type:'s',msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+      tasks.push({id:'sense-foto-'+p,type:'s',msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong> ontbreekt nog.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
     }
   });
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
@@ -2009,18 +2042,46 @@ function rHome(el){
       var st=state[t.id];
       return!(st&&st.until&&st.until>now);
     });
+    openTasks=openTasks.map(function(t){
+      var st=state[t.id];
+      if(st&&st.mode==='done'&&st.until&&st.until<=now){
+        var t2={...t};
+        t2.msg=t.openMsg||('Nog openstaand: '+t.msg);
+        return t2;
+      }
+      return t;
+    });
     if(openTasks.length){
       var idx=parseInt(localStorage.getItem('dsCoachTaskIdx')||'0',10);
       if(isNaN(idx)||idx<0)idx=0;
-      var chosen=openTasks[idx%openTasks.length];
+      var ordered=openTasks.slice(idx).concat(openTasks.slice(0,idx));
+      var picked=[],usedType={};
+      ordered.forEach(function(t){
+        if(picked.length>=3)return;
+        if(!usedType[t.type]){
+          picked.push(t);
+          usedType[t.type]=true;
+        }
+      });
+      if(picked.length<3){
+        ordered.forEach(function(t){
+          if(picked.length>=3)return;
+          if(picked.indexOf(t)===-1)picked.push(t);
+        });
+      }
       localStorage.setItem('dsCoachTaskIdx',String((idx+1)%Math.max(1,openTasks.length)));
-      notes=[chosen];
+      notes=picked;
     }
   }
 
   var notesHtml='';
   if(notes.length){
     notesHtml='<div style="margin-top:24px;width:100%;max-width:380px;text-align:left">';
+    notesHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--r);background:#FFF1F1;border:1px solid #FFD9D9;border-radius:999px;padding:4px 8px">🔴 SENSE</span>'
+      +'<span style="font-size:11px;font-weight:700;color:#A55B00;background:#FFF6EA;border:1px solid #FFE1BE;border-radius:999px;padding:4px 8px">🟡 ACTIE</span>'
+      +'<span style="font-size:11px;font-weight:700;color:#005A9E;background:#EEF7FF;border:1px solid #CFE7FF;border-radius:999px;padding:4px 8px">🔵 CHECK</span>'
+      +'</div>';
     notes.forEach(function(n){
       var colors={s:'var(--r)',a:'#E07800',c:'#0066CC'};
       notesHtml+=`<div class="ncard ${n.type}" style="margin-bottom:10px">
@@ -2080,6 +2141,7 @@ function rSenses(el){
 </div>`;
   if(cs.length){
     h+='<div class="sh">Contacten</div>';
+    h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-6px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
@@ -2091,9 +2153,9 @@ function rSenses(el){
           <div style="font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span></div>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
-          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
-          <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
+          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
         </div>
       </div>`;
     });
@@ -2114,8 +2176,9 @@ function rSenses(el){
           <div style="font-size:12px;color:#999">${stLbl} · ${d.count||0} berichten</div>
         </div>
         <div style="display:flex;gap:6px">
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
           <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();reopenDossier('${p}')">Heropen</button>
-          <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
+          <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="event.stopPropagation();delSense('${p}')">Verwijder definitief</button>
         </div>
       </div>`;
     });
@@ -2128,7 +2191,12 @@ function rSenses(el){
 }
 
 async function delSense(name){
-  if(!confirm('Weet je zeker dat je '+name+' wil verwijderen?'))return;
+  if(!confirm(
+    'Definitief verwijderen: '+name+'?\n\n'
+    +'- Verwijdert dossier + alle berichten permanent\n'
+    +'- Dit kan niet ongedaan gemaakt worden\n'
+    +'- Gebruik "On hold" of "Sluit af" als je wil bewaren'
+  ))return;
   await delP(name);toast('🗑️ '+name+' verwijderd');goScreen('senses');
 }
 
