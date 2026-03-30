@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:29">
+<meta name="ds-build" content="v2026-03-30-1 16:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -142,9 +142,15 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .msg-ai{display:flex;flex-direction:column;gap:4px}
 .bbl-ai{background:var(--rl);border:1px solid #FFD5D5;border-radius:16px 16px 16px 4px;padding:14px 16px;font-size:var(--fs-sm);color:#222;line-height:1.6;max-width:96%}
 .bbl-ai .sndr{font-size:var(--fs-xs);font-weight:700;color:var(--r);margin-bottom:6px;letter-spacing:.8px}
-.ai-rich-card{background:#fff;border:1px solid #F0DADA;border-radius:12px;padding:12px 13px;margin:6px 0 2px}
+.ai-rich-card{background:#fff;border:1px solid #F0DADA;border-radius:12px;padding:12px 13px;margin:6px 0 2px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
 .ai-rich-card p:last-child{margin-bottom:0!important}
 .ai-rich-card ul{padding-left:18px}
+.ai-sec{padding:2px 0 10px}
+.ai-sec+.ai-sec{border-top:1px dashed #F0DADA;padding-top:10px}
+.ai-sec-title{font-size:12px;font-weight:800;letter-spacing:.4px;color:#7c1212;text-transform:uppercase;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.ai-sec-text{font-size:14px;color:#2b2b2b;line-height:1.75;margin:0 0 8px}
+.ai-sec-list{margin:2px 0 8px 20px;color:#333}
+.ai-sec-list li{margin:3px 0;line-height:1.65}
 .msg-user{display:flex;justify-content:flex-end}
 .bbl-user{background:var(--r);border-radius:16px 16px 4px 16px;padding:14px 16px;font-size:var(--fs-sm);color:#fff;line-height:1.6;max-width:96%}
 
@@ -748,28 +754,60 @@ function escHTML(s){
 function formatAiRichText(txt){
   var raw=String(txt==null?'':txt).replace(/\\n/g,'\n').trim();
   if(!raw)return'';
-  var esc=escHTML(raw);
-  esc=esc.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  var blocks=esc.split(/\n{2,}/).map(function(b){return b.trim();}).filter(Boolean);
-  var out=[];
-  function paragraphIcon(s){
-    var t=String(s||'').toLowerCase();
-    if(/aanbevel|actie|volgende stap|doe|probeer|plan|stuur|vraag/.test(t))return'🎯';
-    if(/let op|risico|twijfel|afstand|waarschu|red flag|niet|oppassen|spann/.test(t))return'⚠️';
-    if(/sterk|match|goed|positief|kans|past|consistent|mooi/.test(t))return'✅';
+  // Normalize technical output into readable sections.
+  raw=raw
+    .replace(/^\s*\|[-:\s|]+\|\s*$/gm,'')
+    .replace(/^\s*[-]{3,}\s*$/gm,'')
+    .replace(/^\s*#{1,6}\s*/gm,'')
+    .replace(/(\s|^)(\d+[\)\.\-])\s+/g,'\n$2 ')
+    .replace(/^\s*[^\n|]+\|[^\n|]+\|[^\n|]+\s*$/gm,function(line){
+      var parts=line.split('|').map(function(p){return p.trim();}).filter(Boolean);
+      if(parts.length>=2)return'- '+parts.join(' -> ');
+      return line;
+    });
+  function inlineFmt(s){
+    return escHTML(String(s||'')).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  }
+  function sectionIcon(title){
+    var t=String(title||'').toLowerCase();
+    if(/aanbevel|actie|volgende stap/.test(t))return'🎯';
+    if(/waarom|aandacht|risico|twijfel/.test(t))return'⚠️';
+    if(/conclusie|sterk|match/.test(t))return'✅';
     return'💡';
   }
-  blocks.forEach(function(block){
-    var lines=block.split('\n').map(function(l){return l.trim();}).filter(Boolean);
-    if(!lines.length)return;
-    if(lines.every(function(l){return /^[-*•]\s+/.test(l);})){
-      out.push('<ul style="margin:4px 0 8px 18px">'+lines.map(function(l){return'<li style="margin:2px 0">'+l.replace(/^[-*•]\s+/,'')+'</li>';}).join('')+'</ul>');
+  var lines=raw.split('\n').map(function(l){return l.trim();});
+  var sections=[];
+  var cur={title:'Inzicht',items:[]};
+  function pushCur(){if(cur.items.length)sections.push(cur);}
+  lines.forEach(function(line){
+    if(!line)return;
+    var sm=line.match(/^(Conclusie|Waarom|Aanbeveling|Advies|Aandacht|Volgende stap)\s*:\s*(.*)$/i);
+    if(sm){
+      pushCur();
+      cur={title:sm[1],items:[]};
+      if(sm[2])cur.items.push({type:'text',text:sm[2]});
       return;
     }
-    lines=lines.map(function(l){return l.replace(/^#{1,6}\s+/,'');});
-    var text=lines.join('<br>');
-    var icon=paragraphIcon(lines.join(' '));
-    out.push('<p style="margin:0 0 10px;line-height:1.7;display:flex;gap:8px;align-items:flex-start"><span style="flex:0 0 auto;line-height:1.4">'+icon+'</span><span style="flex:1">'+text+'</span></p>');
+    var isList=/^([-*•]\s+|\d+[\)\.\-]\s+)/.test(line);
+    cur.items.push({type:isList?'list':'text',text:line.replace(/^([-*•]\s+|\d+[\)\.\-]\s+)/,'')});
+  });
+  pushCur();
+  if(!sections.length)return'<p class="ai-sec-text">'+inlineFmt(raw)+'</p>';
+  var out=sections.map(function(sec){
+    var body=[];
+    var buf=[];
+    function flushList(){
+      if(!buf.length)return;
+      body.push('<ul class="ai-sec-list">'+buf.map(function(it){return'<li>'+inlineFmt(it)+'</li>';}).join('')+'</ul>');
+      buf=[];
+    }
+    sec.items.forEach(function(it){
+      if(it.type==='list'){buf.push(it.text);return;}
+      flushList();
+      body.push('<p class="ai-sec-text">'+inlineFmt(it.text)+'</p>');
+    });
+    flushList();
+    return '<div class="ai-sec"><div class="ai-sec-title"><span>'+sectionIcon(sec.title)+'</span><span>'+inlineFmt(sec.title)+'</span></div>'+body.join('')+'</div>';
   });
   return out.join('');
 }
@@ -777,6 +815,20 @@ function formatAiCard(txt){
   var inner=formatAiRichText(txt);
   if(!inner)return'';
   return '<div class="ai-rich-card">'+inner+'</div>';
+}
+function cleanCompareAiText(txt){
+  var s=String(txt==null?'':txt);
+  var lines=s.split('\n');
+  lines=lines.filter(function(line){
+    var l=String(line||'').trim();
+    if(!l)return false;
+    if(/^\|.*\|$/.test(l))return false;
+    if(/^[-=]{3,}$/.test(l))return false;
+    if(/^(eigenschap|score|confidence).*(\||\d+%)/i.test(l))return false;
+    if(/(communicatie|humor|openheid|vertrouwen|avontuur|directheid|onafhankelijkheid|stabiliteit).*(\||\d+%)/i.test(l))return false;
+    return true;
+  });
+  return lines.join('\n');
 }
 
 function toBase64FromBlob(blob){
@@ -1953,6 +2005,55 @@ function getDossierLifecycle(name){
   if(v!=='active'&&v!=='on_hold'&&v!=='closed')return'active';
   return v;
 }
+function getUsageMode(){
+  var v=localStorage.getItem('ds_usage_mode')||'multi';
+  return v==='single'?'single':'multi';
+}
+function setUsageMode(mode){
+  var m=mode==='single'?'single':'multi';
+  localStorage.setItem('ds_usage_mode',m);
+  S.usageMode=m;
+}
+function getFocusDossier(){
+  return localStorage.getItem('ds_focus_dossier')||'';
+}
+function setFocusDossier(name){
+  if(!name){
+    localStorage.removeItem('ds_focus_dossier');
+    S.focusDossier='';
+    return;
+  }
+  localStorage.setItem('ds_focus_dossier',name);
+  S.focusDossier=name;
+}
+async function activateRelationshipFocus(name,autoHold){
+  if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  if(autoHold){
+    var targets=(S.profiles||[]).filter(function(p){
+      return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
+    });
+    if(targets.length){
+      var ok=confirm(
+        'Relatie-focus op '+dn(name)+' activeren?\n\n'
+        +'- '+targets.length+' ander(e) actief(e) dossier(s) gaan op on hold\n'
+        +'- Je kan ze later altijd heropenen'
+      );
+      if(!ok)return;
+    }
+    setUsageMode('single');
+    setFocusDossier(name);
+    for(var i=0;i<targets.length;i++){
+      await setDossierLifecycle(targets[i],'on_hold');
+    }
+    if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' dossier(s) op on hold');
+    else toast('🎯 Relatie-focus op '+dn(name));
+  }else{
+    setUsageMode('single');
+    setFocusDossier(name);
+    toast('🎯 Relatie-focus op '+dn(name));
+  }
+  goScreen('senses');
+}
 
 function getActiveContactNames(){
   return(S.profiles||[]).filter(function(p){
@@ -2244,6 +2345,8 @@ function rHome(el){
   // Ingelogd → clean home
   var cs=getActiveContactNames();
   var firstName=S.user.user_metadata?.first_name||S.user.email?.split('@')[0]||'';
+  var usageMode=getUsageMode();
+  var focusName=getFocusDossier();
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
   var notes=[];
@@ -2328,6 +2431,10 @@ function rHome(el){
   <div style="font-size:15px;color:var(--m);margin-bottom:20px;font-weight:500">
     ${firstName?'Hoi <strong style="color:var(--t)">'+firstName+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
   </div>
+  ${usageMode==='single'
+    ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 14px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus modus</span></div><p class="ai-sec-text">DateSense werkt nu ook als relatievolger voor 1 persoon'+(focusName?(' · focus op <strong>'+dn(focusName)+'</strong>'):'')+'. Je kan altijd terugschakelen naar meerdere dossiers in Instellingen.</p></div></div>'
+    :''
+  }
 
   <!-- Grote microfoon knop -->
   <button class="mic-btn" onclick="goScreen('vertel')" style="margin:0 0 18px">
@@ -2443,6 +2550,8 @@ function rSenses(el){
   var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
   var cs=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
   var archived=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
+  var usageMode=getUsageMode();
+  var focusName=getFocusDossier();
   if(typeof S.compareMode!=='boolean')S.compareMode=false;
   if(!Array.isArray(S.compareDraft))S.compareDraft=[];
   S.compareDraft=S.compareDraft.filter(function(n){return cs.indexOf(n)>=0;}).slice(0,3);
@@ -2453,13 +2562,19 @@ function rSenses(el){
   <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
 </div>`;
+  if(usageMode==='single'){
+    h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. DateSense volgt nu je relatie met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
+  }
   if(cs.length){
     h+='<div class="sh">Contacten</div>';
     h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-6px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
     if(allContacts.length>=2){
       h+='<div style="margin:-2px 0 10px">'
-        +'<button class="btn-r" style="max-width:240px;padding:9px 14px;font-size:13px;font-weight:800;box-shadow:0 6px 16px rgba(174,0,0,.22)" onclick="toggleCompareMode()">'+(S.compareMode?'✕ Vergelijking sluiten':'⚖️ Vergelijk dossiers')+'</button>'
-        +'<div style="font-size:11px;color:#8a8f97;margin-top:6px">Selecteer 2 tot 3 dossiers (max 3) om ze naast elkaar te vergelijken.</div>'
+        +'<button class="'+(usageMode==='single'?'coach-save-other':'btn-r')+'" style="'+(usageMode==='single'?'':'max-width:240px;padding:9px 14px;font-size:13px;font-weight:800;box-shadow:0 6px 16px rgba(174,0,0,.22)')+'" onclick="toggleCompareMode()">'+(S.compareMode?'✕ Vergelijking sluiten':'⚖️ Vergelijk dossiers')+'</button>'
+        +'<div style="font-size:11px;color:#8a8f97;margin-top:6px">'+(usageMode==='single'
+          ?'Optioneel: gebruik vergelijken enkel wanneer je bewust tussen dossiers wil checken.'
+          :'Selecteer 2 tot 3 dossiers (max 3) om ze naast elkaar te vergelijken.')
+        +'</div>'
         +'</div>';
     }
     cs.forEach((p,i)=>{
@@ -2475,6 +2590,7 @@ function rSenses(el){
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span> <span style="font-size:10px;font-weight:700;color:#1B5E20;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:999px;padding:2px 6px">Actief ✓</span></div>
         </div>
         <div style="display:flex;gap:6px">
+          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();activateRelationshipFocus('${p}',true)">🎯 Focus</button>
           <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
           <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
           <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
@@ -2890,19 +3006,20 @@ async function loadTab(name,tab,d){
         var rfl=rfs>=65?'Hoog waakzaam':'Aandacht nodig';
         if(rfs<35)rfl='Lager risico';
         var reasons=(rf.reasons||[]).slice(0,3);
-        html+='<div style="background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px 14px;margin:0 0 14px;box-shadow:0 2px 10px rgba(0,0,0,.04)">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:800;color:#333">🚩 Red Flags</span><span style="font-size:18px;font-weight:800;color:'+rfc+'">'+rfs+'%</span></div>';
+        html+='<div class="ai-rich-card" style="margin:0 0 14px">';
+        html+='<div class="ai-sec"><div class="ai-sec-title"><span>🚩</span><span>Red flags</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:800;color:#333">Score</span><span style="font-size:18px;font-weight:800;color:'+rfc+'">'+rfs+'%</span></div>';
         html+='<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+rfs+'%;background:'+rfc+'"></div></div>';
         html+='<div style="font-size:12px;color:'+rfc+';font-weight:700;margin-top:6px">'+rfl+'</div>';
         if(reasons.length){
-          html+='<div style="margin-top:8px">';
+          html+='<ul class="ai-sec-list" style="margin-top:8px">';
           reasons.forEach(function(rr){
-            html+='<div style="font-size:12px;color:#555;line-height:1.5;margin-top:3px">• '+escHTML(rr)+'</div>';
+            html+='<li>'+escHTML(rr)+'</li>';
           });
-          html+='</div>';
+          html+='</ul>';
         }
-        html+='<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen).</div>';
-        html+='</div>';
+        html+='<p class="ai-sec-text" style="font-size:11px;color:#8a8f97">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen).</p>';
+        html+='</div></div>';
       }else{
         html+='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:14px;padding:14px 14px;margin:0 0 14px">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
@@ -3133,14 +3250,15 @@ async function loadTab(name,tab,d){
         var rowsTxt=br?br.rows.map(function(r){
           return '<div style="display:flex;justify-content:space-between;font-size:11px;color:#6a6f77;margin-top:3px"><span>'+r.label+'</span><span>jij '+r.a+'% · ander '+r.b+'% ('+diffWord(r.diff)+')</span></div>';
         }).join(''):'';
-        html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px">'
+        html+='<div class="ai-rich-card">'
+          +'<div class="ai-sec"><div class="ai-sec-title"><span>📷</span><span>Photo match</span></div>'
           +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#333;font-weight:700">Photo match</span><span style="font-size:18px;font-weight:800;color:'+mc+'">'+pm+'%</span></div>'
           +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+pm+'%;background:'+mc+'"></div></div>'
-          +'<div style="font-size:12px;color:#666;line-height:1.5;margin-top:8px">Indicatieve visuele match op basis van openheid, glimlach, energie, verzorging en benaderbaarheid.</div>'
+          +'<p class="ai-sec-text" style="font-size:12px;color:#666">Indicatieve visuele match op basis van openheid, glimlach, energie, verzorging en benaderbaarheid.</p>'
           +(br?'<div style="font-size:12px;color:#555;line-height:1.5;margin-top:8px"><strong>Meest gelijkaardig:</strong> '+bestTxt+'<br><strong>Meeste visuele afstand:</strong> '+worstTxt+'</div>':'')
           +(rowsTxt?'<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e3e6eb">'+rowsTxt+'</div>':'')
-          +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:4px">Dit is enkel een visuele vergelijking op foto-indruk. Red flags worden apart bepaald uit gedrag, context en persoonlijkheidsanalyse.</div>'
-          +'</div>';
+          +'<p class="ai-sec-text" style="font-size:11px;color:#8a8f97">Dit is enkel een visuele vergelijking op foto-indruk. Red flags worden apart bepaald uit gedrag, context en persoonlijkheidsanalyse.</p>'
+          +'</div></div>';
       } else {
         html+='<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:13px">'
           +'<strong>⚠️ Geen photo match beschikbaar</strong><br>'
@@ -3926,6 +4044,10 @@ function renderSettingsTile(icon,title,sub,action){
 }
 
 function rSettings(el){
+  var usageMode=getUsageMode();
+  var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+  var focusName=getFocusDossier();
+  if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
   var extraHtml=''
     +renderSettingsTile('⚙️','Instellingen','Algemene voorkeuren','settings-placeholder')
     +renderSettingsTile('💳','Abonnement','Plan en facturatie','subscription-placeholder')
@@ -3948,6 +4070,19 @@ function rSettings(el){
   <option value="eerlijk" ${S.adviceTone==='eerlijk'?'selected':''}>Eerlijk</option>
   <option value="streng" ${S.adviceTone==='streng'?'selected':''}>Streng</option>
 </select>
+<div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
+<select class="form-input" id="usageModeField">
+  <option value="multi" ${usageMode==='multi'?'selected':''}>Meerdere dossiers opvolgen</option>
+  <option value="single" ${usageMode==='single'?'selected':''}>Relatie-focus (1 dossier)</option>
+</select>
+<div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
+  <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
+  <select class="form-input" id="focusDossierField">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(true)">Focus + zet andere op on hold</button>
+    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(false)">Alleen focus instellen</button>
+  </div>
+</div>
 <button class="form-btn" onclick="saveSettings()">Opslaan instellingen</button>
 ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-radius:12px;font-size:15px;color:#2E7D32">✅ API key actief!</div>':''}
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
@@ -3959,6 +4094,13 @@ ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-r
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Extra's</div>
   <div class="g2">${extraHtml}</div>
 </div></div>`;
+  var usageEl=document.getElementById('usageModeField');
+  if(usageEl){
+    usageEl.onchange=function(){
+      var box=document.getElementById('focusConfigBox');
+      if(box)box.style.display=(usageEl.value==='single')?'':'none';
+    };
+  }
 }
 
 async function exportAllData(){
@@ -4022,19 +4164,34 @@ function settingsAction(action){
   toast('Binnenkort beschikbaar');
 }
 
-function saveSettings(){
+async function saveSettings(){
   var kEl=document.getElementById('akField');
   var tEl=document.getElementById('adviceToneField');
   var k=kEl?kEl.value.trim():'';
   var t=tEl?tEl.value:'eerlijk';
+  var usageEl=document.getElementById('usageModeField');
+  var usage=usageEl?usageEl.value:'multi';
   if(k){
     S.apiKey=k;
     localStorage.setItem('ds_ak',k);
   }
   S.adviceTone=(t==='zacht'||t==='streng')?t:'eerlijk';
   localStorage.setItem('ds_advice_tone',S.adviceTone);
+  setUsageMode(usage);
+  if(usage!=='single')setFocusDossier('');
+  if(usage==='single'){
+    var fd=document.getElementById('focusDossierField');
+    var fName=fd?fd.value:'';
+    if(fName)setFocusDossier(fName);
+  }
   toast('✅ Instellingen opgeslagen');
   goScreen('home');
+}
+async function activateRelationshipFocusFromSettings(autoHold){
+  var fd=document.getElementById('focusDossierField');
+  var name=fd?fd.value:'';
+  if(!name){toast('Kies eerst een dossier');return;}
+  await activateRelationshipFocus(name,!!autoHold);
 }
 
 // ══ Compare ══════════════════════════════════════════════════════
@@ -4201,10 +4358,14 @@ async function cmpAdviesCurrent(){
       };
     });
     var sys='Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. '
-      +'Geef 1 duidelijke conclusie met WAAROM (welke eigenschappen trekken omhoog/omlaag), '
-      +'en eindig met een korte aanbeveling. Max 6 zinnen. Nederlands.';
+      +'Schrijf ALLEEN in duidelijke, menselijke taal. '
+      +'Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. '
+      +'Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er alleen kort naar. '
+      +'Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). '
+      +'Max 6 zinnen totaal. Nederlands.';
     var user='Data:\n'+JSON.stringify(payload);
     var t=await callAPI(sys,[{role:'user',content:user}],700);
+    t=cleanCompareAiText(t);
     if(box){
       box.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI CONCLUSIE MET WAAROM</div>'
         +'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(t)+'</div>'
