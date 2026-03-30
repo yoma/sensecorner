@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-27-1 11:15">
+<meta name="ds-build" content="v2026-03-27-1 11:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2156,6 +2156,41 @@ async function loadTab(name,tab,d){
       html+='💡 <strong>Vul je profiel aan</strong> via <strong>Profielgegevens</strong> en <strong>Vertel</strong> om je eigenschappen automatisch te verfijnen.';
       html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="openProfileModal(\'OWN Sense\')">→ Profielgegevens</button></div>';
       html+='</div>';
+      var ownFilled=OWN_CATS.reduce(function(sum,cat){
+        var catData=cats[cat.id]||{};
+        var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+        return sum+filled;
+      },0);
+      var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
+      html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
+      html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
+      html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
+      html+='<span style="font-size:13px;color:#555">'+ownFilled+'/'+ownTotal+' vragen beantwoord</span>';
+      html+='</div>';
+      OWN_CATS.forEach(function(cat){
+        var catData=cats[cat.id]||{};
+        var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+        var isFilled=filled>0;
+        html+='<div class="own-cat '+(isFilled?'filled':'')+'" id="oc-'+cat.id+'">';
+        html+='<div class="own-cat-head" onclick="toggleCat(\''+cat.id+'\')">';
+        html+='<div class="own-cat-icon">'+cat.icon+'</div>';
+        html+='<div class="own-cat-info">';
+        html+='<div class="own-cat-title">'+cat.title+'</div>';
+        html+='<div class="own-cat-prog '+(filled===cat.prompts.length?'done':'')+'">'+filled+'/'+cat.prompts.length+' vragen beantwoord'+(filled===cat.prompts.length?' ✓':'')+'</div>';
+        html+='</div>';
+        html+='<div class="own-cat-arrow">›</div>';
+        html+='</div>';
+        html+='<div class="own-cat-body">';
+        cat.prompts.forEach(function(p,i){
+          var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          html+='<div class="own-q-label">'+p.q+'</div>';
+          html+='<textarea class="own-ta" id="oc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" data-catid="'+cat.id+'" data-type="own" oninput="autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')">'+saved+'</textarea>';
+          html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
+        });
+        html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
+        html+='<div id="own-voorstel-'+cat.id+'"></div>';
+        html+='</div></div>';
+      });
     }
 
     // Contact: invulcategorieën
@@ -2423,6 +2458,11 @@ async function loadTab(name,tab,d){
   else if(tab==='advies'){
     if(!S.adviesCache)S.adviesCache={};
     var cache=S.adviesCache[name];
+    var persisted=((d.meta||{}).last_advice)||null;
+    if(!cache&&persisted&&persisted.html){
+      cache={html:String(persisted.html||''),ts:String(persisted.ts||''),count:parseInt(persisted.count||0,10)||0,acties:String(persisted.acties||'')};
+      S.adviesCache[name]=cache;
+    }
     var currentCount=d.count||0;
     var hasNewData=!cache||cache.count!==currentCount;
 
@@ -2524,7 +2564,10 @@ async function genAdvies(name,forced){
   if(ctx)userContent+='\nRecente berichten:\n'+ctx;
   try{
     var t=await callAPI(sys,[{role:'user',content:userContent}],700);
-    var ts=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    var nowTs=new Date();
+    var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    var tsTime=nowTs.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    var ts='Gegenereerd op '+tsDate+' om '+tsTime;
     var redMatch=t.match(/REDFLAGS:([^\n]+)/i);
     var actMatch=t.match(/ACTIES:([\s\S]*)/i);
     var adviesTxt=t
@@ -2557,6 +2600,7 @@ async function genAdvies(name,forced){
 
     // Render aanbevolen acties
     var actiesContainer=document.getElementById('actiesContainer');
+    var actiesHtmlForCache='';
     if(actiesTxt&&actiesContainer){
       var acties=actiesTxt.split('|').map(function(a){return a.trim().split(';');}).filter(function(a){return a.length>=3;});
       if(acties.length){
@@ -2572,6 +2616,7 @@ async function genAdvies(name,forced){
         });
         actiesHtml+='</div></div>';
         actiesContainer.innerHTML=actiesHtml;
+        actiesHtmlForCache=actiesHtml;
         // Cache acties ook
         if(!S.adviesCache)S.adviesCache={};
         if(S.adviesCache[name])S.adviesCache[name].acties=actiesHtml;
@@ -2580,11 +2625,16 @@ async function genAdvies(name,forced){
     // Cache opslaan met count en timestamp
     if(!S.adviesCache)S.adviesCache={};
     var d2=S.pdata[name]||{count:0};
-    S.adviesCache[name]={html:(redHtml+result),ts:'Gegenereerd om '+ts,count:d2.count||0};
+    S.adviesCache[name]={html:(redHtml+result),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||((S.adviesCache[name]&&S.adviesCache[name].acties)||'')};
+    // Bewaar laatste advies ook in profiel-meta zodat het blijft na herladen
+    d.meta=d.meta||{};
+    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,updated_at:new Date().toISOString()};
+    S.pdata[name]=d;
+    try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
     var footer=document.querySelector('#adviesBox [style*="border-top"]');
     if(footer){
-      footer.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: Gegenereerd om '+ts+'</span>'
+      footer.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: '+ts+'</span>'
         +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↻ Update uw advies</button>';
       var rb2=document.getElementById('advRefreshBtn');
       if(rb2){(function(n){rb2.onclick=function(){genAdvies(n,true);};})(name);}
@@ -2595,7 +2645,7 @@ async function genAdvies(name,forced){
       if(bodyDiv){
         var f=document.createElement('div');
         f.style.cssText='margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between';
-        f.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: Gegenereerd om '+ts+'</span>'
+        f.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: '+ts+'</span>'
           +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↻ Update uw advies</button>';
         bodyDiv.appendChild(f);
         var rb3=document.getElementById('advRefreshBtn');
