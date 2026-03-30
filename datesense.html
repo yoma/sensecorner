@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:11">
+<meta name="ds-build" content="v2026-03-30-1 15:26">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -259,6 +259,11 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .actie-emoji{font-size:20px;flex-shrink:0;margin-top:1px}
 .actie-titel{font-size:14px;font-weight:700;color:var(--t);margin-bottom:3px}
 .actie-sub{font-size:13px;color:#666;line-height:1.5}
+.actie-item.done{opacity:.72;border-left-color:#9E9E9E;background:#F7F7F7}
+.actie-item.done .actie-titel{text-decoration:line-through;color:#666}
+.actie-item.done .actie-sub{color:#8a8f97}
+.actie-done-btn{margin-top:8px;padding:6px 10px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.actie-item.done .actie-done-btn{background:#E8F5E9;border-color:#C8E6C9;color:#1B5E20}
 
 /* ══ AI VOORSTEL OWN ══ */
 .ai-voorstel{background:var(--rl);border-left:4px solid var(--r);border-radius:0 10px 10px 0;padding:12px 14px;margin:12px 0;font-size:14px;color:#333;line-height:1.6}
@@ -2048,6 +2053,95 @@ function buildCoachTasks(){
 }
 function prioWeight(p){return p==='high'?3:(p==='medium'?2:1);}
 
+function getAdviesDoneMap(name){
+  var d=S.pdata[name]||{};
+  var la=((d.meta||{}).last_advice)||{};
+  return (la.action_done&&typeof la.action_done==='object')?la.action_done:{};
+}
+function renderActiesHtml(name,acties){
+  var doneMap=getAdviesDoneMap(name);
+  var total=acties.length;
+  var doneCount=acties.reduce(function(sum,_a,idx){return sum+(doneMap[idx]?1:0);},0);
+  var html='<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--b)">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:10px">AANBEVOLEN ACTIES</div>'
+    +'<div id="actieProgress" style="font-size:12px;color:#6f7680;margin:-4px 0 8px">'+doneCount+'/'+total+' afgewerkt</div>'
+    +'<div class="acties-box">';
+  acties.forEach(function(a,idx){
+    var done=!!doneMap[idx];
+    html+='<div class="actie-item '+(done?'done':'')+'" data-actie-idx="'+idx+'">'
+      +'<div class="actie-emoji">'+a[0]+'</div>'
+      +'<div><div class="actie-titel">'+a[1]+'</div>'
+      +'<div class="actie-sub">'+a[2]+'</div>'
+      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button></div>'
+      +'</div>';
+  });
+  html+='</div></div>';
+  return html;
+}
+function hydrateActieItems(name){
+  var cont=document.getElementById('actiesContainer');
+  if(!cont)return;
+  var items=cont.querySelectorAll('.actie-item');
+  items.forEach(function(el,idx){
+    if(!el.hasAttribute('data-actie-idx'))el.setAttribute('data-actie-idx',String(idx));
+    var btn=el.querySelector('.actie-done-btn');
+    if(!btn){
+      var wrap=el.querySelector('div:nth-child(2)')||el;
+      var b=document.createElement('button');
+      b.className='actie-done-btn';
+      b.textContent='Markeer als afgewerkt';
+      b.onclick=function(){toggleAdviesActie(name,idx);};
+      wrap.appendChild(b);
+    }
+  });
+  applyAdviesDoneUI(name);
+}
+function applyAdviesDoneUI(name){
+  var cont=document.getElementById('actiesContainer');
+  if(!cont)return;
+  var doneMap=getAdviesDoneMap(name);
+  var total=0,doneCount=0;
+  cont.querySelectorAll('.actie-item').forEach(function(el,idx){
+    total++;
+    var done=!!doneMap[idx];
+    if(done)doneCount++;
+    el.classList.toggle('done',done);
+    var btn=el.querySelector('.actie-done-btn');
+    if(btn)btn.textContent=done?'✓ Afgewerkt':'Markeer als afgewerkt';
+  });
+  var p=document.getElementById('actieProgress');
+  if(p)p.textContent=doneCount+'/'+total+' afgewerkt';
+}
+async function persistAdviesState(name){
+  if(!name||!S.user)return;
+  var cont=document.getElementById('actiesContainer');
+  var actiesHtml=cont?cont.innerHTML:'';
+  if(!S.adviesCache)S.adviesCache={};
+  if(!S.adviesCache[name])S.adviesCache[name]={html:'',ts:'',count:0,acties:''};
+  S.adviesCache[name].acties=actiesHtml;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  d.meta.last_advice=d.meta.last_advice||{};
+  d.meta.last_advice.html=S.adviesCache[name].html||d.meta.last_advice.html||'';
+  d.meta.last_advice.ts=S.adviesCache[name].ts||d.meta.last_advice.ts||'';
+  d.meta.last_advice.count=S.adviesCache[name].count||d.meta.last_advice.count||0;
+  d.meta.last_advice.acties=actiesHtml;
+  d.meta.last_advice.updated_at=new Date().toISOString();
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+async function toggleAdviesActie(name,idx){
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  d.meta.last_advice=d.meta.last_advice||{};
+  var map=(d.meta.last_advice.action_done&&typeof d.meta.last_advice.action_done==='object')?d.meta.last_advice.action_done:{};
+  map[idx]=!map[idx];
+  d.meta.last_advice.action_done=map;
+  S.pdata[name]=d;
+  applyAdviesDoneUI(name);
+  await persistAdviesState(name);
+}
+
 // ══ Home ═════════════════════════════════════════════════════════
 function rHome(el){
   // Niet ingelogd → simpele landing
@@ -2955,6 +3049,7 @@ async function loadTab(name,tab,d){
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
+    hydrateActieItems(name);
 
     // Genereer enkel automatisch als er nog geen advies bestaat.
     // Bij nieuwe data blijft het laatste advies staan tot gebruiker op update klikt.
@@ -3052,22 +3147,12 @@ async function genAdvies(name,forced){
     if(actiesTxt&&actiesContainer){
       var acties=actiesTxt.split('|').map(function(a){return a.trim().split(';');}).filter(function(a){return a.length>=3;});
       if(acties.length){
-        var actiesHtml='<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--b)">'
-          +'<div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:10px">AANBEVOLEN ACTIES</div>'
-          +'<div class="acties-box">';
-        acties.forEach(function(a){
-          actiesHtml+='<div class="actie-item">'
-            +'<div class="actie-emoji">'+a[0]+'</div>'
-            +'<div><div class="actie-titel">'+a[1]+'</div>'
-            +'<div class="actie-sub">'+a[2]+'</div></div>'
-            +'</div>';
-        });
-        actiesHtml+='</div></div>';
+        var actiesHtml=renderActiesHtml(name,acties);
         actiesContainer.innerHTML=actiesHtml;
-        actiesHtmlForCache=actiesHtml;
+        actiesHtmlForCache=actiesContainer.innerHTML;
         // Cache acties ook
         if(!S.adviesCache)S.adviesCache={};
-        if(S.adviesCache[name])S.adviesCache[name].acties=actiesHtml;
+        if(S.adviesCache[name])S.adviesCache[name].acties=actiesHtmlForCache;
       }
     }
     // Cache opslaan met count en timestamp
@@ -3076,7 +3161,8 @@ async function genAdvies(name,forced){
     S.adviesCache[name]={html:(redHtml+result),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||((S.adviesCache[name]&&S.adviesCache[name].acties)||'')};
     // Bewaar laatste advies ook in profiel-meta zodat het blijft na herladen
     d.meta=d.meta||{};
-    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,updated_at:new Date().toISOString()};
+    var prevDone=((d.meta.last_advice||{}).action_done)||{};
+    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,action_done:prevDone,updated_at:new Date().toISOString()};
     S.pdata[name]=d;
     try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
