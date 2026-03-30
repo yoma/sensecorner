@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 13:07">
+<meta name="ds-build" content="v2026-03-30-1 13:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -414,7 +414,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Logobar -->
   <div class="logobar">
     <div class="av" id="ownAvatarWrap"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
-    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach</div></div>
+    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag" id="brandTag">Jouw persoonlijke dating coach</div></div>
   </div>
 
   <div class="sync-bar" id="syncBar"></div>
@@ -568,6 +568,19 @@ function setBuildTag(){
   if(!el)return;
   // Toon exact de statische build-info uit HTML (update-moment), niet pageload-tijd.
   el.innerHTML='Build<span class="bt-sub">'+APP_BUILD_LABEL+'</span>';
+}
+
+function renderBrandTag(){
+  var el=document.getElementById('brandTag');
+  if(!el)return;
+  if(!S.user){
+    el.textContent='Jouw persoonlijke dating coach';
+    return;
+  }
+  var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
+  var email=(S.user&&S.user.email)||'';
+  var name=(first&&String(first).trim())||((email&&email.split('@')[0])||'Jij');
+  el.innerHTML='Jouw persoonlijke dating coach · <strong>'+escHTML(name)+'</strong> · <span style="text-decoration:underline;cursor:pointer" onclick="doSignOut()">Afmelden</span>';
 }
 
 // Eigenschappen — STARTEN OP 0 (geen hardcoded waarden!)
@@ -1541,6 +1554,7 @@ function goScreen(sc){
   if(screens[sc])screens[sc](mc);
   mc.scrollTop=0;
   renderOwnAvatar();
+  renderBrandTag();
   if(S.user)rDrawer();
 
   // Hide bottom-nav actions when not logged in
@@ -3171,6 +3185,18 @@ function rImport(el){
 }
 
 function rSettings(el){
+  var extraTiles=[
+    ['⚙️','Instellingen','Algemene voorkeuren','settings-placeholder'],
+    ['💳','Abonnement','Plan en facturatie','subscription-placeholder'],
+    ['🔔','Meldingen','Notificaties beheren','notifications-placeholder'],
+    ['💬','Feedback','Stuur je suggestie','feedback-placeholder'],
+    ['🛟','Help & Support','Hulp en contact','support-placeholder'],
+    ['🔒','Privacy','Data en rechten','privacy-placeholder'],
+    ['📘','Over DateSense','Info over de app','about'],
+    ['❓','FAQ\\'s','Veelgestelde vragen','faq'],
+    ['📦','Export data','Download je gegevens','export'],
+    ['👤','Mijn gegevens','Profielgegevens openen','my-data']
+  ];
   el.innerHTML=`<div style="padding:32px 20px">
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
@@ -3187,7 +3213,61 @@ ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-r
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
   <p style="font-size:15px;color:#666;margin-bottom:14px">Ingelogd als: <strong>${S.user?S.user.email:''}</strong></p>
   <button class="form-btn sec" onclick="doSignOut()">Uitloggen</button>
+</div>
+<div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
+  <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Extra's</div>
+  <div class="g2">
+    ${extraTiles.map(function(x){
+      return '<button class="btn-g" style="padding:12px 10px;text-align:left;display:flex;align-items:flex-start;gap:8px;line-height:1.25" onclick="settingsAction(\\''+x[3]+'\\')">'
+        +'<span style="font-size:16px;line-height:1.1;min-width:18px">'+x[0]+'</span>'
+        +'<span style="display:block;min-width:0">'
+        +'<span style="display:block;font-weight:700;color:#333;font-size:13px">'+x[1]+'</span>'
+        +'<span style="display:block;color:#8a8f97;font-size:11px;margin-top:2px">'+x[2]+'</span>'
+        +'</span></button>';
+    }).join('')}
+  </div>
 </div></div>`;
+}
+
+async function exportAllData(){
+  if(!S.user){toast('Log eerst in');return;}
+  try{
+    var profiles=JSON.parse(JSON.stringify(S.pdata||{}));
+    var msgsRes=await sb.from('sense_messages').select('*').eq('user_id',S.user.id).order('created_at',{ascending:true});
+    if(msgsRes.error)throw msgsRes.error;
+    var payload={
+      exported_at:new Date().toISOString(),
+      user:{id:S.user.id,email:S.user.email||''},
+      profiles:profiles,
+      messages:msgsRes.data||[]
+    };
+    var txt=JSON.stringify(payload,null,2);
+    var blob=new Blob([txt],{type:'application/json;charset=utf-8'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='datesense_export_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    toast('✅ Export gedownload');
+  }catch(e){
+    toast('Export mislukt. Probeer opnieuw.');
+  }
+}
+
+function settingsAction(action){
+  if(action==='my-data'){openProfileModal('OWN Sense');return;}
+  if(action==='export'){exportAllData();return;}
+  if(action==='about'){
+    alert('Over DateSense\\n\\nDateSense helpt je inzichten krijgen in jezelf en je contacten op basis van profielinput, context en advies.\\n\\nVersie: '+APP_BUILD_LABEL);
+    return;
+  }
+  if(action==='faq'){
+    alert('FAQ\\n\\n1) Waar staan mijn gegevens?\\nIn je eigen Supabase account (per gebruiker).\\n\\n2) Waarom soms geen advies?\\nControleer API key en voeg voldoende context toe.\\n\\n3) Kan ik data exporteren?\\nJa, via Extra\\'s > Export data.');
+    return;
+  }
+  toast('Binnenkort beschikbaar');
 }
 
 function saveSettings(){
