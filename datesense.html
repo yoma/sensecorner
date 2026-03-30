@@ -158,6 +158,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 /* Forms */
 .form-input{width:100%;padding:15px 18px;border:1.5px solid var(--b);border-radius:var(--rad-md);font-size:var(--fs-md);font-family:inherit;outline:none;color:var(--t);margin-bottom:14px;background:#fff}
 .form-input:focus{border-color:var(--r)}
+.pw-input-wrap{position:relative;width:100%;margin-bottom:14px}
+.pw-input-wrap .form-input{margin-bottom:0;padding-right:54px}
+.pw-eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:#999;padding:6px}
+.pw-eye-btn:hover{color:var(--r)}
 .form-btn{width:100%;padding:17px;background:var(--r);color:#fff;border:none;border-radius:var(--rad-md);font-size:var(--fs-md);font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px}
 .form-btn:active{opacity:.85}
 .form-btn.sec{background:var(--g);color:#333;border:1px solid var(--b)}
@@ -1256,13 +1260,24 @@ async function doLogin(){
   var e=document.getElementById('lEmail').value.trim(),p=document.getElementById('lPw').value,err=document.getElementById('lErr');
   if(!e||!p){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';return;}
   err.textContent='Even wachten...';err.style.color='#888';
+  var uiDone=false;
+  var uiTimer=setTimeout(function(){
+    if(uiDone)return;
+    uiDone=true;
+    err.style.color='var(--r)';
+    err.textContent='Inloggen time-out (10s). Probeer opnieuw.';
+  },10000);
   try{
     await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
       10000,
       'Inloggen time-out (10s). Probeer opnieuw.'
     );
+    uiDone=true;
+    clearTimeout(uiTimer);
   }catch(x){
+    uiDone=true;
+    clearTimeout(uiTimer);
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
     if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
@@ -1271,6 +1286,8 @@ async function doLogin(){
     else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';
     err.style.color='var(--r)';
     err.textContent=friendly;
+  }finally{
+    clearTimeout(uiTimer);
   }
 }
 
@@ -1662,7 +1679,7 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" style="flex:1" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="coach-save-other" style="font-size:12px;padding:10px 12px;white-space:nowrap" onclick="togglePwVis()">👁</button></div><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 
 // ══ Home ═════════════════════════════════════════════════════════
