@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 13:55">
+<meta name="ds-build" content="v2026-03-30-1 14:02">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -50,8 +50,16 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   box-shadow:0 6px 18px rgba(0,0,0,.06);
 }
 .build-tag-top .bt-sub{font-weight:800;color:var(--r);margin-left:6px}
-.build-tag-top .bt-user{display:block;margin-top:2px;font-size:10px;font-weight:600;color:#777}
-.build-tag-top .bt-logout{color:var(--r);text-decoration:underline;cursor:pointer}
+.build-user-top{
+  position:absolute;
+  top:calc(43px + var(--st));
+  left:14px;
+  z-index:220;
+  font-size:10px;
+  font-weight:600;
+  color:#777;
+}
+.build-user-top .bt-logout{color:var(--r);text-decoration:underline;cursor:pointer}
 
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
@@ -402,6 +410,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
   <!-- Build label linksboven (debug / versie zichtbaar) -->
   <div id="buildTagTop" class="build-tag-top"></div>
+  <div id="buildUserTop" class="build-user-top"></div>
 
   <!-- Topbar -->
   <div class="topbar">
@@ -567,16 +576,19 @@ const sb=(window.supabase&&window.supabase.createClient)?supabase.createClient(S
 
 function setBuildTag(){
   var el=document.getElementById('buildTagTop');
+  var userEl=document.getElementById('buildUserTop');
   if(!el)return;
   // Toon exact de statische build-info uit HTML (update-moment), niet pageload-tijd.
-  var html='Build<span class="bt-sub">'+APP_BUILD_LABEL+'</span>';
+  el.innerHTML='Build<span class="bt-sub">'+APP_BUILD_LABEL+'</span>';
+  if(!userEl)return;
   if(S.user){
     var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
     var email=(S.user&&S.user.email)||'';
     var name=(first&&String(first).trim())||((email&&email.split('@')[0])||'Jij');
-    html+='<span class="bt-user">'+escHTML(name)+' · <span class="bt-logout" onclick="doSignOut()">Afmelden</span></span>';
+    userEl.innerHTML=escHTML(name)+' · <span class="bt-logout" onclick="doSignOut()">Afmelden</span>';
+  }else{
+    userEl.innerHTML='';
   }
-  el.innerHTML=html;
 }
 
 function renderBrandTag(){
@@ -1191,12 +1203,43 @@ function timeAgo(iso){
   return Math.floor(d/86400)+' d geleden';
 }
 
+function fmtPropUpdate(iso){
+  if(!iso)return'Nog niet';
+  var dt=new Date(iso);
+  if(isNaN(dt.getTime()))return'Nog niet';
+  var day=String(dt.getDate()).padStart(2,'0');
+  var mon=String(dt.getMonth()+1).padStart(2,'0');
+  var hh=String(dt.getHours()).padStart(2,'0');
+  var mm=String(dt.getMinutes()).padStart(2,'0');
+  return day+'-'+mon+' '+hh+':'+mm;
+}
+
+function touchPropUpdates(meta,prevProps,nextProps){
+  var m=meta||{};
+  var pu=(m.prop_updates&&typeof m.prop_updates==='object')?m.prop_updates:{};
+  var changed=false;
+  var nowIso=new Date().toISOString();
+  PK.forEach(function(k){
+    var prev=(prevProps&&prevProps[k]!==undefined&&prevProps[k]!==null)?parseInt(prevProps[k],10):0;
+    var next=(nextProps&&nextProps[k]!==undefined&&nextProps[k]!==null)?parseInt(nextProps[k],10):0;
+    if(isNaN(prev))prev=0;
+    if(isNaN(next))next=0;
+    if(prev!==next){
+      pu[k]=nowIso;
+      changed=true;
+    }
+  });
+  if(changed)m.prop_updates=pu;
+  return m;
+}
+
 // Render eigenschappen (alleen als er data is)
 function renderProps(props,showSource,opt){
   var hasData=PK.some(k=>(props[k]||0)>0);
   var o=opt||{};
   var compact=o.compact!==false;
   var extras=Array.isArray(o.extra)?o.extra:[];
+  var propUpdates=(o.propUpdates&&typeof o.propUpdates==='object')?o.propUpdates:{};
   if(!hasData){
     return'<div class="prop-empty">'
       +'<div class="prop-empty-icon">📊</div>'
@@ -1216,8 +1259,10 @@ function renderProps(props,showSource,opt){
   }
   function renderPills(items){
     return'<div class="props-compact">'+items.map(function(it){
+      var upd=(it.k&&propUpdates[it.k])?fmtPropUpdate(propUpdates[it.k]):'';
       return'<div class="prop-pill">'
         +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
+        +(upd?'<div style="font-size:10px;color:#9a9a9a;margin-top:4px">Bijgewerkt '+upd+'</div>':'')
         +'</div>';
     }).join('')+'</div>';
   }
@@ -1245,10 +1290,12 @@ function renderProps(props,showSource,opt){
   var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
     var barColor=v===0?'var(--b)':'var(--r)';
+    var upd=(propUpdates&&propUpdates[k])?fmtPropUpdate(propUpdates[k]):'Nog niet';
     return'<div class="prop">'
       +'<div class="pn">'+PL[i]+'</div>'
       +'<div class="track"><div class="fill" style="width:'+v+'%;background:'+barColor+'"></div></div>'
       +'<div class="pct" style="color:'+(v===0?'#ccc':'var(--r)')+'">'+v+'%</div>'
+      +'<div style="font-size:10px;color:#9a9a9a;min-width:90px;text-align:right">Upd '+upd+'</div>'
       +'</div>';
   }).join('');
 
@@ -2189,7 +2236,7 @@ async function loadTab(name,tab,d){
       var pmX=computePhotoMatchPct(ownPaX,contactPaX);
       if(pmX!==null)extraMetrics.push({label:'Fotoanalyse',v:pmX});
     }
-    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{extra:extraMetrics})+'</div>';
+    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
 
     // OWN: reset knop + tip
     if(isOwnDossier){
@@ -2214,11 +2261,15 @@ async function loadTab(name,tab,d){
       html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
       html+='<span style="font-size:13px;color:#555">'+ownFilled+'/'+ownTotal+' vragen beantwoord</span>';
       html+='</div>';
+      var firstOpenSet=false;
       OWN_CATS.forEach(function(cat){
         var catData=cats[cat.id]||{};
         var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
         var isFilled=filled>0;
-        html+='<div class="own-cat open '+(isFilled?'filled':'')+'" id="oc-'+cat.id+'">';
+        var isComplete=(filled===cat.prompts.length);
+        var shouldOpen=!firstOpenSet&&!isComplete;
+        if(shouldOpen)firstOpenSet=true;
+        html+='<div class="own-cat '+(shouldOpen?'open ':'')+(isFilled?'filled':'')+'" id="oc-'+cat.id+'">';
         html+='<div class="own-cat-head" onclick="toggleCat(\''+cat.id+'\')">';
         html+='<div class="own-cat-icon">'+cat.icon+'</div>';
         html+='<div class="own-cat-info">';
@@ -2803,7 +2854,9 @@ async function herbereken(dosName,silent=true){
       propsEl.parentNode&&propsEl.parentNode.insertBefore(indDiv,propsEl.nextSibling);
     }
   }
-  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{}};
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  var prevProps={...d.props};
   var cats=d.categories||{};
 
   // Verzamel alle manuele invoer
@@ -2839,17 +2892,18 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
     // Altijd meest recente categories gebruiken uit memory
     d.categories=(S.pdata[dosName]&&S.pdata[dosName].categories)||d.categories||{};
     S.pdata[dosName]=d;
-    await saveP(dosName,d.props,d.count,d.categories);
+    d.meta=touchPropUpdates(d.meta,prevProps,d.props);
+    await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
     // Reset herbereken cache zodat volgende openen weet dat props up-to-date zijn
     if(!S.herberekenCache)S.herberekenCache={};
     S.herberekenCache[dosName]=d.count||0;
     // Update balkjes in-place
     var propsBarEl=document.getElementById('contact-props-bars-'+dosName);
     if(propsBarEl){
-      propsBarEl.innerHTML=renderProps(d.props);
+      propsBarEl.innerHTML=renderProps(d.props,true,{propUpdates:(d.meta&&d.meta.prop_updates)||{}});
     }
     var ownBarEl=document.getElementById('own-props-bars');
-    if(ownBarEl&&dosName==='OWN Sense')ownBarEl.innerHTML=renderProps(d.props);
+    if(ownBarEl&&dosName==='OWN Sense')ownBarEl.innerHTML=renderProps(d.props,true,{propUpdates:(d.meta&&d.meta.prop_updates)||{}});
     // Verwijder indicator en toon bevestiging
     var ind=document.getElementById('herb-ind-'+dosName);
     if(ind){
@@ -2908,7 +2962,7 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
 
 // ══ OWN Sense ═════════════════════════════════════════════════════
 function rOWN(el){
-  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{}};
+  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
   var cats=d.categories||{};
   var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
 
@@ -2938,7 +2992,7 @@ function rOWN(el){
 <div style="display:flex;justify-content:flex-end;margin:-8px 0 10px">
   <button class="coach-save-other" onclick="openProfileModal('OWN Sense')">Profielgegevens beheren</button>
 </div>
-<div id="own-props-bars" style="margin-bottom:20px">${renderProps(d.props)}</div>
+<div id="own-props-bars" style="margin-bottom:20px">${renderProps(d.props,true,{propUpdates:(d.meta&&d.meta.prop_updates)||{}})}</div>
 
 <!-- Profiel compleetheid -->
 <div style="background:var(--g);border-radius:12px;padding:14px 16px;margin-bottom:20px;border:1px solid var(--b)">
@@ -2955,11 +3009,16 @@ function rOWN(el){
 <!-- Categorieën -->
 <div class="sh">Vertel me meer over jezelf</div>
 <div id="ownCats">
-${OWN_CATS.map(cat=>{
+${(()=>{
+  var firstOpenDone=false;
+  return OWN_CATS.map(cat=>{
   var prog=catProgress(cat.id);
   var catData=cats[cat.id]||{};
   var isFilled=prog.filled>0;
-  return`<div class="own-cat ${isFilled?'filled':''}" id="oc-${cat.id}">
+  var isComplete=(prog.filled===prog.total);
+  var shouldOpen=!firstOpenDone&&!isComplete;
+  if(shouldOpen)firstOpenDone=true;
+  return`<div class="own-cat ${shouldOpen?'open ':''}${isFilled?'filled':''}" id="oc-${cat.id}">
   <div class="own-cat-head" onclick="toggleCat('${cat.id}')">
     <div class="own-cat-icon">${cat.icon}</div>
     <div class="own-cat-info">
@@ -2978,7 +3037,8 @@ ${OWN_CATS.map(cat=>{
     <div id="own-voorstel-${cat.id}"></div>
   </div>
 </div>`;
-}).join('')}
+}).join('');
+})()}
 </div>
 
 <div class="sh">Activiteit</div>
@@ -3074,8 +3134,10 @@ async function saveOwnCat(catId,silent){
   });
 
   // Sla antwoorden op in state en Supabase
-  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{}};
+  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
   if(!d.categories)d.categories={};
+  d.meta=d.meta||{};
+  var prevProps={...d.props};
   d.categories[catId]=answers;
 
   // Vraag AI om eigenschappen te updaten op basis van ALLE categorieën
@@ -3091,7 +3153,7 @@ async function saveOwnCat(catId,silent){
   // Als er niks ingevuld is, sla gewoon op zonder AI
   if(!allCatText.trim()){
     S.pdata['OWN Sense']=d;
-    await saveP('OWN Sense',d.props,d.count,d.categories);
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
     showAutoSaveIndicator(catId,true);
     return;
   }
@@ -3113,14 +3175,15 @@ async function saveOwnCat(catId,silent){
     console.error('saveOwnCat AI error:',x.message,x);
     // Sla toch op ook al mislukte AI
     S.pdata['OWN Sense']=d;
-    await saveP('OWN Sense',d.props,d.count,d.categories);
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
     showAutoSaveIndicator(catId,true);
     return;
   }
 
   d.count=(d.count||0);
+  d.meta=touchPropUpdates(d.meta,prevProps,d.props);
   S.pdata['OWN Sense']=d;
-  await saveP('OWN Sense',d.props,d.count,d.categories);
+  await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
 
   if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
   var savedEl=document.getElementById('oc-saved-'+catId);
@@ -3141,7 +3204,8 @@ async function saveOwnCat(catId,silent){
   // Update alleen de eigenschapsbalkjes in-place
   var propsEl=document.getElementById('own-props-bars');
   if(propsEl){
-    propsEl.innerHTML=renderProps(S.pdata['OWN Sense']?.props||{...DP});
+    var ownData=S.pdata['OWN Sense']||{props:{...DP},meta:{}};
+    propsEl.innerHTML=renderProps(ownData.props||{...DP},true,{propUpdates:(ownData.meta&&ownData.meta.prop_updates)||{}});
   }
 }
 
@@ -4021,7 +4085,9 @@ async function updateContactCategories(dosName,tekst){
 
 async function updateEigenschappenAI(dossier,tekst){
   if(!S.apiKey)return;
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
+  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{},meta:{}};
+  pd.meta=pd.meta||{};
+  var prevProps={...pd.props};
   var sys='Je bent DateSensei. Analyseer deze tekst en update de 9 eigenschappen ENKEL als de tekst daar aanleiding toe geeft.'
   +' Huidig: '+JSON.stringify(pd.props)+'.'
   +' Geef ENKEL geldig JSON (geen markdown): {"gevoeligheid":null,"openheid":null,"humor":null,"directheid":null,"avontuur":null,"stabiliteit":null,"vertrouwen":null,"communicatie":null,"onafhankelijkheid":null}'
@@ -4036,9 +4102,10 @@ async function updateEigenschappenAI(dossier,tekst){
         if(!isNaN(v))pd.props[k]=v;
       }
     });
-    await saveP(dossier,pd.props,pd.count,pd.categories);
+    pd.meta=touchPropUpdates(pd.meta,prevProps,pd.props);
+    await saveP(dossier,pd.props,pd.count,pd.categories,pd.summary,pd.meta);
   }catch(x){
-    await saveP(dossier,pd.props,pd.count,pd.categories);
+    await saveP(dossier,pd.props,pd.count,pd.categories,pd.summary,pd.meta);
   }
 }
 
