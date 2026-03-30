@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
+<!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
+<meta name="ds-build" content="v2026-03-27-1 11:15">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -556,7 +558,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
-const APP_BUILD='v2026-03-27-1';
+var _metaBuild=document.querySelector('meta[name="ds-build"]');
+const APP_BUILD=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
 const sb=supabase.createClient(SURL,SKEY);
 
 function setBuildTag(){
@@ -1319,11 +1322,15 @@ async function doLogin(){
   },5000);
 
   try{
-    await withTimeout(
+    var signRes=await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
       5000,
       'Inloggen time-out (5s). Probeer opnieuw.'
     );
+    // Supabase kan bij fout wachtwoord "error" returnen zonder throw.
+    if(signRes && signRes.error){
+      throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
+    }
     // Success: UI wordt via AUTH state change aangepast.
   }catch(x){
     if(token!==_loginAttemptId)return;
@@ -1515,6 +1522,11 @@ function goScreen(sc){
   // Protect screens when not authenticated
   if(!S.user && ['senses','own','vertel','compare','dossier'].includes(sc)){
     sc='login';
+  }
+  // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
+  if(sc==='own' && S.user){
+    viewDossier('OWN Sense');
+    return;
   }
   S.prev=S.screen;S.screen=sc;
   if(sc==='vertel'&&prevScreen!=='vertel'){
@@ -2425,12 +2437,12 @@ async function loadTab(name,tab,d){
     // Herstel ook acties uit cache
     var cachedActies=cache&&cache.acties||'';
     advHtml+='<div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
-    if(cache&&!hasNewData){
-      advHtml+=cache.html;
-    } else if(cache&&hasNewData){
-      advHtml+='<div style="font-size:13px;color:#aaa;margin-bottom:12px">↻ Nieuwe data beschikbaar — advies wordt bijgewerkt...</div>';
-      advHtml+='<div class="typing"><span></span><span></span><span></span></div>';
-    } else if(!cache&&currentCount===0){
+    if(cache){
+      if(hasNewData&&currentCount>0){
+        advHtml+='<div style="font-size:13px;color:#aaa;margin-bottom:12px">Update je advies — nieuwe info gevonden. Ik werk het nu bij...</div>';
+      }
+      advHtml+=(cache.html||'');
+    } else if(currentCount===0){
       advHtml+='<div style="text-align:center;padding:20px 0;color:var(--m)"><div style="font-size:32px;margin-bottom:10px">💬</div>Voeg eerst iets toe via <strong>Vertel</strong> of vul de invulvakjes in.</div>';
     } else {
       advHtml+='<div class="typing"><span></span><span></span><span></span></div>';
@@ -2465,8 +2477,16 @@ async function genAdvies(name,forced){
     if(box)box.innerHTML='<div style="text-align:center;padding:20px;color:var(--m)">⚠️ Voeg je API key toe via ⚙️ instellingen.</div>';
     return;
   }
+  var cache=S.adviesCache&&S.adviesCache[name];
+  var oldHtml=cache&&cache.html?cache.html:'';
   var box=document.getElementById('advTxt');
-  if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+  if(box){
+    if(!forced && oldHtml){
+      box.innerHTML='<div style="font-size:13px;color:#aaa;margin-bottom:12px">Update je advies — nieuwe info gevonden. Ik werk het nu bij...</div>'+oldHtml;
+    } else {
+      box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+    }
+  }
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{msgs=await loadMsgs(name);}catch(e){}
