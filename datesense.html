@@ -1248,9 +1248,34 @@ async function init(){
 
 async function doLogin(){
   var e=document.getElementById('lEmail').value.trim(),p=document.getElementById('lPw').value,err=document.getElementById('lErr');
+  if(!e||!p){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';return;}
   err.textContent='Even wachten...';err.style.color='#888';
-  try{await sb.auth.signInWithPassword({email:e,password:p});}
-  catch(x){err.style.color='var(--r)';err.textContent=x.message;}
+  try{
+    await sb.auth.signInWithPassword({email:e,password:p});
+  }catch(x){
+    var msg=(x&&x.message?String(x.message):'').toLowerCase();
+    var friendly='Inloggen mislukt. Probeer opnieuw.';
+    if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
+    else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';
+    else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';
+    err.style.color='var(--r)';
+    err.textContent=friendly;
+  }
+}
+
+async function forgotPassword(){
+  var emailEl=document.getElementById('lEmail');
+  var err=document.getElementById('lErr');
+  var email=(emailEl&&emailEl.value?emailEl.value.trim():'');
+  if(!email){if(err){err.style.color='var(--r)';err.textContent='Vul eerst je email in.';}return;}
+  if(err){err.style.color='#888';err.textContent='Reset mail versturen...';}
+  try{
+    var redirect=window.location.origin+window.location.pathname;
+    await sb.auth.resetPasswordForEmail(email,{redirectTo:redirect});
+    if(err){err.style.color='#2E7D32';err.textContent='Reset-link verzonden. Controleer je mailbox.';}
+  }catch(e){
+    if(err){err.style.color='var(--r)';err.textContent='Kon reset-mail niet versturen. Probeer opnieuw.';}
+  }
 }
 
 async function doRegister(){
@@ -1415,7 +1440,7 @@ function rDrawer(){
   var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Mijn Senses</div>
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
 <div class="dlbl">Persoonlijk</div>
-<div class="drow" onclick="viewDossier('OWN Sense')">
+<div class="drow" onclick="goScreen('own')">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense</div>
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
@@ -1613,7 +1638,7 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button class="form-btn" onclick="doLogin()">Inloggen</button><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 
 // ══ Home ═════════════════════════════════════════════════════════
@@ -1685,6 +1710,11 @@ function rHome(el){
     Vertel me wat je voelt of over je contacten.<br>
     Ik sorteer het automatisch naar het juiste dossier.
   </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px">
+    <button class="btn-g" style="max-width:150px;padding:10px 12px" onclick="goScreen('own')">OwnSense</button>
+    <button class="btn-g" style="max-width:150px;padding:10px 12px" onclick="goScreen('senses')">Mijn Senses</button>
+    <button class="btn-g" style="max-width:150px;padding:10px 12px;background:#FFF0F0;border-color:#FFD9D9;color:var(--r)" onclick="doSignOut()">Uitloggen</button>
+  </div>
 
   ${notesHtml}
 
@@ -1698,7 +1728,7 @@ function rSenses(el){
   var cs=S.profiles.filter(p=>p!=='OWN Sense');
   var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
-<div class="srow" onclick="viewDossier('OWN Sense')">
+<div class="srow" onclick="goScreen('own')">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
@@ -3242,20 +3272,22 @@ async function sendMsg(){
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
 
+  var coachNamesLine=buildContactNamesLine();
   var coachCtx=buildCoachContext();
-  if(coachCtx.length>1200)coachCtx=coachCtx.substring(0,1200);
+  if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
+  var coachCtxFinal=(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent DateSensei, de persoonlijke dating coach van de gebruiker.'
     +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
-    +' CONTEXT: '+coachCtx;
+    +' CONTEXT: '+coachCtxFinal;
 
 
 
   try{
     var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
-    if(dossierCtx&&dossierCtx.length>1200)dossierCtx=dossierCtx.substring(0,1200);
+    if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history,{role:'user',content:txtForAI}];
     var fullSys=sys+(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'');
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
@@ -3993,6 +4025,15 @@ function buildCoachContext(){
     });
   }
   return lines.join('\n');
+}
+
+function buildContactNamesLine(){
+  var contacts=S.profiles
+    .filter(function(p){return p!=='OWN Sense';})
+    .map(function(p){return dn(p);})
+    .filter(Boolean);
+  if(!contacts.length)return'';
+  return'CONTACTNAMEN: '+contacts.join(', ');
 }
 
 async function buildDossierContextForAI(dosName){
