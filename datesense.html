@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:58">
+<meta name="ds-build" content="v2026-03-30-1 17:07">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2066,6 +2066,23 @@ function quickSetUsageMode(mode){
   }
   goScreen('home');
 }
+function setHomeModeDraft(mode){
+  S.homeModeDraft=(mode==='single')?'single':'multi';
+  goScreen('home');
+}
+function activateDateModeFromHome(){
+  var wasSingle=getUsageMode()==='single';
+  setUsageMode('multi');
+  setFocusDossier('');
+  setFocusRelationType('');
+  S.homeModeDraft='multi';
+  if(wasSingle){
+    toast('💬 Date modus actief: je kan nu met meerdere dossiers werken. Oude dossiers kan je heropenen in Mijn Senses.');
+  }else{
+    toast('💬 Date modus is actief.');
+  }
+  goScreen('home');
+}
 async function applyFocusFromHome(autoHold){
   var sel=document.getElementById('homeFocusSelect');
   var n=sel?sel.value:'';
@@ -2073,6 +2090,7 @@ async function applyFocusFromHome(autoHold){
   var rt=rtEl?rtEl.value:'';
   if(!n){toast('Kies eerst een dossier');return;}
   setFocusRelationType(rt);
+  S.homeModeDraft='single';
   await activateRelationshipFocus(n,!!autoHold);
 }
 async function activateRelationshipFocus(name,autoHold){
@@ -2218,6 +2236,22 @@ async function updateDossierStageFromUI(name){
   var v=String(el.value||'virtueel');
   await setDossierStage(name,v);
   toast('Status: '+stageLabel(v));
+}
+async function updateDossierRelationTypeFromUI(name){
+  if(!name||name==='OWN Sense')return;
+  var el=document.getElementById('dosRelTypeSel');
+  if(!el)return;
+  var v=String(el.value||'').trim();
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  if(v)d.meta.relationship_type=v;
+  else delete d.meta.relationship_type;
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+  if(getUsageMode()==='single'&&getFocusDossier()===name){
+    setFocusRelationType(v);
+  }
+  toast(v?('Relatietype: '+v):'Relatietype gewist');
 }
 
 function buildCoachTasks(){
@@ -2395,6 +2429,7 @@ function rHome(el){
   var cs=getActiveContactNames();
   var firstName=S.user.user_metadata?.first_name||S.user.email?.split('@')[0]||'';
   var usageMode=getUsageMode();
+  var modeDraft=(S.homeModeDraft==='single'||S.homeModeDraft==='multi')?S.homeModeDraft:usageMode;
   var focusName=getFocusDossier();
   var focusRelType=getFocusRelationType();
 
@@ -2484,19 +2519,19 @@ function rHome(el){
   <div class="ai-rich-card" style="text-align:left;max-width:380px;margin:-8px 0 14px">
     <div class="ai-sec">
       <div class="ai-sec-title"><span>🧭</span><span>Gebruiksmode</span></div>
-      <p class="ai-sec-text">Kies hoe je DateSense vandaag gebruikt: meerdere dates opvolgen of 1 relatie centraal zetten.</p>
+      <p class="ai-sec-text">Kies hoe je DateSense vandaag gebruikt.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        <button class="${usageMode==='multi'?'btn-r':'coach-save-other'}" style="${usageMode==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="quickSetUsageMode('multi')">Date modus</button>
-        <button class="${usageMode==='single'?'btn-r':'coach-save-other'}" style="${usageMode==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="quickSetUsageMode('single')">Relatie-focus</button>
+        <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('multi')">Date modus</button>
+        <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
-      ${usageMode==='single'
+      ${modeDraft==='single'
         ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><select id="homeFocusRelationType" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!focusRelType?'selected':'')+'>Type relatie (optioneel)</option><option value="exclusief daten" '+(focusRelType==='exclusief daten'?'selected':'')+'>Exclusief daten</option><option value="prille relatie" '+(focusRelType==='prille relatie'?'selected':'')+'>Prille relatie</option><option value="vaste relatie" '+(focusRelType==='vaste relatie'?'selected':'')+'>Vaste relatie</option><option value="onduidelijk / zoekend" '+(focusRelType==='onduidelijk / zoekend'?'selected':'')+'>Onduidelijk / zoekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Let op: andere actieve dossiers worden bij activatie automatisch op on hold gezet (later heropenen kan altijd).</div>'
-        :''
+        :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>'
       }
     </div>
   </div>
   ${usageMode==='single'
-    ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 14px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus modus</span></div><p class="ai-sec-text">DateSense werkt nu ook als relatievolger voor 1 persoon'+(focusName?(' · focus op <strong>'+dn(focusName)+'</strong>'):'')+(focusRelType?(' · type: <strong>'+escHTML(focusRelType)+'</strong>'):'')+'. Je kan altijd terugschakelen naar meerdere dossiers in Instellingen.</p></div></div>'
+    ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 10px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?dn(focusName):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p></div></div>'
     :''
   }
 
@@ -2816,11 +2851,19 @@ async function rDossier(el){
   }
   if(!isOwn){
     var stageNow=getDossierStage(name);
-    header+='<div style="margin-top:6px"><select id="dosStageSel" onchange="updateDossierStageFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
+    var relTypeNow=((d.meta||{}).relationship_type)||((getUsageMode()==='single'&&getFocusDossier()===name)?getFocusRelationType():'');
+    header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" onchange="updateDossierStageFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
       +'<option value="virtueel" '+(stageNow==='virtueel'?'selected':'')+'>Virtueel</option>'
       +'<option value="eerste_date" '+(stageNow==='eerste_date'?'selected':'')+'>Eerste date</option>'
       +'<option value="meerdere_dates" '+(stageNow==='meerdere_dates'?'selected':'')+'>Meerdere dates</option>'
       +'<option value="geen_contact" '+(stageNow==='geen_contact'?'selected':'')+'>Geen contact meer</option>'
+      +'</select>'
+      +'<select id="dosRelTypeSel" onchange="updateDossierRelationTypeFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
+      +'<option value="" '+(!relTypeNow?'selected':'')+'>Type relatie…</option>'
+      +'<option value="exclusief daten" '+(relTypeNow==='exclusief daten'?'selected':'')+'>Exclusief daten</option>'
+      +'<option value="prille relatie" '+(relTypeNow==='prille relatie'?'selected':'')+'>Prille relatie</option>'
+      +'<option value="vaste relatie" '+(relTypeNow==='vaste relatie'?'selected':'')+'>Vaste relatie</option>'
+      +'<option value="onduidelijk / zoekend" '+(relTypeNow==='onduidelijk / zoekend'?'selected':'')+'>Onduidelijk / zoekend</option>'
       +'</select></div>';
   }
   header+='</div>';
@@ -4449,6 +4492,7 @@ async function cmpAdviesCurrent(){
         profielvelden:st.catFilled,
         confidence:st.confidence,
         low_data:st.lowData,
+        relatie_type:((d.meta||{}).relationship_type)||'',
         context_input:catSnips.join(' | ').substring(0,1100),
         recent_events:recentFacts
       };
