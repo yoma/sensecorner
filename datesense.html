@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 14:24">
+<meta name="ds-build" content="v2026-03-30-1 14:58">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1891,6 +1891,96 @@ async function newSenseFromDrawer(){
 function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 
+function getDossierLifecycle(name){
+  if(!name||name==='OWN Sense')return'active';
+  var d=S.pdata[name]||{};
+  var m=d.meta||{};
+  var v=String(m.lifecycle_status||'active').toLowerCase();
+  if(v!=='active'&&v!=='on_hold'&&v!=='closed')return'active';
+  return v;
+}
+
+function getActiveContactNames(){
+  return(S.profiles||[]).filter(function(p){
+    return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';
+  });
+}
+
+async function setDossierLifecycle(name,status){
+  if(!name||name==='OWN Sense')return;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  d.meta.lifecycle_status=status;
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+
+function _coachState(){
+  try{return JSON.parse(localStorage.getItem('dsCoachState')||'{}')||{};}catch(e){return{};}
+}
+function _saveCoachState(s){
+  try{localStorage.setItem('dsCoachState',JSON.stringify(s||{}));}catch(e){}
+}
+function coachTaskAck(id,mode){
+  var s=_coachState();
+  var days=mode==='done'?14:7;
+  s[id]={until:Date.now()+days*86400000,mode:mode};
+  _saveCoachState(s);
+  goScreen('home');
+}
+function coachTaskSnooze(id,hours){
+  var h=Math.max(1,parseInt(hours,10)||24);
+  var s=_coachState();
+  s[id]={until:Date.now()+h*3600000,mode:'snooze'};
+  _saveCoachState(s);
+  goScreen('home');
+}
+
+async function markDossierOnHold(name){
+  if(!name||name==='OWN Sense')return;
+  await setDossierLifecycle(name,'on_hold');
+  toast('⏸️ '+dn(name)+' op on hold gezet');
+  goScreen('senses');
+}
+async function closeDossier(name){
+  if(!name||name==='OWN Sense')return;
+  await setDossierLifecycle(name,'closed');
+  toast('✅ '+dn(name)+' afgesloten');
+  goScreen('senses');
+}
+async function reopenDossier(name){
+  if(!name||name==='OWN Sense')return;
+  await setDossierLifecycle(name,'active');
+  toast('🔄 '+dn(name)+' opnieuw actief');
+  goScreen('senses');
+}
+
+function buildCoachTasks(){
+  var tasks=[];
+  getActiveContactNames().forEach(function(p){
+    var d=S.pdata[p]||{};
+    var person=dn(p).replace('Sense','');
+    var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):999;
+    if(days>=7){
+      tasks.push({id:'check-stale-'+p,type:'c',msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+    }
+    var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
+    var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
+    if((d.count||0)>=8&&adviceOld){
+      tasks.push({id:'actie-advies-'+p,type:'a',msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+    }
+    if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis)){
+      tasks.push({id:'sense-foto-'+p,type:'s',msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+    }
+  });
+  var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
+  var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
+  if(ownMissingProfile){
+    tasks.push({id:'check-own-profile',type:'a',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open profielgegevens →',action:"goScreen('own');setTimeout(function(){openProfileModal('OWN Sense');},120)"});
+  }
+  return tasks;
+}
+
 // ══ Home ═════════════════════════════════════════════════════════
 function rHome(el){
   // Niet ingelogd → simpele landing
@@ -1906,24 +1996,27 @@ function rHome(el){
   }
 
   // Ingelogd → clean home
-  var cs=S.profiles.filter(p=>p!=='OWN Sense');
+  var cs=getActiveContactNames();
   var firstName=S.user.user_metadata?.first_name||S.user.email?.split('@')[0]||'';
 
-  // Bouw meldingen — max 3, alleen relevante
+  // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
   var notes=[];
-  cs.forEach(function(p){
-    var d=S.pdata[p];
-    if(!d)return;
-    if(d.lastActive){
-      var days=Math.floor((Date.now()-new Date(d.lastActive))/86400000);
-      if(days>=5)notes.push({type:'c',name:p,msg:'Al '+days+' dagen niets over <strong>'+p.replace('Sense','')+'</strong> genoteerd.',link:'Vertel iets →',action:"goScreen('vertel')"});
+  var allTasks=buildCoachTasks();
+  if(allTasks.length){
+    var state=_coachState();
+    var now=Date.now();
+    var openTasks=allTasks.filter(function(t){
+      var st=state[t.id];
+      return!(st&&st.until&&st.until>now);
+    });
+    if(openTasks.length){
+      var idx=parseInt(localStorage.getItem('dsCoachTaskIdx')||'0',10);
+      if(isNaN(idx)||idx<0)idx=0;
+      var chosen=openTasks[idx%openTasks.length];
+      localStorage.setItem('dsCoachTaskIdx',String((idx+1)%Math.max(1,openTasks.length)));
+      notes=[chosen];
     }
-    if(d.count>0&&d.count%5===0&&d.count<=20){
-      notes.push({type:'s',name:p,msg:'<strong>'+p.replace('Sense','')+'</strong> heeft '+d.count+' berichten. Klaar voor een analyse?',link:'Bekijk dossier →',action:"viewDossier('"+p+"')"});
-    }
-  });
-  // Max 2 meldingen tonen
-  notes=notes.slice(0,2);
+  }
 
   var notesHtml='';
   if(notes.length){
@@ -1934,6 +2027,12 @@ function rHome(el){
         <div class="ncat">${n.type==='s'?'Sense':n.type==='a'?'Actie':'Check'}</div>
         <div class="ntext">${n.msg}</div>
         <span class="nlink" onclick="${n.action}">${n.link}</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',24)">Snooze 1d</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',72)">Snooze 3d</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','done')">✓ Klaar</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','dismiss')">Weg</button>
+        </div>
       </div>`;
     });
     notesHtml+='</div>';
@@ -1969,7 +2068,9 @@ function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size
 
 // ══ Senses lijst ═════════════════════════════════════════════════
 function rSenses(el){
-  var cs=S.profiles.filter(p=>p!=='OWN Sense');
+  var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var cs=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
+  var archived=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
   var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
 <div class="srow" onclick="goScreen('own')">
@@ -1989,11 +2090,35 @@ function rSenses(el){
           <div style="font-size:15px;font-weight:700">${p}</div>
           <div style="font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span></div>
         </div>
-        <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
+        <div style="display:flex;gap:6px">
+          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
+          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
+          <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
+        </div>
       </div>`;
     });
   } else {
     h+=`<div class="sh">Contacten</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">Nog geen contacten.<br>Typ iets in Vertel en ik maak automatisch een dossier aan!</p></div>`;
+  }
+  if(archived.length){
+    h+='<div class="sh">On hold / Afgesloten</div>';
+    archived.forEach(function(p,i){
+      var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
+      var st=getDossierLifecycle(p);
+      var stLbl=st==='on_hold'?'On hold':'Afgesloten';
+      var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
+      h+=`<div class="srow">
+        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65"/>':'<div class="sdot" style="background:'+col+';opacity:.55"></div>'}
+        <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
+          <div style="font-size:15px;font-weight:700;color:#666">${p}</div>
+          <div style="font-size:12px;color:#999">${stLbl} · ${d.count||0} berichten</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();reopenDossier('${p}')">Heropen</button>
+          <button class="del-btn" onclick="event.stopPropagation();delSense('${p}')">✕</button>
+        </div>
+      </div>`;
+    });
   }
   h+=`<div class="srow" style="justify-content:center;border:none" onclick="newSenseFromDrawer()">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -3702,7 +3827,7 @@ async function sendMsg(){
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelFrom||null;
   if(!voorgesteldDossier){
-    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+    var contacts=getActiveContactNames();
     var bestM=null,bestC=0;
     contacts.forEach(function(p){
       var n=dn(p);
@@ -3929,7 +4054,7 @@ function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
 
   // Bouw opties
-  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var contacts=getActiveContactNames();
   var optionsHtml='';
   contacts.forEach(function(p){
     var selected=matchedDossier===p?'style="border-color:var(--r);background:var(--rl)"':'';
@@ -4308,7 +4433,7 @@ function handleTxtFile(input){
     if(nameMatch)detectedName=nameMatch[1].trim();
 
     // Toon bevestigingsdialoog — alles gaat naar één dossier
-    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';}).map(function(p){return dn(p);});
+    var contacts=getActiveContactNames().map(function(p){return dn(p);});
     var suggestion=detectedName||'';
     // Check if detected name matches existing contact (case-insensitive, partial match)
     var matchedDossier='';
@@ -4451,7 +4576,7 @@ function buildCoachContext(){
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
   if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
 
-  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var contacts=getActiveContactNames();
   if(contacts.length){
     lines.push('');
     lines.push('JOUW CONTACTEN:');
@@ -4480,7 +4605,7 @@ function buildCoachContext(){
 
 function buildContactNamesLine(){
   var contacts=S.profiles
-    .filter(function(p){return p!=='OWN Sense';})
+    .filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';})
     .map(function(p){return dn(p);})
     .filter(Boolean);
   if(!contacts.length)return'';
@@ -4526,7 +4651,7 @@ async function laadContextMsgs(){
   if(!S.user||!S.profiles.length)return;
   S._ctxMsgs={};
   for(var p of S.profiles){
-    if(p==='OWN Sense')continue;
+    if(p==='OWN Sense'||getDossierLifecycle(p)!=='active')continue;
     try{
       var {data}=await sb.from('sense_messages')
         .select('html').eq('user_id',S.user.id).eq('profile_name',p)
