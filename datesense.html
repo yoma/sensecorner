@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:45">
+<meta name="ds-build" content="v2026-03-30-1 16:52">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -760,6 +760,7 @@ function formatAiRichText(txt){
     .replace(/^\s*[-]{3,}\s*$/gm,'')
     .replace(/^\s*#{1,6}\s*/gm,'')
     .replace(/(\s|^)(\d+[\)\.\-])\s+/g,'\n$2 ')
+    .replace(/(^|[.!?]\s+)(één|een|twee|drie)\s*[,:\-]\s+/gim,'$1- ')
     .replace(/^\s*[^\n|]+\|[^\n|]+\|[^\n|]+\s*$/gm,function(line){
       var parts=line.split('|').map(function(p){return p.trim();}).filter(Boolean);
       if(parts.length>=2)return'- '+parts.join(' -> ');
@@ -2026,6 +2027,25 @@ function setFocusDossier(name){
   localStorage.setItem('ds_focus_dossier',name);
   S.focusDossier=name;
 }
+function quickSetUsageMode(mode){
+  setUsageMode(mode);
+  if(mode==='single'){
+    var focus=getFocusDossier();
+    if(!focus){
+      var first=(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';})[0]||'';
+      if(first)setFocusDossier(first);
+    }
+  }else{
+    setFocusDossier('');
+  }
+  goScreen('home');
+}
+async function applyFocusFromHome(autoHold){
+  var sel=document.getElementById('homeFocusSelect');
+  var n=sel?sel.value:'';
+  if(!n){toast('Kies eerst een dossier');return;}
+  await activateRelationshipFocus(n,!!autoHold);
+}
 async function activateRelationshipFocus(name,autoHold){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
   if(autoHold){
@@ -2430,6 +2450,20 @@ function rHome(el){
 
   <div style="font-size:15px;color:var(--m);margin-bottom:20px;font-weight:500">
     ${firstName?'Hoi <strong style="color:var(--t)">'+firstName+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
+  </div>
+  <div class="ai-rich-card" style="text-align:left;max-width:380px;margin:-8px 0 14px">
+    <div class="ai-sec">
+      <div class="ai-sec-title"><span>🧭</span><span>Gebruiksmode</span></div>
+      <p class="ai-sec-text">Kies hoe je DateSense vandaag gebruikt: meerdere dates opvolgen of 1 relatie centraal zetten.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="${usageMode==='multi'?'btn-r':'coach-save-other'}" style="${usageMode==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="quickSetUsageMode('multi')">Date modus</button>
+        <button class="${usageMode==='single'?'btn-r':'coach-save-other'}" style="${usageMode==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="quickSetUsageMode('single')">Relatie-focus</button>
+      </div>
+      ${usageMode==='single'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="coach-save-other" style="font-size:12px;padding:7px 9px" onclick="applyFocusFromHome(true)">Focus + on hold</button></div>'
+        :''
+      }
+    </div>
   </div>
   ${usageMode==='single'
     ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 14px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus modus</span></div><p class="ai-sec-text">DateSense werkt nu ook als relatievolger voor 1 persoon'+(focusName?(' · focus op <strong>'+dn(focusName)+'</strong>'):'')+'. Je kan altijd terugschakelen naar meerdere dossiers in Instellingen.</p></div></div>'
@@ -3381,6 +3415,7 @@ async function genAdvies(name,forced){
     +' Daarna geef je op een NIEUWE REGEL exact dit formaat:'
     +' ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg'
     +' (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀)'
+    +' Gebruik geen nummering in woorden zoals "één/twee/drie"; gebruik gewone zinnen of bulletstijl.'
     +' Maximaal 5 zinnen advies. Nederlands.';
   var userContent='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify(d.props);
   if(catTxt)userContent+='\nIngevulde info: '+catTxt;
@@ -4346,21 +4381,39 @@ async function cmpAdviesCurrent(){
   var box=document.getElementById('cmpBox');
   if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
   try{
-    var payload=names.map(function(n){
+    var payload=await Promise.all(names.map(async function(n){
       var st=compareDataStats(n);
+      var d=st.d||{};
+      var catSnips=[];
+      Object.values(d.categories||{}).forEach(function(cat){
+        Object.values(cat||{}).forEach(function(v){
+          var t=String(v||'').trim();
+          if(t)catSnips.push(t);
+        });
+      });
+      var msgs=[];
+      try{msgs=await loadMsgs(n,{limit:30});}catch(_e){}
+      var recentFacts=msgs.filter(function(m){return m.role==='user';})
+        .slice(-10)
+        .map(function(m){return String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
+        .filter(Boolean)
+        .slice(-4);
       return {
         naam:dn(n),
-        props:st.d.props||{},
+        props:d.props||{},
         berichten:st.msgCount,
         profielvelden:st.catFilled,
         confidence:st.confidence,
-        low_data:st.lowData
+        low_data:st.lowData,
+        context_input:catSnips.join(' | ').substring(0,1100),
+        recent_events:recentFacts
       };
-    });
+    }));
     var sys='Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. '
       +'Schrijf ALLEEN in duidelijke, menselijke taal. '
       +'Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. '
       +'Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er alleen kort naar. '
+      +'Gebruik OOK de recente context (events, ingevulde input) en vermijd feitelijke fouten over wat al gebeurd is. '
       +'Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). '
       +'Max 6 zinnen totaal. Nederlands.';
     var user='Data:\n'+JSON.stringify(payload);
