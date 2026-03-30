@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:29">
+<meta name="ds-build" content="v2026-03-30-1 15:41">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -885,7 +885,9 @@ function getProfileMetaCompletion(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
   // Dossiernaam is vast; enkel echte profielvelden tellen mee.
-  var keys=['birthdate','city','intent','photo_url'];
+  var keys=name==='OWN Sense'
+    ?['birthdate','city','intent','photo_url']
+    :['birthdate','intent','photo_url'];
   var filled=keys.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
   return{filled:filled,total:keys.length,complete:filled===keys.length};
 }
@@ -1732,16 +1734,17 @@ function openProfileModal(name){
   title.textContent='Profielgegevens - '+dn(_profileModalFor);
   avatar.src=meta.photo_url||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect width="46" height="46" fill="%23eceff3"/></svg>';
   status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
+  var isOwnProf=_profileModalFor==='OWN Sense';
   fields.innerHTML=''
     +'<input class="profile-field" value="'+escA(dn(_profileModalFor))+'" readonly>'
     +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'" oninput="updateProfileAgePreview()">'
     +'<input class="profile-field" id="pf_age_auto" placeholder="Leeftijd (auto)" value="'+escA(calcAgeFromBirthdate(meta.birthdate)||meta.age)+'" readonly>'
     +'<input class="profile-field" id="pf_city" placeholder="Regio / woonplaats" value="'+escA(meta.city)+'">'
-    +'<input class="profile-field full" id="pf_address" placeholder="Adres (straat + nr)" value="'+escA(meta.address)+'">'
-    +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'
     +'<input class="profile-field" id="pf_country" placeholder="Land" value="'+escA(meta.country)+'">'
+    +(isOwnProf?('<input class="profile-field full" id="pf_address" placeholder="Adres (straat + nr)" value="'+escA(meta.address)+'">'
+      +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
     +'<input class="profile-field full" id="pf_intent" placeholder="Intentie (bv. serieuze relatie)" value="'+escA(meta.intent)+'">'
-    +'<input class="profile-field full" id="pf_billing_pref" placeholder="Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)" value="'+escA(meta.billing_pref)+'">';
+    +(isOwnProf?('<input class="profile-field full" id="pf_billing_pref" placeholder="Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)" value="'+escA(meta.billing_pref)+'">'):'');
   updateProfileAgePreview();
   modal.classList.add('show');
 }
@@ -1864,15 +1867,22 @@ async function handleProfilePhotoInput(input){
 async function saveProfileMetaForm(){
   var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
+  var isOwnProf=_profileModalFor==='OWN Sense';
   function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
   d.meta.birthdate=v('pf_birthdate');
   d.meta.age=calcAgeFromBirthdate(d.meta.birthdate);
   d.meta.city=v('pf_city');
-  d.meta.address=v('pf_address');
-  d.meta.postal_code=v('pf_postal');
   d.meta.country=v('pf_country');
   d.meta.intent=v('pf_intent');
-  d.meta.billing_pref=v('pf_billing_pref');
+  if(isOwnProf){
+    d.meta.address=v('pf_address');
+    d.meta.postal_code=v('pf_postal');
+    d.meta.billing_pref=v('pf_billing_pref');
+  }else{
+    delete d.meta.address;
+    delete d.meta.postal_code;
+    delete d.meta.billing_pref;
+  }
   S.pdata[_profileModalFor]=d;
   await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
   closeProfileModal();
@@ -2277,6 +2287,30 @@ function rNotifications(el){
     var person=personMatch&&personMatch[1]?personMatch[1]:'';
     return {...t,status:status,person:person};
   });
+  var recentItems=Object.keys(state).filter(function(id){
+    var st=state[id];
+    return st&&st.until&&st.until>now;
+  }).map(function(id){
+    var st=state[id]||{};
+    var type='c';
+    if(id.indexOf('sense-')===0)type='s';
+    else if(id.indexOf('actie-')===0||id.indexOf('check-own-profile')===0)type='a';
+    var pm=id.match(/-(.+Sense)$/);
+    var person=pm&&pm[1]?pm[1]:'';
+    return {
+      id:id,
+      type:type,
+      prio:'low',
+      status:(st.mode==='snooze'?'snoozed':'done'),
+      msg:'Afgehandelde melding',
+      link:'Open dossier →',
+      action:person?("viewDossier('"+person+"')"):"goScreen('home')",
+      person:person
+    };
+  });
+  var seen={};
+  items.forEach(function(i){seen[i.id]=1;});
+  recentItems.forEach(function(r){if(!seen[r.id])items.push(r);});
   if(q!=='all')items=items.filter(function(t){return t.type===q;});
   if(sortBy==='person'){
     items.sort(function(a,b){return String(a.person||'').localeCompare(String(b.person||''));});
