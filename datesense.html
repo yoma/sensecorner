@@ -111,13 +111,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .prop-empty{text-align:center;padding:22px 16px;background:var(--g);border-radius:var(--rad-md);margin-bottom:14px;border:1px solid var(--b)}
 .prop-empty-icon{font-size:28px;margin-bottom:8px}
 .prop-empty-text{font-size:var(--fs-sm);color:var(--m);line-height:1.6}
-.props-compact{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.prop-pill{border:1px solid var(--b);background:#fff;border-radius:10px;padding:8px 10px}
-.prop-pill-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
-.prop-pill-name{font-size:12px;color:#444;line-height:1.2}
-.prop-pill-val{font-size:12px;font-weight:800;color:var(--r)}
-.prop-pill-track{height:5px;background:#eceff3;border-radius:5px;overflow:hidden}
-.prop-pill-fill{height:100%;background:var(--r);border-radius:5px;transition:width .5s ease}
+.props-compact{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}
+.prop-pill{border:1px solid var(--b);background:#fff;border-radius:999px;padding:6px 9px;min-height:30px}
+.prop-pill-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:0}
+.prop-pill-name{font-size:11px;color:#444;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prop-pill-val{font-size:11px;font-weight:800;color:var(--r);white-space:nowrap}
+.prop-pill-track{display:none}
+.prop-pill-fill{display:none}
 .props-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--m);background:#fff;border:1px solid var(--b);border-radius:999px;padding:6px 10px;cursor:pointer;font-family:inherit}
 .props-toggle .chev{display:inline-block;transition:transform .22s ease}
 .props-toggle.open .chev{transform:rotate(180deg)}
@@ -559,7 +559,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
-const APP_BUILD=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
+var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
+// APP_BUILD_BASE = alleen versienummer (eerste token), zodat we geen oude tijd dubbel tonen
+const APP_BUILD_BASE=String(_metaBuildContent||'v2026-03-27-1').trim().split(/\s+/)[0]||'v2026-03-27-1';
 const sb=supabase.createClient(SURL,SKEY);
 
 function setBuildTag(){
@@ -568,7 +570,10 @@ function setBuildTag(){
   var now=new Date();
   var hh=String(now.getHours()).padStart(2,'0');
   var mm=String(now.getMinutes()).padStart(2,'0');
-  el.innerHTML='Build<span class="bt-sub">'+APP_BUILD+' · '+hh+':'+mm+'</span>';
+  var timeStr=hh+':'+mm;
+  // Zet ook in de HTML meta-tag (debug/info) zodat je de juiste tijd altijd in de DOM ziet
+  if(_metaBuild&&_metaBuild.setAttribute)_metaBuild.setAttribute('content',APP_BUILD_BASE+' '+timeStr);
+  el.innerHTML='Build<span class="bt-sub">'+APP_BUILD_BASE+' · '+timeStr+'</span>';
 }
 
 // Eigenschappen — STARTEN OP 0 (geen hardcoded waarden!)
@@ -1203,7 +1208,6 @@ function renderProps(props,showSource,opt){
     return'<div class="props-compact">'+items.map(function(it){
       return'<div class="prop-pill">'
         +'<div class="prop-pill-top"><div class="prop-pill-name">'+it.label+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
-        +'<div class="prop-pill-track"><div class="prop-pill-fill" style="width:'+it.v+'%"></div></div>'
         +'</div>';
     }).join('')+'</div>';
   }
@@ -2149,8 +2153,8 @@ async function loadTab(name,tab,d){
       if(hasData){
       }
       html+='<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">';
-      html+='💡 <strong>Vul je profiel in</strong> via de <strong>OwnSense</strong> tab onderaan om je eigenschappen automatisch te berekenen.';
-      html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="goScreen(\'own\')">→ Naar OWN Sense</button></div>';
+      html+='💡 <strong>Vul je profiel aan</strong> via <strong>Profielgegevens</strong> en <strong>Vertel</strong> om je eigenschappen automatisch te verfijnen.';
+      html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="openProfileModal(\'OWN Sense\')">→ Profielgegevens</button></div>';
       html+='</div>';
     }
 
@@ -2439,7 +2443,7 @@ async function loadTab(name,tab,d){
     advHtml+='<div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
     if(cache){
       if(hasNewData&&currentCount>0){
-        advHtml+='<div style="font-size:13px;color:#aaa;margin-bottom:12px">Update je advies — nieuwe info gevonden. Ik werk het nu bij...</div>';
+        advHtml+='<div style="font-size:13px;color:#8a8f97;margin-bottom:12px">Er is nieuwe info sinds je laatste advies.</div>';
       }
       advHtml+=(cache.html||'');
     } else if(currentCount===0){
@@ -2448,11 +2452,11 @@ async function loadTab(name,tab,d){
       advHtml+='<div class="typing"><span></span><span></span><span></span></div>';
     }
     advHtml+='</div>';
-    // Footer met status
-    if(cache&&!hasNewData){
-      advHtml+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between">';
-      advHtml+='<span style="font-size:12px;color:#bbb">Geen nieuwe info sinds laatste advies</span>';
-      advHtml+='<button id="advRefreshBtn" style="padding:8px 14px;background:var(--g);color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↻ Vernieuwen</button>';
+    // Footer met status + duidelijke updateknop
+    if(cache){
+      advHtml+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+      advHtml+='<span style="font-size:12px;color:#888">Laatste advies: '+(cache.ts||'onbekend')+'</span>';
+      advHtml+='<button id="advRefreshBtn" style="padding:8px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↻ Update uw advies</button>';
       advHtml+='</div>';
     }
     advHtml+='</div></div>';
@@ -2464,8 +2468,9 @@ async function loadTab(name,tab,d){
     var rb=document.getElementById('advRefreshBtn');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
 
-    // Genereer alleen als nieuwe data of geen cache
-    if(currentCount>0&&(hasNewData||!cache)){
+    // Genereer enkel automatisch als er nog geen advies bestaat.
+    // Bij nieuwe data blijft het laatste advies staan tot gebruiker op update klikt.
+    if(currentCount>0&&!cache){
       genAdvies(name,false);
     }
   }
@@ -2482,7 +2487,7 @@ async function genAdvies(name,forced){
   var box=document.getElementById('advTxt');
   if(box){
     if(!forced && oldHtml){
-      box.innerHTML='<div style="font-size:13px;color:#aaa;margin-bottom:12px">Update je advies — nieuwe info gevonden. Ik werk het nu bij...</div>'+oldHtml;
+      box.innerHTML='<div style="font-size:13px;color:#8a8f97;margin-bottom:12px">Er is nieuwe info sinds je laatste advies.</div>'+oldHtml;
     } else {
       box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
     }
@@ -2579,8 +2584,8 @@ async function genAdvies(name,forced){
     // Update footer
     var footer=document.querySelector('#adviesBox [style*="border-top"]');
     if(footer){
-      footer.innerHTML='<span style="font-size:12px;color:#bbb">Gegenereerd om '+ts+'</span>'
-        +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--g);color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↻ Vernieuwen</button>';
+      footer.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: Gegenereerd om '+ts+'</span>'
+        +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↻ Update uw advies</button>';
       var rb2=document.getElementById('advRefreshBtn');
       if(rb2){(function(n){rb2.onclick=function(){genAdvies(n,true);};})(name);}
     } else {
@@ -2590,8 +2595,8 @@ async function genAdvies(name,forced){
       if(bodyDiv){
         var f=document.createElement('div');
         f.style.cssText='margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between';
-        f.innerHTML='<span style="font-size:12px;color:#bbb">Gegenereerd om '+ts+'</span>'
-          +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--g);color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">↻ Vernieuwen</button>';
+        f.innerHTML='<span style="font-size:12px;color:#888">Laatste advies: Gegenereerd om '+ts+'</span>'
+          +'<button id="advRefreshBtn" style="padding:8px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↻ Update uw advies</button>';
         bodyDiv.appendChild(f);
         var rb3=document.getElementById('advRefreshBtn');
         if(rb3){(function(n){rb3.onclick=function(){genAdvies(n,true);};})(name);}
