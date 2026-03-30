@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:21">
+<meta name="ds-build" content="v2026-03-30-1 16:29">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -142,6 +142,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .msg-ai{display:flex;flex-direction:column;gap:4px}
 .bbl-ai{background:var(--rl);border:1px solid #FFD5D5;border-radius:16px 16px 16px 4px;padding:14px 16px;font-size:var(--fs-sm);color:#222;line-height:1.6;max-width:96%}
 .bbl-ai .sndr{font-size:var(--fs-xs);font-weight:700;color:var(--r);margin-bottom:6px;letter-spacing:.8px}
+.ai-rich-card{background:#fff;border:1px solid #F0DADA;border-radius:12px;padding:12px 13px;margin:6px 0 2px}
+.ai-rich-card p:last-child{margin-bottom:0!important}
+.ai-rich-card ul{padding-left:18px}
 .msg-user{display:flex;justify-content:flex-end}
 .bbl-user{background:var(--r);border-radius:16px 16px 4px 16px;padding:14px 16px;font-size:var(--fs-sm);color:#fff;line-height:1.6;max-width:96%}
 
@@ -741,6 +744,39 @@ function escHTML(s){
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+}
+function formatAiRichText(txt){
+  var raw=String(txt==null?'':txt).replace(/\\n/g,'\n').trim();
+  if(!raw)return'';
+  var esc=escHTML(raw);
+  esc=esc.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  var blocks=esc.split(/\n{2,}/).map(function(b){return b.trim();}).filter(Boolean);
+  var out=[];
+  function paragraphIcon(s){
+    var t=String(s||'').toLowerCase();
+    if(/aanbevel|actie|volgende stap|doe|probeer|plan|stuur|vraag/.test(t))return'🎯';
+    if(/let op|risico|twijfel|afstand|waarschu|red flag|niet|oppassen|spann/.test(t))return'⚠️';
+    if(/sterk|match|goed|positief|kans|past|consistent|mooi/.test(t))return'✅';
+    return'💡';
+  }
+  blocks.forEach(function(block){
+    var lines=block.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+    if(!lines.length)return;
+    if(lines.every(function(l){return /^[-*•]\s+/.test(l);})){
+      out.push('<ul style="margin:4px 0 8px 18px">'+lines.map(function(l){return'<li style="margin:2px 0">'+l.replace(/^[-*•]\s+/,'')+'</li>';}).join('')+'</ul>');
+      return;
+    }
+    lines=lines.map(function(l){return l.replace(/^#{1,6}\s+/,'');});
+    var text=lines.join('<br>');
+    var icon=paragraphIcon(lines.join(' '));
+    out.push('<p style="margin:0 0 10px;line-height:1.7;display:flex;gap:8px;align-items:flex-start"><span style="flex:0 0 auto;line-height:1.4">'+icon+'</span><span style="flex:1">'+text+'</span></p>');
+  });
+  return out.join('');
+}
+function formatAiCard(txt){
+  var inner=formatAiRichText(txt);
+  if(!inner)return'';
+  return '<div class="ai-rich-card">'+inner+'</div>';
 }
 
 function toBase64FromBlob(blob){
@@ -2421,7 +2457,10 @@ function rSenses(el){
     h+='<div class="sh">Contacten</div>';
     h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-6px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
     if(allContacts.length>=2){
-      h+='<div style="display:flex;justify-content:flex-end;margin:-2px 0 10px"><button class="coach-save-other" style="'+(S.compareMode?'border-color:var(--r);color:var(--r)':'')+'" onclick="toggleCompareMode()">'+(S.compareMode?'Vergelijking sluiten':'Vergelijk')+'</button></div>';
+      h+='<div style="margin:-2px 0 10px">'
+        +'<button class="btn-r" style="max-width:240px;padding:9px 14px;font-size:13px;font-weight:800;box-shadow:0 6px 16px rgba(174,0,0,.22)" onclick="toggleCompareMode()">'+(S.compareMode?'✕ Vergelijking sluiten':'⚖️ Vergelijk dossiers')+'</button>'
+        +'<div style="font-size:11px;color:#8a8f97;margin-top:6px">Selecteer 2 tot 3 dossiers (max 3) om ze naast elkaar te vergelijken.</div>'
+        +'</div>';
     }
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
@@ -3241,7 +3280,7 @@ async function genAdvies(name,forced){
       .replace(/ACTIES:[\s\S]*/ig,'')
       .trim();
     var actiesTxt=actMatch&&actMatch[1]?actMatch[1].trim():'';
-    var result=adviesTxt.split('\n').join('<br>');
+    var result=formatAiCard(adviesTxt);
     var redHtml='';
     if(redMatch&&redMatch[1]){
       var redRaw=redMatch[1].trim();
@@ -4004,17 +4043,17 @@ function getCompareSelection(){
   var saved=(S.compareSelection||[]).filter(function(n){return cs.indexOf(n)>=0;});
   var unique=[];
   saved.forEach(function(n){if(unique.indexOf(n)===-1)unique.push(n);});
+  // Respecteer expliciete selectie (bv. vanuit Mijn Senses): nooit automatisch opvullen tot 3.
+  if(unique.length>=2){
+    S.compareSelection=unique.slice(0,3);
+    return S.compareSelection.slice();
+  }
   if(unique.length<2){
     cs.forEach(function(n){
       if(unique.length<2&&unique.indexOf(n)===-1)unique.push(n);
     });
   }
-  if(unique.length<3){
-    cs.forEach(function(n){
-      if(unique.length<3&&unique.indexOf(n)===-1)unique.push(n);
-    });
-  }
-  S.compareSelection=unique.slice(0,3);
+  S.compareSelection=unique.slice(0,2);
   return S.compareSelection.slice();
 }
 function setComparePick(idx,val){
@@ -4168,7 +4207,7 @@ async function cmpAdviesCurrent(){
     var t=await callAPI(sys,[{role:'user',content:user}],700);
     if(box){
       box.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI CONCLUSIE MET WAAROM</div>'
-        +'<div style="font-size:15px;color:#333;line-height:1.7">'+t+'</div>'
+        +'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(t)+'</div>'
         +'<div style="font-size:11px;color:#8a8f97;margin-top:10px">Confidence per dossier en data-waarschuwingen zie je in de tabel hierboven.</div>';
     }
   }catch(x){
@@ -4435,7 +4474,7 @@ async function sendMsg(){
 
     if(forcedDossier){
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier);
-      addMsg('ai',raw+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
+      addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
     }else{
     // Toon AI antwoord + opslaan-balk
       var saveId='sv'+Date.now();
@@ -4453,7 +4492,7 @@ async function sendMsg(){
         +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
         +'</div>';
 
-      addMsg('ai',raw+saveBar);
+      addMsg('ai',formatAiCard(raw)+saveBar);
     }
     // Update sidebar sessie preview
     updateSessiePreview(S.currentSessionId,txt);
