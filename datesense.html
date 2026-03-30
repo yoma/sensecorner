@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:57">
+<meta name="ds-build" content="v2026-03-30-1 16:04">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2849,7 +2849,7 @@ async function loadTab(name,tab,d){
         html+='<div class="own-cat-info">';
         var contactCatUpd=getCategoryUpdate(d.meta||{},'contact',cat.id);
         html+='<div class="own-cat-title">'+cat.title+'</div>';
-        html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(contactCatUpd)+'</div>';
+        html+='<div id="cc-cat-upd-'+cat.id+'" style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(contactCatUpd)+'</div>';
         html+='<div class="own-cat-prog '+(prog.filled===prog.total?'done':'')+'">';
         html+=prog.filled+'/'+prog.total+' vragen beantwoord'+(prog.filled===prog.total?' ✓':'');
         html+='</div></div>';
@@ -2859,7 +2859,7 @@ async function loadTab(name,tab,d){
         cat.prompts.forEach(function(p,i){
           var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
           var contactFieldUpd=getFieldUpdate(d.meta||{},'contact',cat.id,'a'+i);
-          html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
+          html+='<div class="own-q-label">'+p.q+' <span id="cc-field-upd-'+cat.id+'-a'+i+'" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
           html+='<textarea class="own-ta" id="cc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" oninput="autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')">'+saved+'</textarea>';
           html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
         });
@@ -3347,8 +3347,12 @@ async function saveContactCat(dosName,catId,silent){
   ['a0','a1','a2'].forEach(function(aKey){
     if((prevCat[aKey]||'')!==(answers[aKey]||'')){
       d.meta.field_updates.contact[catId][aKey]=nowIso;
+      var fieldUpdEl=document.getElementById('cc-field-upd-'+catId+'-'+aKey);
+      if(fieldUpdEl)fieldUpdEl.textContent='· Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
     }
   });
+  var catUpdEl=document.getElementById('cc-cat-upd-'+catId);
+  if(catUpdEl)catUpdEl.textContent='Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
   S.pdata[dosName]=d;
   await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
   // Update progress indicator
@@ -3551,14 +3555,14 @@ ${(()=>{
     <div class="own-cat-icon">${cat.icon}</div>
     <div class="own-cat-info">
       <div class="own-cat-title">${cat.title}</div>
-      <div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: ${fmtPropUpdate(catLast)}</div>
+      <div id="oc-cat-upd-${cat.id}" style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: ${fmtPropUpdate(catLast)}</div>
       <div class="own-cat-prog ${prog.filled===prog.total?'done':''}">${prog.filled}/${prog.total} vragen beantwoord${prog.filled===prog.total?' ✓':''}</div>
     </div>
     <div class="own-cat-arrow">›</div>
   </div>
   <div class="own-cat-body">
     ${cat.prompts.map((p,i)=>`
-      <div class="own-q-label">${p.q} <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: ${fmtPropUpdate(getFieldUpdate(d.meta||{},'own',cat.id,'a'+i))}</span></div>
+      <div class="own-q-label">${p.q} <span id="oc-field-upd-${cat.id}-a${i}" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: ${fmtPropUpdate(getFieldUpdate(d.meta||{},'own',cat.id,'a'+i))}</span></div>
       <textarea class="own-ta" id="oc-${cat.id}-a${i}" placeholder="${p.ph}" rows="2" data-catid="${cat.id}" data-type="own" oninput="autoResize(this);scheduleAutoSave('own','OWN Sense','${cat.id}',${i});if(${i}===cat.prompts.length-1)scheduleOwnVoorstel(this.value,'${cat.id}')">${catData['a'+i]||''}</textarea>
       <div class="autosave-indicator" id="oc-field-${cat.id}-a${i}"></div>
     `).join('')}
@@ -3677,8 +3681,12 @@ async function saveOwnCat(catId,silent){
     var aKey='a'+i;
     if((prevCat[aKey]||'')!==(answers[aKey]||'')){
       d.meta.field_updates.own[catId][aKey]=nowIso;
+      var fieldUpdEl=document.getElementById('oc-field-upd-'+catId+'-'+aKey);
+      if(fieldUpdEl)fieldUpdEl.textContent='· Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
     }
   });
+  var catUpdEl=document.getElementById('oc-cat-upd-'+catId);
+  if(catUpdEl)catUpdEl.textContent='Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
 
   // Vraag AI om eigenschappen te updaten op basis van ALLE categorieën
   var allCatText='';
