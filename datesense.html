@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 15:41">
+<meta name="ds-build" content="v2026-03-30-1 15:53">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2062,27 +2062,45 @@ function buildCoachTasks(){
   return tasks;
 }
 function prioWeight(p){return p==='high'?3:(p==='medium'?2:1);}
+function humanTaskLabel(id){
+  id=String(id||'');
+  var t=id.indexOf('sense-')===0?'Fotoanalyse'
+    :(id.indexOf('actie-')===0?'Actie'
+    :(id.indexOf('check-')===0?'Check':'Melding'));
+  var m=id.match(/-(.+Sense)$/);
+  var person=m&&m[1]?dn(m[1]):'algemeen';
+  return t+' '+person;
+}
 
 function getAdviesDoneMap(name){
   var d=S.pdata[name]||{};
   var la=((d.meta||{}).last_advice)||{};
+  if(la.action_done_keys&&typeof la.action_done_keys==='object')return la.action_done_keys;
   return (la.action_done&&typeof la.action_done==='object')?la.action_done:{};
+}
+function actionTitleKey(t){
+  return String(t||'').toLowerCase().replace(/\s+/g,' ').trim();
 }
 function renderActiesHtml(name,acties){
   var doneMap=getAdviesDoneMap(name);
   var total=acties.length;
-  var doneCount=acties.reduce(function(sum,_a,idx){return sum+(doneMap[idx]?1:0);},0);
+  var doneCount=acties.reduce(function(sum,a){
+    var k=actionTitleKey(a&&a[1]);
+    return sum+(doneMap[k]?1:0);
+  },0);
   var html='<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--b)">'
     +'<div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:10px">AANBEVOLEN ACTIES</div>'
     +'<div id="actieProgress" style="font-size:12px;color:#6f7680;margin:-4px 0 8px">'+doneCount+'/'+total+' afgewerkt</div>'
     +'<div class="acties-box">';
   acties.forEach(function(a,idx){
-    var done=!!doneMap[idx];
-    html+='<div class="actie-item '+(done?'done':'')+'" data-actie-idx="'+idx+'">'
+    var title=(a&&a[1])||'';
+    var aKey=actionTitleKey(title);
+    var done=!!doneMap[aKey];
+    html+='<div class="actie-item '+(done?'done':'')+'" data-actie-idx="'+idx+'" data-actie-key="'+escHTML(aKey)+'">'
       +'<div class="actie-emoji">'+a[0]+'</div>'
-      +'<div><div class="actie-titel">'+a[1]+'</div>'
+      +'<div><div class="actie-titel">'+title+'</div>'
       +'<div class="actie-sub">'+a[2]+'</div>'
-      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button></div>'
+      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\',\''+encodeURIComponent(aKey)+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button></div>'
       +'</div>';
   });
   html+='</div></div>';
@@ -2094,13 +2112,20 @@ function hydrateActieItems(name){
   var items=cont.querySelectorAll('.actie-item');
   items.forEach(function(el,idx){
     if(!el.hasAttribute('data-actie-idx'))el.setAttribute('data-actie-idx',String(idx));
+    if(!el.hasAttribute('data-actie-key')){
+      var tEl=el.querySelector('.actie-titel');
+      el.setAttribute('data-actie-key',actionTitleKey(tEl?tEl.textContent:''));
+    }
     var btn=el.querySelector('.actie-done-btn');
     if(!btn){
       var wrap=el.querySelector('div:nth-child(2)')||el;
       var b=document.createElement('button');
       b.className='actie-done-btn';
       b.textContent='Markeer als afgewerkt';
-      b.onclick=function(){toggleAdviesActie(name,idx);};
+      b.onclick=function(){
+        var key=encodeURIComponent(el.getAttribute('data-actie-key')||'');
+        toggleAdviesActie(name,key,idx);
+      };
       wrap.appendChild(b);
     }
   });
@@ -2113,7 +2138,8 @@ function applyAdviesDoneUI(name){
   var total=0,doneCount=0;
   cont.querySelectorAll('.actie-item').forEach(function(el,idx){
     total++;
-    var done=!!doneMap[idx];
+    var key=el.getAttribute('data-actie-key')||actionTitleKey((el.querySelector('.actie-titel')||{}).textContent||'');
+    var done=!!doneMap[key];
     if(done)doneCount++;
     el.classList.toggle('done',done);
     var btn=el.querySelector('.actie-done-btn');
@@ -2140,12 +2166,22 @@ async function persistAdviesState(name){
   S.pdata[name]=d;
   await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
 }
-async function toggleAdviesActie(name,idx){
+async function toggleAdviesActie(name,keyEnc,idx){
   var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
   d.meta.last_advice=d.meta.last_advice||{};
-  var map=(d.meta.last_advice.action_done&&typeof d.meta.last_advice.action_done==='object')?d.meta.last_advice.action_done:{};
-  map[idx]=!map[idx];
+  var map=(d.meta.last_advice.action_done_keys&&typeof d.meta.last_advice.action_done_keys==='object')
+    ?d.meta.last_advice.action_done_keys
+    :{};
+  var k=decodeURIComponent(String(keyEnc||''));
+  if(!k){
+    var cont=document.getElementById('actiesContainer');
+    var item=cont?cont.querySelector('.actie-item[data-actie-idx="'+idx+'"]'):null;
+    k=actionTitleKey((item&&item.querySelector('.actie-titel'))?item.querySelector('.actie-titel').textContent:'');
+  }
+  if(!k)return;
+  map[k]=!map[k];
+  d.meta.last_advice.action_done_keys=map;
   d.meta.last_advice.action_done=map;
   S.pdata[name]=d;
   applyAdviesDoneUI(name);
@@ -2357,7 +2393,7 @@ function rNotifications(el){
     return st&&st.until&&st.until>now&&(st.mode==='done'||st.mode==='snooze');
   }).slice(0,5).map(function(id){
     var st=state[id];
-    return '<div style="font-size:12px;color:#8a8f97;line-height:1.5">• '+id.replace(/^.*?-/,'')+' · '+(st.mode==='done'?'done':'snoozed')+'</div>';
+    return '<div style="font-size:12px;color:#8a8f97;line-height:1.5">• '+humanTaskLabel(id)+' · '+(st.mode==='done'?'afgewerkt':'gesnoozed')+'</div>';
   }).join('');
   var hist=recent?('<div style="margin-top:14px;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fafbfc"><div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Recent afgehandeld</div>'+recent+'</div>'):'';
   el.innerHTML=`<div style="padding:16px 16px 32px"><div class="sh">Mijn meldingen</div>${chips}${body}${hist}</div>`;
@@ -3066,7 +3102,10 @@ async function loadTab(name,tab,d){
     advHtml+='<div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
     if(cache){
       if(hasNewData&&currentCount>0){
-        advHtml+='<div style="font-size:13px;color:#8a8f97;margin-bottom:12px">Er is nieuwe info sinds je laatste advies.</div>';
+        advHtml+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+          +'<span style="font-size:13px;color:#8a8f97">Nieuwe input gedetecteerd sinds je laatste advies.</span>'
+          +'<button id="advSuggestUpdateBtn" class="coach-save-other" style="font-size:12px;padding:6px 10px;border-color:var(--r);color:var(--r)">Advies updaten</button>'
+          +'</div>';
       }
       advHtml+=(cache.html||'');
     } else if(currentCount===0){
@@ -3089,6 +3128,8 @@ async function loadTab(name,tab,d){
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
+    var sb=document.getElementById('advSuggestUpdateBtn');
+    if(sb){(function(n){sb.onclick=function(){genAdvies(n,true);};})(name);}
     hydrateActieItems(name);
 
     // Genereer enkel automatisch als er nog geen advies bestaat.
@@ -3201,8 +3242,8 @@ async function genAdvies(name,forced){
     S.adviesCache[name]={html:(redHtml+result),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||((S.adviesCache[name]&&S.adviesCache[name].acties)||'')};
     // Bewaar laatste advies ook in profiel-meta zodat het blijft na herladen
     d.meta=d.meta||{};
-    var prevDone=((d.meta.last_advice||{}).action_done)||{};
-    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,action_done:prevDone,updated_at:new Date().toISOString()};
+    var prevDoneKeys=((d.meta.last_advice||{}).action_done_keys)||((d.meta.last_advice||{}).action_done)||{};
+    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,action_done:prevDoneKeys,action_done_keys:prevDoneKeys,updated_at:new Date().toISOString()};
     S.pdata[name]=d;
     try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
@@ -5276,52 +5317,4 @@ async function _opslaanKeuze(dossier){
   await _doOpslaan(sid,data.tekst,dossier);
 }
 
-async function maakNieuwDossierEnOpslaan(sid,useSuggested){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  var suggested=data.suggestedName||'';
-  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
-  if(inputName===null)return;
-  var base=String(inputName||'').trim();
-  if(!base){toast('Naam is leeg');return;}
-  var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier);
-}
-
-async function _doOpslaan(sid,tekst,dossier){
-  var bar=document.getElementById(sid);
-  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
-  await ensureP(dossier);
-  var inserted=await saveMsg(dossier,'user',tekst);
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
-  pd.count=(pd.count||0)+1;
-  S.pdata[dossier]=pd;
-  await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  return inserted;
-}
-
-// ══ Init ══════════════════════════════════════════════════════════
-// Event delegation: auto-save voor contact categorieën via data attributen
-document.addEventListener('input',function(e){
-  var ta=e.target;
-  if(!ta.classList.contains('own-ta'))return;
-  // Contact categorie textareas hebben id="cc-CATID-aN"
-  var m=ta.id.match(/^cc-(.+)-a\d+$/);
-  if(m){
-    var catId=m[1];
-    var dossierEl=ta.closest('[id^="cc-"]');
-    // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-init();
-</script>
-</body>
-</html>
+async function m
