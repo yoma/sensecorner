@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 17:19">
+<meta name="ds-build" content="v2026-03-30-1 17:24">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3484,6 +3484,9 @@ async function genAdvies(name,forced){
     });
   }
   var isOwnAdv=name==='OWN Sense';
+  var dMeta=(d.meta||{});
+  var relType=String(dMeta.relationship_type||'').trim();
+  var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
   var tone=S.adviceTone||'eerlijk';
   var toneInstr=tone==='streng'
     ?'Wees streng, direct en eerlijk. Als de huidige info zwakke match of risico toont, zeg dat expliciet.'
@@ -3500,10 +3503,17 @@ async function genAdvies(name,forced){
     +' ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg'
     +' (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀)'
     +' Gebruik geen nummering in woorden zoals "één/twee/drie"; gebruik gewone zinnen of bulletstijl.'
+    +(name!=='OWN Sense'
+      ?' Respecteer de relatie-fase. Als relatie al lopend is (bv. prille/vaste relatie of meerdere dates), geef GEEN advies zoals "plan eerste date".'
+      :'')
     +' Maximaal 5 zinnen advies. Nederlands.';
   var usageLine=buildUsageModeContextLine();
   if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
   var userContent='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify(d.props);
+  if(name!=='OWN Sense'){
+    if(stageNow)userContent+='\nDating fase: '+stageLabel(stageNow);
+    if(relType)userContent+='\nRelatietype: '+relType;
+  }
   if(catTxt)userContent+='\nIngevulde info: '+catTxt;
   if(ctx)userContent+='\nRecente berichten:\n'+ctx;
   try{
@@ -5495,7 +5505,7 @@ function buildCoachContext(){
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
       var meta=d.meta||{};
       var metaAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
-      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',meta.intent].filter(Boolean).join(', ');
+      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',meta.intent,meta.relationship_type?('relatietype '+meta.relationship_type):'',('fase '+stageLabel(getDossierStage(p)))].filter(Boolean).join(', ');
       var photoShort=(meta.photo_analysis&&meta.photo_analysis.summary)?(' | foto: '+String(meta.photo_analysis.summary).substring(0,80)):'';
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
@@ -5526,8 +5536,10 @@ async function buildDossierContextForAI(dosName){
   var d=S.pdata[dosName]||{props:{},categories:{},summary:'',meta:{}};
   var lines=[];
   var m=d.meta||{};
+  var relType=String(m.relationship_type||'').trim();
+  var dStage=getDossierStage(dosName);
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
-  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,m.intent].filter(Boolean).join(', ');
+  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,m.intent,relType?('relatietype '+relType):'',dStage?('fase '+stageLabel(dStage)):''].filter(Boolean).join(', ');
   if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
   if(m.photo_analysis){
     var ptxt='Foto-analyse: mood '+(m.photo_analysis.mood||'')+', openheid '+(m.photo_analysis.openheid||0)+'%, glimlach '+(m.photo_analysis.glimlach||0)+'%, energie '+(m.photo_analysis.energie||0)+'%, verzorging '+(m.photo_analysis.verzorging||0)+'%, benaderbaarheid '+(m.photo_analysis.benaderbaarheid||0)+'%';
