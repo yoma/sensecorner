@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:52">
+<meta name="ds-build" content="v2026-03-30-1 16:58">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2018,6 +2018,31 @@ function setUsageMode(mode){
 function getFocusDossier(){
   return localStorage.getItem('ds_focus_dossier')||'';
 }
+function getFocusRelationType(){
+  var v=localStorage.getItem('ds_focus_relation_type')||'';
+  if(!v)return'';
+  return String(v);
+}
+function setFocusRelationType(v){
+  var val=String(v||'').trim();
+  if(!val){
+    localStorage.removeItem('ds_focus_relation_type');
+    S.focusRelationType='';
+    return;
+  }
+  localStorage.setItem('ds_focus_relation_type',val);
+  S.focusRelationType=val;
+}
+function buildUsageModeContextLine(){
+  var mode=getUsageMode();
+  if(mode!=='single')return'Gebruiksmode: date modus (meerdere dossiers mogelijk).';
+  var fd=getFocusDossier();
+  var rt=getFocusRelationType();
+  var base='Gebruiksmode: relatie-focus actief';
+  if(fd)base+=' op '+dn(fd);
+  if(rt)base+=' · type: '+rt;
+  return base+'. Behandel dit als lopende, vaste dating/relatie-context.';
+}
 function setFocusDossier(name){
   if(!name){
     localStorage.removeItem('ds_focus_dossier');
@@ -2037,13 +2062,17 @@ function quickSetUsageMode(mode){
     }
   }else{
     setFocusDossier('');
+    setFocusRelationType('');
   }
   goScreen('home');
 }
 async function applyFocusFromHome(autoHold){
   var sel=document.getElementById('homeFocusSelect');
   var n=sel?sel.value:'';
+  var rtEl=document.getElementById('homeFocusRelationType');
+  var rt=rtEl?rtEl.value:'';
   if(!n){toast('Kies eerst een dossier');return;}
+  setFocusRelationType(rt);
   await activateRelationshipFocus(n,!!autoHold);
 }
 async function activateRelationshipFocus(name,autoHold){
@@ -2367,6 +2396,7 @@ function rHome(el){
   var firstName=S.user.user_metadata?.first_name||S.user.email?.split('@')[0]||'';
   var usageMode=getUsageMode();
   var focusName=getFocusDossier();
+  var focusRelType=getFocusRelationType();
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
   var notes=[];
@@ -2460,13 +2490,13 @@ function rHome(el){
         <button class="${usageMode==='single'?'btn-r':'coach-save-other'}" style="${usageMode==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="quickSetUsageMode('single')">Relatie-focus</button>
       </div>
       ${usageMode==='single'
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="coach-save-other" style="font-size:12px;padding:7px 9px" onclick="applyFocusFromHome(true)">Focus + on hold</button></div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><select id="homeFocusRelationType" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!focusRelType?'selected':'')+'>Type relatie (optioneel)</option><option value="exclusief daten" '+(focusRelType==='exclusief daten'?'selected':'')+'>Exclusief daten</option><option value="prille relatie" '+(focusRelType==='prille relatie'?'selected':'')+'>Prille relatie</option><option value="vaste relatie" '+(focusRelType==='vaste relatie'?'selected':'')+'>Vaste relatie</option><option value="onduidelijk / zoekend" '+(focusRelType==='onduidelijk / zoekend'?'selected':'')+'>Onduidelijk / zoekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Let op: andere actieve dossiers worden bij activatie automatisch op on hold gezet (later heropenen kan altijd).</div>'
         :''
       }
     </div>
   </div>
   ${usageMode==='single'
-    ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 14px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus modus</span></div><p class="ai-sec-text">DateSense werkt nu ook als relatievolger voor 1 persoon'+(focusName?(' · focus op <strong>'+dn(focusName)+'</strong>'):'')+'. Je kan altijd terugschakelen naar meerdere dossiers in Instellingen.</p></div></div>'
+    ?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:-8px 0 14px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus modus</span></div><p class="ai-sec-text">DateSense werkt nu ook als relatievolger voor 1 persoon'+(focusName?(' · focus op <strong>'+dn(focusName)+'</strong>'):'')+(focusRelType?(' · type: <strong>'+escHTML(focusRelType)+'</strong>'):'')+'. Je kan altijd terugschakelen naar meerdere dossiers in Instellingen.</p></div></div>'
     :''
   }
 
@@ -3417,6 +3447,8 @@ async function genAdvies(name,forced){
     +' (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀)'
     +' Gebruik geen nummering in woorden zoals "één/twee/drie"; gebruik gewone zinnen of bulletstijl.'
     +' Maximaal 5 zinnen advies. Nederlands.';
+  var usageLine=buildUsageModeContextLine();
+  if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
   var userContent='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify(d.props);
   if(catTxt)userContent+='\nIngevulde info: '+catTxt;
   if(ctx)userContent+='\nRecente berichten:\n'+ctx;
@@ -4082,6 +4114,7 @@ function rSettings(el){
   var usageMode=getUsageMode();
   var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
   var focusName=getFocusDossier();
+  var focusRelType=getFocusRelationType();
   if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
   var extraHtml=''
     +renderSettingsTile('⚙️','Instellingen','Algemene voorkeuren','settings-placeholder')
@@ -4113,6 +4146,13 @@ function rSettings(el){
 <div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
   <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
   <select class="form-input" id="focusDossierField">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
+  <select class="form-input" id="focusRelationTypeField">
+    <option value="" ${!focusRelType?'selected':''}>Type relatie kiezen (optioneel)</option>
+    <option value="exclusief daten" ${focusRelType==='exclusief daten'?'selected':''}>Exclusief daten</option>
+    <option value="prille relatie" ${focusRelType==='prille relatie'?'selected':''}>Prille relatie</option>
+    <option value="vaste relatie" ${focusRelType==='vaste relatie'?'selected':''}>Vaste relatie</option>
+    <option value="onduidelijk / zoekend" ${focusRelType==='onduidelijk / zoekend'?'selected':''}>Onduidelijk / zoekend</option>
+  </select>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
     <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(true)">Focus + zet andere op on hold</button>
     <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(false)">Alleen focus instellen</button>
@@ -4218,6 +4258,8 @@ async function saveSettings(){
     var fd=document.getElementById('focusDossierField');
     var fName=fd?fd.value:'';
     if(fName)setFocusDossier(fName);
+    var fr=document.getElementById('focusRelationTypeField');
+    setFocusRelationType(fr?fr.value:'');
   }
   toast('✅ Instellingen opgeslagen');
   goScreen('home');
@@ -4225,6 +4267,8 @@ async function saveSettings(){
 async function activateRelationshipFocusFromSettings(autoHold){
   var fd=document.getElementById('focusDossierField');
   var name=fd?fd.value:'';
+  var fr=document.getElementById('focusRelationTypeField');
+  setFocusRelationType(fr?fr.value:'');
   if(!name){toast('Kies eerst een dossier');return;}
   await activateRelationshipFocus(name,!!autoHold);
 }
@@ -4416,6 +4460,8 @@ async function cmpAdviesCurrent(){
       +'Gebruik OOK de recente context (events, ingevulde input) en vermijd feitelijke fouten over wat al gebeurd is. '
       +'Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). '
       +'Max 6 zinnen totaal. Nederlands.';
+    var usageLine=buildUsageModeContextLine();
+    if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
     var user='Data:\n'+JSON.stringify(payload);
     var t=await callAPI(sys,[{role:'user',content:user}],700);
     t=cleanCompareAiText(t);
@@ -4653,9 +4699,10 @@ async function sendMsg(){
   });
 
   var coachNamesLine=buildContactNamesLine();
+  var usageLine=buildUsageModeContextLine();
   var coachCtx=buildCoachContext();
   if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
-  var coachCtxFinal=(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
+  var coachCtxFinal=(usageLine?usageLine+'\n':'')+(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent DateSensei, de persoonlijke dating coach van de gebruiker.'
     +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
