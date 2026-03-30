@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 13:23">
+<meta name="ds-build" content="v2026-03-30-1 13:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -561,7 +561,7 @@ const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
 var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
 const APP_BUILD_LABEL=String(_metaBuildContent||'v2026-03-27-1').trim();
-const sb=supabase.createClient(SURL,SKEY);
+const sb=(window.supabase&&window.supabase.createClient)?supabase.createClient(SURL,SKEY):null;
 
 function setBuildTag(){
   var el=document.getElementById('buildTagTop');
@@ -1273,6 +1273,17 @@ async function ensureSessionTables(){
 }
 
 async function init(){
+  if(!sb){
+    goScreen('home');
+    var mc=document.getElementById('mainContent');
+    if(mc){
+      mc.innerHTML='<div style="padding:24px;color:#7A2A2A">'
+        +'<div style="font-size:18px;font-weight:800;margin-bottom:8px">Kan DateSense niet initialiseren</div>'
+        +'<div style="font-size:14px;line-height:1.6">Supabase library kon niet geladen worden. Herlaad de pagina (Ctrl+F5) of controleer je internetverbinding.</div>'
+        +'</div>';
+    }
+    return;
+  }
   ensureSessionTables();
   try{
     var {data:{session}}=await sb.auth.getSession();
