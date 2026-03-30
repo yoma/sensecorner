@@ -30,6 +30,25 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .brand .dot{color:var(--r)}
 .tag{font-size:var(--fs-xs);color:var(--r);font-style:italic;margin-top:2px}
 
+/* Build label linksboven (debug / versie zichtbaar) */
+.build-tag-top{
+  position:absolute;
+  top:calc(10px + var(--st));
+  left:12px;
+  z-index:220;
+  pointer-events:none;
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid var(--b);
+  background:rgba(255,255,255,.86);
+  backdrop-filter:blur(6px);
+  font-size:12px;
+  font-weight:800;
+  color:var(--t);
+  box-shadow:0 6px 18px rgba(0,0,0,.06);
+}
+.build-tag-top .bt-sub{font-weight:800;color:var(--r);margin-left:6px}
+
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Nav */
@@ -160,8 +179,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .form-input:focus{border-color:var(--r)}
 .pw-input-wrap{position:relative;width:100%;margin-bottom:14px}
 .pw-input-wrap .form-input{margin-bottom:0;padding-right:76px}
-.pw-eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:1px solid var(--b);background:#fff;cursor:pointer;font-size:16px;color:#777;padding:0;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.04)}
-.pw-eye-btn:hover{color:var(--r);border-color:rgba(0,0,0,.12)}
+.pw-eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:transparent;cursor:pointer;font-size:18px;color:#777;padding:0;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;box-shadow:none}
+.pw-eye-btn:hover{background:rgba(0,0,0,.04);color:var(--r)}
+.pw-eye-btn:active{background:rgba(0,0,0,.07)}
 .form-btn{width:100%;padding:17px;background:var(--r);color:#fff;border:none;border-radius:var(--rad-md);font-size:var(--fs-md);font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px}
 .form-btn:active{opacity:.85}
 .form-btn.sec{background:var(--g);color:#333;border:1px solid var(--b)}
@@ -376,6 +396,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <div class="overlay" id="ovl" onclick="closeDrawer()"></div>
   <div class="drawer" id="drawer"><div class="dr-in" id="drIn"></div></div>
 
+  <!-- Build label linksboven (debug / versie zichtbaar) -->
+  <div id="buildTagTop" class="build-tag-top" aria-hidden="true"></div>
+
   <!-- Topbar -->
   <div class="topbar">
     <button class="ico" id="btnBack" onclick="goBack()" style="visibility:hidden">
@@ -389,7 +412,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Logobar -->
   <div class="logobar">
     <div class="av" id="ownAvatarWrap"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
-    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach · <span id="buildTag">build</span></div></div>
+    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach</div></div>
   </div>
 
   <div class="sync-bar" id="syncBar"></div>
@@ -537,8 +560,12 @@ const APP_BUILD='v2026-03-27-1';
 const sb=supabase.createClient(SURL,SKEY);
 
 function setBuildTag(){
-  var el=document.getElementById('buildTag');
-  if(el)el.textContent=APP_BUILD;
+  var el=document.getElementById('buildTagTop');
+  if(!el)return;
+  var now=new Date();
+  var hh=String(now.getHours()).padStart(2,'0');
+  var mm=String(now.getMinutes()).padStart(2,'0');
+  el.innerHTML='Build<span class="bt-sub">'+APP_BUILD+' · '+hh+':'+mm+'</span>';
 }
 
 // Eigenschappen — STARTEN OP 0 (geen hardcoded waarden!)
@@ -618,6 +645,8 @@ var _profileUploadBusy=false;
 var _photoAnalysisBusy={};
 var _analysisPhotoFor='OWN Sense';
 var _analysisUploadBusy=false;
+var _loginInFlight=false;
+var _loginAttemptId=0;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -1257,37 +1286,64 @@ async function init(){
 }
 
 async function doLogin(){
-  var e=document.getElementById('lEmail').value.trim(),p=document.getElementById('lPw').value,err=document.getElementById('lErr');
-  if(!e||!p){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';return;}
-  err.textContent='Even wachten...';err.style.color='#888';
-  var uiDone=false;
+  if(_loginInFlight)return;
+  var token=++_loginAttemptId;
+  _loginInFlight=true;
+
+  var eEl=document.getElementById('lEmail');
+  var pEl=document.getElementById('lPw');
+  var err=document.getElementById('lErr');
+  var e=eEl?eEl.value.trim():'';
+  var p=pEl?pEl.value:'';
+
+  if(!e||!p){
+    if(err){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';}
+    _loginInFlight=false;
+    return;
+  }
+
+  var btn=document.getElementById('lLoginBtn');
+  if(btn){btn.disabled=true;btn.style.opacity=.65;}
+
+  if(err){err.textContent='Even wachten...';err.style.color='#888';}
+
   var uiTimer=setTimeout(function(){
-    if(uiDone)return;
-    uiDone=true;
-    err.style.color='var(--r)';
-    err.textContent='Inloggen time-out (5s). Probeer opnieuw.';
-  },10000);
+    if(token!==_loginAttemptId)return;
+    _loginInFlight=false;
+    if(btn){btn.disabled=false;btn.style.opacity='';}
+    var e2=document.getElementById('lErr')||err;
+    if(e2){
+      e2.style.color='var(--r)';
+      e2.textContent='Inloggen time-out (5s). Probeer opnieuw.';
+    }
+  },5000);
+
   try{
     await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
       5000,
       'Inloggen time-out (5s). Probeer opnieuw.'
     );
-    uiDone=true;
-    clearTimeout(uiTimer);
+    // Success: UI wordt via AUTH state change aangepast.
   }catch(x){
-    uiDone=true;
-    clearTimeout(uiTimer);
+    if(token!==_loginAttemptId)return;
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
     if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
     else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';
     else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';
     else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';
-    err.style.color='var(--r)';
-    err.textContent=friendly;
+    var e3=document.getElementById('lErr')||err;
+    if(e3){
+      e3.style.color='var(--r)';
+      e3.textContent=friendly;
+    }
   }finally{
     clearTimeout(uiTimer);
+    if(token===_loginAttemptId){
+      _loginInFlight=false;
+      if(btn){btn.disabled=false;btn.style.opacity='';}
+    }
   }
 }
 
@@ -1456,6 +1512,10 @@ function goBack(){
 
 function goScreen(sc){
   var prevScreen=S.screen;
+  // Protect screens when not authenticated
+  if(!S.user && ['senses','own','vertel','compare','dossier'].includes(sc)){
+    sc='login';
+  }
   S.prev=S.screen;S.screen=sc;
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
@@ -1472,6 +1532,15 @@ function goScreen(sc){
   mc.scrollTop=0;
   renderOwnAvatar();
   if(S.user)rDrawer();
+
+  // Hide bottom-nav actions when not logged in
+  ['tab-senses','tab-own','tab-vertel'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(!e)return;
+    e.style.display=S.user?'':'none';
+  });
+  var homeTab=document.getElementById('tab-home');
+  if(homeTab)homeTab.style.display='';
 }
 
 // ══ Drawer ═══════════════════════════════════════════════════════
@@ -1679,7 +1748,7 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 
 // ══ Home ═════════════════════════════════════════════════════════
