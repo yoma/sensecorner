@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 13:28">
+<meta name="ds-build" content="v2026-03-30-1 13:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1562,7 +1562,26 @@ function goScreen(sc){
   ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
   var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier};
-  if(screens[sc])screens[sc](mc);
+  if(screens[sc]){
+    try{
+      var r=screens[sc](mc);
+      if(r&&typeof r.then==='function'){
+        r.catch(function(err){
+          console.error('screen render async error:',err);
+          mc.innerHTML='<div style="padding:20px;color:#7A2A2A;font-size:13px;line-height:1.6">'
+            +'<div style="font-size:16px;font-weight:800;margin-bottom:8px">Scherm kon niet laden</div>'
+            +'<div>'+(err&&err.message?escHTML(err.message):'Onbekende fout')+'</div>'
+            +'</div>';
+        });
+      }
+    }catch(err){
+      console.error('screen render error:',err);
+      mc.innerHTML='<div style="padding:20px;color:#7A2A2A;font-size:13px;line-height:1.6">'
+        +'<div style="font-size:16px;font-weight:800;margin-bottom:8px">Scherm kon niet laden</div>'
+        +'<div>'+(err&&err.message?escHTML(err.message):'Onbekende fout')+'</div>'
+        +'</div>';
+    }
+  }
   mc.scrollTop=0;
   renderOwnAvatar();
   renderBrandTag();
