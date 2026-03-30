@@ -1251,13 +1251,18 @@ async function doLogin(){
   if(!e||!p){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';return;}
   err.textContent='Even wachten...';err.style.color='#888';
   try{
-    await sb.auth.signInWithPassword({email:e,password:p});
+    await withTimeout(
+      sb.auth.signInWithPassword({email:e,password:p}),
+      20000,
+      'Inloggen time-out. Probeer opnieuw.'
+    );
   }catch(x){
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
     if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
     else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';
     else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';
+    else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';
     err.style.color='var(--r)';
     err.textContent=friendly;
   }
@@ -1271,7 +1276,11 @@ async function forgotPassword(){
   if(err){err.style.color='#888';err.textContent='Reset mail versturen...';}
   try{
     var redirect=window.location.origin+window.location.pathname;
-    await sb.auth.resetPasswordForEmail(email,{redirectTo:redirect});
+    await withTimeout(
+      sb.auth.resetPasswordForEmail(email,{redirectTo:redirect}),
+      20000,
+      'Reset time-out. Probeer opnieuw.'
+    );
     if(err){err.style.color='#2E7D32';err.textContent='Reset-link verzonden. Controleer je mailbox.';}
   }catch(e){
     if(err){err.style.color='var(--r)';err.textContent='Kon reset-mail niet versturen. Probeer opnieuw.';}
