@@ -385,7 +385,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Logobar -->
   <div class="logobar">
     <div class="av" id="ownAvatarWrap"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
-    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach</div></div>
+    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag">Jouw persoonlijke dating coach · <span id="buildTag">build</span></div></div>
   </div>
 
   <div class="sync-bar" id="syncBar"></div>
@@ -529,7 +529,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+const APP_BUILD='v2026-03-27-1';
 const sb=supabase.createClient(SURL,SKEY);
+
+function setBuildTag(){
+  var el=document.getElementById('buildTag');
+  if(el)el.textContent=APP_BUILD;
+}
 
 // Eigenschappen — STARTEN OP 0 (geen hardcoded waarden!)
 const PK=['gevoeligheid','openheid','humor','directheid','avontuur','stabiliteit','vertrouwen','communicatie','onafhankelijkheid'];
@@ -1253,8 +1259,8 @@ async function doLogin(){
   try{
     await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
-      20000,
-      'Inloggen time-out. Probeer opnieuw.'
+      10000,
+      'Inloggen time-out (10s). Probeer opnieuw.'
     );
   }catch(x){
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
@@ -1285,6 +1291,15 @@ async function forgotPassword(){
   }catch(e){
     if(err){err.style.color='var(--r)';err.textContent='Kon reset-mail niet versturen. Probeer opnieuw.';}
   }
+}
+
+function togglePwVis(){
+  var inp=document.getElementById('lPw');
+  var btn=document.getElementById('pwToggleBtn');
+  if(!inp)return;
+  var show=inp.type==='password';
+  inp.type=show?'text':'password';
+  if(btn)btn.textContent=show?'🙈':'👁';
 }
 
 async function doRegister(){
@@ -1647,7 +1662,7 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" style="flex:1" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="coach-save-other" style="font-size:12px;padding:10px 12px;white-space:nowrap" onclick="togglePwVis()">👁</button></div><button class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
 
 // ══ Home ═════════════════════════════════════════════════════════
@@ -4447,6 +4462,7 @@ document.addEventListener('input',function(e){
   }
 });
 
+setBuildTag();
 init();
 </script>
 </body>
