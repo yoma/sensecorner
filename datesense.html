@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:04">
+<meta name="ds-build" content="v2026-03-30-1 16:08">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3957,24 +3957,181 @@ function saveSettings(){
 }
 
 // ══ Compare ══════════════════════════════════════════════════════
+function getCompareSelection(){
+  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var saved=(S.compareSelection||[]).filter(function(n){return cs.indexOf(n)>=0;});
+  var unique=[];
+  saved.forEach(function(n){if(unique.indexOf(n)===-1)unique.push(n);});
+  if(unique.length<2){
+    cs.forEach(function(n){
+      if(unique.length<2&&unique.indexOf(n)===-1)unique.push(n);
+    });
+  }
+  if(unique.length<3){
+    cs.forEach(function(n){
+      if(unique.length<3&&unique.indexOf(n)===-1)unique.push(n);
+    });
+  }
+  S.compareSelection=unique.slice(0,3);
+  return S.compareSelection.slice();
+}
+function setComparePick(idx,val){
+  var picks=getCompareSelection();
+  if(!val){
+    picks[idx]='';
+  }else{
+    var otherIdx=picks.indexOf(val);
+    if(otherIdx>=0&&otherIdx!==idx)picks[otherIdx]='';
+    picks[idx]=val;
+  }
+  picks=picks.filter(Boolean);
+  S.compareSelection=picks.slice(0,3);
+  goScreen('compare');
+}
+function compareDataStats(name){
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  var propsKnown=PK.filter(function(k){return(d.props[k]||0)>0;}).length;
+  var catFilled=0;
+  ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
+    Object.values((d.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())catFilled++;});
+  });
+  var msgCount=d.count||0;
+  var confidence=Math.max(10,Math.min(98,Math.round((Math.min(msgCount,20)*2.2)+(propsKnown*4)+(catFilled*3.2))));
+  var lowData=(msgCount<4)||(catFilled<3)||(propsKnown<4);
+  return {d:d,msgCount:msgCount,propsKnown:propsKnown,catFilled:catFilled,confidence:confidence,lowData:lowData};
+}
+function cmpScoreVal(v){
+  return v>0?('<strong>'+v+'%</strong>'):'<span style="color:#bbb">—</span>';
+}
+function cmpBestWorst(names){
+  if(!names||names.length<2)return{best:'-',worst:'-'};
+  var pairs=[];
+  for(var i=0;i<names.length;i++){
+    for(var j=i+1;j<names.length;j++){
+      var a=S.pdata[names[i]]||{props:{...DP}};
+      var b=S.pdata[names[j]]||{props:{...DP}};
+      var diffs=[];
+      PK.forEach(function(k){
+        var av=a.props[k]||0,bv=b.props[k]||0;
+        if(av>0&&bv>0)diffs.push(100-Math.abs(av-bv));
+      });
+      if(diffs.length){
+        var score=Math.round(diffs.reduce(function(x,y){return x+y;},0)/diffs.length);
+        pairs.push({a:names[i],b:names[j],score:score});
+      }
+    }
+  }
+  if(!pairs.length)return{best:'Te weinig overlap',worst:'Te weinig overlap'};
+  pairs.sort(function(x,y){return y.score-x.score;});
+  var best=pairs[0],worst=pairs[pairs.length-1];
+  return{
+    best:dn(best.a)+' ↔ '+dn(best.b)+' ('+best.score+'%)',
+    worst:dn(worst.a)+' ↔ '+dn(worst.b)+' ('+worst.score+'%)'
+  };
+}
 function rCompare(el){
-  var cs=S.profiles.filter(p=>p!=='OWN Sense');
+  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
   if(cs.length<2){el.innerHTML='<div style="text-align:center;padding:80px 30px;color:var(--m)"><div style="font-size:48px;margin-bottom:16px">⚖️</div><p style="font-size:15px;line-height:1.6">Je hebt minimaal 2 contactdossiers nodig.<br><br><span style="color:var(--r);cursor:pointer;font-weight:600" onclick="newSenseFromDrawer()">+ Nieuw Sense aanmaken</span></p></div>';return;}
-  var c1=cs[0],c2=cs[1],d1=S.pdata[c1]||{props:{...DP}},d2=S.pdata[c2]||{props:{...DP}};
-  var rows=PK.map((k,i)=>{
-    var v1=d1.props[k]||0,v2=d2.props[k]||0;
-    if(v1===0&&v2===0)return`<div class="cmp-row"><div class="cmp-lbl">${PL[i]}</div><div class="cmp-v t1" style="color:#ccc">—</div><div class="cmp-v t2" style="color:#ccc">—</div></div>`;
-    return`<div class="cmp-row"><div class="cmp-lbl">${PL[i]}</div><div class="cmp-v t1">${v1>=v2&&v1>0?'⭐ ':''}${v1}%</div><div class="cmp-v t2">${v2>v1&&v2>0?'⭐ ':''}${v2}%</div></div>`;
+  var picks=getCompareSelection().slice(0,3);
+  if(picks.length<2){
+    picks=[cs[0],cs[1]];
+    S.compareSelection=picks.slice();
+  }
+  var names=picks.filter(Boolean).slice(0,3);
+  var stats=names.map(compareDataStats);
+  var bestWorst=cmpBestWorst(names);
+  S.compareCurrent=names.slice();
+  function selHtml(idx){
+    var cur=names[idx]||'';
+    var opts='<option value="">—</option>'+cs.map(function(n){
+      return'<option value="'+n+'" '+(cur===n?'selected':'')+'>'+dn(n)+'</option>';
+    }).join('');
+    return '<select onchange="setComparePick('+idx+',this.value)" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;font-size:13px;font-family:inherit">'+opts+'</select>';
+  }
+  var headCells=names.map(function(n,i){
+    var st=stats[i];
+    return '<th style="padding:10px 8px;background:'+(i%2===0?'#FFF5F5':'#F5F5FF')+';border:1px solid var(--b);font-size:12px;text-align:center">'
+      +'<div style="font-weight:800;color:#333">'+dn(n)+'</div>'
+      +'<div style="font-size:11px;color:#7a7f88;margin-top:2px">'+st.msgCount+' berichten · '+st.catFilled+'/9 profiel</div>'
+      +'<div style="font-size:11px;margin-top:4px;color:'+(st.confidence>=70?'#1B5E20':st.confidence>=45?'#A55B00':'#9E9E9E')+'">Confidence '+st.confidence+'%</div>'
+      +(st.lowData?'<div style="font-size:10px;color:#B42318;margin-top:2px">Te weinig data</div>':'')
+      +'</th>';
   }).join('');
-  el.innerHTML=`<div style="padding:16px 16px 32px"><div style="display:flex;gap:8px;margin-bottom:16px"><div style="flex:2"></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:var(--r);background:#FFF5F5;padding:10px 6px;border-radius:12px">${c1}<br><span style="font-size:22px;font-weight:800">${d1.count||0}</span><br><span style="font-size:11px">berichten</span></div><div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:#3949AB;background:#F5F5FF;padding:10px 6px;border-radius:12px">${c2}<br><span style="font-size:22px;font-weight:800">${d2.count||0}</span><br><span style="font-size:11px">berichten</span></div></div>${rows}<div id="cmpBox" style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px;margin-top:18px"><div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI ANALYSE</div><div style="font-size:15px;color:#333;line-height:1.6">Voeg meer data toe voor een betere analyse.</div><div style="display:flex;gap:10px;margin-top:14px"><button class="aa r" onclick="cmpAdvies('${c1}','${c2}')">AI Analyse</button><button class="aa g" onclick="viewDossier('${c1}')">Open ${c1}</button></div></div></div>`;
+  var bodyRows=PK.map(function(k,i){
+    var vals=stats.map(function(st){return st.d.props[k]||0;});
+    var max=Math.max.apply(null,vals);
+    var cells=vals.map(function(v){
+      var star=(v>0&&v===max&&vals.filter(function(x){return x===max;}).length===1)?'⭐ ':'';
+      return '<td style="padding:9px 8px;border:1px solid var(--b);text-align:center;font-size:13px">'+star+cmpScoreVal(v)+'</td>';
+    }).join('');
+    return '<tr><td style="padding:9px 8px;border:1px solid var(--b);background:#FAFAFA;font-size:12px;color:#555;font-weight:700">'+PL[i]+'</td>'+cells+'</tr>';
+  }).join('');
+  var summaryRows=[
+    {label:'Profielvelden ingevuld',values:stats.map(function(st){return st.catFilled+'/9';})},
+    {label:'Eigenschappen met data',values:stats.map(function(st){return st.propsKnown+'/9';})},
+    {label:'Confidence',values:stats.map(function(st){return st.confidence+'%';})}
+  ].map(function(r){
+    return '<tr><td style="padding:8px;border:1px solid var(--b);background:#FAFAFA;font-size:12px;color:#666">'+r.label+'</td>'
+      +r.values.map(function(v){return'<td style="padding:8px;border:1px solid var(--b);text-align:center;font-size:12px;color:#555">'+v+'</td>';}).join('')
+      +'</tr>';
+  }).join('');
+  var warnings=stats.filter(function(st){return st.lowData;}).map(function(st,idx){
+    return '⚠️ '+dn(names[idx])+': beperkte data, conclusie minder betrouwbaar.';
+  }).join('<br>');
+  el.innerHTML='<div style="padding:16px 16px 32px">'
+    +'<div style="font-size:14px;font-weight:800;color:#333;margin-bottom:10px">Vergelijk dossiers naast elkaar</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+selHtml(0)+selHtml(1)+selHtml(2)+'</div>'
+    +'<div style="overflow:auto;border:1px solid var(--b);border-radius:12px;background:#fff">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:'+(names.length===3?'760px':'620px')+'">'
+      +'<thead><tr><th style="padding:10px 8px;border:1px solid var(--b);background:#fafafa;font-size:12px;color:#666;text-align:left">KPI</th>'+headCells+'</tr></thead>'
+      +'<tbody>'+bodyRows+summaryRows+'</tbody></table>'
+    +'</div>'
+    +'<div id="cmpBox" style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px;margin-top:14px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:8px;letter-spacing:.5px">AI CONCLUSIE</div>'
+      +'<div style="font-size:14px;color:#444;line-height:1.6">Beste overlap: <strong>'+bestWorst.best+'</strong><br>Grootste afstand: <strong>'+bestWorst.worst+'</strong>'
+      +(warnings?('<div style="margin-top:8px;color:#B42318;font-size:12px">'+warnings+'</div>'):'')
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
+      +'<button class="aa r" onclick="cmpAdviesCurrent()">AI Analyse met waarom</button>'
+      +'<button class="aa g" onclick="viewDossier(\''+names[0]+'\')">Open '+dn(names[0])+'</button>'
+      +(names[1]?'<button class="aa g" onclick="viewDossier(\''+names[1]+'\')">Open '+dn(names[1])+'</button>':'')
+      +(names[2]?'<button class="aa g" onclick="viewDossier(\''+names[2]+'\')">Open '+dn(names[2])+'</button>':'')
+      +'</div>'
+    +'</div>'
+  +'</div>';
 }
 
-async function cmpAdvies(c1,c2){
+async function cmpAdviesCurrent(){
+  var names=(S.compareCurrent||[]).filter(Boolean).slice(0,3);
+  if(names.length<2){toast('Kies minimaal 2 dossiers');return;}
   if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
-  var box=document.getElementById('cmpBox');if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
-  var d1=S.pdata[c1]||{props:{...DP}},d2=S.pdata[c2]||{props:{...DP}};
-  try{var t=await callAPI('Je bent DateSensei. Vergelijk '+c1+' en '+c2+' eerlijk. Nederlands. Max 4 zinnen.',[{role:'user',content:'Vergelijk '+c1+' ('+JSON.stringify(d1.props)+') met '+c2+' ('+JSON.stringify(d2.props)+').'}],500);if(box)box.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">ADVIES</div><div style="font-size:15px;color:#333;line-height:1.6">'+t+'</div>';}
-  catch(x){if(box)box.innerHTML='<div style="color:red">Fout: '+x.message+'</div>';}
+  var box=document.getElementById('cmpBox');
+  if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+  try{
+    var payload=names.map(function(n){
+      var st=compareDataStats(n);
+      return {
+        naam:dn(n),
+        props:st.d.props||{},
+        berichten:st.msgCount,
+        profielvelden:st.catFilled,
+        confidence:st.confidence,
+        low_data:st.lowData
+      };
+    });
+    var sys='Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. '
+      +'Geef 1 duidelijke conclusie met WAAROM (welke eigenschappen trekken omhoog/omlaag), '
+      +'en eindig met een korte aanbeveling. Max 6 zinnen. Nederlands.';
+    var user='Data:\n'+JSON.stringify(payload);
+    var t=await callAPI(sys,[{role:'user',content:user}],700);
+    if(box){
+      box.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI CONCLUSIE MET WAAROM</div>'
+        +'<div style="font-size:15px;color:#333;line-height:1.7">'+t+'</div>'
+        +'<div style="font-size:11px;color:#8a8f97;margin-top:10px">Confidence per dossier en data-waarschuwingen zie je in de tabel hierboven.</div>';
+    }
+  }catch(x){
+    if(box)box.innerHTML='<div style="color:#c00">Fout: '+x.message+'</div>';
+  }
 }
 
 // ══ API call ══════════════════════════════════════════════════════
