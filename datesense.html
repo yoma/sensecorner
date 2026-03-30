@@ -2166,21 +2166,39 @@ function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size
 
 function rNotifications(el){
   var q=(S.notificationsFilter||'all');
+  var sortBy=(S.notificationsSort||'prio');
   var state=_coachState();
   var now=Date.now();
   var items=buildCoachTasks().map(function(t){
     var st=state[t.id]||null;
     var status='open';
     if(st&&st.until&&st.until>now)status=(st.mode==='snooze'?'snoozed':'done');
-    return {...t,status:status};
+    var personMatch=(t.id||'').match(/-(.+Sense)$/);
+    var person=personMatch&&personMatch[1]?personMatch[1]:'';
+    return {...t,status:status,person:person};
   });
   if(q!=='all')items=items.filter(function(t){return t.type===q;});
-  items.sort(function(a,b){return prioWeight(b.prio||'low')-prioWeight(a.prio||'low');});
+  if(sortBy==='person'){
+    items.sort(function(a,b){return String(a.person||'').localeCompare(String(b.person||''));});
+  }else if(sortBy==='newest'){
+    items.sort(function(a,b){
+      var sa=state[a.id],sb=state[b.id];
+      var ta=sa&&sa.until?sa.until:0,tb=sb&&sb.until?sb.until:0;
+      return tb-ta;
+    });
+  }else{
+    items.sort(function(a,b){return prioWeight(b.prio||'low')-prioWeight(a.prio||'low');});
+  }
   var chips='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px">'
     +'<button class="coach-save-other" style="'+(q==='all'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'all\';goScreen(\'notifications\')">Alles</button>'
     +'<button class="coach-save-other" style="'+(q==='s'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'s\';goScreen(\'notifications\')">SENSE</button>'
     +'<button class="coach-save-other" style="'+(q==='a'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'a\';goScreen(\'notifications\')">ACTIE</button>'
     +'<button class="coach-save-other" style="'+(q==='c'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'c\';goScreen(\'notifications\')">CHECK</button>'
+    +'</div>';
+  chips+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px">'
+    +'<button class="coach-save-other" style="'+(sortBy==='newest'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'newest\';goScreen(\'notifications\')">Nieuwste</button>'
+    +'<button class="coach-save-other" style="'+(sortBy==='prio'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'prio\';goScreen(\'notifications\')">Prioriteit</button>'
+    +'<button class="coach-save-other" style="'+(sortBy==='person'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'person\';goScreen(\'notifications\')">Per persoon</button>'
     +'</div>';
   var body=items.length?items.map(function(n){
     var pr=(n.prio||'low');
@@ -2193,9 +2211,22 @@ function rNotifications(el){
       </div>
       <div class="ntext">${n.msg}</div>
       <span class="nlink" onclick="${n.action}">${n.link}</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',24);goScreen('notifications')">Snooze 1d</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','done');goScreen('notifications')">✓ Done</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','dismiss');goScreen('notifications')">Weg</button>
+      </div>
     </div>`;
   }).join(''):'<div style="font-size:13px;color:#8a8f97;padding:8px 2px">Geen meldingen in deze filter.</div>';
-  el.innerHTML=`<div style="padding:16px 16px 32px"><div class="sh">Mijn meldingen</div>${chips}${body}</div>`;
+  var recent=Object.keys(state).filter(function(id){
+    var st=state[id];
+    return st&&st.until&&st.until>now&&(st.mode==='done'||st.mode==='snooze');
+  }).slice(0,5).map(function(id){
+    var st=state[id];
+    return '<div style="font-size:12px;color:#8a8f97;line-height:1.5">• '+id.replace(/^.*?-/,'')+' · '+(st.mode==='done'?'done':'snoozed')+'</div>';
+  }).join('');
+  var hist=recent?('<div style="margin-top:14px;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fafbfc"><div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Recent afgehandeld</div>'+recent+'</div>'):'';
+  el.innerHTML=`<div style="padding:16px 16px 32px"><div class="sh">Mijn meldingen</div>${chips}${body}${hist}</div>`;
 }
 
 // ══ Senses lijst ═════════════════════════════════════════════════
