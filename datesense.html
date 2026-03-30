@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-30-1 16:13">
+<meta name="ds-build" content="v2026-03-30-1 16:19">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2407,6 +2407,9 @@ function rSenses(el){
   var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
   var cs=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
   var archived=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
+  if(typeof S.compareMode!=='boolean')S.compareMode=false;
+  if(!Array.isArray(S.compareDraft))S.compareDraft=[];
+  S.compareDraft=S.compareDraft.filter(function(n){return cs.indexOf(n)>=0;}).slice(0,3);
   var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
 <div class="srow" onclick="goScreen('own')">
@@ -2417,11 +2420,16 @@ function rSenses(el){
   if(cs.length){
     h+='<div class="sh">Contacten</div>';
     h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-6px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
+    if(allContacts.length>=2){
+      h+='<div style="display:flex;justify-content:flex-end;margin:-2px 0 10px"><button class="coach-save-other" style="'+(S.compareMode?'border-color:var(--r);color:var(--r)':'')+'" onclick="toggleCompareMode()">'+(S.compareMode?'Vergelijking sluiten':'Vergelijk')+'</button></div>';
+    }
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
+      var picked=S.compareDraft.indexOf(p)>=0;
       h+=`<div class="srow">
+        ${S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer">':''}
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
           <div style="font-size:15px;font-weight:700">${p}</div>
@@ -2458,11 +2466,42 @@ function rSenses(el){
       </div>`;
     });
   }
+  if(S.compareMode&&allContacts.length>=2){
+    h+='<div style="position:sticky;bottom:calc(74px + var(--sb));z-index:40;margin-top:10px;background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      +'<div style="font-size:12px;color:#666">'+S.compareDraft.length+'/3 geselecteerd (min. 2)</div>'
+      +'<button class="btn-r" style="max-width:240px;padding:9px 12px" onclick="startCompareFromSenses()" '+(S.compareDraft.length<2?'disabled':'')+'>Vergelijk geselecteerde dossiers</button>'
+      +'</div>';
+  }
   h+=`<div class="srow" style="justify-content:center;border:none" onclick="newSenseFromDrawer()">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   <span style="font-size:15px;font-weight:700;color:var(--r);margin-left:8px">Nieuw Sense aanmaken</span>
 </div></div>`;
   el.innerHTML=h;
+}
+
+function toggleCompareMode(){
+  S.compareMode=!S.compareMode;
+  if(!S.compareMode)S.compareDraft=[];
+  goScreen('senses');
+}
+function toggleCompareSelect(name){
+  if(!S.compareMode)return;
+  if(!Array.isArray(S.compareDraft))S.compareDraft=[];
+  var i=S.compareDraft.indexOf(name);
+  if(i>=0){
+    S.compareDraft.splice(i,1);
+  }else{
+    if(S.compareDraft.length>=3){toast('Maximaal 3 dossiers vergelijken');return;}
+    S.compareDraft.push(name);
+  }
+  goScreen('senses');
+}
+function startCompareFromSenses(){
+  if(!Array.isArray(S.compareDraft)||S.compareDraft.length<2){toast('Kies minimaal 2 dossiers');return;}
+  S.compareSelection=S.compareDraft.slice(0,3);
+  S.compareMode=false;
+  S.compareDraft=[];
+  goScreen('compare');
 }
 
 async function delSense(name){
