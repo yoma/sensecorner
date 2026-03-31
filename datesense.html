@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 13:05">
+<meta name="ds-build" content="v2026-03-31-1 13:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3168,7 +3168,7 @@ function plannerLooksUsable(txt){
   if(!raw)return false;
   if(/^fout bij plannen:/i.test(raw))return false;
   if(raw.length<220)return false;
-  return parsePlannerResult(raw).length>=3;
+  return parsePlannerResult(raw).length>=2;
 }
 function plannerAutoAnswersFor(name){
   var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
@@ -3243,6 +3243,95 @@ function plannerIdeaGuidance(idea){
   }
   return 'Pas de stijl van elk voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan.';
 }
+function plannerFallbackProposals(name,answers){
+  var person=dn(name||'dit dossier');
+  var region=String(answers.region||'jouw regio').trim()||'jouw regio';
+  var mood=String(answers.mood||'warm').trim()||'warm';
+  var duration=String(answers.duration||'1 à 2 uur').trim()||'1 à 2 uur';
+  var setting=String(answers.setting||'mix').trim()||'mix';
+  var pace=String(answers.pace||'rustig').trim()||'rustig';
+  var focus=String(answers.focus||'verbinden').trim()||'verbinden';
+  var idea=String(answers.idea||'iets leuks').trim().toLowerCase();
+  if(idea.indexOf('koffie')>=0||idea.indexOf('coffee')>=0){
+    return [
+      {
+        title:'Rustige koffiebar in '+region,
+        why:'Past bij '+person+' omdat een korte koffiedate laagdrempelig is en toch ruimte geeft voor '+focus+'.',
+        how:'Kies een kleine specialty coffee bar of rustige hoekzaak waar je niet moet roepen. Vraag een tafeltje binnen, liefst aan het raam of achteraan.',
+        practical:'Spreek af voor '+duration+'. Zoek een koffiebar in '+region+' met zachte sfeer, weinig lawaai en plek om rustig te zitten. '+(setting==='binnen'?'Hou het binnen en knus.':'Kies een plek met binnenruimte en eventueel terrasoptie.')+' Tempo: '+pace+'.',
+        bestMoment:'Late voormiddag of vroege namiddag werkt vaak het best voor een ontspannen eerste connectie.',
+        prep:'Stuur een eenvoudige uitnodiging en stel meteen een concreet uur voor. Check kort of de zaak open is voor je vertrekt.',
+        extra:'Neem iets kleins om te delen, zoals een cake of koekje. Dat maakt het gesprek natuurlijker.',
+        warning:'Vermijd drukke ketens of plekken waar je na 20 minuten weer buiten moet.'
+      },
+      {
+        title:'Koffie + korte wandeling',
+        why:'Geeft wat meer speelsheid dan alleen zitten en houdt de sfeer licht voor '+person+'.',
+        how:'Start met koffie op een rustige plek en maak daarna een korte wandeling van 15 à 20 minuten in de buurt.',
+        practical:'Kies een koffieplek in '+region+' dicht bij een park, plein of mooie straat. Reken op '+duration+' in totaal. '+(setting==='binnen'?'Begin binnen met koffie en ga enkel buiten als het goed voelt.':'Laat de overgang naar buiten natuurlijk gebeuren.') ,
+        bestMoment:'Namiddag of vroege avond, wanneer het ritme losser is en je niet hoeft te haasten.',
+        prep:'Zorg voor een tweede kleine optie in de buurt als de eerste plek vol zit.',
+        extra:'Een korte wandeling na de koffie haalt de druk van constant oogcontact weg.',
+        warning:'Maak de wandeling niet te lang; het moet een verlengstuk zijn, geen hele tocht.'
+      },
+    ];
+  }
+  return [
+    {
+      title:'Compact voorstel in '+region,
+      why:'Past bij '+person+' en houdt rekening met '+focus+', '+mood+' en een '+pace+' tempo.',
+      how:'Kies een haalbare plek of activiteit die niet te zwaar aanvoelt maar wel genoeg ruimte geeft voor contact.',
+      practical:'Werk binnen '+duration+' en zoek iets in of nabij '+region+'. Setting: '+setting+'. Budget: '+(answers.budget||'flexibel')+'.',
+      bestMoment:'Kies een moment waarop jullie allebei zonder haast aanwezig kunnen zijn.',
+      prep:'Hou 1 hoofdidee en 1 back-upoptie klaar.',
+      extra:'Voeg een klein detail toe dat het persoonlijk maakt.',
+      warning:'Hou het eenvoudig; te veel druk haalt de spontaniteit weg.'
+    },
+    {
+      title:'Iets speelser in '+region,
+      why:'Zorgt voor wat meer lucht en beweging binnen hetzelfde planidee.',
+      how:'Combineer 2 korte delen: eerst aankomen, daarna een kleine switch van setting of ritme.',
+      practical:'Blijf in dezelfde buurt zodat je niet veel moet verplaatsen. Reken op '+duration+'.',
+      bestMoment:'Kies een tijdslot waarin de sfeer rustig maar levendig genoeg is.',
+      prep:'Check op voorhand openingstijden en een reserve-optie.',
+      extra:'Een klein gedeeld moment maakt de date warmer.',
+      warning:'Maak het niet te ambitieus voor één afspraak.'
+    },
+  ];
+}
+function plannerNormalizeResult(raw,name,answers){
+  var parsed=parsePlannerResult(raw);
+  if(parsed.length>=2)return String(raw||'').trim();
+  var items=parsed.slice();
+  var fallbacks=plannerFallbackProposals(name,answers);
+  for(var i=0;i<fallbacks.length&&items.length<2;i++){
+    var fb=fallbacks[i];
+    items.push({
+      idx:items.length+1,
+      title:fb.title,
+      why:fb.why,
+      how:fb.how,
+      practical:fb.practical,
+      bestMoment:fb.bestMoment,
+      prep:fb.prep,
+      extra:fb.extra,
+      warning:fb.warning
+    });
+  }
+  return items.slice(0,2).map(function(item,idx){
+    return [
+      'Voorstel '+(idx+1)+':',
+      'Titel: '+(item.title||''),
+      'Waarom dit past: '+(item.why||''),
+      'Hoe het eruitziet: '+(item.how||''),
+      'Praktisch: '+(item.practical||''),
+      'Beste moment: '+(item.bestMoment||''),
+      'Voorbereiding: '+(item.prep||''),
+      'Mooiste extra: '+(item.extra||''),
+      'Let op: '+(item.warning||'')
+    ].join('\n');
+  }).join('\n\n');
+}
 function buildPlannerContextPayload(name){
   if(!name||name==='OWN Sense')return'';
   var d=S.pdata[name]||{props:{},categories:{},summary:'',meta:{}};
@@ -3305,11 +3394,11 @@ function plannerAutoTaskFor(name){
   var ready=getRecentAutoPlannerEntry(name,72);
   if(!ready)return null;
   var person=dn(name).replace('Sense','');
-  var msg='Voor <strong>'+person+'</strong> staan 3 planvoorstellen klaar als zetje.';
-  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staan 3 eerste-date voorstellen klaar.';
-  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staan 3 originelere datevoorstellen klaar.';
-  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staan 3 quality-time plannen klaar.';
-  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staan 3 verbindende plannen klaar.';
+  var msg='Voor <strong>'+person+'</strong> staan 2 planvoorstellen klaar als zetje.';
+  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staan 2 eerste-date voorstellen klaar.';
+  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staan 2 originelere datevoorstellen klaar.';
+  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staan 2 quality-time plannen klaar.';
+  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staan 2 verbindende plannen klaar.';
   else if(stage==='geen_contact')msg='Voor <strong>'+person+'</strong> staat een voorzichtig herstartplan klaar, als dat nog goed voelt.';
   return {
     id:'plan-auto-'+name,
@@ -3329,11 +3418,12 @@ async function requestPlannerIdeas(name,answers){
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
   var hasConcreteRegion=String(answers.region||'').trim().length>=3;
   var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
-    +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
+    +'Je maakt 2 uitgewerkte voorstellen in het Nederlands. '
     +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
     +'Schrijf warm, premium en praktisch. '
     +'Respecteer strikt de fase en context van het dossier. Als iemand nog niet in het echt gezien is, stel dan geen zware of te intieme plannen voor. '
-    +'Geef exact 3 voorstellen, niet 2 en niet 4. '
+    +'Geef exact 2 voorstellen, niet 1 en niet 3. '
+    +'Geef alleen echte, offline haalbare voorstellen. Geen virtuele wandeling, geen denkbeeldige route, geen symbolische of abstracte invulling. '
     +'Voor elk voorstel gebruik je exact deze structuur: '
     +'Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:. '
     +' Als regio of stad duidelijk ingevuld is, MOET je concrete voorbeelden van restaurants, bars, buurten, wandelplekken, hotspots of startlocaties noemen die daarbij passen. '
@@ -3358,7 +3448,7 @@ async function requestPlannerIdeas(name,answers){
     +'\n- Type idee: '+ideaMeta.moodHint
     +'\n- Schrijfstijl voor dit idee: '+ideaGuidance
     +(hasConcreteRegion?'\n- Verplichting: noem per voorstel minstens 1 concrete plek, buurt, zaak of startlocatie in of nabij deze regio.':'')
-    +'\n\nMaak exact 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.'
+    +'\n\nMaak exact 2 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.'
     +'\nGeef waar mogelijk praktische details zoals: waar starten, waar parkeren, rijtijd, afstand/km, duur en 1 beste extra tip.'
     +(hasConcreteRegion
       ?'\nOmdat de regio duidelijk is, geef je per voorstel minstens 1 concrete plek-suggestie en liefst 2 waar passend, geformuleerd als AI-suggestie die nog gecheckt moet worden.'
@@ -3366,22 +3456,23 @@ async function requestPlannerIdeas(name,answers){
     +'\nAls je iets niet zeker weet, formuleer het als praktische inschatting en niet als hard feit.';
   try{
     var raw=await callAPI(sys,[{role:'user',content:userContent}],760,36000);
-    if(parsePlannerResult(raw).length<3){
-      raw=await callAPI(sys+' Je vorige antwoord had te weinig bruikbare voorstellen. Herstel dit nu en geef exact 3 volledig parseerbare voorstellen in hetzelfde format, elk met Titel, Waarom dit past, Hoe het eruitziet, Praktisch, Beste moment, Voorbereiding, Mooiste extra en Let op. Wees compacter dan daarnet.',[{role:'user',content:userContent}],900,26000);
+    if(parsePlannerResult(raw).length<2){
+      raw=await callAPI(sys+' Je vorige antwoord had te weinig bruikbare voorstellen. Herstel dit nu en geef exact 2 volledig parseerbare voorstellen in hetzelfde format, elk met Titel, Waarom dit past, Hoe het eruitziet, Praktisch, Beste moment, Voorbereiding, Mooiste extra en Let op. Wees compacter dan daarnet.',[{role:'user',content:userContent}],900,26000);
     }
-    return String(raw||'').trim();
+    return plannerNormalizeResult(raw,name,answers);
   }catch(e){
     // Fallback prompt: korter en sneller, vooral voor mobiele/tragere netwerken.
-    var fastSys='Je bent DateSensei. Geef exact 3 compacte, concrete planvoorstellen in het Nederlands. '
+    var fastSys='Je bent DateSensei. Geef exact 2 compacte, concrete planvoorstellen in het Nederlands. '
+      +' Alleen echte, offline haalbare voorstellen; geen virtuele of symbolische invulling. '
       +'Geen links, geen tabellen. Gebruik exact labels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.';
     var fastUser='Dossier: '+dn(name)
       +'\nRegio: '+(answers.region||'flexibel')
       +'\nIdee: '+(answers.idea||'koffie')
       +'\nSfeer: '+(answers.mood||'nog open')
       +'\nFase: '+stage
-      +'\nGeef exact 3 voorstellen.';
+      +'\nGeef exact 2 voorstellen.';
     var quick=await callAPI(fastSys,[{role:'user',content:fastUser}],620,22000);
-    return String(quick||'').trim();
+    return plannerNormalizeResult(quick,name,answers);
   }
 }
 async function warmAutoPlannerSuggestions(){
@@ -3636,7 +3727,7 @@ async function generatePlannerIdeas(){
     var raw=await requestPlannerIdeas(name,answers);
     var parsed=parsePlannerResult(raw);
     if(parsed.length<3){
-      throw new Error('Ik kreeg nog geen 3 volledige planvoorstellen terug. Probeer opnieuw of maak je regio of idee iets specifieker.');
+      throw new Error('Ik kreeg nog geen 2 volledige planvoorstellen terug. Probeer opnieuw of maak je regio of idee iets specifieker.');
     }
     S.planner.loading=false;
     S.planner.result=raw.trim();
@@ -3674,13 +3765,13 @@ function rPlanner(el){
   var resultHtml='';
   if(p.loading){
     resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div class="planner-loading">'
-      +'<div class="planner-loading-top"><div class="planner-spinner"></div><div class="planner-loading-title">Je 3 plannen worden nu uitgewerkt</div></div>'
-      +'<p class="planner-loading-text">DateSense blijft bezig. Ik kijk nu naar jullie fase, context en voorkeuren zodat je straks 3 duidelijke voorstellen krijgt.</p>'
+      +'<div class="planner-loading-top"><div class="planner-spinner"></div><div class="planner-loading-title">Je 2 plannen worden nu uitgewerkt</div></div>'
+      +'<p class="planner-loading-text">DateSense blijft bezig. Ik kijk nu naar jullie fase, context en voorkeuren zodat je straks 2 duidelijke voorstellen krijgt.</p>'
       +'<div class="planner-progress"><div class="planner-progress-bar"></div></div>'
       +'<div class="planner-loading-steps">'
       +'<div class="planner-loading-step">1. Ik kies ideeën die passen bij dit dossier.</div>'
       +'<div class="planner-loading-step">2. Ik werk praktische details uit zoals duur, startpunt en extra tip.</div>'
-      +'<div class="planner-loading-step">3. Ik zet alles klaar in 3 aparte kaarten zodat je meteen kan kiezen.</div>'
+      +'<div class="planner-loading-step">3. Ik zet alles klaar in 2 aparte kaarten zodat je meteen kan kiezen.</div>'
       +'</div>'
       +'</div></div>';
   }else if(p.result){
@@ -3722,7 +3813,7 @@ function rPlanner(el){
     +plannerField('plannerFocusWrap','Wat wil je dat het moment oplevert?',plannerSelect('plannerFocus',answers.focus||'',plannerFocusOptions(),'Kies focus')+'<div class="planner-sub">Dit gaat over effect: verbinden, speelsheid, dieper gesprek...</div>')
     +'</div>'
     +'<div class="planner-actions">'
-    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+(p.loading?'Even wachten...':'Genereer 3 plannen')+'</button>'
+    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+(p.loading?'Even wachten...':'Genereer 2 plannen')+'</button>'
     +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+name+'\')">Terug naar dossier</button>':'')
     +'</div>'
     +resultHtml
