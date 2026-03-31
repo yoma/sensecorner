@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 16:16">
+<meta name="ds-build" content="v2026-03-31-1 17:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3241,10 +3241,10 @@ function plannerAutoAnswersFor(name){
 function plannerIdeaGuidance(idea){
   var v=String(idea||'').toLowerCase();
   if(v.indexOf('restaurant')>=0||v.indexOf('eten')>=0||v.indexOf('diner')>=0||v.indexOf('tapas')>=0){
-    return 'Als het idee richting restaurant of eten gaat, schrijf dan als een echte date-concierge: gebruik volwassen, vloeiende zinnen en schets een avond die verzorgd, geloofwaardig en uitnodigend aanvoelt. Denk aan type plek, sfeer aan tafel, welk ritme goed werkt, wat je eventueel deelt en welk soort buurt of setting het best past.';
+    return 'Als het idee richting restaurant of eten gaat, schrijf dan als een echte date-concierge: gebruik volwassen, vloeiende zinnen en schets een avond die verzorgd, geloofwaardig en uitnodigend aanvoelt. Maak het voorstel verleidelijk en beeldend, alsof iemand meteen zin krijgt om te reserveren. Denk aan type plek, sfeer aan tafel, welk ritme goed werkt, wat je eventueel deelt en welk soort buurt of setting het best past.';
   }
   if(v.indexOf('wandel')>=0||v.indexOf('hike')>=0){
-    return 'Als het idee richting wandeling gaat, maak het routegericht maar sfeervol: gebruik geen droge checklist, wel vloeiende taal die het traject bijna voelbaar maakt. Denk aan startpunt, lus of traject, duur, tempo, mooiste stuk van de route, waar je even stopt en wat er achteraf nog zacht kan aansluiten.';
+    return 'Als het idee richting wandeling gaat, maak het routegericht maar sfeervol: gebruik geen droge checklist, wel vloeiende taal die het traject bijna voelbaar maakt. Laat het lezen als een klein vooruitzicht waar rust, uitzicht en timing samenkomen. Denk aan startpunt, lus of traject, duur, tempo, mooiste stuk van de route, waar je even stopt en wat er achteraf nog zacht kan aansluiten.';
   }
   if(v.indexOf('citytrip')>=0||v.indexOf('trip')>=0||v.indexOf('weekend')>=0){
     return 'Als het idee richting citytrip of weekend gaat, maak het dagindeling-achtig maar elegant: laat het lezen als een klein uitgewerkt vooruitzicht, niet als een kale planning. Denk aan aankomst, eerste stop, ritme van de dag, waar je best begint, wat je best reserveert en hoe je het ontspannen houdt.';
@@ -3255,14 +3255,13 @@ function plannerIdeaGuidance(idea){
   if(v.indexOf('verrass')>=0){
     return 'Als het idee een verrassing is, houd het haalbaar en charmant: schrijf met net genoeg mysterie om het bijzonder te maken, maar met genoeg concreetheid om het ook echt uitvoerbaar te houden.';
   }
-  return 'Pas de stijl van elk voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan. Gebruik geen houterige of ultrakorte zinnen, maar volwassen, vloeiende formuleringen.';
+  return 'Pas de stijl van elk voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan. Gebruik geen houterige of ultrakorte zinnen, maar volwassen, vloeiende formuleringen. Elk voorstel moet een eigen karakter hebben en op een andere manier aantrekkelijk aanvoelen.';
 }
 function plannerRegionAreaHint(region,anchors){
   var regionTxt=String(region||'jouw regio').trim()||'jouw regio';
-  var list=(Array.isArray(anchors)?anchors:[]).filter(Boolean).slice(0,4);
-  if(list.length>=3)return list.slice(0,3).join(', ')+' of een rustige straat in dezelfde zone';
-  if(list.length===2)return list[0]+', '+list[1]+' of een rustige straat in dezelfde zone';
-  if(list.length===1)return 'de buurt rond '+list[0]+' of een rustige straat in dezelfde zone';
+  var list=(Array.isArray(anchors)?anchors:[]).filter(Boolean).slice(0,3);
+  if(list.length>=2)return list[0]+' of '+list[1];
+  if(list.length===1)return 'de buurt rond '+list[0];
   return 'een herkenbare buurt, een plein, een straat met sfeer of een rustige zone in '+regionTxt;
 }
 function plannerCleanAnchorName(name,region){
@@ -3277,6 +3276,28 @@ function plannerCleanAnchorName(name,region){
   if(regionLc&&out.toLowerCase()===regionLc)return'';
   if(out.length<4)return'';
   return out;
+}
+function plannerAnchorScore(name,region){
+  var n=String(name||'').toLowerCase();
+  var score=0;
+  if(!n)return-99;
+  if(/plein|kaai|markt|lei|vest|dijk|park|laan|straat|wijk|buurt|centrum|quartier|patershol|zurenborg/.test(n))score+=3;
+  if(/station|industrie|industrieterrein|knooppunt|ring|haven/.test(n))score-=3;
+  if(/luchtbal/.test(n))score-=6;
+  if(/centrum$/.test(n))score-=1;
+  if(region&&n.indexOf(String(region).toLowerCase())>=0)score-=1;
+  return score;
+}
+function plannerCurateAnchors(region,anchors){
+  var unique=(Array.isArray(anchors)?anchors:[]).filter(Boolean).filter(function(v,idx,arr){
+    return arr.indexOf(v)===idx;
+  });
+  return unique
+    .map(function(name){return {name:name,score:plannerAnchorScore(name,region)};})
+    .filter(function(x){return x.score>-2;})
+    .sort(function(a,b){return b.score-a.score;})
+    .map(function(x){return x.name;})
+    .slice(0,4);
 }
 function plannerItemIsAreaLike(item,region,countryCode){
   var addr=item&&item.address?item.address:{};
@@ -3335,7 +3356,7 @@ async function fetchPlannerRegionAnchors(region,country){
       clearTimeout(timer);
     }
   }
-  S._plannerRegionAnchorCache[cacheKey]=anchors.slice(0,5);
+  S._plannerRegionAnchorCache[cacheKey]=plannerCurateAnchors(q,anchors);
   return S._plannerRegionAnchorCache[cacheKey];
 }
 function plannerFallbackProposals(name,answers,regionAnchors){
@@ -3592,6 +3613,9 @@ async function requestPlannerIdeas(name,answers){
     +'Bij Praktisch noem je starttype, duur, afstand of rijtijd als inschatting. '
     +'Gebruik per onderdeel bij voorkeur 2 volledige zinnen in plaats van losse woorden of afgeknepen fragmenten. '
     +'Vermijd staccato stijl, te korte opsommingen of lege placeholderzinnen. '
+    +'Voorstel 1 en voorstel 2 moeten echt verschillend aanvoelen in sfeer, opbouw en energie. '
+    +'Vermijd brave opvultekst of lege managementtaal. Elk voorstel moet een helder, aantrekkelijk haakje hebben waardoor het bijzonder voelt. '
+    +'Kies liever 1 sterk, origineel idee met mooie flow dan 2 generieke beschrijvingen van "iets gezelligs". '
     +'Extra stijlrichting: '+ideaGuidance+'.';
   var userContent='Dossier: '+dn(name)
     +'\nFase: '+stage
@@ -3608,7 +3632,8 @@ async function requestPlannerIdeas(name,answers){
     +'\nType hint: '+ideaMeta.moodHint
     +(hasConcreteRegion?'\nNoem per voorstel minstens 1 passende buurtnaam, plein, straat, kaai, stationsomgeving of streek in deze regio.':'')
     +(regionAnchors.length?('\nLive regio-ankers: '+regionAnchors.slice(0,5).join(', ')):'')
-    +'\nGeef 2 verschillende, haalbare voorstellen.';
+    +'\nGeef 2 verschillende, haalbare voorstellen.'
+    +'\nMaak ze creatief, origineel en aantrekkelijk genoeg dat iemand spontaan denkt: dit wil ik echt doen.';
   try{
     var raw=await callAPI(sys,[{role:'user',content:userContent}],520,16000);
     return plannerNormalizeResult(raw,name,answers,regionAnchors);
