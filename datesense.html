@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 23:32">
+<meta name="ds-build" content="v2026-03-31-1 23:46">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1899,6 +1899,7 @@ async function loadAll(){
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
   }
+  scrubCrossAccountRuntimeState();
 }
 
 async function ensureP(name){
@@ -2300,6 +2301,24 @@ async function newSenseFromDrawer(){
 function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div>`;}
 function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in DateSense.</div><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button id="rRegisterBtn" class="form-btn" onclick="doRegister()">Maak mijn account aan</button><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
 
+function getScopedStorageKey(base){
+  var userPart='';
+  try{
+    if(S&&S.user)userPart=String(S.user.id||S.user.email||'').trim();
+  }catch(e){}
+  return base+'::'+(userPart||'guest');
+}
+function getScopedStorage(base,fallback){
+  var raw=localStorage.getItem(getScopedStorageKey(base));
+  return raw==null?(fallback==null?'':fallback):raw;
+}
+function setScopedStorage(base,value){
+  localStorage.setItem(getScopedStorageKey(base),value);
+}
+function removeScopedStorage(base){
+  localStorage.removeItem(getScopedStorageKey(base));
+}
+
 function getDossierLifecycle(name){
   if(!name||name==='OWN Sense')return'active';
   var d=S.pdata[name]||{};
@@ -2309,34 +2328,34 @@ function getDossierLifecycle(name){
   return v;
 }
 function getUsageMode(){
-  var v=localStorage.getItem('ds_usage_mode')||'multi';
+  var v=getScopedStorage('ds_usage_mode','multi')||'multi';
   return v==='single'?'single':'multi';
 }
 function setUsageMode(mode){
   var m=mode==='single'?'single':'multi';
-  localStorage.setItem('ds_usage_mode',m);
+  setScopedStorage('ds_usage_mode',m);
   S.usageMode=m;
 }
 function getFocusDossier(){
-  return localStorage.getItem('ds_focus_dossier')||'';
+  return getScopedStorage('ds_focus_dossier','')||'';
 }
 function getFocusRelationType(){
-  var v=localStorage.getItem('ds_focus_relation_type')||'';
+  var v=getScopedStorage('ds_focus_relation_type','')||'';
   if(!v)return'';
   return String(v);
 }
 function setFocusRelationType(v){
   var val=String(v||'').trim();
   if(!val){
-    localStorage.removeItem('ds_focus_relation_type');
+    removeScopedStorage('ds_focus_relation_type');
     S.focusRelationType='';
     return;
   }
-  localStorage.setItem('ds_focus_relation_type',val);
+  setScopedStorage('ds_focus_relation_type',val);
   S.focusRelationType=val;
 }
 function getBoostPrefs(){
-  var raw=localStorage.getItem('ds_focus_boost_prefs')||'';
+  var raw=getScopedStorage('ds_focus_boost_prefs','')||'';
   var base={region:'',budget:'',style:'',time:''};
   if(!raw)return base;
   try{
@@ -2357,8 +2376,24 @@ function setBoostPrefs(prefs){
     style:String(p.style||'').trim(),
     time:String(p.time||'').trim()
   };
-  localStorage.setItem('ds_focus_boost_prefs',JSON.stringify(next));
+  setScopedStorage('ds_focus_boost_prefs',JSON.stringify(next));
   S.boostPrefs=next;
+}
+function scrubCrossAccountRuntimeState(){
+  var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+  var focus=getFocusDossier();
+  if(!contacts.length){
+    setFocusDossier('');
+    setFocusRelationType('');
+    setBoostPrefs({region:'',budget:'',style:'',time:''});
+    setUsageMode('multi');
+    S.homeModeDraft='multi';
+    return;
+  }
+  if(focus&&contacts.indexOf(focus)===-1){
+    setFocusDossier('');
+    setFocusRelationType('');
+  }
 }
 function boostPrefsSummary(){
   var p=getBoostPrefs();
@@ -2430,11 +2465,11 @@ function buildUsageModeContextLine(){
 }
 function setFocusDossier(name){
   if(!name){
-    localStorage.removeItem('ds_focus_dossier');
+    removeScopedStorage('ds_focus_dossier');
     S.focusDossier='';
     return;
   }
-  localStorage.setItem('ds_focus_dossier',name);
+  setScopedStorage('ds_focus_dossier',name);
   S.focusDossier=name;
 }
 function quickSetUsageMode(mode){
@@ -2625,10 +2660,10 @@ async function setDossierLifecycle(name,status){
 }
 
 function _coachState(){
-  try{return JSON.parse(localStorage.getItem('dsCoachState')||'{}')||{};}catch(e){return{};}
+  try{return JSON.parse(getScopedStorage('dsCoachState','{}')||'{}')||{};}catch(e){return{};}
 }
 function _saveCoachState(s){
-  try{localStorage.setItem('dsCoachState',JSON.stringify(s||{}));}catch(e){}
+  try{setScopedStorage('dsCoachState',JSON.stringify(s||{}));}catch(e){}
 }
 function coachTaskAck(id,mode){
   var s=_coachState();
@@ -2986,7 +3021,7 @@ function rHome(el){
   var focusName=getFocusDossier();
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
-  var hasExplicitMode=!!localStorage.getItem('ds_usage_mode');
+  var hasExplicitMode=!!getScopedStorage('ds_usage_mode','');
   if(typeof S.homeModeEditorOpen!=='boolean')S.homeModeEditorOpen=!hasExplicitMode;
   var showModeEditor=!!S.homeModeEditorOpen;
   var onboardingHtml=renderOnboardingCard();
