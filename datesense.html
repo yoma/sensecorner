@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 16:08">
+<meta name="ds-build" content="v2026-03-31-1 16:16">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3042,6 +3042,18 @@ function plannerSelect(id,value,options,placeholder){
     return '<option value="'+opt+'" '+(value===opt?'selected':'')+'>'+opt+'</option>';
   }).join('')+'</select>';
 }
+function plannerCountryOptions(){
+  return ['België','Nederland','Frankrijk','Duitsland','Verenigd Koninkrijk'];
+}
+function plannerCountryCode(country){
+  var c=String(country||'België').trim().toLowerCase();
+  if(c==='belgië'||c==='belgie')return'be';
+  if(c==='nederland')return'nl';
+  if(c==='frankrijk')return'fr';
+  if(c==='duitsland')return'de';
+  if(c==='verenigd koninkrijk')return'gb';
+  return'be';
+}
 function plannerHomeCardCopy(name){
   var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
   if(stage==='eerste_date')return{title:'Eerste date plannen',text:'Werk een warm, haalbaar voorstel uit voor <strong>'+dn(name)+'</strong> dat licht en ontspannen aanvoelt.'};
@@ -3105,6 +3117,7 @@ function readPlannerAnswersFromDom(){
   return {
     idea:((document.getElementById('plannerIdea')||{}).value||'').trim(),
     region:((document.getElementById('plannerRegion')||{}).value||'').trim(),
+    country:((document.getElementById('plannerCountry')||{}).value||'België').trim()||'België',
     budget:((document.getElementById('plannerBudget')||{}).value||'').trim(),
     mood:((document.getElementById('plannerMood')||{}).value||'').trim(),
     duration:((document.getElementById('plannerDuration')||{}).value||'').trim(),
@@ -3259,38 +3272,59 @@ function plannerCleanAnchorName(name,region){
   var out=raw.split(',')[0].trim();
   out=out.replace(/\s+\([^)]*\)$/,'').trim();
   if(!out)return'';
-  var bad=/^(belg(?:ium|ië)|nederland|france|germany|europe|vlaanderen|flanders|wallonie|wallonia)$/i;
+  var bad=/^(belg(?:ium|ië)|nederland|france|germany|europe|vlaanderen|flanders|wallonie|wallonia|restaurant|cafe|bar|brasserie|bistro|frituur|hotel|museum|parking|station)$/i;
   if(bad.test(out))return'';
   if(regionLc&&out.toLowerCase()===regionLc)return'';
   if(out.length<4)return'';
   return out;
 }
-async function fetchPlannerRegionAnchors(region){
+function plannerItemIsAreaLike(item,region,countryCode){
+  var addr=item&&item.address?item.address:{};
+  var type=String(item&&item.type||'').toLowerCase();
+  var clazz=String(item&&item.class||'').toLowerCase();
+  var country=String(addr.country_code||'').toLowerCase();
+  if(country&&country!==String(countryCode||'be').toLowerCase())return false;
+  if(clazz==='amenity'||clazz==='shop'||clazz==='tourism'||clazz==='leisure'||clazz==='office')return false;
+  if(/restaurant|cafe|bar|fast_food|hotel|guest_house|museum|supermarket|bakery|parking/.test(type))return false;
+  var hasAreaField=!!(addr.neighbourhood||addr.suburb||addr.city_district||addr.quarter||addr.borough||addr.village||addr.town||addr.city||addr.road||addr.pedestrian||addr.footway||addr.square);
+  if(!hasAreaField&&clazz!=='boundary'&&clazz!=='place'&&clazz!=='highway')return false;
+  var regionLc=String(region||'').toLowerCase();
+  var whole=(String(item&&item.display_name||'')+' '+JSON.stringify(addr)).toLowerCase();
+  if(regionLc&&whole.indexOf(regionLc)===-1)return false;
+  return true;
+}
+async function fetchPlannerRegionAnchors(region,country){
   var q=String(region||'').trim();
   if(!q||q.length<3)return[];
+  var cc=plannerCountryCode(country);
   S._plannerRegionAnchorCache=S._plannerRegionAnchorCache||{};
-  if(Array.isArray(S._plannerRegionAnchorCache[q]))return S._plannerRegionAnchorCache[q];
+  var cacheKey=cc+'::'+q;
+  if(Array.isArray(S._plannerRegionAnchorCache[cacheKey]))return S._plannerRegionAnchorCache[cacheKey];
   var queries=[q,q+' centrum',q+' station',q+' plein',q+' park'];
   var anchors=[];
   for(var i=0;i<queries.length&&anchors.length<5;i++){
     var controller=new AbortController();
     var timer=setTimeout(function(){controller.abort();},2600);
     try{
-      var url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&addressdetails=1&accept-language=nl&q='+encodeURIComponent(queries[i]);
+      var url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=4&addressdetails=1&accept-language=nl&countrycodes='+cc+'&q='+encodeURIComponent(queries[i]);
       var res=await fetch(url,{headers:{'Accept':'application/json'},signal:controller.signal});
       var data=await res.json();
       (Array.isArray(data)?data:[]).forEach(function(item){
+        if(!plannerItemIsAreaLike(item,q,cc))return;
         var addr=item&&item.address?item.address:{};
         var candidates=[
-          item&&item.name,
           addr.neighbourhood,
           addr.suburb,
           addr.city_district,
           addr.quarter,
+          addr.borough,
+          addr.square,
+          addr.road,
+          addr.pedestrian,
           addr.hamlet,
           addr.village,
           addr.town,
-          item&&item.display_name
+          addr.city
         ].map(function(x){return plannerCleanAnchorName(x,q);}).filter(Boolean);
         candidates.forEach(function(c){
           if(anchors.indexOf(c)===-1&&anchors.length<6)anchors.push(c);
@@ -3301,8 +3335,8 @@ async function fetchPlannerRegionAnchors(region){
       clearTimeout(timer);
     }
   }
-  S._plannerRegionAnchorCache[q]=anchors.slice(0,5);
-  return S._plannerRegionAnchorCache[q];
+  S._plannerRegionAnchorCache[cacheKey]=anchors.slice(0,5);
+  return S._plannerRegionAnchorCache[cacheKey];
 }
 function plannerFallbackProposals(name,answers,regionAnchors){
   var person=dn(name||'dit dossier');
@@ -3543,7 +3577,7 @@ function plannerAutoTaskFor(name){
 }
 async function requestPlannerIdeas(name,answers){
   var dCtx=buildPlannerContextPayload(name);
-  var regionAnchors=await fetchPlannerRegionAnchors(answers.region||'');
+  var regionAnchors=await fetchPlannerRegionAnchors(answers.region||'',answers.country||'België');
   var stage=stageLabel(getDossierStage(name));
   var ideaMeta=plannerIdeaMeta(answers.idea);
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
@@ -3564,6 +3598,7 @@ async function requestPlannerIdeas(name,answers){
     +(dCtx?('\nContext:\n'+dCtx):'')
     +'\nIdee: '+(answers.idea||'open')
     +'\nRegio: '+(answers.region||'flexibel')
+    +'\nLand: '+(answers.country||'België')
     +'\nBudget: '+(answers.budget||'flexibel')
     +'\nSfeer: '+(answers.mood||'open')
     +'\nDuur: '+(answers.duration||'open')
@@ -3909,6 +3944,7 @@ async function savePlannerHistory(name,answers,result,extraMeta){
     answers:{
       idea:String(answers.idea||''),
       region:String(answers.region||''),
+      country:String(answers.country||'België'),
       budget:String(answers.budget||''),
       mood:String(answers.mood||''),
       duration:String(answers.duration||''),
@@ -4043,6 +4079,7 @@ function rPlanner(el){
     +plannerField('plannerIdeaWrap','Wat wil je ongeveer doen?','<div class="planner-chips">'+presetChips+'</div><input id="plannerIdea" class="form-input" style="margin:8px 0 0" placeholder="Restaurant, wandeling, citytrip, bowling, verrassing..." value="'+escHTML(answers.idea||'')+'" oninput="schedulePlannerIdeaRefresh()" onchange="refreshPlannerForIdea()"/><div class="planner-sub">Kies een chip of typ zelf iets anders.</div>')
     +'<div class="planner-grid">'
     +plannerField('plannerRegionWrap','Regio / afstand','<input id="plannerRegion" class="form-input" style="margin:0" placeholder="Antwerpen, max 30 min rijden..." value="'+escHTML(answers.region||'')+'"/><div class="planner-sub">Gebruik regio, afstand of reistijd als filter.</div>')
+    +plannerField('plannerCountryWrap','Land',plannerSelect('plannerCountry',answers.country||'België',plannerCountryOptions(),'Kies land')+'<div class="planner-sub">Standaard staat dit op België voor betere lokale suggesties.</div>')
     +plannerField('plannerBudgetWrap','Budget',plannerSelect('plannerBudget',answers.budget||'',['betaalbaar','gemiddeld','bijzonder'],'Kies budget'))
     +plannerField('plannerMoodWrap','Sfeer',plannerSelect('plannerMood',answers.mood||'',['romantisch','rustig','speels','spannend','ontspannen'],'Kies sfeer'))
     +plannerField('plannerDurationWrap','Tijdsduur',plannerSelect('plannerDuration',answers.duration||'',['1-2 uur','halve dag','hele dag','avond','weekend'],'Kies tijd'))
