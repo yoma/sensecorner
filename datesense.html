@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 12:20">
+<meta name="ds-build" content="v2026-03-31-1 12:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -185,6 +185,16 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
 @keyframes bnc{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
+.advice-loading{background:linear-gradient(180deg,#fff,#fff8f7);border:1px solid #F2D8D1;border-radius:16px;padding:16px 16px 14px;box-shadow:0 6px 18px rgba(122,18,18,.05)}
+.advice-loading-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.advice-loading-spinner{width:18px;height:18px;border:2px solid #F4D7CC;border-top-color:#AE0000;border-radius:50%;animation:spin .9s linear infinite;flex-shrink:0}
+.advice-loading-title{font-size:13px;font-weight:800;color:#7c1212;letter-spacing:.3px;text-transform:uppercase}
+.advice-loading-text{font-size:14px;color:#333;line-height:1.65;margin:0 0 12px}
+.advice-progress{height:8px;background:#F3E2DD;border-radius:999px;overflow:hidden;margin-bottom:12px}
+.advice-progress-bar{height:100%;width:72%;background:linear-gradient(90deg,#AE0000,#D96A54,#F1C6B3);background-size:160% 100%;animation:advprog 1.4s ease-in-out infinite}
+.advice-loading-steps{display:grid;gap:8px}
+.advice-loading-step{display:flex;align-items:center;gap:8px;font-size:13px;color:#6a5548;background:#FFF8F3;border:1px solid #F4E0D3;border-radius:10px;padding:8px 10px}
+@keyframes advprog{0%{background-position:0% 0}100%{background-position:100% 0}}
 
 /* Input bar */
 .input-bar{background:#fff;border-top:2px solid var(--b);flex-shrink:0;padding:12px 16px;padding-bottom:calc(12px + var(--sb))}
@@ -810,6 +820,7 @@ var _loginAttemptId=0;
 var _stageFocusPromptCtx=null;
 var _autoPlannerWarmBusy=false;
 var _autoPlannerWarmKey='';
+var _plannerIdeaRefreshTimer=null;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -2946,6 +2957,18 @@ function rHome(el){
 function plannerField(id,label,html){
   return '<div class="planner-field"><div class="planner-label">'+label+'</div>'+html+'</div>';
 }
+function renderAdviceLoadingCard(){
+  return '<div class="advice-loading">'
+    +'<div class="advice-loading-top"><div class="advice-loading-spinner"></div><div class="advice-loading-title">Advies wordt vernieuwd</div></div>'
+    +'<p class="advice-loading-text">DateSense bekijkt nu de nieuwste signalen uit dit dossier en zet die om naar een scherper, actueler advies.</p>'
+    +'<div class="advice-progress"><div class="advice-progress-bar"></div></div>'
+    +'<div class="advice-loading-steps">'
+    +'<div class="advice-loading-step">1. Ik lees je recente updates en ingevulde context opnieuw.</div>'
+    +'<div class="advice-loading-step">2. Ik weeg dynamiek, risico en kansen tegen elkaar af.</div>'
+    +'<div class="advice-loading-step">3. Ik zet dat om naar helder advies en bruikbare actiepunten.</div>'
+    +'</div>'
+    +'</div>';
+}
 function plannerSelect(id,value,options,placeholder){
   return '<select id="'+id+'" class="form-input" style="margin:0"><option value="">'+placeholder+'</option>'+options.map(function(opt){
     return '<option value="'+opt+'" '+(value===opt?'selected':'')+'>'+opt+'</option>';
@@ -3022,6 +3045,24 @@ function readPlannerAnswersFromDom(){
     focus:((document.getElementById('plannerFocus')||{}).value||'').trim()
   };
 }
+function syncPlannerAnswersFromDom(){
+  S.planner=S.planner||{};
+  S.planner.answers=readPlannerAnswersFromDom();
+  return S.planner.answers;
+}
+function schedulePlannerIdeaRefresh(){
+  var answers=syncPlannerAnswersFromDom();
+  S.planner.result='';
+  S.planner.historySelection='';
+  if(_plannerIdeaRefreshTimer)clearTimeout(_plannerIdeaRefreshTimer);
+  _plannerIdeaRefreshTimer=setTimeout(function(){
+    var meta=plannerIdeaMeta(answers.idea);
+    if(meta.settingOptions.indexOf(answers.setting)===-1){
+      S.planner.answers.setting='';
+    }
+    if(S.screen==='planner')goScreen('planner');
+  },180);
+}
 function refreshPlannerForIdea(){
   S.planner=S.planner||{};
   S.planner.answers=readPlannerAnswersFromDom();
@@ -3039,6 +3080,7 @@ function setPlannerIdea(v){
   S.planner.answers.idea=String(v||'').trim();
   S.planner.result='';
   S.planner.historySelection='';
+  if(_plannerIdeaRefreshTimer)clearTimeout(_plannerIdeaRefreshTimer);
   goScreen('planner');
 }
 function plannerHasEnoughInput(a){
@@ -3221,12 +3263,9 @@ async function requestPlannerIdeas(name,answers){
       ?'\nOmdat de regio duidelijk is, geef je per voorstel minstens 1 concrete plek-suggestie en liefst 2 waar passend, geformuleerd als AI-suggestie die nog gecheckt moet worden.'
       :'\nAls regio voldoende duidelijk is, geef dan gerust 1 of 2 concrete plek-suggesties per voorstel, maar formuleer ze als AI-suggestie die nog gecheckt moet worden.')
     +'\nAls je iets niet zeker weet, formuleer het als praktische inschatting en niet als hard feit.';
-  var raw=await callAPI(sys,[{role:'user',content:userContent}],900,45000);
+  var raw=await callAPI(sys,[{role:'user',content:userContent}],780,28000);
   if(parsePlannerResult(raw).length<3){
-    raw=await callAPI(sys+' Je vorige antwoord had te weinig bruikbare voorstellen. Herstel dit nu en geef exact 3 volledig parseerbare voorstellen in hetzelfde format, elk met Titel, Waarom dit past, Hoe het eruitziet, Praktisch, Beste moment, Voorbereiding, Mooiste extra en Let op.',[{role:'user',content:userContent}],1100,45000);
-  }
-  if(parsePlannerResult(raw).length<3){
-    raw=await callAPI(sys+' Nog steeds onvoldoende. Geef nu exact 3 voorstellen, begin elk voorstel expliciet met "Voorstel 1:", "Voorstel 2:", "Voorstel 3:" en gebruik daarna alle verplichte labels volledig.',[{role:'user',content:userContent}],1200,45000);
+    raw=await callAPI(sys+' Je vorige antwoord had te weinig bruikbare voorstellen. Herstel dit nu en geef exact 3 volledig parseerbare voorstellen in hetzelfde format, elk met Titel, Waarom dit past, Hoe het eruitziet, Praktisch, Beste moment, Voorbereiding, Mooiste extra en Let op. Wees compacter dan daarnet.',[{role:'user',content:userContent}],920,22000);
   }
   return String(raw||'').trim();
 }
@@ -3556,7 +3595,7 @@ function rPlanner(el){
   el.innerHTML='<div class="planner-shell">'
     +'<div class="planner-hero"><div class="ai-sec" style="padding:0"><div class="ai-sec-title"><span>Plan iets leuks</span></div><p class="ai-sec-text" style="margin-bottom:6px">DateSense houdt rekening met het gekozen dossier, de fase en de context. Elise en Pascale krijgen dus niet zomaar hetzelfde voorstel.</p><div class="planner-status">Vul minstens 2 richtingen in om te plannen. Voorbeeld: <strong>wandeling + romantisch</strong> of <strong>Antwerpen + betaalbaar</strong>.</div></div></div>'
     +plannerField('plannerDossierWrap','Voor welk dossier?',dossierSelect)
-    +plannerField('plannerIdeaWrap','Wat wil je ongeveer doen?','<div class="planner-chips">'+presetChips+'</div><input id="plannerIdea" class="form-input" style="margin:8px 0 0" placeholder="Restaurant, wandeling, citytrip, bowling, verrassing..." value="'+escHTML(answers.idea||'')+'" oninput="refreshPlannerForIdea()"/><div class="planner-sub">Kies een chip of typ zelf iets anders.</div>')
+    +plannerField('plannerIdeaWrap','Wat wil je ongeveer doen?','<div class="planner-chips">'+presetChips+'</div><input id="plannerIdea" class="form-input" style="margin:8px 0 0" placeholder="Restaurant, wandeling, citytrip, bowling, verrassing..." value="'+escHTML(answers.idea||'')+'" oninput="schedulePlannerIdeaRefresh()" onchange="refreshPlannerForIdea()"/><div class="planner-sub">Kies een chip of typ zelf iets anders.</div>')
     +'<div class="planner-grid">'
     +plannerField('plannerRegionWrap','Regio / afstand','<input id="plannerRegion" class="form-input" style="margin:0" placeholder="Antwerpen, max 30 min rijden..." value="'+escHTML(answers.region||'')+'"/><div class="planner-sub">Gebruik regio, afstand of reistijd als filter.</div>')
     +plannerField('plannerBudgetWrap','Budget',plannerSelect('plannerBudget',answers.budget||'',['betaalbaar','gemiddeld','bijzonder'],'Kies budget'))
@@ -4437,7 +4476,7 @@ async function loadTab(name,tab,d){
     } else if(currentCount===0){
       advHtml+='<div style="text-align:center;padding:20px 0;color:var(--m)"><div style="font-size:32px;margin-bottom:10px">💬</div>Voeg eerst iets toe via <strong>Vertel</strong> of vul de invulvakjes in.</div>';
     } else {
-      advHtml+='<div class="typing"><span></span><span></span><span></span></div>';
+      advHtml+=renderAdviceLoadingCard();
     }
     advHtml+='</div>';
     // Footer met status + duidelijke updateknop
@@ -4479,7 +4518,7 @@ async function genAdvies(name,forced){
     if(!forced && oldHtml){
       box.innerHTML='<div style="font-size:13px;color:#8a8f97;margin-bottom:12px">Er is nieuwe info sinds je laatste advies.</div>'+oldHtml;
     } else {
-      box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+      box.innerHTML=renderAdviceLoadingCard();
     }
   }
   var d=S.pdata[name]||{props:{...DP}};
@@ -5615,7 +5654,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs){
     return txt;
   }catch(e){
     if(e&&e.name==='AbortError'){
-      throw new Error('AI request timeout (30s). Probeer opnieuw.');
+      throw new Error('AI request timeout ('+Math.round(timeoutMs/1000)+'s). Probeer opnieuw.');
     }
     throw e;
   }finally{
