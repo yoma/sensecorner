@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 09:12">
+<meta name="ds-build" content="v2026-03-31-1 09:35">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -582,6 +582,15 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   </div>
 </div>
 
+<div class="save-modal-overlay" id="stageFocusModal">
+  <div class="save-modal-bg" onclick="closeStageFocusModal()"></div>
+  <div class="save-modal-sheet">
+    <div class="save-modal-title">Relatie-focus voorstellen</div>
+    <div class="save-modal-sub" id="stageFocusModalSub">Deze fase past vaak beter bij relatie-focus.</div>
+    <div id="stageFocusModalOpts"></div>
+  </div>
+</div>
+
 <script>
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -694,6 +703,7 @@ var _analysisPhotoFor='OWN Sense';
 var _analysisUploadBusy=false;
 var _loginInFlight=false;
 var _loginAttemptId=0;
+var _stageFocusPromptCtx=null;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -2236,22 +2246,83 @@ function getDossierStage(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
   var s=String(m.dating_stage||'virtueel').toLowerCase();
-  if(['virtueel','eerste_date','meerdere_dates','geen_contact'].indexOf(s)===-1)return'virtueel';
+  if(['virtueel','eerste_date','meerdere_dates','exclusief daten','prille relatie','vaste relatie','geen_contact'].indexOf(s)===-1)return'virtueel';
   return s;
 }
 function stageLabel(s){
   if(s==='eerste_date')return'Eerste date';
   if(s==='meerdere_dates')return'Meerdere dates';
+  if(s==='exclusief daten')return'Exclusief daten';
+  if(s==='prille relatie')return'Prille relatie';
+  if(s==='vaste relatie')return'Vaste relatie';
   if(s==='geen_contact')return'Geen contact meer';
   return'Virtueel';
+}
+function isRelationshipFocusSuggestedStage(stage){
+  var s=String(stage||'').toLowerCase();
+  return s==='exclusief daten'||s==='prille relatie';
+}
+function stageRelationTypeValue(stage){
+  var s=String(stage||'').toLowerCase();
+  return(s==='exclusief daten'||s==='prille relatie'||s==='vaste relatie')?s:'';
 }
 async function setDossierStage(name,stage){
   if(!name||name==='OWN Sense')return;
   var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
   d.meta.dating_stage=stage;
+  if(stageRelationTypeValue(stage) && !String(d.meta.relationship_type||'').trim()){
+    d.meta.relationship_type=stageRelationTypeValue(stage);
+  }
   S.pdata[name]=d;
   await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+function shouldOfferStageFocusPrompt(name,stage){
+  if(!name||name==='OWN Sense')return false;
+  if(!isRelationshipFocusSuggestedStage(stage))return false;
+  if(getUsageMode()==='single'&&getFocusDossier()===name)return false;
+  var d=S.pdata[name]||{};
+  var m=d.meta||{};
+  return m.skip_focus_prompt!==true;
+}
+function openStageFocusModal(name,stage){
+  var modal=document.getElementById('stageFocusModal');
+  var sub=document.getElementById('stageFocusModalSub');
+  var opts=document.getElementById('stageFocusModalOpts');
+  if(!modal||!sub||!opts)return;
+  _stageFocusPromptCtx={name:name,stage:stage};
+  sub.innerHTML='Je zette <strong>'+dn(name)+'</strong> op <strong>'+stageLabel(stage)+'</strong>. Wil je overschakelen naar relatie-focus? Andere actieve dossiers kan je dan automatisch op on hold zetten.';
+  opts.innerHTML=''
+    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'activate\')"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Ja, activeer relatie-focus</strong><br><span style="font-size:12px;color:#666">Je kiest dit dossier als focus en kan andere actieve dossiers automatisch pauzeren.</span></span></button>'
+    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in date modus en krijgt later opnieuw een voorstel.</span></span></button>'
+    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'never\')"><span class="save-modal-dot" style="background:#C7CBD1"></span><span style="flex:1"><strong>Niet meer tonen voor dit dossier</strong><br><span style="font-size:12px;color:#666">DateSense stopt dit voorstel voor '+dn(name)+'.</span></span></button>';
+  modal.classList.add('show');
+}
+function closeStageFocusModal(){
+  var modal=document.getElementById('stageFocusModal');
+  if(modal)modal.classList.remove('show');
+  _stageFocusPromptCtx=null;
+}
+async function handleStageFocusChoice(choice){
+  var ctx=_stageFocusPromptCtx;
+  closeStageFocusModal();
+  if(!ctx||!ctx.name)return;
+  if(choice==='activate'){
+    var relType=stageRelationTypeValue(ctx.stage);
+    if(relType)setFocusRelationType(relType);
+    await activateRelationshipFocus(ctx.name,true);
+    return;
+  }
+  if(choice==='never'){
+    var d=S.pdata[ctx.name]||{props:{...DP},count:0,categories:{},meta:{}};
+    d.meta=d.meta||{};
+    d.meta.skip_focus_prompt=true;
+    S.pdata[ctx.name]=d;
+    await saveP(ctx.name,d.props,d.count,d.categories,d.summary,d.meta);
+    toast('Relatie-focus voorstel verborgen voor '+dn(ctx.name));
+    return;
+  }
+  toast('Date modus behouden voor '+dn(ctx.name));
 }
 async function toggleDossierNotifications(name){
   if(!name||name==='OWN Sense')return;
@@ -2334,6 +2405,9 @@ async function updateDossierStageFromUI(name){
   var v=String(el.value||'virtueel');
   await setDossierStage(name,v);
   toast('Status: '+stageLabel(v));
+  if(shouldOfferStageFocusPrompt(name,v)){
+    openStageFocusModal(name,v);
+  }
 }
 async function updateDossierRelationTypeFromUI(name){
   if(!name||name==='OWN Sense')return;
@@ -2387,13 +2461,13 @@ function buildCoachTasks(){
     ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
       Object.values((fd.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())focusFilled++;});
     });
-    if((fRelType==='prille relatie'||fStage==='meerdere_dates')&&focusFilled<7){
+    if((fRelType==='prille relatie'||fStage==='meerdere_dates'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusFilled<7){
       tasks.push({id:'rel-focus-align-'+focusName,type:'c',prio:'high',msg:'Je zit met <strong>'+fPerson+'</strong> in een serieuzere fase. Check of verwachtingen, tempo en exclusiviteit al helder uitgesproken zijn.',openMsg:'Nog openstaand: bespreek verwachtingen en tempo met <strong>'+fPerson+'</strong>.',link:'Open dossier →',action:"viewDossier('"+focusName+"')"});
     }
-    if(fRelType==='vaste relatie'){
+    if(fRelType==='vaste relatie'||fStage==='vaste relatie'){
       tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"});
     }
-    if((fRelType==='exclusief daten'||fRelType==='prille relatie')&&focusDays>=5){
+    if((fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
       tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';goScreen('vertel')"});
     }
   }
@@ -2418,7 +2492,7 @@ function sanitizeAdviceForRelationshipStage(txt,name,stageNow,relType){
   var out=String(txt||'');
   var rel=String(relType||'').toLowerCase();
   var stage=String(stageNow||'').toLowerCase();
-  var committed=(rel==='prille relatie'||rel==='vaste relatie'||rel==='exclusief daten'||stage==='meerdere_dates');
+  var committed=(rel==='prille relatie'||rel==='vaste relatie'||rel==='exclusief daten'||stage==='meerdere_dates'||stage==='exclusief daten'||stage==='prille relatie'||stage==='vaste relatie');
   if(!committed)return out;
   out=out.replace(/\b(plan|stel voor|organiseer)\s+(een\s+)?eerste\s+date\b/ig,'bouw een volgend kwaliteitsmoment in');
   out=out.replace(/\bga\b\s+(eens\s+)?op\s+(een\s+)?eerste\s+date\b/ig,'bouw verder op jullie contact');
@@ -2995,6 +3069,9 @@ async function rDossier(el){
       +'<option value="virtueel" '+(stageNow==='virtueel'?'selected':'')+'>Virtueel</option>'
       +'<option value="eerste_date" '+(stageNow==='eerste_date'?'selected':'')+'>Eerste date</option>'
       +'<option value="meerdere_dates" '+(stageNow==='meerdere_dates'?'selected':'')+'>Meerdere dates</option>'
+      +'<option value="exclusief daten" '+(stageNow==='exclusief daten'?'selected':'')+'>Exclusief daten</option>'
+      +'<option value="prille relatie" '+(stageNow==='prille relatie'?'selected':'')+'>Prille relatie</option>'
+      +'<option value="vaste relatie" '+(stageNow==='vaste relatie'?'selected':'')+'>Vaste relatie</option>'
       +'<option value="geen_contact" '+(stageNow==='geen_contact'?'selected':'')+'>Geen contact meer</option>'
       +'</select>'
       +(showRelType
