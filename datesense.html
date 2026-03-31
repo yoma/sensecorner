@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 15:23">
+<meta name="ds-build" content="v2026-03-31-1 15:29">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3484,7 +3484,7 @@ async function requestPlannerIdeas(name,answers){
     +(hasConcreteRegion?'\nNoem per voorstel minstens 1 passende buurt, streek, zone of startomgeving in deze regio.':'')
     +'\nGeef 2 verschillende, haalbare voorstellen.';
   try{
-    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,15000);
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,16000);
     return plannerNormalizeResult(raw,name,answers);
   }catch(e){
     // Fallback prompt: korter en sneller, vooral voor mobiele/tragere netwerken.
@@ -3497,8 +3497,12 @@ async function requestPlannerIdeas(name,answers){
       +'\nSfeer: '+(answers.mood||'nog open')
       +'\nFase: '+stage
       +'\nGeef exact 2 voorstellen.';
-    var quick=await callAPI(fastSys,[{role:'user',content:fastUser}],420,12000);
-    return plannerNormalizeResult(quick,name,answers);
+    try{
+      var quick=await callAPI(fastSys,[{role:'user',content:fastUser}],420,14000);
+      return plannerNormalizeResult(quick,name,answers);
+    }catch(_e){
+      return plannerNormalizeResult('',name,answers);
+    }
   }
 }
 async function warmAutoPlannerSuggestions(){
