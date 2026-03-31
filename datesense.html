@@ -2470,6 +2470,26 @@ function buildCoachTasks(){
     if((fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
       tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';goScreen('vertel')"});
     }
+    var focusBoost=buildRelationshipBoost(focusName);
+    var focusInspiration=buildBoostInspirationCards(focusBoost).slice(0,2);
+    if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
+      var boostIdea=focusBoost.ideas[0];
+      var boostMsg='<strong>'+boostIdea.title+'</strong> · '+boostIdea.tip;
+      if(focusInspiration.length){
+        boostMsg+='<div style="font-size:11px;color:#8a8f97;margin-top:6px">Inspiratie: '+focusInspiration.map(function(it){
+          return'<a href="'+it.url+'" target="_blank" rel="noreferrer" style="color:#8a8f97;text-decoration:underline">'+it.title+'</a>';
+        }).join(' · ')+'</div>';
+      }
+      tasks.push({
+        id:'boost-focus-'+focusName,
+        type:'a',
+        prio:'low',
+        msg:boostMsg,
+        openMsg:'Nog openstaand: plan een klein verbindend moment met <strong>'+fPerson+'</strong>.',
+        link:'Naar advies →',
+        action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"
+      });
+    }
   }
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
@@ -2638,8 +2658,6 @@ function rHome(el){
   var focusName=getFocusDossier();
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
-  var focusBoost=focusName?buildRelationshipBoost(focusName):null;
-  var focusInspiration=buildBoostInspirationCards(focusBoost).slice(0,2);
   var hasExplicitMode=!!localStorage.getItem('ds_usage_mode');
   if(typeof S.homeModeEditorOpen!=='boolean')S.homeModeEditorOpen=!hasExplicitMode;
   var showModeEditor=!!S.homeModeEditorOpen;
@@ -2745,8 +2763,6 @@ function rHome(el){
     ?'<div class="ai-rich-card" style="text-align:left;max-width:340px;margin:-10px 0 8px;padding:8px 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:3px"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text" style="font-size:13px;line-height:1.5;margin:0 0 2px">Focus op <strong>'+(focusName?dn(focusName):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
     :(!showModeEditor?'<div class="ai-rich-card" style="text-align:left;max-width:340px;margin:-10px 0 8px;padding:8px 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:3px"><span>💬</span><span>Date modus actief</span></div><p class="ai-sec-text" style="font-size:13px;line-height:1.5;margin:0 0 2px">Je kan met meerdere dossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
   }
-  ${!showModeEditor&&focusBoost&&focusBoost.ideas.length?'<div class="ai-rich-card" style="text-align:left;max-width:360px;margin:0 0 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:4px"><span>❤️</span><span>Relationship Boost</span></div><p class="ai-sec-text" style="font-size:13px;line-height:1.5;margin:0 0 6px"><strong>'+focusBoost.ideas[0].title+'</strong> · '+focusBoost.ideas[0].tip+'</p>'+(focusInspiration.length?('<div style="font-size:11px;color:#8a8f97">Inspiratie: '+focusInspiration.map(function(it){return'<a href="'+it.url+'" target="_blank" rel="noreferrer" style="color:#8a8f97;text-decoration:underline">'+it.title+'</a>';}).join(' · ')+'</div>'):'')+'</div></div>':''}
-
   <!-- Grote microfoon knop -->
   <button class="mic-btn" onclick="goScreen('vertel')" style="margin:0 0 18px">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
