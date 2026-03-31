@@ -695,7 +695,8 @@ var S={
     dossier:'',
     answers:{idea:'',region:'',budget:'',mood:'',duration:'',setting:'',pace:'',focus:''},
     loading:false,
-    result:''
+    result:'',
+    historySelection:''
   },
   // Vertel chat tijdelijk (wis na opslaan)
   vertelMsgs:[],
@@ -2791,6 +2792,55 @@ function plannerSelect(id,value,options,placeholder){
     return '<option value="'+opt+'" '+(value===opt?'selected':'')+'>'+opt+'</option>';
   }).join('')+'</select>';
 }
+function plannerHistoryList(name){
+  if(!name)return[];
+  var d=S.pdata[name]||{};
+  var meta=d.meta||{};
+  var items=Array.isArray(meta.plan_history)?meta.plan_history:[];
+  return items.slice().sort(function(a,b){
+    return String(b&&b.created_at||'').localeCompare(String(a&&a.created_at||''));
+  });
+}
+async function savePlannerHistory(name,answers,result){
+  if(!name||!result||String(result).indexOf('Fout bij plannen:')===0)return;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  var items=Array.isArray(d.meta.plan_history)?d.meta.plan_history:[];
+  var stage=stageLabel(getDossierStage(name));
+  var title=(answers.idea||answers.focus||answers.mood||'Planvoorstel').trim();
+  items.unshift({
+    id:'plan_'+Date.now()+'_'+Math.floor(Math.random()*9999),
+    title:title,
+    created_at:new Date().toISOString(),
+    stage:stage,
+    answers:{
+      idea:String(answers.idea||''),
+      region:String(answers.region||''),
+      budget:String(answers.budget||''),
+      mood:String(answers.mood||''),
+      duration:String(answers.duration||''),
+      setting:String(answers.setting||''),
+      pace:String(answers.pace||''),
+      focus:String(answers.focus||'')
+    },
+    result:String(result||'')
+  });
+  d.meta.plan_history=items.slice(0,8);
+  d.meta.last_plan=items[0];
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+function restorePlannerHistory(name,id){
+  var item=plannerHistoryList(name).find(function(x){return x&&x.id===id;});
+  if(!item)return;
+  S.planner=S.planner||{};
+  S.planner.dossier=name;
+  S.planner.answers=item.answers||{};
+  S.planner.result=item.result||'';
+  S.planner.loading=false;
+  S.planner.historySelection=id;
+  goScreen('planner');
+}
 async function generatePlannerIdeas(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var p=S.planner||{};
@@ -2809,6 +2859,7 @@ async function generatePlannerIdeas(){
   S.planner.answers=answers;
   S.planner.loading=true;
   S.planner.result='';
+  S.planner.historySelection='';
   goScreen('planner');
   try{
     var dCtx=await buildDossierContextForAI(name);
@@ -2838,6 +2889,7 @@ async function generatePlannerIdeas(){
     var raw=await callAPI(sys,[{role:'user',content:userContent}],900);
     S.planner.loading=false;
     S.planner.result=raw.trim();
+    await savePlannerHistory(name,answers,raw.trim());
     goScreen('planner');
   }catch(e){
     S.planner.loading=false;
@@ -2850,6 +2902,7 @@ function rPlanner(el){
   var name=String(p.dossier||'').trim()||getFocusDossier()||'';
   if(!p.dossier&&name)S.planner.dossier=name;
   var answers=p.answers||{};
+  var historyItems=plannerHistoryList(name);
   var contacts=(S.profiles||[]).filter(function(v){return v!=='OWN Sense'&&getDossierLifecycle(v)==='active';});
   var dossierSelect='<select id="plannerDossier" class="form-input" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';goScreen(\'planner\')">'
     +contacts.map(function(v){return'<option value="'+v+'" '+((name||'')===v?'selected':'')+'>'+dn(v)+'</option>';}).join('')
@@ -2863,6 +2916,23 @@ function rPlanner(el){
       +(isErr
         ?'<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:14px;line-height:1.6">'+escHTML(p.result)+'</div>'
         :formatAiCard(p.result))
+      +'</div>';
+  }
+  var historyHtml='';
+  if(historyItems.length){
+    historyHtml='<div style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:#666;letter-spacing:.5px;margin-bottom:8px">EERDERE PLANNEN</div>'
+      +historyItems.map(function(item){
+        var a=item.answers||{};
+        var mini=[item.stage,a.region,a.budget,a.mood,a.duration].filter(Boolean).join(' · ');
+        var active=S.planner.historySelection===item.id;
+        return '<div style="background:'+(active?'#FFF8F2':'#fff')+';border:1px solid '+(active?'#FFDAB8':'var(--b)')+';border-radius:12px;padding:12px 14px;margin-bottom:8px">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+          +'<div><div style="font-size:14px;font-weight:700;color:#333">'+escHTML(item.title||'Planvoorstel')+'</div>'
+          +'<div style="font-size:11px;color:#8a8f97;margin-top:3px">'+new Date(item.created_at).toLocaleString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+(mini?(' · '+escHTML(mini)):'')+'</div></div>'
+          +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="restorePlannerHistory(\''+name+'\',\''+item.id+'\')">Open</button>'
+          +'</div>'
+          +'</div>';
+      }).join('')
       +'</div>';
   }
   el.innerHTML='<div style="padding:20px 16px 32px;max-width:700px;margin:0 auto">'
@@ -2883,6 +2953,7 @@ function rPlanner(el){
     +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+name+'\')">Terug naar dossier</button>':'')
     +'</div>'
     +resultHtml
+    +historyHtml
     +'</div>';
 }
 
