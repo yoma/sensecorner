@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 11:23">
+<meta name="ds-build" content="v2026-03-31-1 11:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -221,6 +221,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .planner-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .planner-status{background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:10px 12px;color:#8B4B24;font-size:12px;line-height:1.55;margin:8px 0 12px}
 .planner-results{display:grid;gap:12px;margin-top:14px}
+.planner-loading{background:linear-gradient(180deg,#fff,#fff9f7);border:1px solid #F2D8D1;border-radius:16px;padding:16px 16px 14px;box-shadow:0 6px 18px rgba(122,18,18,.05)}
+.planner-loading-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.planner-spinner{width:18px;height:18px;border:2px solid #F4D7CC;border-top-color:#C96E38;border-radius:50%;animation:spin .9s linear infinite;flex-shrink:0}
+.planner-loading-title{font-size:13px;font-weight:800;color:#7c1212;letter-spacing:.3px;text-transform:uppercase}
+.planner-loading-text{font-size:14px;color:#333;line-height:1.65;margin:0 0 10px}
+.planner-loading-steps{display:grid;gap:8px}
+.planner-loading-step{display:flex;align-items:center;gap:8px;font-size:13px;color:#6a5548;background:#FFF8F3;border:1px solid #F4E0D3;border-radius:10px;padding:8px 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
 .planner-result-card{background:#fff;border:1px solid #F2D8D1;border-radius:16px;padding:14px 15px;box-shadow:0 6px 18px rgba(122,18,18,.05)}
 .planner-result-card.alt1{border-color:#F2D8D1;background:linear-gradient(180deg,#fff,#fff8f6)}
 .planner-result-card.alt2{border-color:#F4E5D2;background:linear-gradient(180deg,#fff,#fffaf5)}
@@ -336,6 +344,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .coach-save-btn{padding:6px 14px;background:var(--r);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .coach-save-other{padding:6px 10px;background:#fff;color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit}
 .coach-save-skip{padding:6px 10px;background:none;color:#aaa;border:none;font-size:12px;cursor:pointer;font-family:inherit}
+.home-mini-card{width:100%;max-width:340px;min-height:94px;text-align:left;margin:0 0 10px;padding:10px 12px;display:flex;align-items:center}
+.home-mini-card .ai-sec{width:100%;padding:0}
+.home-mini-card .ai-sec-title{font-size:11px;margin-bottom:4px}
+.home-mini-card .ai-sec-text{font-size:12px;line-height:1.5;margin:0 0 6px}
 
 /* ══ IMPORT MENU ══ */
 .import-menu{position:fixed;bottom:80px;left:16px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.15);border:1px solid var(--b);z-index:100;overflow:hidden;transform:scale(.95);opacity:0;pointer-events:none;transition:transform .18s ease,opacity .18s ease;transform-origin:bottom left;min-width:220px}
@@ -734,6 +746,8 @@ var _analysisUploadBusy=false;
 var _loginInFlight=false;
 var _loginAttemptId=0;
 var _stageFocusPromptCtx=null;
+var _autoPlannerWarmBusy=false;
+var _autoPlannerWarmKey='';
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -2471,14 +2485,8 @@ function buildCoachTasks(){
     if(stage==='geen_contact'&&days<=30){
       tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
-    if((d.count||0)>=3&&stage!=='geen_contact'){
-      var planMsg='DateSense kan 3 planideeën uitwerken voor <strong>'+person+'</strong>.';
-      if(stage==='eerste_date')planMsg='Voor <strong>'+person+'</strong> kan DateSense 3 eerste-date plannen voorstellen die licht en haalbaar aanvoelen.';
-      else if(stage==='meerdere_dates')planMsg='Voor <strong>'+person+'</strong> kan DateSense 3 originelere plannen voorstellen die jullie contact verdiepen.';
-      else if(stage==='exclusief daten'||stage==='prille relatie')planMsg='Voor <strong>'+person+'</strong> kan DateSense 3 quality-time plannen voorstellen die meer verbinding geven.';
-      else if(stage==='vaste relatie')planMsg='Voor <strong>'+person+'</strong> kan DateSense 3 verbindende plannen voorstellen om uit de routine te breken.';
-      tasks.push({id:'plan-auto-'+p,type:'a',prio:'low',msg:planMsg,openMsg:'Nog openstaand: laat DateSense een planvoorstel maken voor <strong>'+person+'</strong>.',link:'Open planner →',action:"openPlanner('"+p+"')"});
-    }
+    var autoPlanTask=plannerAutoTaskFor(p);
+    if(autoPlanTask)tasks.push(autoPlanTask);
   });
   var usageMode=getUsageMode();
   var focusName=getFocusDossier();
@@ -2515,20 +2523,6 @@ function buildCoachTasks(){
         action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"
       });
     }
-    var planMsg='Plan iets leuks met <strong>'+fPerson+'</strong>. DateSense kan een paar uitgewerkte voorstellen voor jullie maken.';
-    if(fStage==='eerste_date')planMsg='Twijfel je wat te doen met <strong>'+fPerson+'</strong>? DateSense kan meteen 3 eerste-date voorstellen uitwerken.';
-    else if(fStage==='meerdere_dates')planMsg='Met <strong>'+fPerson+'</strong> kan je nu iets kiezen dat nét wat origineler is. DateSense kan 3 plannen voorstellen.';
-    else if(fStage==='exclusief daten'||fStage==='prille relatie')planMsg='Voor <strong>'+fPerson+'</strong> kan DateSense 3 quality-time plannen voorstellen die meer verbinding geven.';
-    else if(fStage==='vaste relatie')planMsg='Wil je met <strong>'+fPerson+'</strong> uit jullie routine breken? DateSense kan 3 verbindende plannen voorstellen.';
-    tasks.push({
-      id:'plan-focus-'+focusName,
-      type:'a',
-      prio:'low',
-      msg:planMsg,
-      openMsg:'Nog openstaand: laat DateSense een planvoorstel maken voor <strong>'+fPerson+'</strong>.',
-      link:'Open planner →',
-      action:"openPlanner('"+focusName+"')"
-    });
   }
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
@@ -2799,14 +2793,14 @@ function rHome(el){
     </div>
   </div>`:''}
   ${!showModeEditor&&usageMode==='single'
-    ?'<div class="ai-rich-card" style="text-align:left;max-width:340px;margin:-10px 0 8px;padding:8px 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:3px"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text" style="font-size:13px;line-height:1.5;margin:0 0 2px">Focus op <strong>'+(focusName?dn(focusName):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
-    :(!showModeEditor?'<div class="ai-rich-card" style="text-align:left;max-width:340px;margin:-10px 0 8px;padding:8px 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:3px"><span>💬</span><span>Date modus actief</span></div><p class="ai-sec-text" style="font-size:13px;line-height:1.5;margin:0 0 2px">Je kan met meerdere dossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
+    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?dn(focusName):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
+    :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>💬</span><span>Date modus actief</span></div><p class="ai-sec-text">Je kan met meerdere dossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
   }
   ${(function(){
       var shortcut=plannerHomeShortcutCopy();
       var plannerName=shortcut.name||(cs&&cs[0])||'';
       if(!plannerName)return'';
-      return '<div class="ai-rich-card" style="text-align:left;max-width:320px;margin:0 0 10px;padding:8px 10px"><div class="ai-sec" style="padding:0"><div class="ai-sec-title" style="font-size:11px;margin-bottom:3px"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text" style="font-size:12px;line-height:1.45;margin:0 0 6px">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+plannerName+'\')">Open planner</button></div></div>';
+      return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+plannerName+'\')">Bekijk 3 ideeën</button></div></div>';
     })()}
   <!-- Grote microfoon knop -->
   <button class="mic-btn" onclick="goScreen('vertel')" style="margin:0 0 18px">
@@ -2824,6 +2818,9 @@ function rHome(el){
   ${notesHtml}
 
 </div>`;
+  setTimeout(function(){
+    warmAutoPlannerSuggestions();
+  },120);
 }
 
 function plannerField(id,label,html){
@@ -2849,14 +2846,14 @@ function plannerHomeShortcutCopy(){
   if(mode==='single'&&focusName){
     return {
       name:focusName,
-      title:'Planner',
-      text:'Werk een compact plan uit voor <strong>'+dn(focusName)+'</strong>.'
+      title:'Plan iets leuks samen',
+      text:'Laat DateSense 3 concrete plannen uitwerken voor <strong>'+dn(focusName)+'</strong>.'
     };
   }
   return {
     name:'',
-    title:'Planner',
-    text:'Werk snel een plan uit voor een dossier wanneer jij dat wil.'
+    title:'Plan je volgende date',
+    text:'Laat DateSense 3 leuke, concrete ideeën uitwerken voor je volgende date.'
   };
 }
 function plannerIdeaMeta(idea){
@@ -2940,6 +2937,172 @@ function plannerLooksUsable(txt){
   if(/^fout bij plannen:/i.test(raw))return false;
   if(raw.length<220)return false;
   return plannerProposalCount(raw)>=3;
+}
+function plannerAutoAnswersFor(name){
+  var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
+  var prefs=getBoostPrefs();
+  var base={
+    idea:'',
+    region:prefs.region||'',
+    budget:prefs.budget||'',
+    mood:'',
+    duration:prefs.time||'',
+    setting:'',
+    pace:prefs.style||'',
+    focus:''
+  };
+  if(stage==='eerste_date'){
+    base.idea='eerste date';
+    base.mood='luchtig en ontspannen';
+    base.duration=base.duration||'2 à 3 uur';
+    base.focus='op gemak leren kennen';
+    base.setting='mix';
+    base.pace=base.pace||'rustig';
+  }else if(stage==='meerdere_dates'){
+    base.idea='iets origineels samen';
+    base.mood='speels en warm';
+    base.duration=base.duration||'halve dag';
+    base.focus='verbinden';
+    base.setting='mix';
+  }else if(stage==='exclusief daten'||stage==='prille relatie'){
+    base.idea='quality time';
+    base.mood='verbindend en zacht';
+    base.duration=base.duration||'halve dag';
+    base.focus='kwaliteitstijd';
+    base.setting='mix';
+  }else if(stage==='vaste relatie'){
+    base.idea='samen uit routine breken';
+    base.mood='verbindend en verrassend';
+    base.duration=base.duration||'avond of dagdeel';
+    base.focus='verbinden';
+    base.setting='mix';
+  }else if(stage==='geen_contact'){
+    base.idea='laagdrempelig herstartmoment';
+    base.mood='veilig en niet te zwaar';
+    base.duration=base.duration||'1 à 2 uur';
+    base.focus='rustig opnieuw aftasten';
+    base.setting='mix';
+    base.pace='rustig';
+  }else{
+    base.idea='iets leuks samen';
+    base.mood='warm en haalbaar';
+    base.duration=base.duration||'2 à 4 uur';
+    base.focus='verbinden';
+    base.setting='mix';
+  }
+  return base;
+}
+function plannerAutoEntryAgeHours(item){
+  if(!item||!item.created_at)return 9999;
+  var t=new Date(item.created_at).getTime();
+  if(!isFinite(t))return 9999;
+  return (Date.now()-t)/3600000;
+}
+function getRecentAutoPlannerEntry(name,maxHours){
+  var limit=typeof maxHours==='number'?maxHours:72;
+  return plannerHistoryList(name).find(function(item){
+    return item&&item.auto_seed&&plannerAutoEntryAgeHours(item)<=limit;
+  })||null;
+}
+function openPlannerSuggestion(name){
+  var hit=getRecentAutoPlannerEntry(name,72);
+  if(hit){
+    restorePlannerHistory(name,hit.id);
+    return;
+  }
+  openPlanner(name);
+}
+function plannerAutoTaskFor(name){
+  if(!name||name==='OWN Sense')return null;
+  var d=S.pdata[name]||{};
+  var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
+  if((d.count||0)<3||stage==='geen_contact'&&!(d.count||0))return null;
+  var ready=getRecentAutoPlannerEntry(name,72);
+  if(!ready)return null;
+  var person=dn(name).replace('Sense','');
+  var msg='Voor <strong>'+person+'</strong> staan 3 planvoorstellen klaar als zetje.';
+  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staan 3 eerste-date voorstellen klaar.';
+  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staan 3 originelere datevoorstellen klaar.';
+  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staan 3 quality-time plannen klaar.';
+  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staan 3 verbindende plannen klaar.';
+  else if(stage==='geen_contact')msg='Voor <strong>'+person+'</strong> staat een voorzichtig herstartplan klaar, als dat nog goed voelt.';
+  return {
+    id:'plan-auto-'+name,
+    type:'a',
+    prio:'low',
+    msg:msg,
+    openMsg:'Nog openstaand: er staan nog steeds planvoorstellen klaar voor <strong>'+person+'</strong>.',
+    link:'Open voorstel →',
+    action:"openPlannerSuggestion('"+name+"')"
+  };
+}
+async function requestPlannerIdeas(name,answers){
+  var dCtx=await buildDossierContextForAI(name);
+  var stage=stageLabel(getDossierStage(name));
+  var usageLine=buildUsageModeContextLine();
+  var ideaMeta=plannerIdeaMeta(answers.idea);
+  var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
+    +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
+    +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
+    +'Schrijf warm, premium en praktisch. '
+    +'Respecteer strikt de fase en context van het dossier. Als iemand nog niet in het echt gezien is, stel dan geen zware of te intieme plannen voor. '
+    +'Geef exact 3 voorstellen, niet 2 en niet 4. '
+    +'Voor elk voorstel gebruik je exact deze structuur: '
+    +'Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:. '
+    +' Bij Praktisch geef je zo concreet mogelijk: startpunt, parking/startlocatie, geschatte rijtijd, duur of afstand, en hoe je begint. '
+    +' Bij Mooiste extra geef je 1 concrete insider-tip zoals beste uitzicht, lekkerste gerecht, mooiste stop of slimste kamerkeuze. '
+    +'Houd elk voorstel compact maar concreet.';
+  var userContent='Dossier: '+dn(name)
+    +'\nFase: '+stage
+    +(usageLine?('\nGebruiksmode: '+usageLine):'')
+    +(dCtx?('\nContext:\n'+dCtx):'')
+    +'\n\nWensen voor dit plan:'
+    +'\n- Wat wil je doen: '+(answers.idea||'nog open')
+    +'\n- Regio / afstand: '+(answers.region||'flexibel')
+    +'\n- Budget: '+(answers.budget||'flexibel')
+    +'\n- Sfeer: '+(answers.mood||'nog open')
+    +'\n- Tijdsduur: '+(answers.duration||'nog open')
+    +'\n- Binnen of buiten: '+(answers.setting||'nog open')
+    +'\n- Rustig of actief: '+(answers.pace||'nog open')
+    +'\n- Gewenst effect: '+(answers.focus||'verbinden')
+    +'\n- Type idee: '+ideaMeta.moodHint
+    +'\n\nMaak exact 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.'
+    +'\nGeef waar mogelijk praktische details zoals: waar starten, waar parkeren, rijtijd, afstand/km, duur en 1 beste extra tip.'
+    +'\nAls je iets niet zeker weet, formuleer het als praktische inschatting en niet als hard feit.';
+  var raw=await callAPI(sys,[{role:'user',content:userContent}],900,45000);
+  if(plannerProposalCount(raw)<3){
+    raw=await callAPI(sys+' Je vorige antwoord had te weinig voorstellen. Herstel dit nu en geef exact 3 voorstellen in hetzelfde format.',[{role:'user',content:userContent}],1100,45000);
+  }
+  return String(raw||'').trim();
+}
+async function warmAutoPlannerSuggestions(){
+  if(_autoPlannerWarmBusy||!S.user||S.screen!=='home'||!S.apiKey)return;
+  var candidates=getActiveContactNames().filter(function(name){
+    var d=S.pdata[name]||{};
+    var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
+    if((d.count||0)<3)return false;
+    if(stage==='geen_contact'&&(d.count||0)<1)return false;
+    return !getRecentAutoPlannerEntry(name,72);
+  }).slice(0,2);
+  if(!candidates.length)return;
+  var warmKey=candidates.join('|');
+  if(_autoPlannerWarmKey===warmKey)return;
+  _autoPlannerWarmBusy=true;
+  _autoPlannerWarmKey=warmKey;
+  try{
+    for(var i=0;i<candidates.length;i++){
+      var name=candidates[i];
+      if(getRecentAutoPlannerEntry(name,72))continue;
+      var answers=plannerAutoAnswersFor(name);
+      var raw=await requestPlannerIdeas(name,answers);
+      await savePlannerHistory(name,answers,raw,{auto_seed:true,auto_reason:'coach'});
+    }
+  }catch(_e){
+  }finally{
+    _autoPlannerWarmBusy=false;
+    _autoPlannerWarmKey='';
+    if(S.screen==='home')setTimeout(function(){goScreen('home');},40);
+  }
 }
 function parsePlannerResult(txt){
   var raw=String(txt||'').replace(/\r/g,'').trim();
@@ -3084,7 +3247,7 @@ function plannerHistoryList(name){
     return String(b&&b.created_at||'').localeCompare(String(a&&a.created_at||''));
   });
 }
-async function savePlannerHistory(name,answers,result){
+async function savePlannerHistory(name,answers,result,extraMeta){
   if(!name||!plannerLooksUsable(result))return;
   var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
   d.meta=d.meta||{};
@@ -3096,6 +3259,8 @@ async function savePlannerHistory(name,answers,result){
     title:title,
     created_at:new Date().toISOString(),
     stage:stage,
+    auto_seed:!!(extraMeta&&extraMeta.auto_seed),
+    auto_reason:String(extraMeta&&extraMeta.auto_reason||''),
     answers:{
       idea:String(answers.idea||''),
       region:String(answers.region||''),
@@ -3146,51 +3311,28 @@ async function generatePlannerIdeas(){
   S.planner.result='';
   S.planner.historySelection='';
   goScreen('planner');
+  setTimeout(function(){
+    var target=document.getElementById('plannerResultsAnchor');
+    if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});
+  },40);
   try{
-    var dCtx=await buildDossierContextForAI(name);
-    var stage=stageLabel(getDossierStage(name));
-    var usageLine=buildUsageModeContextLine();
-    var ideaMeta=plannerIdeaMeta(answers.idea);
-    var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
-      +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
-      +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
-      +'Schrijf warm, premium en praktisch. '
-      +'Respecteer strikt de fase en context van het dossier. Als iemand nog niet in het echt gezien is, stel dan geen zware of te intieme plannen voor. '
-      +'Geef exact 3 voorstellen, niet 2 en niet 4. '
-      +'Voor elk voorstel gebruik je exact deze structuur: '
-      +'Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:. '
-      +' Bij Praktisch geef je zo concreet mogelijk: startpunt, parking/startlocatie, geschatte rijtijd, duur of afstand, en hoe je begint. '
-      +' Bij Mooiste extra geef je 1 concrete insider-tip zoals beste uitzicht, lekkerste gerecht, mooiste stop of slimste kamerkeuze. '
-      +'Houd elk voorstel compact maar concreet.';
-    var userContent='Dossier: '+dn(name)
-      +'\nFase: '+stage
-      +(usageLine?('\nGebruiksmode: '+usageLine):'')
-      +(dCtx?('\nContext:\n'+dCtx):'')
-      +'\n\nWensen voor dit plan:'
-      +'\n- Wat wil je doen: '+(answers.idea||'nog open')
-      +'\n- Regio / afstand: '+(answers.region||'flexibel')
-      +'\n- Budget: '+(answers.budget||'flexibel')
-      +'\n- Sfeer: '+(answers.mood||'nog open')
-      +'\n- Tijdsduur: '+(answers.duration||'nog open')
-      +'\n- Binnen of buiten: '+(answers.setting||'nog open')
-      +'\n- Rustig of actief: '+(answers.pace||'nog open')
-      +'\n- Gewenst effect: '+(answers.focus||'verbinden')
-      +'\n- Type idee: '+ideaMeta.moodHint
-      +'\n\nMaak exact 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.'
-      +'\nGeef waar mogelijk praktische details zoals: waar starten, waar parkeren, rijtijd, afstand/km, duur en 1 beste extra tip.'
-      +'\nAls je iets niet zeker weet, formuleer het als praktische inschatting en niet als hard feit.';
-    var raw=await callAPI(sys,[{role:'user',content:userContent}],900,45000);
-    if(plannerProposalCount(raw)<3){
-      raw=await callAPI(sys+' Je vorige antwoord had te weinig voorstellen. Herstel dit nu en geef exact 3 voorstellen in hetzelfde format.',[{role:'user',content:userContent}],1100,45000);
-    }
+    var raw=await requestPlannerIdeas(name,answers);
     S.planner.loading=false;
     S.planner.result=raw.trim();
     await savePlannerHistory(name,answers,raw.trim());
     goScreen('planner');
+    setTimeout(function(){
+      var target=document.getElementById('plannerResultsAnchor');
+      if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});
+    },40);
   }catch(e){
     S.planner.loading=false;
     S.planner.result='Fout bij plannen: '+(e&&e.message?e.message:'Onbekende fout');
     goScreen('planner');
+    setTimeout(function(){
+      var target=document.getElementById('plannerResultsAnchor');
+      if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});
+    },40);
   }
 }
 function rPlanner(el){
@@ -3210,7 +3352,15 @@ function rPlanner(el){
     +'</select>';
   var resultHtml='';
   if(p.loading){
-    resultHtml='<div class="ai-rich-card" style="margin-top:14px"><div class="ai-sec"><div class="ai-sec-title"><span>Plan wordt voorbereid</span></div><p class="ai-sec-text">DateSense werkt 3 voorstellen uit die passen bij jullie fase, vibe en voorkeuren.</p></div></div>';
+    resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div class="planner-loading">'
+      +'<div class="planner-loading-top"><div class="planner-spinner"></div><div class="planner-loading-title">Je 3 plannen worden nu uitgewerkt</div></div>'
+      +'<p class="planner-loading-text">DateSense blijft bezig. Ik kijk nu naar jullie fase, context en voorkeuren zodat je straks 3 duidelijke voorstellen krijgt.</p>'
+      +'<div class="planner-loading-steps">'
+      +'<div class="planner-loading-step">1. Ik kies ideeën die passen bij dit dossier.</div>'
+      +'<div class="planner-loading-step">2. Ik werk praktische details uit zoals duur, startpunt en extra tip.</div>'
+      +'<div class="planner-loading-step">3. Ik zet alles klaar in 3 aparte kaarten zodat je meteen kan kiezen.</div>'
+      +'</div>'
+      +'</div></div>';
   }else if(p.result){
     var isErr=String(p.result||'').indexOf('Fout bij plannen:')===0;
     resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:8px">JOUW PLANVOORSTELLEN</div>'
