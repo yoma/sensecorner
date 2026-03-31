@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 10:41">
+<meta name="ds-build" content="v2026-03-31-1 10:50">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2807,6 +2807,37 @@ function plannerHomeCardCopy(name){
   if(stage==='geen_contact')return{title:'Plan alleen als het klopt',text:'DateSense kan voor <strong>'+dn(name)+'</strong> een laagdrempelig voorstel maken, als hernieuwd contact nog passend voelt.'};
   return{title:'Plan iets leuks',text:'Werk een leuk voorstel uit voor <strong>'+dn(name)+'</strong> met AI-vragen en 3 concrete plannen.'};
 }
+function plannerIdeaMeta(idea){
+  var v=String(idea||'').toLowerCase();
+  if(v.indexOf('wandel')>=0||v.indexOf('hike')>=0)return{
+    settingOptions:['buiten','mix'],
+    settingLabel:'Buiten of eventueel mix',
+    moodHint:'wandeling'
+  };
+  if(v.indexOf('restaurant')>=0||v.indexOf('eten')>=0||v.indexOf('diner')>=0)return{
+    settingOptions:['binnen','buiten','mix'],
+    settingLabel:'Binnen, buiten of mix',
+    moodHint:'restaurant'
+  };
+  if(v.indexOf('citytrip')>=0||v.indexOf('trip')>=0||v.indexOf('weekend')>=0)return{
+    settingOptions:['binnen','buiten','mix'],
+    settingLabel:'Binnen, buiten of mix',
+    moodHint:'trip'
+  };
+  if(v.indexOf('bowling')>=0||v.indexOf('cinema')>=0||v.indexOf('museum')>=0)return{
+    settingOptions:['binnen','mix'],
+    settingLabel:'Binnen of mix',
+    moodHint:'activiteit'
+  };
+  return{
+    settingOptions:['binnen','buiten','mix'],
+    settingLabel:'Binnen of buiten',
+    moodHint:'algemeen'
+  };
+}
+function plannerProposalCount(txt){
+  return (String(txt||'').match(/(^|\n)Titel\s*:/g)||[]).length;
+}
 function plannerHistoryList(name){
   if(!name)return[];
   var d=S.pdata[name]||{};
@@ -2880,10 +2911,12 @@ async function generatePlannerIdeas(){
     var dCtx=await buildDossierContextForAI(name);
     var stage=stageLabel(getDossierStage(name));
     var usageLine=buildUsageModeContextLine();
+    var ideaMeta=plannerIdeaMeta(answers.idea);
     var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
       +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
       +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
       +'Schrijf warm, premium en praktisch. '
+      +'Geef exact 3 voorstellen, niet 2 en niet 4. '
       +'Voor elk voorstel gebruik je exact deze structuur: '
       +'Titel:, Waarom dit past:, Hoe het eruitziet:, Beste moment:, Voorbereiding:, Let op:. '
       +'Houd elk voorstel compact maar concreet.';
@@ -2900,8 +2933,12 @@ async function generatePlannerIdeas(){
       +'\n- Binnen of buiten: '+(answers.setting||'nog open')
       +'\n- Rustig of actief: '+(answers.pace||'nog open')
       +'\n- Focus: '+(answers.focus||'verbinden')
-      +'\n\nMaak 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.';
+      +'\n- Type idee: '+ideaMeta.moodHint
+      +'\n\nMaak exact 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.';
     var raw=await callAPI(sys,[{role:'user',content:userContent}],900);
+    if(plannerProposalCount(raw)<3){
+      raw=await callAPI(sys+' Je vorige antwoord had te weinig voorstellen. Herstel dit nu en geef exact 3 voorstellen in hetzelfde format.',[{role:'user',content:userContent}],1100);
+    }
     S.planner.loading=false;
     S.planner.result=raw.trim();
     await savePlannerHistory(name,answers,raw.trim());
@@ -2917,6 +2954,7 @@ function rPlanner(el){
   var name=String(p.dossier||'').trim()||getFocusDossier()||'';
   if(!p.dossier&&name)S.planner.dossier=name;
   var answers=p.answers||{};
+  var ideaMeta=plannerIdeaMeta(answers.idea||'');
   var historyItems=plannerHistoryList(name);
   var contacts=(S.profiles||[]).filter(function(v){return v!=='OWN Sense'&&getDossierLifecycle(v)==='active';});
   var dossierSelect='<select id="plannerDossier" class="form-input" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';goScreen(\'planner\')">'
@@ -2934,8 +2972,8 @@ function rPlanner(el){
       +'</div>';
   }
   var historyHtml='';
-  if(historyItems.length){
-    historyHtml='<div style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:#666;letter-spacing:.5px;margin-bottom:8px">EERDERE PLANNEN</div>'
+  if(historyItems.length>1){
+    historyHtml='<div style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:#666;letter-spacing:.5px;margin-bottom:8px">OPGESLAGEN PLANNEN</div>'
       +historyItems.map(function(item){
         var a=item.answers||{};
         var mini=[item.stage,a.region,a.budget,a.mood,a.duration].filter(Boolean).join(' · ');
@@ -2959,7 +2997,7 @@ function rPlanner(el){
     +plannerField('plannerBudgetWrap','Budget',plannerSelect('plannerBudget',answers.budget||'',['betaalbaar','gemiddeld','bijzonder'],'Kies budget'))
     +plannerField('plannerMoodWrap','Sfeer',plannerSelect('plannerMood',answers.mood||'',['romantisch','rustig','speels','verbindend','verrassend'],'Kies sfeer'))
     +plannerField('plannerDurationWrap','Tijdsduur',plannerSelect('plannerDuration',answers.duration||'',['1-2 uur','halve dag','hele dag','avond','weekend'],'Kies tijd'))
-    +plannerField('plannerSettingWrap','Binnen of buiten',plannerSelect('plannerSetting',answers.setting||'',['binnen','buiten','mix'],'Kies setting'))
+    +plannerField('plannerSettingWrap',ideaMeta.settingLabel,plannerSelect('plannerSetting',answers.setting||'',ideaMeta.settingOptions,'Kies setting'))
     +plannerField('plannerPaceWrap','Rustig of actief',plannerSelect('plannerPace',answers.pace||'',['rustig','actief','gemengd'],'Kies tempo'))
     +plannerField('plannerFocusWrap','Waar moet het vooral op focussen?',plannerSelect('plannerFocus',answers.focus||'',['verbinden','romantiek','plezier','verdiepen','herstel','verrassing'],'Kies focus'))
     +'</div>'
