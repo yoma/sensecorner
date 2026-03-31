@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 15:57">
+<meta name="ds-build" content="v2026-03-31-1 16:08">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3244,7 +3244,67 @@ function plannerIdeaGuidance(idea){
   }
   return 'Pas de stijl van elk voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan. Gebruik geen houterige of ultrakorte zinnen, maar volwassen, vloeiende formuleringen.';
 }
-function plannerFallbackProposals(name,answers){
+function plannerRegionAreaHint(region,anchors){
+  var regionTxt=String(region||'jouw regio').trim()||'jouw regio';
+  var list=(Array.isArray(anchors)?anchors:[]).filter(Boolean).slice(0,4);
+  if(list.length>=3)return list.slice(0,3).join(', ')+' of een rustige straat in dezelfde zone';
+  if(list.length===2)return list[0]+', '+list[1]+' of een rustige straat in dezelfde zone';
+  if(list.length===1)return 'de buurt rond '+list[0]+' of een rustige straat in dezelfde zone';
+  return 'een herkenbare buurt, een plein, een straat met sfeer of een rustige zone in '+regionTxt;
+}
+function plannerCleanAnchorName(name,region){
+  var raw=String(name||'').trim();
+  if(!raw)return'';
+  var regionLc=String(region||'').toLowerCase();
+  var out=raw.split(',')[0].trim();
+  out=out.replace(/\s+\([^)]*\)$/,'').trim();
+  if(!out)return'';
+  var bad=/^(belg(?:ium|ië)|nederland|france|germany|europe|vlaanderen|flanders|wallonie|wallonia)$/i;
+  if(bad.test(out))return'';
+  if(regionLc&&out.toLowerCase()===regionLc)return'';
+  if(out.length<4)return'';
+  return out;
+}
+async function fetchPlannerRegionAnchors(region){
+  var q=String(region||'').trim();
+  if(!q||q.length<3)return[];
+  S._plannerRegionAnchorCache=S._plannerRegionAnchorCache||{};
+  if(Array.isArray(S._plannerRegionAnchorCache[q]))return S._plannerRegionAnchorCache[q];
+  var queries=[q,q+' centrum',q+' station',q+' plein',q+' park'];
+  var anchors=[];
+  for(var i=0;i<queries.length&&anchors.length<5;i++){
+    var controller=new AbortController();
+    var timer=setTimeout(function(){controller.abort();},2600);
+    try{
+      var url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&addressdetails=1&accept-language=nl&q='+encodeURIComponent(queries[i]);
+      var res=await fetch(url,{headers:{'Accept':'application/json'},signal:controller.signal});
+      var data=await res.json();
+      (Array.isArray(data)?data:[]).forEach(function(item){
+        var addr=item&&item.address?item.address:{};
+        var candidates=[
+          item&&item.name,
+          addr.neighbourhood,
+          addr.suburb,
+          addr.city_district,
+          addr.quarter,
+          addr.hamlet,
+          addr.village,
+          addr.town,
+          item&&item.display_name
+        ].map(function(x){return plannerCleanAnchorName(x,q);}).filter(Boolean);
+        candidates.forEach(function(c){
+          if(anchors.indexOf(c)===-1&&anchors.length<6)anchors.push(c);
+        });
+      });
+    }catch(_e){
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+  S._plannerRegionAnchorCache[q]=anchors.slice(0,5);
+  return S._plannerRegionAnchorCache[q];
+}
+function plannerFallbackProposals(name,answers,regionAnchors){
   var person=dn(name||'dit dossier');
   var region=String(answers.region||'jouw regio').trim()||'jouw regio';
   var mood=String(answers.mood||'warm').trim()||'warm';
@@ -3253,27 +3313,13 @@ function plannerFallbackProposals(name,answers){
   var pace=String(answers.pace||'rustig').trim()||'rustig';
   var focus=String(answers.focus||'verbinden').trim()||'verbinden';
   var idea=String(answers.idea||'iets leuks').trim().toLowerCase();
-  var regionLc=region.toLowerCase();
   var romanticHint=(mood.indexOf('romant')>=0||focus.indexOf('kwaliteit')>=0||focus.indexOf('verbinden')>=0);
-  var areaHints=(function(){
-    if(regionLc.indexOf('antwerp')>=0)return'het Zuid, de Marnixplaats, de Vlaamsekaai of een rustige straat richting de Scheldekaaien';
-    if(regionLc.indexOf('mortsel')>=0)return'het centrum van Mortsel, de Statielei, de buurt rond het Gemeenteplein of een rustige zijstraat richting Fort 4';
-    if(regionLc.indexOf('berchem')>=0)return'de buurt rond Zurenborg, de Dageraadplaats, de Cogels-Osylei of een rustige straat richting het station van Berchem';
-    if(regionLc.indexOf('gent')>=0)return'de buurt rond Patershol, Coupure, de Graslei of een rustig stuk net buiten het drukkere centrum';
-    if(regionLc.indexOf('brugge')>=0)return'de reitjes, de buurt rond de Vesten of een rustig plein net buiten de drukste kern';
-    return'een herkenbare buurt, een plein, een straat met sfeer of een rustige zone in '+region;
-  })();
-  var coffeeAnchors=regionLc.indexOf('antwerp')>=0
-    ? {
-        first:'een rustige koffieplek rond het Zuid, de Marnixplaats of een zijstraat met minder passage',
-        second:'een warme koffieplek in Antwerpen-Zuid of rond een plein waar je makkelijk nog even kan blijven hangen',
-        walk:'een korte lus richting de Scheldekaaien, een rustige winkelstraat of een plein in de buurt'
-      }
-    : {
-        first:'een rustige koffieplek in '+region+' met zachte sfeer en genoeg ruimte om te praten',
-        second:'een kleine brunchplek of koffiebar in '+region+' waar je niet opgejaagd zit',
-        walk:'een korte wandeling via een park, plein of mooie straat in '+region
-      };
+  var areaHints=plannerRegionAreaHint(region,regionAnchors);
+  var coffeeAnchors={
+    first:'een rustige koffieplek in '+areaHints+' met zachte sfeer en genoeg ruimte om te praten',
+    second:'een kleine brunchplek of koffiebar in '+areaHints+' waar je niet opgejaagd zit',
+    walk:'een korte wandeling via een park, plein of mooie straat in '+areaHints
+  };
   if(idea.indexOf('koffie')>=0||idea.indexOf('coffee')>=0){
     return [
       {
@@ -3361,10 +3407,10 @@ function plannerHasConcreteSuggestion(item,answers){
   var regionHit=regionWords.some(function(w){return blob.indexOf(w)>=0;});
   return placeCue&&regionHit;
 }
-function plannerNormalizeResult(raw,name,answers){
+function plannerNormalizeResult(raw,name,answers,regionAnchors){
   var parsed=parsePlannerResult(raw);
   var items=parsed.slice().map(function(item){return {...item};});
-  var fallbacks=plannerFallbackProposals(name,answers);
+  var fallbacks=plannerFallbackProposals(name,answers,regionAnchors);
   items=items.map(function(item,idx){
     if(plannerItemLooksComplete(item)&&plannerHasConcreteSuggestion(item,answers))return item;
     var fb=fallbacks[idx]||fallbacks[0];
@@ -3497,6 +3543,7 @@ function plannerAutoTaskFor(name){
 }
 async function requestPlannerIdeas(name,answers){
   var dCtx=buildPlannerContextPayload(name);
+  var regionAnchors=await fetchPlannerRegionAnchors(answers.region||'');
   var stage=stageLabel(getDossierStage(name));
   var ideaMeta=plannerIdeaMeta(answers.idea);
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
@@ -3525,10 +3572,11 @@ async function requestPlannerIdeas(name,answers){
     +'\nEffect: '+(answers.focus||'verbinden')
     +'\nType hint: '+ideaMeta.moodHint
     +(hasConcreteRegion?'\nNoem per voorstel minstens 1 passende buurtnaam, plein, straat, kaai, stationsomgeving of streek in deze regio.':'')
+    +(regionAnchors.length?('\nLive regio-ankers: '+regionAnchors.slice(0,5).join(', ')):'')
     +'\nGeef 2 verschillende, haalbare voorstellen.';
   try{
     var raw=await callAPI(sys,[{role:'user',content:userContent}],520,16000);
-    return plannerNormalizeResult(raw,name,answers);
+    return plannerNormalizeResult(raw,name,answers,regionAnchors);
   }catch(e){
     // Fallback prompt: korter en sneller, vooral voor mobiele/tragere netwerken.
     var fastSys='Je bent DateSensei. Geef exact 2 compacte, concrete planvoorstellen in het Nederlands. '
@@ -3542,9 +3590,9 @@ async function requestPlannerIdeas(name,answers){
       +'\nGeef exact 2 voorstellen.';
     try{
       var quick=await callAPI(fastSys,[{role:'user',content:fastUser}],420,14000);
-      return plannerNormalizeResult(quick,name,answers);
+      return plannerNormalizeResult(quick,name,answers,regionAnchors);
     }catch(_e){
-      return plannerNormalizeResult('',name,answers);
+      return plannerNormalizeResult('',name,answers,regionAnchors);
     }
   }
 }
