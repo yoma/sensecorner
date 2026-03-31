@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 23:46">
+<meta name="ds-build" content="v2026-03-31-1 23:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1860,6 +1860,7 @@ async function doSignOut(){closeDrawer();await sb.auth.signOut();toast('👋 Tot
 // ══ Data ═════════════════════════════════════════════════════════
 async function loadAll(){
   if(!S.user)return;
+  migrateLegacyUserPrefs();
   var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
   S.profiles=['OWN Sense'];S.pdata={};
   if(!data||!data.length){
@@ -2318,6 +2319,22 @@ function setScopedStorage(base,value){
 function removeScopedStorage(base){
   localStorage.removeItem(getScopedStorageKey(base));
 }
+function migrateLegacyUserPrefs(){
+  if(!S||!S.user)return;
+  var map=[
+    {base:'ds_usage_mode',legacy:'ds_usage_mode'},
+    {base:'ds_focus_dossier',legacy:'ds_focus_dossier'},
+    {base:'ds_focus_relation_type',legacy:'ds_focus_relation_type'},
+    {base:'ds_focus_boost_prefs',legacy:'ds_focus_boost_prefs'},
+    {base:'dsCoachState',legacy:'dsCoachState'}
+  ];
+  map.forEach(function(item){
+    var scopedKey=getScopedStorageKey(item.base);
+    if(localStorage.getItem(scopedKey)!=null)return;
+    var legacyVal=localStorage.getItem(item.legacy);
+    if(legacyVal!=null)localStorage.setItem(scopedKey,legacyVal);
+  });
+}
 
 function getDossierLifecycle(name){
   if(!name||name==='OWN Sense')return'active';
@@ -2513,15 +2530,8 @@ function activateDateModeFromHome(){
 async function applyFocusFromHome(autoHold){
   var sel=document.getElementById('homeFocusSelect');
   var n=sel?sel.value:'';
-  var prefs={
-    region:(document.getElementById('homeBoostRegion')||{}).value||'',
-    budget:(document.getElementById('homeBoostBudget')||{}).value||'',
-    style:(document.getElementById('homeBoostStyle')||{}).value||'',
-    time:(document.getElementById('homeBoostTime')||{}).value||''
-  };
   if(!n){toast('Kies eerst een dossier');return;}
   setFocusRelationType(stageRelationTypeValue(getDossierStage(n)));
-  setBoostPrefs(prefs);
   S.homeModeDraft='single';
   S.homeModeEditorOpen=false;
   await activateRelationshipFocus(n,!!autoHold);
@@ -3125,7 +3135,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><input id="homeBoostRegion" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0" placeholder="Regio / afstand" value="'+escHTML(boostPrefs.region||'')+'"><select id="homeBoostBudget" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.budget?'selected':'')+'>Budget</option><option value="betaalbaar" '+(boostPrefs.budget==='betaalbaar'?'selected':'')+'>Betaalbaar</option><option value="gemiddeld" '+(boostPrefs.budget==='gemiddeld'?'selected':'')+'>Gemiddeld</option><option value="bijzonder" '+(boostPrefs.budget==='bijzonder'?'selected':'')+'>Bijzonder</option></select><select id="homeBoostStyle" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.style?'selected':'')+'>Sfeer / stijl</option><option value="rustig" '+(boostPrefs.style==='rustig'?'selected':'')+'>Rustig</option><option value="romantisch" '+(boostPrefs.style==='romantisch'?'selected':'')+'>Romantisch</option><option value="actief" '+(boostPrefs.style==='actief'?'selected':'')+'>Actief</option><option value="casual" '+(boostPrefs.style==='casual'?'selected':'')+'>Casual</option></select><select id="homeBoostTime" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.time?'selected':'')+'>Beschikbare tijd</option><option value="avond" '+(boostPrefs.time==='avond'?'selected':'')+'>Avond</option><option value="halve dag" '+(boostPrefs.time==='halve dag'?'selected':'')+'>Halve dag</option><option value="hele dag" '+(boostPrefs.time==='hele dag'?'selected':'')+'>Hele dag</option><option value="weekend" '+(boostPrefs.time==='weekend'?'selected':'')+'>Weekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">De relatie-status haal ik uit het dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
           :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
