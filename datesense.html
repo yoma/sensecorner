@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 10:19">
+<meta name="ds-build" content="v2026-03-31-1 10:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -691,6 +691,12 @@ var S={
   profiles:[],
   pdata:{},
   viewDossier:null,viewTab:'overzicht',
+  planner:{
+    dossier:'',
+    answers:{idea:'',region:'',budget:'',mood:'',duration:'',setting:'',pace:'',focus:''},
+    loading:false,
+    result:''
+  },
   // Vertel chat tijdelijk (wis na opslaan)
   vertelMsgs:[],
   timelineLimitByDossier:{}
@@ -1729,7 +1735,7 @@ function goBack(){
 function goScreen(sc){
   var prevScreen=S.screen;
   // Protect screens when not authenticated
-  if(!S.user && ['senses','own','vertel','compare','dossier','notifications'].includes(sc)){
+  if(!S.user && ['senses','own','vertel','compare','dossier','notifications','planner'].includes(sc)){
     sc='login';
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
@@ -1741,14 +1747,14 @@ function goScreen(sc){
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan iets leuks',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
   ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
+  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,planner:rPlanner,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -1812,6 +1818,27 @@ function rDrawer(){
 function openDrawer(){rDrawer();document.getElementById('drawer').classList.add('open');document.getElementById('ovl').classList.add('show');}
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('ovl').classList.remove('show');}
 function viewDossier(name){S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');}
+function openPlanner(dosName){
+  var name=String(dosName||'').trim();
+  if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  var prefs=getBoostPrefs();
+  S.planner=S.planner||{};
+  S.planner.dossier=name;
+  S.planner.answers={
+    idea:'',
+    region:prefs.region||'',
+    budget:prefs.budget||'',
+    mood:'',
+    duration:prefs.time||'',
+    setting:'',
+    pace:prefs.style||'',
+    focus:''
+  };
+  S.planner.loading=false;
+  S.planner.result='';
+  closeDrawer();
+  goScreen('planner');
+}
 async function viewDossierTijdlijn(name){
   S.viewDossier=name;S.viewTab='tijdlijn';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');
 }
@@ -2397,22 +2424,6 @@ async function updateDossierStageFromUI(name){
     openStageFocusModal(name,v);
   }
 }
-async function updateDossierRelationTypeFromUI(name){
-  if(!name||name==='OWN Sense')return;
-  var el=document.getElementById('dosRelTypeSel');
-  if(!el)return;
-  var v=String(el.value||'').trim();
-  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
-  d.meta=d.meta||{};
-  if(v)d.meta.relationship_type=v;
-  else delete d.meta.relationship_type;
-  S.pdata[name]=d;
-  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
-  if(getUsageMode()==='single'&&getFocusDossier()===name){
-    setFocusRelationType(v);
-  }
-  toast(v?('Relatietype: '+v):'Relatietype gewist');
-}
 
 function buildCoachTasks(){
   var tasks=[];
@@ -2472,6 +2483,15 @@ function buildCoachTasks(){
         action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"
       });
     }
+    tasks.push({
+      id:'plan-focus-'+focusName,
+      type:'a',
+      prio:'low',
+      msg:'Plan iets leuks met <strong>'+fPerson+'</strong>. DateSense kan een paar uitgewerkte voorstellen voor jullie maken.',
+      openMsg:'Nog openstaand: laat DateSense een planvoorstel maken voor <strong>'+fPerson+'</strong>.',
+      link:'Open planner →',
+      action:"openPlanner('"+focusName+"')"
+    });
   }
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
@@ -2761,6 +2781,109 @@ function rHome(el){
   ${notesHtml}
 
 </div>`;
+}
+
+function plannerField(id,label,html){
+  return '<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#666;margin-bottom:6px">'+label+'</div>'+html+'</div>';
+}
+function plannerSelect(id,value,options,placeholder){
+  return '<select id="'+id+'" class="form-input" style="margin:0"><option value="">'+placeholder+'</option>'+options.map(function(opt){
+    return '<option value="'+opt+'" '+(value===opt?'selected':'')+'>'+opt+'</option>';
+  }).join('')+'</select>';
+}
+async function generatePlannerIdeas(){
+  if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
+  var p=S.planner||{};
+  var name=String(p.dossier||'').trim();
+  if(!name){toast('Kies eerst een dossier');return;}
+  var answers={
+    idea:((document.getElementById('plannerIdea')||{}).value||'').trim(),
+    region:((document.getElementById('plannerRegion')||{}).value||'').trim(),
+    budget:((document.getElementById('plannerBudget')||{}).value||'').trim(),
+    mood:((document.getElementById('plannerMood')||{}).value||'').trim(),
+    duration:((document.getElementById('plannerDuration')||{}).value||'').trim(),
+    setting:((document.getElementById('plannerSetting')||{}).value||'').trim(),
+    pace:((document.getElementById('plannerPace')||{}).value||'').trim(),
+    focus:((document.getElementById('plannerFocus')||{}).value||'').trim()
+  };
+  S.planner.answers=answers;
+  S.planner.loading=true;
+  S.planner.result='';
+  goScreen('planner');
+  try{
+    var dCtx=await buildDossierContextForAI(name);
+    var stage=stageLabel(getDossierStage(name));
+    var usageLine=buildUsageModeContextLine();
+    var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
+      +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
+      +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
+      +'Schrijf warm, premium en praktisch. '
+      +'Voor elk voorstel gebruik je exact deze structuur: '
+      +'Titel:, Waarom dit past:, Hoe het eruitziet:, Beste moment:, Voorbereiding:, Let op:. '
+      +'Houd elk voorstel compact maar concreet.';
+    var userContent='Dossier: '+dn(name)
+      +'\nFase: '+stage
+      +(usageLine?('\nGebruiksmode: '+usageLine):'')
+      +(dCtx?('\nContext:\n'+dCtx):'')
+      +'\n\nWensen voor dit plan:'
+      +'\n- Wat wil je doen: '+(answers.idea||'nog open')
+      +'\n- Regio / afstand: '+(answers.region||'flexibel')
+      +'\n- Budget: '+(answers.budget||'flexibel')
+      +'\n- Sfeer: '+(answers.mood||'nog open')
+      +'\n- Tijdsduur: '+(answers.duration||'nog open')
+      +'\n- Binnen of buiten: '+(answers.setting||'nog open')
+      +'\n- Rustig of actief: '+(answers.pace||'nog open')
+      +'\n- Focus: '+(answers.focus||'verbinden')
+      +'\n\nMaak 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.';
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],900);
+    S.planner.loading=false;
+    S.planner.result=raw.trim();
+    goScreen('planner');
+  }catch(e){
+    S.planner.loading=false;
+    S.planner.result='Fout bij plannen: '+(e&&e.message?e.message:'Onbekende fout');
+    goScreen('planner');
+  }
+}
+function rPlanner(el){
+  var p=S.planner||{};
+  var name=String(p.dossier||'').trim()||getFocusDossier()||'';
+  if(!p.dossier&&name)S.planner.dossier=name;
+  var answers=p.answers||{};
+  var contacts=(S.profiles||[]).filter(function(v){return v!=='OWN Sense'&&getDossierLifecycle(v)==='active';});
+  var dossierSelect='<select id="plannerDossier" class="form-input" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';goScreen(\'planner\')">'
+    +contacts.map(function(v){return'<option value="'+v+'" '+((name||'')===v?'selected':'')+'>'+dn(v)+'</option>';}).join('')
+    +'</select>';
+  var resultHtml='';
+  if(p.loading){
+    resultHtml='<div class="ai-rich-card" style="margin-top:14px"><div class="ai-sec"><div class="ai-sec-title"><span>Plan wordt voorbereid</span></div><p class="ai-sec-text">DateSense werkt 3 voorstellen uit die passen bij jullie fase, vibe en voorkeuren.</p></div></div>';
+  }else if(p.result){
+    var isErr=String(p.result||'').indexOf('Fout bij plannen:')===0;
+    resultHtml='<div style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:8px">JOUW PLANVOORSTELLEN</div>'
+      +(isErr
+        ?'<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:14px;line-height:1.6">'+escHTML(p.result)+'</div>'
+        :formatAiCard(p.result))
+      +'</div>';
+  }
+  el.innerHTML='<div style="padding:20px 16px 32px;max-width:700px;margin:0 auto">'
+    +'<div class="ai-rich-card" style="margin-bottom:14px"><div class="ai-sec"><div class="ai-sec-title"><span>Plan iets leuks</span></div><p class="ai-sec-text">Beantwoord kort wat je zoekt. Daarna werkt DateSense 3 concrete voorstellen uit zonder externe links.</p></div></div>'
+    +plannerField('plannerDossierWrap','Voor welk dossier?',dossierSelect)
+    +plannerField('plannerIdeaWrap','Wat wil je ongeveer doen?','<input id="plannerIdea" class="form-input" style="margin:0" placeholder="Restaurant, wandeling, citytrip, bowling, verrassing..." value="'+escHTML(answers.idea||'')+'"/>')
+    +'<div class="g2">'
+    +plannerField('plannerRegionWrap','Regio / afstand','<input id="plannerRegion" class="form-input" style="margin:0" placeholder="Antwerpen, max 30 min rijden..." value="'+escHTML(answers.region||'')+'"/>')
+    +plannerField('plannerBudgetWrap','Budget',plannerSelect('plannerBudget',answers.budget||'',['betaalbaar','gemiddeld','bijzonder'],'Kies budget'))
+    +plannerField('plannerMoodWrap','Sfeer',plannerSelect('plannerMood',answers.mood||'',['romantisch','rustig','speels','verbindend','verrassend'],'Kies sfeer'))
+    +plannerField('plannerDurationWrap','Tijdsduur',plannerSelect('plannerDuration',answers.duration||'',['1-2 uur','halve dag','hele dag','avond','weekend'],'Kies tijd'))
+    +plannerField('plannerSettingWrap','Binnen of buiten',plannerSelect('plannerSetting',answers.setting||'',['binnen','buiten','mix'],'Kies setting'))
+    +plannerField('plannerPaceWrap','Rustig of actief',plannerSelect('plannerPace',answers.pace||'',['rustig','actief','gemengd'],'Kies tempo'))
+    +plannerField('plannerFocusWrap','Waar moet het vooral op focussen?',plannerSelect('plannerFocus',answers.focus||'',['verbinden','romantiek','plezier','verdiepen','herstel','verrassing'],'Kies focus'))
+    +'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'
+    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+(p.loading?'Even wachten...':'Genereer 3 plannen')+'</button>'
+    +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+name+'\')">Terug naar dossier</button>':'')
+    +'</div>'
+    +resultHtml
+    +'</div>';
 }
 
 function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button class="btn-g" onclick="doSignOut()">Uitloggen</button></div></div>`;}
@@ -3079,6 +3202,7 @@ async function rDossier(el){
   var profBtnCol=metaComp.complete?'#555':'#B42318';
   var profBtnBorder=metaComp.complete?'1px solid var(--b)':'1px solid #FFD1D1';
   header+='<button style="padding:8px 14px;background:var(--r);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="S.vertelFrom=\''+name+'\';goScreen(\'vertel\')">🎤 Vertel</button>';
+  if(!isOwn)header+='<button style="padding:8px 10px;background:#FFF7F0;color:#A55B00;border:1px solid #FFE0BF;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openPlanner(\''+name+'\')">Plan iets leuks</button>';
   header+='<button style="padding:8px 10px;background:'+profBtnBg+';color:'+profBtnCol+';border:'+profBtnBorder+';border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openProfileModal(\''+name+'\')">'+profBtnTxt+'</button>';
   header+='</div>';
 
