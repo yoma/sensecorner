@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 13:21">
+<meta name="ds-build" content="v2026-03-31-1 13:27">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3252,13 +3252,25 @@ function plannerFallbackProposals(name,answers){
   var pace=String(answers.pace||'rustig').trim()||'rustig';
   var focus=String(answers.focus||'verbinden').trim()||'verbinden';
   var idea=String(answers.idea||'iets leuks').trim().toLowerCase();
+  var regionLc=region.toLowerCase();
+  var coffeeAnchors=regionLc.indexOf('antwerp')>=0
+    ? {
+        first:'Caffènation op de Mechelsesteenweg of Kolonel Coffee in Antwerpen-Zuid',
+        second:'Normo op de Marnixplaats of een koffiebar rond de Vlaamsekaai met rustige zitplek',
+        walk:'de Kloosterstraat, Leopold de Waelplaats of een lus richting Scheldekaaien'
+      }
+    : {
+        first:'een rustige specialty coffee bar in '+region,
+        second:'een kleine brunchplek of koffiebar in '+region+' met rustige zitplek',
+        walk:'een park, plein of mooie straat in '+region
+      };
   if(idea.indexOf('koffie')>=0||idea.indexOf('coffee')>=0){
     return [
       {
         title:'Rustige koffiebar in '+region,
         why:'Past bij '+person+' omdat een korte koffiedate laagdrempelig is en toch ruimte geeft voor '+focus+'.',
-        how:'Kies een kleine specialty coffee bar of rustige hoekzaak waar je niet moet roepen. Vraag een tafeltje binnen, liefst aan het raam of achteraan.',
-        practical:'Spreek af voor '+duration+'. Zoek een koffiebar in '+region+' met zachte sfeer, weinig lawaai en plek om rustig te zitten. '+(setting==='binnen'?'Hou het binnen en knus.':'Kies een plek met binnenruimte en eventueel terrasoptie.')+' Tempo: '+pace+'.',
+        how:'Kies bijvoorbeeld '+coffeeAnchors.first+'. Vraag een tafeltje binnen, liefst aan het raam of achteraan waar je rustig kan praten.',
+        practical:'Spreek af voor '+duration+'. Mik in '+region+' op plekken zoals '+coffeeAnchors.first+'. '+(setting==='binnen'?'Hou het binnen en knus.':'Kies een plek met binnenruimte en eventueel terrasoptie.')+' Tempo: '+pace+'.',
         bestMoment:'Late voormiddag of vroege namiddag werkt vaak het best voor een ontspannen eerste connectie.',
         prep:'Stuur een eenvoudige uitnodiging en stel meteen een concreet uur voor. Check kort of de zaak open is voor je vertrekt.',
         extra:'Neem iets kleins om te delen, zoals een cake of koekje. Dat maakt het gesprek natuurlijker.',
@@ -3267,8 +3279,8 @@ function plannerFallbackProposals(name,answers){
       {
         title:'Koffie + korte wandeling',
         why:'Geeft wat meer speelsheid dan alleen zitten en houdt de sfeer licht voor '+person+'.',
-        how:'Start met koffie op een rustige plek en maak daarna een korte wandeling van 15 à 20 minuten in de buurt.',
-        practical:'Kies een koffieplek in '+region+' dicht bij een park, plein of mooie straat. Reken op '+duration+' in totaal. '+(setting==='binnen'?'Begin binnen met koffie en ga enkel buiten als het goed voelt.':'Laat de overgang naar buiten natuurlijk gebeuren.') ,
+        how:'Start bijvoorbeeld bij '+coffeeAnchors.second+' en wandel daarna 15 à 20 minuten via '+coffeeAnchors.walk+'.',
+        practical:'Kies in '+region+' een koffieplek zoals '+coffeeAnchors.second+' dicht bij '+coffeeAnchors.walk+'. Reken op '+duration+' in totaal. '+(setting==='binnen'?'Begin binnen met koffie en ga enkel buiten als het goed voelt.':'Laat de overgang naar buiten natuurlijk gebeuren.') ,
         bestMoment:'Namiddag of vroege avond, wanneer het ritme losser is en je niet hoeft te haasten.',
         prep:'Zorg voor een tweede kleine optie in de buurt als de eerste plek vol zit.',
         extra:'Een korte wandeling na de koffie haalt de druk van constant oogcontact weg.',
@@ -3299,11 +3311,47 @@ function plannerFallbackProposals(name,answers){
     },
   ];
 }
+function plannerHasConcreteSuggestion(item,answers){
+  var region=String((answers&&answers.region)||'').trim();
+  if(!region)return true;
+  var blob=[item&&item.title,item&&item.how,item&&item.practical,item&&item.extra].join(' ').toLowerCase();
+  var regionWords=region.toLowerCase().split(/[\s,.-]+/).filter(function(w){return w&&w.length>=4;});
+  var placeCue=/caff[eè]nation|kolonel|normo|mechelsesteenweg|marnixplaats|vlaamsekaai|kloosterstraat|scheldekaaien|station|plein|straat|wijk|park|bar|cafe|coffee|brasserie|bistro|tearoom|museum|kaai/.test(blob);
+  var regionHit=regionWords.some(function(w){return blob.indexOf(w)>=0;});
+  return placeCue&&regionHit;
+}
 function plannerNormalizeResult(raw,name,answers){
   var parsed=parsePlannerResult(raw);
-  if(parsed.length>=2)return String(raw||'').trim();
-  var items=parsed.slice();
+  var items=parsed.slice().map(function(item){return {...item};});
   var fallbacks=plannerFallbackProposals(name,answers);
+  items=items.map(function(item,idx){
+    if(plannerHasConcreteSuggestion(item,answers))return item;
+    var fb=fallbacks[idx]||fallbacks[0];
+    return {
+      idx:item.idx,
+      title:item.title||fb.title,
+      why:item.why||fb.why,
+      how:fb.how,
+      practical:fb.practical,
+      bestMoment:item.bestMoment||fb.bestMoment,
+      prep:item.prep||fb.prep,
+      extra:fb.extra,
+      warning:item.warning||fb.warning
+    };
+  });
+  if(items.length>=2)return items.slice(0,2).map(function(item,idx){
+    return [
+      'Voorstel '+(idx+1)+':',
+      'Titel: '+(item.title||''),
+      'Waarom dit past: '+(item.why||''),
+      'Hoe het eruitziet: '+(item.how||''),
+      'Praktisch: '+(item.practical||''),
+      'Beste moment: '+(item.bestMoment||''),
+      'Voorbereiding: '+(item.prep||''),
+      'Mooiste extra: '+(item.extra||''),
+      'Let op: '+(item.warning||'')
+    ].join('\n');
+  }).join('\n\n');
   for(var i=0;i<fallbacks.length&&items.length<2;i++){
     var fb=fallbacks[i];
     items.push({
@@ -3649,8 +3697,12 @@ function plannerHistoryList(name){
   var d=S.pdata[name]||{};
   var meta=d.meta||{};
   var items=Array.isArray(meta.plan_history)?meta.plan_history:[];
+  var currentResult=String((S.planner&&S.planner.result)||'').trim();
   return items.filter(function(item){
     return item&&plannerLooksUsable(item.result||'');
+  }).filter(function(item){
+    if(!currentResult)return true;
+    return String(item.result||'').trim()!==currentResult;
   }).slice().sort(function(a,b){
     return String(b&&b.created_at||'').localeCompare(String(a&&a.created_at||''));
   });
