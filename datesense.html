@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 11:03">
+<meta name="ds-build" content="v2026-03-31-1 11:11">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -228,6 +228,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .planner-result-row{margin-bottom:8px}
 .planner-result-label{font-size:11px;font-weight:800;letter-spacing:.5px;color:#7c1212;text-transform:uppercase;margin-bottom:3px}
 .planner-result-text{font-size:14px;color:#333;line-height:1.65}
+.planner-result-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 
 /* Compare */
 .cmp-row{display:flex;gap:3px;margin-bottom:5px}
@@ -2898,7 +2899,10 @@ function setPlannerIdea(v){
 }
 function plannerHasEnoughInput(a){
   var vals=[a.idea,a.region,a.budget,a.mood,a.duration,a.setting,a.pace,a.focus].filter(function(v){return String(v||'').trim().length>0;});
-  return vals.length>=2;
+  if(vals.length<2)return false;
+  if(String(a.idea||'').trim().length>0)return true;
+  var weighted=[a.mood,a.focus,a.region,a.budget,a.duration,a.setting,a.pace].filter(function(v){return String(v||'').trim().length>0;});
+  return weighted.length>=3;
 }
 function plannerProposalCount(txt){
   return (String(txt||'').match(/(^|\n)Titel\s*:/g)||[]).length;
@@ -2906,6 +2910,16 @@ function plannerProposalCount(txt){
 function parsePlannerResult(txt){
   var raw=String(txt||'').replace(/\r/g,'').trim();
   if(!raw)return[];
+  raw=raw
+    .replace(/\*\*\s*(Titel|Waarom dit past|Hoe het eruitziet|Beste moment|Voorbereiding|Let op)\s*:\s*\*\*/gi,'\n$1: ')
+    .replace(/\*\*\s*(Titel|Waarom dit past|Hoe het eruitziet|Beste moment|Voorbereiding|Let op)\s*:\s*/gi,'\n$1: ')
+    .replace(/\*\*/g,'')
+    .replace(/\n?\s*Voorstel\s+(\d+)\s*:?/gi,'\n###VOORSTEL_$1###\n')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
+  if(raw.indexOf('###VOORSTEL_')>=0){
+    raw=raw.replace(/###VOORSTEL_\d+###/g,'').trim();
+  }
   var parts=raw.split(/\n(?=Titel\s*:)/i).map(function(s){return s.trim();}).filter(Boolean);
   return parts.map(function(part,idx){
     function pick(label){
@@ -2913,25 +2927,91 @@ function parsePlannerResult(txt){
       var m=part.match(rx);
       return m&&m[1]?m[1].trim():'';
     }
+    var title=pick('Titel');
     return {
       idx:idx+1,
-      title:pick('Titel')||('Voorstel '+(idx+1)),
+      title:title,
       why:pick('Waarom dit past'),
       how:pick('Hoe het eruitziet'),
       bestMoment:pick('Beste moment'),
       prep:pick('Voorbereiding'),
       warning:pick('Let op')
     };
-  }).filter(function(x){return x.title||x.why||x.how||x.bestMoment||x.prep||x.warning;});
+  }).filter(function(x){
+    return String(x.title||'').trim().length>0
+      && (x.why||x.how||x.bestMoment||x.prep||x.warning);
+  });
+}
+function plannerInlineFormat(txt){
+  var s=escHTML(String(txt||'').trim());
+  if(!s)return'';
+  return s.replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br>');
+}
+function getCurrentPlannerHistoryEntry(name){
+  var items=plannerHistoryList(name);
+  if(!items.length)return null;
+  var selectedId=(S.planner&&S.planner.historySelection)||'';
+  if(selectedId){
+    var hit=items.find(function(x){return x&&x.id===selectedId;});
+    if(hit)return hit;
+  }
+  var currentResult=String((S.planner&&S.planner.result)||'').trim();
+  if(!currentResult)return items[0]||null;
+  return items.find(function(x){return String((x&&x.result)||'').trim()===currentResult;})||items[0]||null;
+}
+async function updatePlannerHistoryEntry(name,mutator){
+  if(!name||typeof mutator!=='function')return;
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+  d.meta=d.meta||{};
+  var items=Array.isArray(d.meta.plan_history)?d.meta.plan_history:[];
+  if(!items.length)return;
+  var current=getCurrentPlannerHistoryEntry(name);
+  if(!current)return;
+  var changed=false;
+  items=items.map(function(item){
+    if(!item||item.id!==current.id)return item;
+    var next={...item};
+    mutator(next);
+    changed=true;
+    return next;
+  });
+  if(!changed)return;
+  d.meta.plan_history=items;
+  d.meta.last_plan=items[0]||null;
+  S.pdata[name]=d;
+  await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+async function togglePlannerFavorite(name,idx){
+  await updatePlannerHistoryEntry(name,function(entry){
+    var fav=Array.isArray(entry.favorite_idxs)?entry.favorite_idxs.slice():[];
+    var pos=fav.indexOf(idx);
+    if(pos>=0)fav.splice(pos,1);
+    else fav.push(idx);
+    entry.favorite_idxs=fav;
+  });
+  goScreen('planner');
+}
+async function choosePlannerProposal(name,idx){
+  await updatePlannerHistoryEntry(name,function(entry){
+    entry.selected_idx=idx;
+    entry.selected_at=new Date().toISOString();
+  });
+  toast('Plan gemarkeerd als gekozen');
+  goScreen('planner');
 }
 function renderPlannerResultCards(txt){
   var items=parsePlannerResult(txt);
   if(!items.length)return formatAiCard(txt);
+  var hist=getCurrentPlannerHistoryEntry((S.planner&&S.planner.dossier)||'');
+  var favIdxs=hist&&Array.isArray(hist.favorite_idxs)?hist.favorite_idxs:[];
+  var chosenIdx=hist&&hist.selected_idx?hist.selected_idx:null;
   return '<div class="planner-results">'+items.map(function(item){
     function row(label,val){
       if(!val)return'';
-      return '<div class="planner-result-row"><div class="planner-result-label">'+label+'</div><div class="planner-result-text">'+formatAiRichText(val)+'</div></div>';
+      return '<div class="planner-result-row"><div class="planner-result-label">'+label+'</div><div class="planner-result-text"><p>'+plannerInlineFormat(val)+'</p></div></div>';
     }
+    var isFav=favIdxs.indexOf(item.idx)>=0;
+    var isChosen=chosenIdx===item.idx;
     return '<div class="planner-result-card">'
       +'<div class="planner-result-top"><div class="planner-result-kicker">Voorstel '+item.idx+'</div></div>'
       +'<div class="planner-result-title">'+escHTML(item.title)+'</div>'
@@ -2940,6 +3020,10 @@ function renderPlannerResultCards(txt){
       +row('Beste moment',item.bestMoment)
       +row('Voorbereiding',item.prep)
       +row('Let op',item.warning)
+      +'<div class="planner-result-actions">'
+      +'<button class="coach-save-other" style="font-size:12px;padding:7px 10px;'+(isFav?'border-color:#FFDAB8;color:#A55B00;background:#FFF8F0':'')+'" onclick="togglePlannerFavorite(\''+((S.planner&&S.planner.dossier)||'')+'\', '+item.idx+')">'+(isFav?'★ Favoriet':'☆ Bewaar als favoriet')+'</button>'
+      +'<button class="coach-save-other" style="font-size:12px;padding:7px 10px;'+(isChosen?'border-color:#CFE7D4;color:#1B5E20;background:#F3FBF5':'')+'" onclick="choosePlannerProposal(\''+((S.planner&&S.planner.dossier)||'')+'\', '+item.idx+')">'+(isChosen?'✓ Gekozen plan':'Kies dit plan')+'</button>'
+      +'</div>'
       +'</div>';
   }).join('')+'</div>';
 }
@@ -3001,7 +3085,7 @@ async function generatePlannerIdeas(){
   if(!plannerHasEnoughInput(answers)){
     S.planner.answers=answers;
     S.planner.loading=false;
-    S.planner.result='Vul minstens 2 richtingen in, bijvoorbeeld wat je wil doen + sfeer, of regio + budget.';
+    S.planner.result='Te weinig input om degelijke plannen te maken. Vul bijvoorbeeld in wat je wil doen, plus nog 1-2 keuzes zoals sfeer, budget, regio of tijd.';
     goScreen('planner');
     return;
   }
