@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 17:11">
+<meta name="ds-build" content="v2026-03-31-1 23:32">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -870,6 +870,41 @@ function calcAgeFromBirthdate(birthdate){
   if(age<0||age>120)return'';
   return String(age);
 }
+function getContactProfileNames(){
+  return (S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+}
+function hasAnyContactDossier(){
+  return getContactProfileNames().length>0;
+}
+function ownProfileSetupComplete(){
+  var meta=((S.pdata['OWN Sense']||{}).meta)||{};
+  return !!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
+}
+function getOnboardingChecklist(){
+  var contacts=getContactProfileNames();
+  return [
+    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openProfileModal('OWN Sense')"},
+    {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste dossier aan',action:'newSenseFromDrawer()'},
+    {id:'relation-ready',done:contacts.length>0,label:'Kies pas daarna een relatiestatus',action:contacts.length?("viewDossier('"+contacts[0]+"')"):'newSenseFromDrawer()'},
+    {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
+  ];
+}
+function renderOnboardingCard(){
+  var items=getOnboardingChecklist();
+  var doneCount=items.filter(function(x){return x.done;}).length;
+  if(doneCount===items.length)return'';
+  return '<div class="ai-rich-card" style="margin:0 0 14px;text-align:left">'
+    +'<div class="ai-sec"><div class="ai-sec-title"><span>Startgids</span></div>'
+    +'<p class="ai-sec-text">Werk eerst deze stappen af zodat DateSense juist kan starten met je profiel, dossiers en relatiecontext.</p>'
+    +items.map(function(item,idx){
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:'+(idx?'1px dashed #F0DADA':'none')+'">'
+        +'<div style="font-size:12px;font-weight:800;color:'+(item.done?'#2E7D32':'#AE0000')+';min-width:22px">'+(item.done?'✓':(idx+1)+'.')+'</div>'
+        +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#333">'+item.label+'</div>'
+        +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;margin-top:6px" onclick="'+item.action+'">'+(item.done?'Open':'Nu doen')+'</button></div>'
+        +'</div>';
+    }).join('')
+    +'</div></div>';
+}
 
 function updateProfileAgePreview(){
   var bd=document.getElementById('pf_birthdate');
@@ -877,6 +912,19 @@ function updateProfileAgePreview(){
   if(!bd||!ageEl)return;
   var age=calcAgeFromBirthdate(bd.value);
   ageEl.value=age||'';
+}
+function renderProfileVoiceField(id,placeholder,value,isFull,type){
+  return '<div class="'+(isFull?'full':'')+'" style="padding:0;border:none;background:none;'+(isFull?'grid-column:1/-1;':'')+'">'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<input class="profile-field'+(isFull?' full':'')+'" style="margin:0" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'">'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px;white-space:nowrap" onclick="startFieldDictation(\''+id+'\')">🎤 Spreek</button>'
+    +'</div></div>';
+}
+function renderTextareaVoiceRow(id,placeholder,value,oninput){
+  return '<div style="display:flex;gap:8px;align-items:flex-start">'
+    +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="2" oninput="'+oninput+'">'+value+'</textarea>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px;white-space:nowrap" onclick="startFieldDictation(\''+id+'\')">🎤 Spreek</button>'
+    +'</div>';
 }
 
 function escHTML(s){
@@ -1584,6 +1632,59 @@ async function ensureSessionTables(){
   try{await sb.from('sense_sessions').select('id').limit(1);}
   catch(e){console.warn('sense_sessions tabel nog niet aangemaakt');}
 }
+function getAuthRedirectUrl(){
+  var isGitHubPages=/github\.io$/i.test(window.location.hostname||'');
+  if(isGitHubPages){
+    return 'https://yoma.github.io/sensecorner/datesense.html';
+  }
+  return window.location.origin+window.location.pathname;
+}
+function getAuthHashParams(){
+  var hash=String(window.location.hash||'').replace(/^#/,'').trim();
+  if(!hash)return{};
+  return hash.split('&').reduce(function(acc,part){
+    var bits=part.split('=');
+    var k=decodeURIComponent(bits[0]||'');
+    var v=decodeURIComponent(bits.slice(1).join('=')||'');
+    if(k)acc[k]=v;
+    return acc;
+  },{});
+}
+function clearAuthHash(){
+  if(window.location.hash){
+    history.replaceState(null,'',window.location.pathname+window.location.search);
+  }
+}
+async function handlePendingAuthFromUrl(){
+  if(!sb)return;
+  var hashParams=getAuthHashParams();
+  if(!hashParams||!Object.keys(hashParams).length)return;
+  var type=String(hashParams.type||'').toLowerCase();
+  var accessToken=hashParams.access_token;
+  var refreshToken=hashParams.refresh_token;
+  var errBox=document.getElementById('lErr');
+  try{
+    if(accessToken&&refreshToken){
+      await sb.auth.setSession({access_token:accessToken,refresh_token:refreshToken});
+      clearAuthHash();
+      if(type==='recovery'){
+        if(errBox){errBox.style.color='#2E7D32';errBox.textContent='Je reset-link is bevestigd. Stel nu een nieuw wachtwoord in via Supabase of log opnieuw in.';}
+      }
+      return;
+    }
+    if(hashParams.error_description&&errBox){
+      errBox.style.color='var(--r)';
+      errBox.textContent='Je activatielink is ongeldig of verlopen. Vraag indien nodig een nieuwe bevestigingsmail aan.';
+      clearAuthHash();
+    }
+  }catch(e){
+    if(errBox){
+      errBox.style.color='var(--r)';
+      errBox.textContent='De activatie of login-link kon niet correct verwerkt worden. Probeer opnieuw in te loggen.';
+    }
+    clearAuthHash();
+  }
+}
 
 async function init(){
   if(!sb){
@@ -1598,6 +1699,7 @@ async function init(){
     return;
   }
   ensureSessionTables();
+  try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
     var {data:{session}}=await sb.auth.getSession();
     if(session){
@@ -1696,7 +1798,7 @@ async function forgotPassword(){
   if(!email){if(err){err.style.color='var(--r)';err.textContent='Vul eerst je email in.';}return;}
   if(err){err.style.color='#888';err.textContent='Reset mail versturen...';}
   try{
-    var redirect=window.location.origin+window.location.pathname;
+    var redirect=getAuthRedirectUrl();
     await withTimeout(
       sb.auth.resetPasswordForEmail(email,{redirectTo:redirect}),
       20000,
@@ -1716,13 +1818,41 @@ function togglePwVis(){
   inp.type=show?'text':'password';
   if(btn)btn.textContent=show?'🙈':'👁';
 }
+function toggleRegisterPw(id,btn){
+  var inp=document.getElementById(id);
+  if(!inp)return;
+  var show=inp.type==='password';
+  inp.type=show?'text':'password';
+  if(btn)btn.textContent=show?'🙈':'👁';
+}
 
 async function doRegister(){
-  var e=document.getElementById('rEmail').value.trim(),p=document.getElementById('rPw').value,err=document.getElementById('rErr');
-  if(p.length<6){err.style.color='var(--r)';err.textContent='Min. 6 tekens';return;}
-  err.textContent='Bezig...';err.style.color='#888';
-  try{await sb.auth.signUp({email:e,password:p});err.style.color='#4CAF50';err.textContent='✅ Controleer je email!';}
-  catch(x){err.style.color='var(--r)';err.textContent=x.message;}
+  var emailEl=document.getElementById('rEmail');
+  var pwEl=document.getElementById('rPw');
+  var pw2El=document.getElementById('rPw2');
+  var err=document.getElementById('rErr');
+  var btn=document.getElementById('rRegisterBtn');
+  var e=emailEl?emailEl.value.trim():'';
+  var p=pwEl?pwEl.value:'';
+  var p2=pw2El?pw2El.value:'';
+  if(!e||!p||!p2){err.style.color='var(--r)';err.textContent='Vul email, wachtwoord en herhaal wachtwoord in.';return;}
+  if(p.length<6){err.style.color='var(--r)';err.textContent='Wachtwoord moet minstens 6 tekens hebben.';return;}
+  if(p!==p2){err.style.color='var(--r)';err.textContent='Wachtwoorden komen niet overeen.';return;}
+  if(btn){btn.disabled=true;btn.style.opacity=.65;}
+  err.textContent='Account wordt aangemaakt...';err.style.color='#888';
+  try{
+    await sb.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl()}});
+    err.style.color='#2E7D32';
+    err.textContent='Controleer je mailbox en klik op de activatielink. Daarna kan je meteen inloggen.';
+  }
+  catch(x){
+    var msg=String((x&&x.message)||'Registreren mislukt.');
+    if(msg.toLowerCase().includes('user already registered'))msg='Voor dit emailadres bestaat al een account. Probeer in te loggen.';
+    err.style.color='var(--r)';
+    err.textContent=msg;
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='';}
+  }
 }
 
 async function doSignOut(){closeDrawer();await sb.auth.signOut();toast('👋 Tot ziens!');}
@@ -1834,7 +1964,10 @@ async function loadMsgs(pn,opt){
     .order('created_at',{ascending:asc})
     .limit(limit);
   var {data,error}=await q;
-  if(error)throw new Error(error.message);
+  if(error){
+    console.warn('loadMsgs failed for',pn,error.message||error);
+    return [];
+  }
   return data||[];
 }
 
@@ -1998,14 +2131,14 @@ function openProfileModal(name){
   var isOwnProf=_profileModalFor==='OWN Sense';
   fields.innerHTML=''
     +'<input class="profile-field" value="'+escA(dn(_profileModalFor))+'" readonly>'
-    +'<input class="profile-field" id="pf_birthdate" placeholder="Geboortedatum (YYYY-MM-DD)" value="'+escA(meta.birthdate)+'" oninput="updateProfileAgePreview()">'
+    +renderProfileVoiceField('pf_birthdate','Geboortedatum',escA(meta.birthdate),false,'date').replace('id="pf_birthdate" type="date"','id="pf_birthdate" type="date" oninput="updateProfileAgePreview()"').replace('onclick="startFieldDictation(\'pf_birthdate\')"','onclick="toast(\'Gebruik hier de datumkiezer voor correcte invoer\')"')
     +'<input class="profile-field" id="pf_age_auto" placeholder="Leeftijd (auto)" value="'+escA(calcAgeFromBirthdate(meta.birthdate)||meta.age)+'" readonly>'
-    +'<input class="profile-field" id="pf_city" placeholder="Regio / woonplaats" value="'+escA(meta.city)+'">'
-    +'<input class="profile-field" id="pf_country" placeholder="Land" value="'+escA(meta.country)+'">'
-    +(isOwnProf?('<input class="profile-field full" id="pf_address" placeholder="Adres (straat + nr)" value="'+escA(meta.address)+'">'
+    +renderProfileVoiceField('pf_city','Regio / woonplaats',escA(meta.city),false)
+    +renderProfileVoiceField('pf_country','Land',escA(meta.country),false)
+    +(isOwnProf?(renderProfileVoiceField('pf_address','Adres (straat + nr)',escA(meta.address),true)
       +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
-    +'<input class="profile-field full" id="pf_intent" placeholder="Intentie (bv. serieuze relatie)" value="'+escA(meta.intent)+'">'
-    +(isOwnProf?('<input class="profile-field full" id="pf_billing_pref" placeholder="Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)" value="'+escA(meta.billing_pref)+'">'):'');
+    +renderProfileVoiceField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
+    +(isOwnProf?(renderProfileVoiceField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'');
   updateProfileAgePreview();
   modal.classList.add('show');
 }
@@ -2155,7 +2288,7 @@ async function saveProfileMetaForm(){
 
 async function newSenseFromDrawer(){
   closeDrawer();
-  var n=prompt('Naam van de persoon (bv. "Lisa"):');
+  var n=prompt('Naam van je eerste of nieuwe dossier (bv. "Lisa"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
   await ensureP(nm);
@@ -2164,8 +2297,8 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><button class="form-btn sec" onclick="goScreen('register')">Nog geen account? Registreer</button><div id="lErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
-function rRegister(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:28px;line-height:1.6">Gratis account — data veilig opgeslagen in Europa.</p><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button class="form-btn" onclick="doRegister()">Account aanmaken</button><button class="form-btn sec" onclick="goScreen('login')">Al een account? Inloggen</button><div id="rErr" style="font-size:14px;text-align:center;margin-top:8px"></div></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div>`;}
+function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in DateSense.</div><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button id="rRegisterBtn" class="form-btn" onclick="doRegister()">Maak mijn account aan</button><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
 
 function getDossierLifecycle(name){
   if(!name||name==='OWN Sense')return'active';
@@ -2856,6 +2989,8 @@ function rHome(el){
   var hasExplicitMode=!!localStorage.getItem('ds_usage_mode');
   if(typeof S.homeModeEditorOpen!=='boolean')S.homeModeEditorOpen=!hasExplicitMode;
   var showModeEditor=!!S.homeModeEditorOpen;
+  var onboardingHtml=renderOnboardingCard();
+  var hasContacts=cs.length>0;
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
   var notes=[];
@@ -2945,17 +3080,20 @@ function rHome(el){
   <div class="home-greeting">
     ${firstName?'Hoi <strong style="color:var(--t)">'+firstName+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
   </div>
+  ${onboardingHtml}
   ${showModeEditor?`<div class="ai-rich-card" style="text-align:left;max-width:380px;margin:-8px 0 14px">
     <div class="ai-sec">
       <div class="ai-sec-title"><span>🧭</span><span>Gebruiksmode</span></div>
-      <p class="ai-sec-text">Kies hoe je DateSense vandaag gebruikt.</p>
+      <p class="ai-sec-text">${hasContacts?'Kies hoe je DateSense vandaag gebruikt.':'Maak eerst een contactdossier aan voor relatie-focus en verdere relatie-status.'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('multi')">Date modus</button>
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
-      ${modeDraft==='single'
+      ${modeDraft==='single'&&hasContacts
         ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><input id="homeBoostRegion" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0" placeholder="Regio / afstand" value="'+escHTML(boostPrefs.region||'')+'"><select id="homeBoostBudget" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.budget?'selected':'')+'>Budget</option><option value="betaalbaar" '+(boostPrefs.budget==='betaalbaar'?'selected':'')+'>Betaalbaar</option><option value="gemiddeld" '+(boostPrefs.budget==='gemiddeld'?'selected':'')+'>Gemiddeld</option><option value="bijzonder" '+(boostPrefs.budget==='bijzonder'?'selected':'')+'>Bijzonder</option></select><select id="homeBoostStyle" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.style?'selected':'')+'>Sfeer / stijl</option><option value="rustig" '+(boostPrefs.style==='rustig'?'selected':'')+'>Rustig</option><option value="romantisch" '+(boostPrefs.style==='romantisch'?'selected':'')+'>Romantisch</option><option value="actief" '+(boostPrefs.style==='actief'?'selected':'')+'>Actief</option><option value="casual" '+(boostPrefs.style==='casual'?'selected':'')+'>Casual</option></select><select id="homeBoostTime" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.time?'selected':'')+'>Beschikbare tijd</option><option value="avond" '+(boostPrefs.time==='avond'?'selected':'')+'>Avond</option><option value="halve dag" '+(boostPrefs.time==='halve dag'?'selected':'')+'>Halve dag</option><option value="hele dag" '+(boostPrefs.time==='hele dag'?'selected':'')+'>Hele dag</option><option value="weekend" '+(boostPrefs.time==='weekend'?'selected':'')+'>Weekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">De relatie-status haal ik uit het dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
-        :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>'
+        :(modeDraft==='single'&&!hasContacts
+          ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
+          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
       }
     </div>
   </div>`:''}
@@ -2966,7 +3104,7 @@ function rHome(el){
   ${(function(){
       var shortcut=plannerHomeShortcutCopy();
       var plannerName=shortcut.name||(cs&&cs[0])||'';
-      if(!plannerName)return'';
+      if(!plannerName)return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>👥</span><span>Eerste dossier</span></div><p class="ai-sec-text">Maak eerst een contactdossier aan voor je plannen, vergelijking en relatie-status.</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
       return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+plannerName+'\')">Plan iets leuks</button></div></div>';
     })()}
   <!-- Grote microfoon knop -->
@@ -4686,7 +4824,12 @@ async function loadTab(name,tab,d){
           var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
           var ownFieldUpd=getFieldUpdate(d.meta||{},'own',cat.id,'a'+i);
           html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(ownFieldUpd)+'</span></div>';
-          html+='<textarea class="own-ta" id="oc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" data-catid="'+cat.id+'" data-type="own" oninput="autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')">'+saved+'</textarea>';
+          html+=renderTextareaVoiceRow(
+            'oc-'+cat.id+'-a'+i,
+            p.ph,
+            saved,
+            'autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')'
+          );
           html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
         });
         html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
@@ -4756,7 +4899,12 @@ async function loadTab(name,tab,d){
           var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
           var contactFieldUpd=getFieldUpdate(d.meta||{},'contact',cat.id,'a'+i);
           html+='<div class="own-q-label">'+p.q+' <span id="cc-field-upd-'+cat.id+'-a'+i+'" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
-          html+='<textarea class="own-ta" id="cc-'+cat.id+'-a'+i+'" placeholder="'+p.ph+'" rows="2" oninput="autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')">'+saved+'</textarea>';
+          html+=renderTextareaVoiceRow(
+            'cc-'+cat.id+'-a'+i,
+            p.ph,
+            saved,
+            'autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')'
+          );
           html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
         });
         html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
@@ -5569,7 +5717,6 @@ function toggleCat(catId){
 }
 
 async function saveOwnCat(catId,silent){
-  if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
   var btn=document.getElementById('oc-save-'+catId);
   if(btn){btn.disabled=true;btn.textContent='Bezig...';}
   var cat=OWN_CATS.find(c=>c.id===catId);
@@ -5622,6 +5769,15 @@ async function saveOwnCat(catId,silent){
     S.pdata['OWN Sense']=d;
     await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
     showAutoSaveIndicator(catId,true);
+    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
+    return;
+  }
+  if(!S.apiKey){
+    S.pdata['OWN Sense']=d;
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+    showAutoSaveIndicator(catId,true);
+    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
+    toast('Opgeslagen. Voeg een API key toe om eigenschappen ook automatisch te laten herberekenen.');
     return;
   }
   try{
@@ -5644,6 +5800,7 @@ async function saveOwnCat(catId,silent){
     S.pdata['OWN Sense']=d;
     await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
     showAutoSaveIndicator(catId,true);
+    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
     return;
   }
 
@@ -6347,6 +6504,7 @@ async function sendMsg(){
   if(S.busy)return;
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
+  if(_micActive)stopMic(true);
   var txt=inp.value.trim();if(!txt)return;
   var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
   if(txt.length>2800){
@@ -6860,6 +7018,9 @@ async function askAdviceNow(){
 // ══ Microfoon (speech-to-text) ════════════════════════════════════
 var _recognition=null;
 var _micActive=false;
+var _micStopping=false;
+var _micTextTarget='msgInput';
+var _micBaseText='';
 
 function toggleMic(){
   if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
@@ -6869,38 +7030,66 @@ function toggleMic(){
   startMic();
 }
 
+function startFieldDictation(fieldId){
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
+    toast('Spraakherkenning niet beschikbaar in deze browser');return;
+  }
+  var field=document.getElementById(fieldId);
+  if(!field){toast('Invulvak niet gevonden');return;}
+  if(_micActive)stopMic(true);
+  _micTextTarget=fieldId;
+  startMic();
+}
 function startMic(){
   var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var inp=document.getElementById(_micTextTarget||'msgInput');
+  if(!inp)return;
   _recognition=new SRClass();
   _recognition.lang='nl-NL';
   _recognition.continuous=true;
   _recognition.interimResults=true;
-  var inp=document.getElementById('msgInput');
-  var finalText=inp.value;
+  _micBaseText=inp.value?String(inp.value):'';
+  _micStopping=false;
 
   _recognition.onresult=function(e){
     var interim='';
     for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){finalText+=e.results[i][0].transcript+' ';}
+      if(e.results[i].isFinal){_micBaseText+=e.results[i][0].transcript+' ';}
       else interim+=e.results[i][0].transcript;
     }
-    inp.value=finalText+interim;
+    inp.value=_micBaseText+interim;
     autoResize(inp);
   };
-  _recognition.onerror=function(){stopMic();};
-  _recognition.onend=function(){stopMic();};
+  _recognition.onerror=function(){stopMic(true);};
+  _recognition.onend=function(){
+    if(_micStopping)return;
+    stopMic(true);
+  };
   _recognition.start();
   _micActive=true;
   var btn=document.getElementById('micBtn');
-  if(btn)btn.style.background='#CC0000';
+  if(btn&&_micTextTarget==='msgInput')btn.style.background='#CC0000';
   toast('🎤 Luisteren...');
 }
 
-function stopMic(){
-  if(_recognition)_recognition.stop();
+function stopMic(preserveText){
+  _micStopping=true;
+  var targetId=_micTextTarget||'msgInput';
+  var inp=document.getElementById(targetId);
+  if(_recognition){
+    try{_recognition.stop();}catch(_e){}
+  }
+  if(inp){
+    inp.value=String(_micBaseText||'').trim();
+    autoResize(inp);
+    try{inp.focus();}catch(_e){}
+  }
   _micActive=false;
   var btn=document.getElementById('micBtn');
   if(btn)btn.style.background='var(--r)';
+  _recognition=null;
+  _micBaseText=inp?inp.value:'';
+  _micTextTarget='msgInput';
 }
 
 // ══ Import functies ═════════════════════════════════════════════
