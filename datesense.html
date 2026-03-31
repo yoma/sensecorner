@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 12:01">
+<meta name="ds-build" content="v2026-03-31-1 12:20">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -308,6 +308,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .actie-item.done .actie-sub{color:#8a8f97}
 .actie-done-btn{margin-top:8px;padding:6px 10px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 .actie-item.done .actie-done-btn{background:#E8F5E9;border-color:#C8E6C9;color:#1B5E20}
+.actie-btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.actie-link-btn{padding:6px 10px;border:1px solid #FFE0BF;border-radius:8px;background:#FFF7F0;color:#A55B00;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* ══ AI VOORSTEL OWN ══ */
 .ai-voorstel{background:var(--rl);border-left:4px solid var(--r);border-radius:0 10px 10px 0;padding:12px 14px;margin:12px 0;font-size:14px;color:#333;line-height:1.6}
@@ -1937,6 +1939,18 @@ function openPlanner(dosName){
   closeDrawer();
   goScreen('planner');
 }
+function openPlannerDraft(dosName,idea){
+  var name=String(dosName||'').trim();
+  if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  openPlanner(name);
+  S.planner=S.planner||{};
+  S.planner.dossier=name;
+  S.planner.answers=S.planner.answers||{};
+  S.planner.answers.idea=String(idea||'').trim();
+  S.planner.result='';
+  S.planner.historySelection='';
+  goScreen('planner');
+}
 async function viewDossierTijdlijn(name){
   S.viewDossier=name;S.viewTab='tijdlijn';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');
 }
@@ -2622,6 +2636,39 @@ function getAdviesDoneMap(name){
 function actionTitleKey(t){
   return String(t||'').toLowerCase().replace(/\s+/g,' ').trim();
 }
+function plannerIdeaFromAdviceText(title,sub){
+  var txt=(String(title||'')+' '+String(sub||'')).toLowerCase();
+  if(/koffie|coffee|cappuccino|latte/.test(txt))return 'koffie';
+  if(/wandel|hike|park/.test(txt))return 'wandeling';
+  if(/restaurant|diner|eten|tapas|brunch|lunch/.test(txt))return 'restaurant';
+  if(/citytrip|weekend|trip/.test(txt))return 'citytrip';
+  if(/bowling|cinema|museum|activiteit/.test(txt))return 'activiteit';
+  if(/verrass/.test(txt))return 'verrassing';
+  return 'iets leuks samen';
+}
+function plannerAdviceButtonLabel(idea,ready){
+  if(ready)return 'Gebruik planvoorstel';
+  var v=String(idea||'').toLowerCase();
+  if(v==='koffie')return 'Plan koffievoorstel';
+  if(v==='wandeling')return 'Plan wandeling';
+  if(v==='restaurant')return 'Plan diner';
+  if(v==='citytrip')return 'Plan citytrip';
+  if(v==='activiteit')return 'Plan activiteit';
+  if(v==='verrassing')return 'Plan verrassing';
+  return 'Plan iets leuks';
+}
+function adviesActionPlannerMeta(name,title,sub){
+  if(!name||name==='OWN Sense')return null;
+  var txt=(String(title||'')+' '+String(sub||'')).toLowerCase();
+  var plannerCue=/plan|date|restaurant|diner|tapas|wandeling|citytrip|weekend|quality time|kwaliteitstijd|uitstap|avond samen|moment samen|iets leuks|koffie|coffee|brunch|lunch/.test(txt);
+  if(!plannerCue)return null;
+  var ready=!!getRecentAutoPlannerEntry(name,72);
+  var idea=plannerIdeaFromAdviceText(title,sub);
+  return {
+    label:plannerAdviceButtonLabel(idea,ready),
+    action:ready?"openPlannerSuggestion('"+name+"')":"openPlannerDraft('"+name+"','"+idea.replace(/'/g,"\\'")+"')"
+  };
+}
 function renderActiesHtml(name,acties){
   var doneMap=getAdviesDoneMap(name);
   var total=acties.length;
@@ -2635,13 +2682,20 @@ function renderActiesHtml(name,acties){
     +'<div class="acties-box">';
   acties.forEach(function(a,idx){
     var title=(a&&a[1])||'';
+    var sub=(a&&a[2])||'';
     var aKey=actionTitleKey(title);
     var done=!!doneMap[aKey];
+    var plannerMeta=adviesActionPlannerMeta(name,title,sub);
+    var plannerHint=plannerMeta?('DateSense kan hier meteen een passend '+plannerIdeaFromAdviceText(title,sub)+'-voorstel voor uitwerken.'):''; 
     html+='<div class="actie-item '+(done?'done':'')+'" data-actie-idx="'+idx+'" data-actie-key="'+escHTML(aKey)+'">'
       +'<div class="actie-emoji">'+a[0]+'</div>'
       +'<div><div class="actie-titel">'+title+'</div>'
-      +'<div class="actie-sub">'+a[2]+'</div>'
-      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\',\''+encodeURIComponent(aKey)+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button></div>'
+      +'<div class="actie-sub">'+sub+'</div>'
+      +(plannerHint?'<div style="font-size:12px;color:#8a8f97;line-height:1.45;margin-top:6px">'+plannerHint+'</div>':'')
+      +'<div class="actie-btn-row">'
+      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\',\''+encodeURIComponent(aKey)+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button>'
+      +(plannerMeta?'<button class="actie-link-btn" onclick="'+plannerMeta.action+'">'+plannerMeta.label+'</button>':'')
+      +'</div></div>'
       +'</div>';
   });
   html+='</div></div>';
@@ -2660,6 +2714,12 @@ function hydrateActieItems(name){
     var btn=el.querySelector('.actie-done-btn');
     if(!btn){
       var wrap=el.querySelector('div:nth-child(2)')||el;
+      var row=wrap.querySelector('.actie-btn-row');
+      if(!row){
+        row=document.createElement('div');
+        row.className='actie-btn-row';
+        wrap.appendChild(row);
+      }
       var b=document.createElement('button');
       b.className='actie-done-btn';
       b.textContent='Markeer als afgewerkt';
@@ -2667,7 +2727,7 @@ function hydrateActieItems(name){
         var key=encodeURIComponent(el.getAttribute('data-actie-key')||'');
         toggleAdviesActie(name,key,idx);
       };
-      wrap.appendChild(b);
+      row.appendChild(b);
     }
   });
   applyAdviesDoneUI(name);
@@ -2999,7 +3059,7 @@ function plannerLooksUsable(txt){
   if(!raw)return false;
   if(/^fout bij plannen:/i.test(raw))return false;
   if(raw.length<220)return false;
-  return plannerProposalCount(raw)>=3;
+  return parsePlannerResult(raw).length>=3;
 }
 function plannerAutoAnswersFor(name){
   var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
@@ -3124,6 +3184,7 @@ async function requestPlannerIdeas(name,answers){
   var usageLine=buildUsageModeContextLine();
   var ideaMeta=plannerIdeaMeta(answers.idea);
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
+  var hasConcreteRegion=String(answers.region||'').trim().length>=3;
   var sys='Je bent DateSensei, een empathische maar concrete planner voor dates en relatie-momenten. '
     +'Je maakt 3 uitgewerkte voorstellen in het Nederlands. '
     +'Geef GEEN links, GEEN Google-zoekopdrachten, GEEN tabellen. '
@@ -3132,7 +3193,7 @@ async function requestPlannerIdeas(name,answers){
     +'Geef exact 3 voorstellen, niet 2 en niet 4. '
     +'Voor elk voorstel gebruik je exact deze structuur: '
     +'Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:. '
-    +' Als regio of stad duidelijk ingevuld is, mag je concrete voorbeelden van restaurants, bars, buurten, wandelplekken, hotspots of startlocaties noemen die daarbij passen. '
+    +' Als regio of stad duidelijk ingevuld is, MOET je concrete voorbeelden van restaurants, bars, buurten, wandelplekken, hotspots of startlocaties noemen die daarbij passen. '
     +' Noem zulke plekken nooit als absolute zekerheid, maar als praktische AI-suggestie die nog even geverifieerd moet worden. '
     +' Bij Praktisch geef je zo concreet mogelijk: startpunt, parking/startlocatie, geschatte rijtijd, duur of afstand, en hoe je begint. '
     +' Bij Mooiste extra geef je 1 concrete insider-tip zoals beste uitzicht, lekkerste gerecht, mooiste stop of slimste kamerkeuze. '
@@ -3153,13 +3214,19 @@ async function requestPlannerIdeas(name,answers){
     +'\n- Gewenst effect: '+(answers.focus||'verbinden')
     +'\n- Type idee: '+ideaMeta.moodHint
     +'\n- Schrijfstijl voor dit idee: '+ideaGuidance
+    +(hasConcreteRegion?'\n- Verplichting: noem per voorstel minstens 1 concrete plek, buurt, zaak of startlocatie in of nabij deze regio.':'')
     +'\n\nMaak exact 3 verschillende voorstellen die haalbaar zijn en passen bij de fase van dit dossier.'
     +'\nGeef waar mogelijk praktische details zoals: waar starten, waar parkeren, rijtijd, afstand/km, duur en 1 beste extra tip.'
-    +'\nAls regio voldoende duidelijk is, geef dan gerust 1 of 2 concrete plek-suggesties per voorstel, maar formuleer ze als AI-suggestie die nog gecheckt moet worden.'
+    +(hasConcreteRegion
+      ?'\nOmdat de regio duidelijk is, geef je per voorstel minstens 1 concrete plek-suggestie en liefst 2 waar passend, geformuleerd als AI-suggestie die nog gecheckt moet worden.'
+      :'\nAls regio voldoende duidelijk is, geef dan gerust 1 of 2 concrete plek-suggesties per voorstel, maar formuleer ze als AI-suggestie die nog gecheckt moet worden.')
     +'\nAls je iets niet zeker weet, formuleer het als praktische inschatting en niet als hard feit.';
   var raw=await callAPI(sys,[{role:'user',content:userContent}],900,45000);
-  if(plannerProposalCount(raw)<3){
-    raw=await callAPI(sys+' Je vorige antwoord had te weinig voorstellen. Herstel dit nu en geef exact 3 voorstellen in hetzelfde format.',[{role:'user',content:userContent}],1100,45000);
+  if(parsePlannerResult(raw).length<3){
+    raw=await callAPI(sys+' Je vorige antwoord had te weinig bruikbare voorstellen. Herstel dit nu en geef exact 3 volledig parseerbare voorstellen in hetzelfde format, elk met Titel, Waarom dit past, Hoe het eruitziet, Praktisch, Beste moment, Voorbereiding, Mooiste extra en Let op.',[{role:'user',content:userContent}],1100,45000);
+  }
+  if(parsePlannerResult(raw).length<3){
+    raw=await callAPI(sys+' Nog steeds onvoldoende. Geef nu exact 3 voorstellen, begin elk voorstel expliciet met "Voorstel 1:", "Voorstel 2:", "Voorstel 3:" en gebruik daarna alle verplichte labels volledig.',[{role:'user',content:userContent}],1200,45000);
   }
   return String(raw||'').trim();
 }
@@ -3183,6 +3250,7 @@ async function warmAutoPlannerSuggestions(){
       if(getRecentAutoPlannerEntry(name,72))continue;
       var answers=plannerAutoAnswersFor(name);
       var raw=await requestPlannerIdeas(name,answers);
+      if(parsePlannerResult(raw).length<3)continue;
       await savePlannerHistory(name,answers,raw,{auto_seed:true,auto_reason:'coach'});
     }
   }catch(_e){
@@ -3412,6 +3480,10 @@ async function generatePlannerIdeas(){
   },40);
   try{
     var raw=await requestPlannerIdeas(name,answers);
+    var parsed=parsePlannerResult(raw);
+    if(parsed.length<3){
+      throw new Error('Ik kreeg nog geen 3 volledige planvoorstellen terug. Probeer opnieuw of maak je regio of idee iets specifieker.');
+    }
     S.planner.loading=false;
     S.planner.result=raw.trim();
     await savePlannerHistory(name,answers,raw.trim());
