@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 09:35">
+<meta name="ds-build" content="v2026-03-31-1 10:19">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2186,8 +2186,6 @@ function activateDateModeFromHome(){
 async function applyFocusFromHome(autoHold){
   var sel=document.getElementById('homeFocusSelect');
   var n=sel?sel.value:'';
-  var rtEl=document.getElementById('homeFocusRelationType');
-  var rt=rtEl?rtEl.value:'';
   var prefs={
     region:(document.getElementById('homeBoostRegion')||{}).value||'',
     budget:(document.getElementById('homeBoostBudget')||{}).value||'',
@@ -2195,7 +2193,7 @@ async function applyFocusFromHome(autoHold){
     time:(document.getElementById('homeBoostTime')||{}).value||''
   };
   if(!n){toast('Kies eerst een dossier');return;}
-  setFocusRelationType(rt);
+  setFocusRelationType(stageRelationTypeValue(getDossierStage(n)));
   setBoostPrefs(prefs);
   S.homeModeDraft='single';
   S.homeModeEditorOpen=false;
@@ -2294,8 +2292,7 @@ function openStageFocusModal(name,stage){
   sub.innerHTML='Je zette <strong>'+dn(name)+'</strong> op <strong>'+stageLabel(stage)+'</strong>. Wil je overschakelen naar relatie-focus? Andere actieve dossiers kan je dan automatisch op on hold zetten.';
   opts.innerHTML=''
     +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'activate\')"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Ja, activeer relatie-focus</strong><br><span style="font-size:12px;color:#666">Je kiest dit dossier als focus en kan andere actieve dossiers automatisch pauzeren.</span></span></button>'
-    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in date modus en krijgt later opnieuw een voorstel.</span></span></button>'
-    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'never\')"><span class="save-modal-dot" style="background:#C7CBD1"></span><span style="flex:1"><strong>Niet meer tonen voor dit dossier</strong><br><span style="font-size:12px;color:#666">DateSense stopt dit voorstel voor '+dn(name)+'.</span></span></button>';
+    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nee, nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in date modus en krijgt later opnieuw een voorstel.</span></span></button>';
   modal.classList.add('show');
 }
 function closeStageFocusModal(){
@@ -2311,15 +2308,6 @@ async function handleStageFocusChoice(choice){
     var relType=stageRelationTypeValue(ctx.stage);
     if(relType)setFocusRelationType(relType);
     await activateRelationshipFocus(ctx.name,true);
-    return;
-  }
-  if(choice==='never'){
-    var d=S.pdata[ctx.name]||{props:{...DP},count:0,categories:{},meta:{}};
-    d.meta=d.meta||{};
-    d.meta.skip_focus_prompt=true;
-    S.pdata[ctx.name]=d;
-    await saveP(ctx.name,d.props,d.count,d.categories,d.summary,d.meta);
-    toast('Relatie-focus voorstel verborgen voor '+dn(ctx.name));
     return;
   }
   toast('Date modus behouden voor '+dn(ctx.name));
@@ -2471,15 +2459,9 @@ function buildCoachTasks(){
       tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';goScreen('vertel')"});
     }
     var focusBoost=buildRelationshipBoost(focusName);
-    var focusInspiration=buildBoostInspirationCards(focusBoost).slice(0,2);
     if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
       var boostIdea=focusBoost.ideas[0];
       var boostMsg='<strong>'+boostIdea.title+'</strong> · '+boostIdea.tip;
-      if(focusInspiration.length){
-        boostMsg+='<div style="font-size:11px;color:#8a8f97;margin-top:6px">Inspiratie: '+focusInspiration.map(function(it){
-          return'<a href="'+it.url+'" target="_blank" rel="noreferrer" style="color:#8a8f97;text-decoration:underline">'+it.title+'</a>';
-        }).join(' · ')+'</div>';
-      }
       tasks.push({
         id:'boost-focus-'+focusName,
         type:'a',
@@ -2754,7 +2736,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><select id="homeFocusRelationType" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!focusRelType?'selected':'')+'>Type relatie (optioneel)</option><option value="exclusief daten" '+(focusRelType==='exclusief daten'?'selected':'')+'>Exclusief daten</option><option value="prille relatie" '+(focusRelType==='prille relatie'?'selected':'')+'>Prille relatie</option><option value="vaste relatie" '+(focusRelType==='vaste relatie'?'selected':'')+'>Vaste relatie</option><option value="onduidelijk / zoekend" '+(focusRelType==='onduidelijk / zoekend'?'selected':'')+'>Onduidelijk / zoekend</option></select><input id="homeBoostRegion" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0" placeholder="Regio / afstand" value="'+escHTML(boostPrefs.region||'')+'"><select id="homeBoostBudget" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.budget?'selected':'')+'>Budget</option><option value="betaalbaar" '+(boostPrefs.budget==='betaalbaar'?'selected':'')+'>Betaalbaar</option><option value="gemiddeld" '+(boostPrefs.budget==='gemiddeld'?'selected':'')+'>Gemiddeld</option><option value="bijzonder" '+(boostPrefs.budget==='bijzonder'?'selected':'')+'>Bijzonder</option></select><select id="homeBoostStyle" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.style?'selected':'')+'>Sfeer / stijl</option><option value="rustig" '+(boostPrefs.style==='rustig'?'selected':'')+'>Rustig</option><option value="romantisch" '+(boostPrefs.style==='romantisch'?'selected':'')+'>Romantisch</option><option value="actief" '+(boostPrefs.style==='actief'?'selected':'')+'>Actief</option><option value="casual" '+(boostPrefs.style==='casual'?'selected':'')+'>Casual</option></select><select id="homeBoostTime" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.time?'selected':'')+'>Beschikbare tijd</option><option value="avond" '+(boostPrefs.time==='avond'?'selected':'')+'>Avond</option><option value="halve dag" '+(boostPrefs.time==='halve dag'?'selected':'')+'>Halve dag</option><option value="hele dag" '+(boostPrefs.time==='hele dag'?'selected':'')+'>Hele dag</option><option value="weekend" '+(boostPrefs.time==='weekend'?'selected':'')+'>Weekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Let op: andere actieve dossiers worden bij activatie automatisch op on hold gezet (later heropenen kan altijd).</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><input id="homeBoostRegion" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0" placeholder="Regio / afstand" value="'+escHTML(boostPrefs.region||'')+'"><select id="homeBoostBudget" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.budget?'selected':'')+'>Budget</option><option value="betaalbaar" '+(boostPrefs.budget==='betaalbaar'?'selected':'')+'>Betaalbaar</option><option value="gemiddeld" '+(boostPrefs.budget==='gemiddeld'?'selected':'')+'>Gemiddeld</option><option value="bijzonder" '+(boostPrefs.budget==='bijzonder'?'selected':'')+'>Bijzonder</option></select><select id="homeBoostStyle" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.style?'selected':'')+'>Sfeer / stijl</option><option value="rustig" '+(boostPrefs.style==='rustig'?'selected':'')+'>Rustig</option><option value="romantisch" '+(boostPrefs.style==='romantisch'?'selected':'')+'>Romantisch</option><option value="actief" '+(boostPrefs.style==='actief'?'selected':'')+'>Actief</option><option value="casual" '+(boostPrefs.style==='casual'?'selected':'')+'>Casual</option></select><select id="homeBoostTime" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0"><option value="" '+(!boostPrefs.time?'selected':'')+'>Beschikbare tijd</option><option value="avond" '+(boostPrefs.time==='avond'?'selected':'')+'>Avond</option><option value="halve dag" '+(boostPrefs.time==='halve dag'?'selected':'')+'>Halve dag</option><option value="hele dag" '+(boostPrefs.time==='hele dag'?'selected':'')+'>Hele dag</option><option value="weekend" '+(boostPrefs.time==='weekend'?'selected':'')+'>Weekend</option></select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">De relatie-status haal ik uit het dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>'
       }
     </div>
@@ -3079,8 +3061,6 @@ async function rDossier(el){
   }
   if(!isOwn){
     var stageNow=getDossierStage(name);
-    var relTypeNow=((d.meta||{}).relationship_type)||((getUsageMode()==='single'&&getFocusDossier()===name)?getFocusRelationType():'');
-    var showRelType=getUsageMode()==='single';
     header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" onchange="updateDossierStageFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
       +'<option value="virtueel" '+(stageNow==='virtueel'?'selected':'')+'>Virtueel</option>'
       +'<option value="eerste_date" '+(stageNow==='eerste_date'?'selected':'')+'>Eerste date</option>'
@@ -3090,15 +3070,6 @@ async function rDossier(el){
       +'<option value="vaste relatie" '+(stageNow==='vaste relatie'?'selected':'')+'>Vaste relatie</option>'
       +'<option value="geen_contact" '+(stageNow==='geen_contact'?'selected':'')+'>Geen contact meer</option>'
       +'</select>'
-      +(showRelType
-        ?('<select id="dosRelTypeSel" onchange="updateDossierRelationTypeFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
-          +'<option value="" '+(!relTypeNow?'selected':'')+'>Type relatie…</option>'
-          +'<option value="exclusief daten" '+(relTypeNow==='exclusief daten'?'selected':'')+'>Exclusief daten</option>'
-          +'<option value="prille relatie" '+(relTypeNow==='prille relatie'?'selected':'')+'>Prille relatie</option>'
-          +'<option value="vaste relatie" '+(relTypeNow==='vaste relatie'?'selected':'')+'>Vaste relatie</option>'
-          +'<option value="onduidelijk / zoekend" '+(relTypeNow==='onduidelijk / zoekend'?'selected':'')+'>Onduidelijk / zoekend</option>'
-          +'</select>')
-        :'')
       +'</div>';
   }
   header+='</div>';
@@ -4450,13 +4421,6 @@ function rSettings(el){
 <div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
   <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
   <select class="form-input" id="focusDossierField">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
-  <select class="form-input" id="focusRelationTypeField">
-    <option value="" ${!focusRelType?'selected':''}>Type relatie kiezen (optioneel)</option>
-    <option value="exclusief daten" ${focusRelType==='exclusief daten'?'selected':''}>Exclusief daten</option>
-    <option value="prille relatie" ${focusRelType==='prille relatie'?'selected':''}>Prille relatie</option>
-    <option value="vaste relatie" ${focusRelType==='vaste relatie'?'selected':''}>Vaste relatie</option>
-    <option value="onduidelijk / zoekend" ${focusRelType==='onduidelijk / zoekend'?'selected':''}>Onduidelijk / zoekend</option>
-  </select>
   <input class="form-input" id="focusBoostRegionField" type="text" placeholder="Regio / afstand" value="${escHTML(boostPrefs.region||'')}"/>
   <select class="form-input" id="focusBoostBudgetField">
     <option value="" ${!boostPrefs.budget?'selected':''}>Budget kiezen</option>
@@ -4589,8 +4553,7 @@ async function saveSettings(){
     var fd=document.getElementById('focusDossierField');
     var fName=fd?fd.value:'';
     if(fName)setFocusDossier(fName);
-    var fr=document.getElementById('focusRelationTypeField');
-    setFocusRelationType(fr?fr.value:'');
+    setFocusRelationType(stageRelationTypeValue(getDossierStage(fName)));
     setBoostPrefs(boostPrefs);
   }
   toast('✅ Instellingen opgeslagen');
@@ -4599,8 +4562,7 @@ async function saveSettings(){
 async function activateRelationshipFocusFromSettings(autoHold){
   var fd=document.getElementById('focusDossierField');
   var name=fd?fd.value:'';
-  var fr=document.getElementById('focusRelationTypeField');
-  setFocusRelationType(fr?fr.value:'');
+  setFocusRelationType(stageRelationTypeValue(getDossierStage(name)));
   setBoostPrefs({
     region:(document.getElementById('focusBoostRegionField')||{}).value||'',
     budget:(document.getElementById('focusBoostBudgetField')||{}).value||'',
