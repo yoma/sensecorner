@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-01-1 08:21">
+<meta name="ds-build" content="v2026-04-01-1 08:26">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1020,6 +1020,53 @@ function toBase64FromBlob(blob){
     r.readAsDataURL(blob);
   });
 }
+function loadImageFromBlob(blob){
+  return new Promise(function(resolve,reject){
+    var url=URL.createObjectURL(blob);
+    var img=new Image();
+    img.onload=function(){
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror=function(){
+      URL.revokeObjectURL(url);
+      reject(new Error('Kon afbeelding niet openen'));
+    };
+    img.src=url;
+  });
+}
+async function optimizeImageForAnalysis(blob){
+  var maxBytes=4.5*1024*1024;
+  if(blob.size<=maxBytes){
+    return {blob:blob,mediaType:(blob.type||'image/jpeg')};
+  }
+  var img=await loadImageFromBlob(blob);
+  var maxDim=1600;
+  var scale=Math.min(1,maxDim/Math.max(img.width||1,img.height||1));
+  var width=Math.max(1,Math.round((img.width||1)*scale));
+  var height=Math.max(1,Math.round((img.height||1)*scale));
+  var canvas=document.createElement('canvas');
+  canvas.width=width;
+  canvas.height=height;
+  var ctx=canvas.getContext('2d');
+  if(!ctx)throw new Error('Kon afbeelding niet voorbereiden voor analyse');
+  ctx.drawImage(img,0,0,width,height);
+  var qualitySteps=[0.86,0.78,0.7,0.62,0.54,0.46];
+  var best=null;
+  for(var i=0;i<qualitySteps.length;i++){
+    var q=qualitySteps[i];
+    var out=await new Promise(function(resolve,reject){
+      canvas.toBlob(function(result){
+        if(result)resolve(result);
+        else reject(new Error('Kon gecomprimeerde afbeelding niet maken'));
+      },'image/jpeg',q);
+    });
+    best=out;
+    if(out.size<=maxBytes)break;
+  }
+  if(!best)throw new Error('Kon afbeelding niet voorbereiden voor analyse');
+  return {blob:best,mediaType:'image/jpeg'};
+}
 
 function withTimeout(promise,ms,msg){
   return Promise.race([
@@ -1103,12 +1150,13 @@ async function analyseerFotoVoorDossier(dosName){
       var resp=await fetch(targets[i]);
       if(!resp.ok)continue;
       var blob=await resp.blob();
-      var b64=await toBase64FromBlob(blob);
+      var optimized=await optimizeImageForAnalysis(blob);
+      var b64=await toBase64FromBlob(optimized.blob);
       var prompt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
       +'openheid (0-100), glimlach (0-100), energie (0-100), verzorging (0-100), benaderbaarheid (0-100), '
       +'mood (korte tekst), summary (max 2 zinnen in het Nederlands).';
       var raw=await callAPI('',[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:(blob.type||'image/jpeg'),data:b64}},
+        {type:'image',source:{type:'base64',media_type:optimized.mediaType,data:b64}},
         {type:'text',text:prompt}
       ]}],500);
       var parsed=parseFirstJSONObject(raw);
