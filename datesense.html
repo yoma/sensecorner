@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-01-1 08:30">
+<meta name="ds-build" content="v2026-04-01-1 08:35">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -196,6 +196,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .advice-loading-step{display:flex;align-items:center;gap:8px;font-size:13px;color:#6a5548;background:#FFF8F3;border:1px solid #F4E0D3;border-radius:10px;padding:8px 10px}
 @keyframes advprog{0%{background-position:0% 0}100%{background-position:100% 0}}
 @keyframes advprogwidth{0%{width:18%}50%{width:86%}100%{width:28%}}
+.photo-loading{background:linear-gradient(180deg,#fff,#fff8f7);border:1px solid #F2D8D1;border-radius:16px;padding:16px 16px 14px;box-shadow:0 6px 18px rgba(122,18,18,.05);margin-bottom:12px}
+.photo-loading-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.photo-loading-spinner{width:18px;height:18px;border:2px solid #F4D7CC;border-top-color:#AE0000;border-radius:50%;animation:spin .9s linear infinite;flex-shrink:0}
+.photo-loading-title{font-size:13px;font-weight:800;color:#7c1212;letter-spacing:.3px;text-transform:uppercase}
+.photo-loading-text{font-size:14px;color:#333;line-height:1.65;margin:0 0 12px}
+.photo-loading-steps{display:grid;gap:8px}
+.photo-loading-step{display:flex;align-items:center;gap:8px;font-size:13px;color:#6a5548;background:#FFF8F3;border:1px solid #F4E0D3;border-radius:10px;padding:8px 10px}
 
 /* Input bar */
 .input-bar{background:#fff;border-top:2px solid var(--b);flex-shrink:0;padding:12px 16px;padding-bottom:calc(12px + var(--sb))}
@@ -1143,6 +1150,10 @@ async function analyseerFotoVoorDossier(dosName){
   var targets=analysisPhotos.length?analysisPhotos:(d.meta.photo_url?[d.meta.photo_url]:[]);
   if(!targets.length){toast('Voeg eerst een analysefoto of profielfoto toe');return;}
   _photoAnalysisBusy[dosName]=true;
+  if(S.screen==='dossier'&&S.viewDossier===dosName&&S.viewTab==='foto'){
+    var cont=document.getElementById('tabContent');
+    if(cont)cont.innerHTML=renderPhotoAnalysisLoadingCard(targets.length);
+  }
   toast('📸 Foto analyseren...');
   try{
     var analyses=[];
@@ -3234,6 +3245,18 @@ function renderAdviceLoadingCard(){
     +'</div>'
     +'</div>';
 }
+function renderPhotoAnalysisLoadingCard(photoCount){
+  var count=Math.max(1,parseInt(photoCount||1,10)||1);
+  return '<div class="photo-loading">'
+    +'<div class="photo-loading-top"><div class="photo-loading-spinner"></div><div class="photo-loading-title">Fotoanalyse wordt uitgevoerd</div></div>'
+    +'<p class="photo-loading-text">DateSense bekijkt nu '+count+' foto'+(count>1?'\'s':'')+' en zet die om naar een rustige, leesbare samenvatting.</p>'
+    +'<div class="photo-loading-steps">'
+    +'<div class="photo-loading-step">1. Ik bereid de foto voor zodat ze vlot verwerkt kan worden.</div>'
+    +'<div class="photo-loading-step">2. Ik analyseer uitstraling, energie en algemene indruk.</div>'
+    +'<div class="photo-loading-step">3. Ik zet dat om naar je fotoanalyse en match-uitleg.</div>'
+    +'</div>'
+    +'</div>';
+}
 function buildAdviceContextPayload(name,d,msgs){
   var lines=[];
   var meta=(d&&d.meta)||{};
@@ -5147,7 +5170,7 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:12px;color:var(--m)">'+(pa&&meta.photo_analysis_updated_at?('Laatst geanalyseerd: '+timeAgo(meta.photo_analysis_updated_at)):'Nog niet geanalyseerd')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97;margin-top:2px">Deze knop analyseert alle foto\'s uit het analysevak.</div>'
       +'</div>'
-      +'<button class="btn-r" style="max-width:170px;padding:10px 12px" onclick="analyseerFotoVoorDossier(\''+name+'\')">Analyseer foto\'s</button>'
+      +'<button class="btn-r" style="max-width:170px;padding:10px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+name+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Analyseer foto\'s')+'</button>'
       +'</div>';
     if(pa){
       function meter(label,val){
@@ -5170,7 +5193,7 @@ async function loadTab(name,tab,d){
       html+='<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:13px">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
         +'<div><strong>⚠️ Nog geen fotoanalyse</strong><div style="font-size:12px;color:#965252;margin-top:2px">Analyse helpt je om match-uitleg en visuele context te verfijnen.</div></div>'
-        +'<button class="btn-r" style="max-width:170px;padding:8px 12px" onclick="analyseerFotoVoorDossier(\''+name+'\')">Nu analyseren</button>'
+        +'<button class="btn-r" style="max-width:170px;padding:8px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+name+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Nu analyseren')+'</button>'
         +'</div>'
         +'</div>';
     }
