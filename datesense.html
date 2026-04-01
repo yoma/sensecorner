@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-01-1 08:14">
+<meta name="ds-build" content="v2026-04-01-1 08:21">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -348,7 +348,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .sess-date{font-size:11px;color:#8a9099;margin-bottom:3px}
 .sess-preview{
   font-size:13px;color:#2d3136;line-height:1.35;overflow:hidden;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  display:-webkit-box;line-clamp:2;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   min-height:34px
 }
 .sess-del{width:30px;min-width:30px;min-height:68px;border:1px solid #d7dbe1;border-radius:10px;background:#eceff3;color:#7d858f;cursor:pointer;font-size:14px}
@@ -2738,8 +2738,9 @@ function buildCoachTasks(){
     var d=S.pdata[p]||{};
     var person=dn(p).replace('Sense','');
     var stage=getDossierStage(p);
-    var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):999;
-    if(days>=7&&stage!=='geen_contact'){
+    var hasRealActivity=!!d.lastActive||((d.count||0)>0);
+    var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
+    if(hasRealActivity&&days>=7&&stage!=='geen_contact'){
       tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':'medium'),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
     var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
@@ -2763,7 +2764,8 @@ function buildCoachTasks(){
     var fPerson=dn(focusName);
     var fStage=getDossierStage(focusName);
     var fRelType=String(((fd.meta||{}).relationship_type)||getFocusRelationType()||'').toLowerCase();
-    var focusDays=fd.lastActive?Math.floor((Date.now()-new Date(fd.lastActive))/86400000):999;
+    var focusHasRealActivity=!!fd.lastActive||((fd.count||0)>0);
+    var focusDays=fd.lastActive?Math.floor((Date.now()-new Date(fd.lastActive))/86400000):0;
     var focusFilled=0;
     ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
       Object.values((fd.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())focusFilled++;});
@@ -2774,7 +2776,7 @@ function buildCoachTasks(){
     if(fRelType==='vaste relatie'||fStage==='vaste relatie'){
       tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"});
     }
-    if((fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
+    if(focusHasRealActivity&&(fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
       tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';goScreen('vertel')"});
     }
     var focusBoost=buildRelationshipBoost(focusName);
