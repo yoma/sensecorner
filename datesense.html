@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-03-31-1 23:55">
+<meta name="ds-build" content="v2026-04-01-1 08:14">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -913,12 +913,8 @@ function updateProfileAgePreview(){
   var age=calcAgeFromBirthdate(bd.value);
   ageEl.value=age||'';
 }
-function renderProfileVoiceField(id,placeholder,value,isFull,type){
-  return '<div class="'+(isFull?'full':'')+'" style="padding:0;border:none;background:none;'+(isFull?'grid-column:1/-1;':'')+'">'
-    +'<div style="display:flex;gap:8px;align-items:center">'
-    +'<input class="profile-field'+(isFull?' full':'')+'" style="margin:0" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'">'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px;white-space:nowrap" onclick="startFieldDictation(\''+id+'\')">🎤 Spreek</button>'
-    +'</div></div>';
+function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
+  return '<input class="profile-field'+(isFull?' full':'')+'" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'" '+(extraAttrs||'')+'>';
 }
 function renderTextareaVoiceRow(id,placeholder,value,oninput){
   return '<div style="display:flex;gap:8px;align-items:flex-start">'
@@ -2133,14 +2129,14 @@ function openProfileModal(name){
   var isOwnProf=_profileModalFor==='OWN Sense';
   fields.innerHTML=''
     +'<input class="profile-field" value="'+escA(dn(_profileModalFor))+'" readonly>'
-    +renderProfileVoiceField('pf_birthdate','Geboortedatum',escA(meta.birthdate),false,'date').replace('id="pf_birthdate" type="date"','id="pf_birthdate" type="date" oninput="updateProfileAgePreview()"').replace('onclick="startFieldDictation(\'pf_birthdate\')"','onclick="toast(\'Gebruik hier de datumkiezer voor correcte invoer\')"')
+    +renderProfileField('pf_birthdate','Geboortedatum',escA(meta.birthdate),false,'date','oninput="updateProfileAgePreview()"')
     +'<input class="profile-field" id="pf_age_auto" placeholder="Leeftijd (auto)" value="'+escA(calcAgeFromBirthdate(meta.birthdate)||meta.age)+'" readonly>'
-    +renderProfileVoiceField('pf_city','Regio / woonplaats',escA(meta.city),false)
-    +renderProfileVoiceField('pf_country','Land',escA(meta.country),false)
-    +(isOwnProf?(renderProfileVoiceField('pf_address','Adres (straat + nr)',escA(meta.address),true)
+    +renderProfileField('pf_city','Regio / woonplaats',escA(meta.city),false)
+    +renderProfileField('pf_country','Land',escA(meta.country),false)
+    +(isOwnProf?(renderProfileField('pf_address','Adres (straat + nr)',escA(meta.address),true)
       +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
-    +renderProfileVoiceField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
-    +(isOwnProf?(renderProfileVoiceField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'');
+    +renderProfileField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
+    +(isOwnProf?(renderProfileField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'');
   updateProfileAgePreview();
   modal.classList.add('show');
 }
