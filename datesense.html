@@ -8,8 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
-<!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-9 15:05">
+<!-- DateSense build tag (debug): handmatig aanpassen bij release -->
+<meta name="ds-build" content="v2026-04-03 13:41">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -17,8 +17,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 :root{
   --r:#AE0000;--rl:#FFF5F5;--g:#F8F9FA;--b:#E5E5E5;--m:#888;--t:#1A1A1A;
   --sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px);
+  --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);
   --fs-xs:12px;--fs-sm:14px;--fs-md:16px;--fs-xl:22px;
   --rad-sm:10px;--rad-md:14px;--rad-lg:18px;
+  /* Afstand van viewport-onderkant tot bovenkant bottom-nav (incl. typische tab + safe area in nav-padding) */
+  --dock-above-nav:calc(52px + var(--sb));
+  /* Ruimte die dossier-dock + adem inneemt boven de tabbar */
+  --dossier-dock-core:56px;
 }
 
 .app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#fff;position:relative;overflow:hidden}
@@ -74,11 +79,52 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .logobar-meta{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;padding-top:2px;text-align:right}
 .logobar-brand-wrap{flex:1;min-width:0}
 .logobar .build-tag-top,.logobar .build-user-top{z-index:1}
+.logobar-hidden{display:none!important}
 
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* Ruimte onderaan: tabbar + dossier-dock + kleine ademruimte (zelfde logica als --nav-bar-core + --dossier-dock-core) */
+.app.dossier-mode .main{padding-bottom:calc(var(--dossier-dock-core) + 52px + var(--sb) + 10px)}
 
-/* Nav */
-.nav{background:#fff;border-top:1px solid var(--b);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0}
+.dossier-dock{
+  display:none;flex-direction:row;
+  position:fixed;left:0;right:0;z-index:25;
+  bottom:var(--dock-above-nav);
+  padding:10px 12px;padding-left:max(12px,var(--sl));padding-right:max(12px,var(--sr));
+  background:linear-gradient(180deg,rgba(255,255,255,.98),#fff);
+  border-top:1px solid var(--b);box-shadow:0 -6px 20px rgba(0,0,0,.06);
+  gap:10px;align-items:stretch;justify-content:center;
+  -webkit-backface-visibility:hidden;backface-visibility:hidden;
+}
+.dossier-dock .dd-btn{
+  flex:1;min-width:0;max-width:min(200px,46vw);margin:0 auto;padding:12px 10px;border-radius:14px;font-size:14px;font-weight:800;
+  font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+  border:1.5px solid var(--b);background:#fff;color:var(--t);
+  touch-action:manipulation;-webkit-user-select:none;user-select:none;
+}
+.dossier-dock .dd-btn.dd-vertel{background:var(--r);border-color:var(--r);color:#fff;box-shadow:0 4px 14px rgba(174,0,0,.22)}
+.dossier-dock .dd-btn:active{opacity:.92;transform:translateY(1px)}
+
+.dossier-mc-btn{display:flex;flex-direction:column;align-items:flex-end;gap:1px;padding:2px 0 2px 10px;border:none;background:none;cursor:pointer;font-family:inherit;text-align:right;flex-shrink:0;max-width:46%}
+.dossier-mc-pct{font-size:18px;font-weight:800;line-height:1.1;letter-spacing:-.3px}
+.dossier-mc-lbl{font-size:10px;font-weight:700;color:var(--m);line-height:1.15;max-width:8.5em}
+.dossier-mc-chev{font-size:9px;color:#aaa;margin-top:2px;transition:transform .2s ease}
+.dossier-mc-btn.open .dossier-mc-chev{transform:rotate(-180deg)}
+.dossier-acc-wrap{max-height:0;overflow:hidden;transition:max-height .38s ease;margin:0 0 8px}
+.dossier-acc-wrap.open{max-height:min(520px,78vh)}
+.dossier-acc-inner{display:flex;gap:12px;padding:10px 0 12px;align-items:flex-start;border-bottom:1px solid var(--b)}
+.dossier-rf-row{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;border:1px solid var(--b);background:#fafbfc;cursor:pointer;font-family:inherit;text-align:left}
+.dossier-rf-row .rf-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dossier-rf-row .rf-mid{flex:1;min-width:0;font-size:14px;font-weight:700;color:#333}
+.dossier-rf-row .rf-pct{font-size:16px;font-weight:800;flex-shrink:0}
+.dossier-rf-acc{max-height:0;overflow:hidden;transition:max-height .35s ease}
+.dossier-rf-acc.open{max-height:400px}
+.dossier-rf-acc-inn{padding:0 0 14px}
+.dtabs-scroll .tabs-bar{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;justify-content:flex-start}
+.dtabs-scroll .tabs-bar::-webkit-scrollbar{display:none}
+.dtabs-scroll .dtab{flex:0 0 auto;min-width:max-content;padding:12px 14px}
+
+/* Nav — altijd boven dossier-dock (z-index) zodat tikken op tabs betrouwbaar blijft */
+.nav{background:#fff;border-top:1px solid var(--b);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none}
 .tab.active{color:var(--r)}
 .tab svg{width:23px;height:23px}
@@ -588,6 +634,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .vertel-coach-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .vertel-chip{padding:6px 9px;border-radius:999px;border:1px solid #F3D6D6;background:#fff;color:#8A2D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
 .vertel-chip .chip-short{display:none}
+.vertel-help-mount{margin:0 10px 8px}
+.vertel-help-toggle{width:100%;text-align:left;padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fafbfc;color:#555;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.vertel-help-toggle .chev{font-size:10px;color:#888;transition:transform .2s}
+.vertel-help-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.vertel-help-panel{display:none;margin-top:8px;padding:10px 12px;border:1px solid #F2D6D6;border-radius:12px;background:linear-gradient(180deg,#FFF9F9 0%,#FFFDFD 100%)}
+.vertel-help-panel.open{display:block}
+.vertel-gesprek-banner{font-size:12px;color:#444;line-height:1.45;margin-top:4px}
+.vertel-gesprek-banner .linkish{background:none;border:none;padding:0;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px}
 </style>
 </head>
 <body>
@@ -606,8 +660,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <button class="ico" onclick="goScreen('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
 
-  <!-- Logobar -->
-  <div class="logobar">
+  <!-- Logobar (alleen zichtbaar op Home; zie goScreen) -->
+  <div class="logobar" id="logobar">
     <div class="av" id="ownAvatarWrap" onclick="goScreen('home')" style="cursor:pointer"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
     <div class="logobar-brand-wrap">
       <div class="brand">
@@ -628,20 +682,33 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Input bar (alleen Vertel scherm) -->
   <div id="inputBar" style="display:none">
     <div class="input-bar">
+      <div id="vertelHelpMount" class="vertel-help-mount"></div>
       <div class="input-row input-row-vertel">
 
         <button class="rnd gr" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <button type="button" class="rnd rd-mic" id="micBtn" onclick="toggleMic()" title="Spraak — tik om te spreken (wordt rood tijdens opname)">
+        <button type="button" class="rnd rd-mic" id="micBtn" onclick="toggleMic()" title="Spraak: tik om te spreken (wordt rood tijdens opname)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
         </button>
-        <textarea class="input-area" id="msgInput" placeholder="Typ alles in één keer — ik sorteer automatisch naar het juiste dossier. Vertel wat er speelt…" rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <textarea class="input-area" id="msgInput" placeholder="Typ alles in één keer, ik sorteer naar het juiste dossier. Vertel wat er speelt…" rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
         <button class="rnd rd" onclick="sendMsg()" title="Verstuur">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- Dossier: vaste acties (Vertel + Advies) — geen dubbele knoppen in header -->
+  <div id="dossierDock" class="dossier-dock" style="display:none" role="group" aria-label="Dossier acties">
+    <button type="button" class="dd-btn dd-vertel" onclick="if(S.viewDossier){S.vertelFrom=S.viewDossier;S.vertelGesprekDossier=S.viewDossier;goScreen('vertel');}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      Vertel
+    </button>
+    <button type="button" class="dd-btn dd-advies" onclick="switchTab('advies')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 16v-4M12 8h.01"/></svg>
+      Advies
+    </button>
   </div>
 
   <!-- Bottom nav -->
@@ -811,8 +878,7 @@ function setBuildTag(){
   var el=document.getElementById('buildTagTop');
   var userEl=document.getElementById('buildUserTop');
   if(!el)return;
-  // Toon exact de statische build-info uit HTML (update-moment), niet pageload-tijd.
-  el.innerHTML='Build<span class="bt-sub">'+APP_BUILD_LABEL+'</span>';
+  el.innerHTML='Build<span class="bt-sub">'+escHTML(APP_BUILD_LABEL)+'</span>';
   if(!userEl)return;
   if(S.user){
     var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
@@ -926,6 +992,8 @@ var S={
   },
   // Vertel chat tijdelijk (wis na opslaan)
   vertelMsgs:[],
+  /** Laatste gekozen dossier voor dit Vertel-gesprek (na opslaan of vanuit dossier); bewaart context tussen berichten. */
+  vertelGesprekDossier:null,
   timelineLimitByDossier:{}
 };
 
@@ -1194,9 +1262,9 @@ function getQuickHelpStepsForScreen(screen){
   if(sc==='dossier'){
     var own=S.viewDossier==='OWN Sense';
     return[
-      {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Fotoanalyse en Advies.'},
+      {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Foto, Profiel en Advies.'},
       {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
-      {targetSel:'.dossier-head-actions',title:'Snelle acties',text:'Met deze knoppen stuur je snel door naar Vertel of andere relevante acties.'}
+      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan vind je Vertel en Advies — vaste plek, minder verwarring.'}
     ];
   }
   return[
@@ -1222,14 +1290,11 @@ function addVertelHintToInput(text){
   inp.focus();
 }
 function renderVertelInputCoachTip(){
-  var host=document.querySelector('#inputBar .input-bar');
-  if(!host)return;
-  if(hasSeenVertelCoachTip()&&S.vertelMsgs&&S.vertelMsgs.length>0)return;
-  var old=document.getElementById('vertelInputCoachTip');
-  if(old&&old.parentNode)old.parentNode.removeChild(old);
-  var firstUse=!hasSeenVertelCoachTip();
+  var mount=document.getElementById('vertelHelpMount');
+  if(!mount)return;
+  mount.innerHTML='';
   var forced=getForcedDossier();
-  var target=forced||S.vertelFrom||'';
+  var target=forced||S.vertelGesprekDossier||S.vertelFrom||'';
   var isOwnTarget=!target||target==='OWN Sense';
   var tLabel=isOwnTarget?'jezelf':dn(target);
   var chip1Text=isOwnTarget
@@ -1247,25 +1312,37 @@ function renderVertelInputCoachTip(){
       .replace(/'/g,"\\'")
       .replace(/\r?\n/g,'\\n');
   }
-  var tip=document.createElement('div');
-  tip.id='vertelInputCoachTip';
-  tip.className='vertel-coach-tip';
-  tip.innerHTML=''
-    +'<div class="vertel-coach-head">Hulp bij Vertel</div>'
-    +'<div class="vertel-coach-text">Je werkt nu vooral rond <strong>'+escHTML(tLabel)+'</strong>. Vertel wat er gebeurde, wat je voelde en waar je op vastloopt. Dan krijg je veel gerichter advies.</div>'
+  var wrap=document.createElement('div');
+  wrap.id='vertelInputCoachTip';
+  wrap.innerHTML=''
+    +'<button type="button" class="vertel-help-toggle" id="vertelHelpToggle" aria-expanded="false" onclick="toggleVertelHelpPanel()">'
+    +'<span>Hulp bij Vertel</span><span class="chev" aria-hidden="true">▸</span></button>'
+    +'<div class="vertel-help-panel" id="vertelHelpPanel" role="region" aria-label="Hulp bij Vertel">'
+    +'<div class="vertel-coach-head">Tips</div>'
+    +'<div class="vertel-coach-text">Je werkt nu vooral rond <strong>'+escHTML(tLabel)+'</strong>. Vertel wat er gebeurde, wat je voelde en waar je op vastloopt. Dan krijg je gerichter advies.</div>'
     +'<div class="vertel-coach-chips">'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')"><span class="chip-long">🧭 Context + gevoel + vraag</span><span class="chip-short">🧭 Context</span></button>'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')"><span class="chip-long">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</span><span class="chip-short">📝 Update</span></button>'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip3Text)+'\')"><span class="chip-long">🎯 Vraag om acties</span><span class="chip-short">🎯 Acties</span></button>'
+    +'<button type="button" class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')"><span class="chip-long">🧭 Context + gevoel + vraag</span><span class="chip-short">🧭 Context</span></button>'
+    +'<button type="button" class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')"><span class="chip-long">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</span><span class="chip-short">📝 Update</span></button>'
+    +'<button type="button" class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip3Text)+'\')"><span class="chip-long">🎯 Vraag om acties</span><span class="chip-short">🎯 Acties</span></button>'
     +'</div>'
     +'<div style="margin-top:8px;display:flex;justify-content:flex-end">'
-    +'<button class="coach-save-other" style="font-size:11px;padding:5px 8px" onclick="closeVertelInputCoachTip()">'+(firstUse?'Begrepen':'Sluiten')+'</button>'
-    +'</div>';
-  host.insertBefore(tip,host.firstChild);
+    +'<button type="button" class="coach-save-other" style="font-size:11px;padding:5px 8px" onclick="closeVertelInputCoachTip()">Sluiten</button>'
+    +'</div></div>';
+  mount.appendChild(wrap);
+}
+function toggleVertelHelpPanel(){
+  var btn=document.getElementById('vertelHelpToggle');
+  var pan=document.getElementById('vertelHelpPanel');
+  if(!btn||!pan)return;
+  var open=!pan.classList.contains('open');
+  pan.classList.toggle('open',open);
+  btn.setAttribute('aria-expanded',open?'true':'false');
 }
 function closeVertelInputCoachTip(){
-  var tip=document.getElementById('vertelInputCoachTip');
-  if(tip&&tip.parentNode)tip.parentNode.removeChild(tip);
+  var pan=document.getElementById('vertelHelpPanel');
+  var btn=document.getElementById('vertelHelpToggle');
+  if(pan)pan.classList.remove('open');
+  if(btn)btn.setAttribute('aria-expanded','false');
   markVertelCoachTipSeen();
 }
 function startQuickHelpTour(force){
@@ -1473,8 +1550,11 @@ function formatAiRichText(txt){
   });
   return out.join('');
 }
+function replaceEmDashes(s){
+  return String(s==null?'':s).replace(/\u2014/g,',').replace(/—/g,',');
+}
 function formatAiCard(txt){
-  var inner=formatAiRichText(txt);
+  var inner=formatAiRichText(replaceEmDashes(txt));
   if(!inner)return'';
   return '<div class="ai-rich-card">'+inner+'</div>';
 }
@@ -1702,7 +1782,7 @@ async function focusFirstEmptyContactField(name){
   if(!name||name==='OWN Sense')return;
   if(S.viewDossier!==name)S.viewDossier=name;
   if(S.screen!=='dossier')goScreen('dossier');
-  if(S.viewTab!=='overzicht')await switchTab('overzicht');
+  if(S.viewTab!=='profiel')await switchTab('profiel');
   var order=['karakter_contact','patronen_contact','gevoel_contact'];
   var target=null,targetCat=null;
   order.forEach(function(cid){
@@ -1775,6 +1855,7 @@ function guessHoofdDossierNaam(tekst){
   var t=String(tekst||'');
   var forced=getForcedDossier();
   if(forced)return dn(forced);
+  if(S.vertelGesprekDossier)return dn(S.vertelGesprekDossier);
   if(S.vertelFrom)return dn(S.vertelFrom);
   var found='';
   (S.profiles||[]).forEach(function(p){
@@ -1832,6 +1913,34 @@ function updateVertelSaveModeUI(){
 }
 function kiesVertelSaveMode(){
   openSaveModeModal();
+}
+
+function openVertelGesprekKies(){
+  openDossierPickModal(
+    'Koppel dit Vertel-gesprek',
+    'Daarna stel ik voor om te bewaren bij dit dossier. Je kunt bij elk bericht nog een andere keuze maken.',
+    'vertel_focus',
+    null
+  );
+}
+
+function updateVertelGesprekBanner(){
+  var el=document.getElementById('vertelGesprekBanner');
+  if(!el)return;
+  if(getForcedDossier()){
+    el.style.display='none';
+    el.innerHTML='';
+    return;
+  }
+  var d=S.vertelGesprekDossier||S.vertelFrom;
+  if(!d){
+    el.style.display='none';
+    el.innerHTML='';
+    return;
+  }
+  el.style.display='block';
+  el.innerHTML='Gesprek gekoppeld aan <strong>'+escHTML(dn(d))+'</strong> · '
+    +'<button type="button" class="linkish" onclick="openVertelGesprekKies()">Ander dossier</button>';
 }
 
 function openSaveModeModal(){
@@ -1914,6 +2023,12 @@ async function selectDossierFromPick(dossier){
     await koppelSessieMsgNaar(ctx.payload,dossier,false);
   }else if(ctx.type==='bulk'){
     await koppelAlleOngekoppeldNaar(dossier,ctx.payload||[]);
+  }else if(ctx.type==='vertel_focus'){
+    S.vertelGesprekDossier=dossier;
+    S.vertelFrom=dossier;
+    updateVertelGesprekBanner();
+    if(S.screen==='vertel')renderVertelInputCoachTip();
+    toast('Opslagvoorstel: '+dn(dossier));
   }else if(ctx.type==='save'){
     await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
   }
@@ -2582,7 +2697,15 @@ function goScreen(sc){
     endQuickHelpTour(true);
   }
   var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan iets leuks',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',promptcenter:'Prompt Center'};
-  document.getElementById('pgTitle').textContent=T[sc]||sc;
+  var titleText=T[sc]||sc;
+  if(sc==='dossier'&&S.viewDossier)titleText=dn(S.viewDossier);
+  document.getElementById('pgTitle').textContent=titleText;
+  var lb=document.getElementById('logobar');
+  if(lb)lb.classList.toggle('logobar-hidden',sc!=='home');
+  var appEl=document.getElementById('app');
+  if(appEl)appEl.classList.toggle('dossier-mode',sc==='dossier');
+  var dock=document.getElementById('dossierDock');
+  if(dock)dock.style.display=(sc==='dossier'&&S.user)?'flex':'none';
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
@@ -3442,7 +3565,7 @@ function buildCoachTasks(){
       tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     if(focusHasRealActivity&&(fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
-      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';goScreen('vertel')"});
+      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';S.vertelGesprekDossier='"+focusName+"';goScreen('vertel')"});
     }
     var focusBoost=buildRelationshipBoost(focusName);
     if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
@@ -3925,11 +4048,11 @@ function renderAdviceEmptyState(name){
   return '<div class="adv-empty-premium" style="text-align:center;padding:8px 4px 20px;color:var(--m)">'
     +'<div style="font-size:34px;margin-bottom:10px">💬</div>'
     +'<div style="font-size:17px;font-weight:800;color:#333;margin-bottom:10px">Waarom je nog geen advies ziet</div>'
-    +'<p style="font-size:14px;color:#555;line-height:1.55;margin:0 auto 14px;max-width:340px;text-align:left">DateSensei bouwt advies op basis van <strong>jouw echte input</strong> over <strong>'+escHTML(label)+'</strong>: berichten in de tijdlijn (via Vertel), wat je op <strong>Overzicht</strong> invult, en je profiel. Zonder minimaal één bron is er niets om op te baseren — dan blijft dit bewust leeg.</p>'
-    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij date of wat je voelt, of vul je categorieën op Overzicht in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op Overzicht in.')+'</p>'
+    +'<p style="font-size:14px;color:#555;line-height:1.55;margin:0 auto 14px;max-width:340px;text-align:left">DateSensei bouwt advies op basis van <strong>jouw echte input</strong> over <strong>'+escHTML(label)+'</strong>: berichten in de tijdlijn (via Vertel), wat je op tab <strong>Profiel</strong> invult, en je profielgegevens. Zonder minimaal één bron is er niets om op te baseren — dan blijft dit bewust leeg.</p>'
+    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij date of wat je voelt, of vul je categorieën op tab Profiel in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op tab Profiel in.')+'</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px;max-width:340px;margin:0 auto">'
-    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel — voeg een tijdlijnbericht toe</button>'
-    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'overzicht\')">📋 Overzicht — invulvakjes &amp; eigenschappen</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';S.vertelGesprekDossier=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel, voeg een tijdlijnbericht toe</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'profiel\')">📋 Tab Profiel — invulvakjes &amp; eigenschappen</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="openProfileModal(\''+escN+'\')">'+(isOwn?'👤 Profielgegevens (OWN Sense)':'👤 Profielgegevens van dit dossier')+'</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="goScreen(\'settings\')">⚙️ Instellingen (API-sleutel)</button>'
     +'</div>'
@@ -5299,15 +5422,39 @@ async function rDossier(el){
   var daysKnown=d.lastActive?Math.max(1,Math.floor((Date.now()-new Date(d.lastActive))/86400000)):0;
   var personName2=dn(name);
 
+  var matchLabel='',matchColor='#888',reden='',donutSvgSmall='';
+  var goedMatch=[],slecht=[];
+  if(!isOwn&&matchPct>=0){
+    matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
+    matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
+    var own2pre=S.pdata['OWN Sense']||{props:{...DP}};
+    PK.forEach(function(k,i){
+      var ov=own2pre.props[k]||0,cv=d.props[k]||0;
+      if(ov>0&&cv>0){var diff=Math.abs(ov-cv);if(diff<=20)goedMatch.push(PL[i]);else if(diff>=40)slecht.push(PL[i]);}
+    });
+    reden=goedMatch.length&&slecht.length
+      ?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,2).join(' & ')+'</strong> · meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
+      :goedMatch.length?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,3).join(', ')+'</strong>'
+      :slecht.length?'Meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
+      :'Voeg meer info toe voor een analyse';
+    var rs=28,cxs=32,cys=32,circs=2*Math.PI*rs;
+    var dashs=matchPct/100*circs,gaps=circs-dashs;
+    donutSvgSmall='<svg class="donut-svg" width="64" height="64" viewBox="0 0 64 64">'
+      +'<circle cx="'+cxs+'" cy="'+cys+'" r="'+rs+'" fill="none" stroke="#eee" stroke-width="8"/>'
+      +'<circle cx="'+cxs+'" cy="'+cys+'" r="'+rs+'" fill="none" stroke="'+matchColor+'" stroke-width="8"'
+      +' stroke-dasharray="'+dashs.toFixed(1)+' '+gaps.toFixed(1)+'"'
+      +' stroke-dashoffset="'+((circs/4)).toFixed(1)+'" stroke-linecap="round"/>'
+      +'<text x="'+cxs+'" y="'+(cys+5)+'" text-anchor="middle" font-size="13" font-weight="800" fill="'+matchColor+'">'+matchPct+'%</text>'
+      +'</svg>';
+  }
+
   var header='<div style="padding:16px 16px 0">';
-  // Naam + badge + knop
-  header+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">';
+  header+='<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">';
   if(!isOwn){
     var pMeta=d.meta||{};
     if(pMeta.photo_url){
       header+='<img src="'+pMeta.photo_url+'" alt="'+personName2+'" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
     }else{
-      // Avatar cirkel met initiaal
       var initial=personName2.charAt(0).toUpperCase();
       var ci2=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
       var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
@@ -5320,7 +5467,7 @@ async function rDossier(el){
       header+='<img src="'+ownM.photo_url+'" alt="OWN foto" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
     }
   }
-  header+='<div style="flex:1">';
+  header+='<div style="flex:1;min-width:0">';
   header+='<div style="font-size:18px;font-weight:800;color:var(--t)">'+personName2+'</div>';
   if(!isOwn&&d.lastActive){
     header+='<div style="font-size:12px;color:var(--m);margin-top:2px">Laatste update: '+timeAgo(d.lastActive)+'</div>';
@@ -5339,84 +5486,42 @@ async function rDossier(el){
       +'</div>';
   }
   header+='</div>';
-  var metaComp=getProfileMetaCompletion(name);
-  var profBtnTxt=metaComp.complete?'Profielgegevens':'Profiel onvolledig';
-  var profBtnBg=metaComp.complete?'#fff':'#FFF5F5';
-  var profBtnCol=metaComp.complete?'#555':'#B42318';
-  var profBtnBorder=metaComp.complete?'1px solid var(--b)':'1px solid #FFD1D1';
-  header+='<div class="dossier-head-actions">';
-  header+='<button style="padding:8px 14px;background:var(--r);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="S.vertelFrom=\''+name+'\';goScreen(\'vertel\')">🎤 Vertel</button>';
-  if(!isOwn)header+='<button style="padding:8px 10px;background:#FFF7F0;color:#A55B00;border:1px solid #FFE0BF;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openPlanner(\''+name+'\')">Plan iets leuks</button>';
-  header+='<button style="padding:8px 10px;background:'+profBtnBg+';color:'+profBtnCol+';border:'+profBtnBorder+';border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openProfileModal(\''+name+'\')">'+profBtnTxt+'</button>';
-  header+='</div></div>';
+  if(!isOwn&&matchPct>=0){
+    header+='<button type="button" class="dossier-mc-btn" id="dossierMatchToggle" aria-expanded="false" onclick="var w=document.getElementById(\'dossierMatchAccWrap\');var b=document.getElementById(\'dossierMatchToggle\');if(w&&b){w.classList.toggle(\'open\');b.classList.toggle(\'open\');b.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
+    header+='<span class="dossier-mc-pct" style="color:'+matchColor+'">'+matchPct+'%</span>';
+    header+='<span class="dossier-mc-lbl" style="color:'+matchColor+'">'+matchLabel+'</span>';
+    header+='<span class="dossier-mc-chev" aria-hidden="true">▼</span>';
+    header+='</button>';
+  }
+  header+='</div>';
 
-  if(!isOwn){
-    if(matchPct>=0){
-      var matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
-      var matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
-      var own2=S.pdata['OWN Sense']||{props:{...DP}};
-      var goedMatch=[],slecht=[];
-      PK.forEach(function(k,i){
-        var ov=own2.props[k]||0,cv=d.props[k]||0;
-        if(ov>0&&cv>0){var diff=Math.abs(ov-cv);if(diff<=20)goedMatch.push(PL[i]);else if(diff>=40)slecht.push(PL[i]);}
-      });
-      var reden=goedMatch.length&&slecht.length
-        ?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,2).join(' & ')+'</strong> · meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
-        :goedMatch.length?'Meest gelijkaardig in <strong>'+goedMatch.slice(0,3).join(', ')+'</strong>'
-        :slecht.length?'Meeste afstand in <strong>'+slecht.slice(0,2).join(' & ')+'</strong>'
-        :'Voeg meer info toe voor een analyse';
-
-      // SVG donut
-      var r=36,cx=44,cy=44,circ=2*Math.PI*r;
-      var dash=matchPct/100*circ,gap=circ-dash;
-      var donutSvg='<svg class="donut-svg" width="88" height="88" viewBox="0 0 88 88">'
-        +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#eee" stroke-width="10"/>'
-        +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+matchColor+'" stroke-width="10"'
-        +' stroke-dasharray="'+dash.toFixed(1)+' '+gap.toFixed(1)+'"'
-        +' stroke-dashoffset="'+((circ/4)).toFixed(1)+'" stroke-linecap="round"/>'
-        +'<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" font-size="16" font-weight="800" fill="'+matchColor+'">'+matchPct+'%</text>'
-        +'</svg>';
-
-      header+='<div class="donut-wrap" id="match-bar">'
-        +donutSvg
-        +'<div class="donut-info">'
-        +'<div class="donut-pct" style="color:'+matchColor+'">'+matchPct+'%</div>'
-        +'<div class="donut-lbl" style="color:'+matchColor+'">'+matchLabel+'</div>'
-        +'<div class="donut-reden">'+reden+'</div>'
-        +((traitMatchPct||photoMatchPct)?'<div style="font-size:12px;color:#777;margin-top:6px">'
-          +(traitMatchPct?('Eigenschappen: <strong>'+traitMatchPct+'%</strong>'):'')
-          +(traitMatchPct&&photoMatchPct?' · ':'')
-          +(photoMatchPct?('Fotoanalyse: <strong>'+photoMatchPct+'%</strong>'):'')
-          +(traitMatchPct&&photoMatchPct?' <span style="color:#999">(75/25)</span>':'')
-          +'</div>':'')
-        +'</div></div>';
-
-      // Stats grid
-      // Bereken hoeveel invulvakjes al ingevuld zijn
-      var catsFilled=0;
-      if(d.categories){
-        ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
-          Object.values(d.categories[cid]||{}).forEach(function(v){if((v||'').trim())catsFilled++;});
-        });
-      }
-      header+='<div class="stats-grid">'
-        +'<div class="stat-card" style="cursor:pointer" onclick="switchTab(\'tijdlijn\')"><div class="stat-num">'+msgCount+'</div><div class="stat-lbl">Berichten over haar/hem</div></div>'
-        +'<div class="stat-card" style="cursor:pointer" onclick="focusFirstEmptyContactField(\''+name+'\')"><div class="stat-num">'+catsFilled+'/9</div><div class="stat-lbl">Profiel ingevuld · klik om verder te vullen</div></div>'
-        +'</div>';
-    } else {
-      var matchMsg2=matchPct===-1
-        ?'Vul eerst je <strong>OWN Sense</strong> in om een match te berekenen.'
-        :'Voeg meer info toe over '+personName2+' om een match te berekenen.';
-      header+='<div style="padding:12px 16px;background:var(--g);border-radius:12px;border:1px solid var(--b);font-size:13px;color:var(--m);margin-bottom:14px">📊 '+matchMsg2+'</div>';
-    }
+  if(!isOwn&&matchPct>=0){
+    header+='<div id="dossierMatchAccWrap" class="dossier-acc-wrap">';
+    header+='<div class="dossier-acc-inner">'+donutSvgSmall
+      +'<div class="donut-info" style="flex:1;min-width:0">'
+      +'<div class="donut-lbl" style="color:'+matchColor+';font-size:15px;font-weight:800">'+matchLabel+' · '+matchPct+'%</div>'
+      +'<div class="donut-reden" style="margin-top:4px;font-size:13px;line-height:1.55">'+reden+'</div>'
+      +((traitMatchPct||photoMatchPct)?'<div style="font-size:12px;color:#777;margin-top:6px">'
+        +(traitMatchPct?('Eigenschappen: <strong>'+traitMatchPct+'%</strong>'):'')
+        +(traitMatchPct&&photoMatchPct?' · ':'')
+        +(photoMatchPct?('Foto: <strong>'+photoMatchPct+'%</strong>'):'')
+        +(traitMatchPct&&photoMatchPct?' <span style="color:#999">(75/25)</span>':'')
+        +'</div>':'')
+      +'</div></div></div>';
+  }else if(!isOwn){
+    var matchMsg2=matchPct===-1
+      ?'Vul eerst je <strong>OWN Sense</strong> in om een match te berekenen.'
+      :'Voeg meer info toe over '+personName2+' om een match te berekenen.';
+    header+='<div style="padding:12px 16px;background:var(--g);border-radius:12px;border:1px solid var(--b);font-size:13px;color:var(--m);margin-bottom:14px">📊 '+matchMsg2+'</div>';
   }
   header+='</div>';
 
   var vt=S.viewTab;
-  var tabs='<div class="dossier-tabs-wrap"><div class="tabs-bar">'
+  var tabs='<div class="dossier-tabs-wrap dtabs-scroll"><div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
-    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Fotoanalyse</div>'
+    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Foto</div>'
+    +'<div class="dtab '+(vt==="profiel"?"active":"")+'" onclick="switchTab(\'profiel\')">Profiel</div>'
     +'<div class="dtab '+(vt==="advies"?"active":"")+'" onclick="switchTab(\'advies\')">Advies</div>'
     +'</div></div>';
 
@@ -5449,7 +5554,7 @@ async function switchTab(tab){
     S.timelineLimitByDossier[S.viewDossier]=50;
   }
   document.querySelectorAll('.dtab').forEach(t=>{
-    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Fotoanalyse','advies':'Advies'};
+    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Foto','profiel':'Profiel','advies':'Advies'};
     t.classList.toggle('active',t.textContent===map[tab]);
   });
   await loadTab(S.viewDossier,tab,S.pdata[S.viewDossier]||{props:{...DP},count:0,categories:{}});
@@ -5473,24 +5578,7 @@ async function loadTab(name,tab,d){
     var cats=d.categories||{};
     var personName=name.replace('Sense','').trim();
 
-    // Contact invulcategorieën definitie
-    var CONTACT_CATS=[
-      {id:'karakter_contact',title:'Karakter & Persoonlijkheid',icon:'🧠',prompts:[
-        {q:'Hoe zou jij '+personName+' omschrijven?',ph:'Bv: open, gesloten, grappig, serieus...'},
-        {q:'Hoe gedraagt hij/zij zich in gesprekken?',ph:'Bv: luistert goed, praat veel, vermijdt onderwerp...'},
-        {q:'Wat zijn opvallende eigenschappen of gewoontes?',ph:'Bv: altijd te laat, erg ambitieus, warm naar anderen...'}
-      ]},
-      {id:'patronen_contact',title:'Patronen & Gedrag',icon:'🔄',prompts:[
-        {q:'Welke patronen merk je op?',ph:'Bv: trekt zich terug als het spannend wordt, blaast warm en koud...'},
-        {q:'Hoe reageert hij/zij op emoties of conflict?',ph:'Bv: vermijdt conflict, wordt defensief, blijft rustig...'},
-        {q:'Is hij/zij consistent in woorden en daden?',ph:'Bv: zegt X maar doet Y, of altijd betrouwbaar...'}
-      ]},
-      {id:'gevoel_contact',title:'Jouw Gevoel bij Hem/Haar',icon:'❤️',prompts:[
-        {q:'Hoe voel jij je bij deze persoon?',ph:'Bv: energiek, onzeker, rustig, geprikkeld...'},
-        {q:'Wat trekt jou aan in hem/haar?',ph:'Bv: humor, diepgang, energie, uiterlijk...'},
-        {q:'Wat stoort of twijfelt je?',ph:'Bv: reageert traag, weinig initiatief, onduidelijkheid...'}
-      ]}
-    ];
+    var CONTACT_CATS=getContactCatsDef(personName);
 
     function contactCatProgress(catId){
       var catData=cats[catId]||{};
@@ -5505,6 +5593,13 @@ async function loadTab(name,tab,d){
 
     // Bouw HTML
     var html='';
+
+    if(!isOwnDossier){
+      html+='<div style="font-size:13px;color:#555;margin-bottom:14px;line-height:1.45">'
+        +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+contactFilled+'/'+contactTotal+'</strong> profiel'
+        +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="switchTab(\'profiel\')">Profiel invullen</button>'
+        +'</div>';
+    }
 
     // Eigenschappen
     var propsLastIso=getPropsUpdatedAt(d.meta||{});
@@ -5522,10 +5617,8 @@ async function loadTab(name,tab,d){
     }
     html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
 
-    // OWN: reset knop + tip
+    // OWN: verwijs naar tab Profiel voor invulvakken
     if(isOwnDossier){
-      if(hasData){
-      }
       var ownFilled=OWN_CATS.reduce(function(sum,cat){
         var catData=cats[cat.id]||{};
         var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
@@ -5536,76 +5629,37 @@ async function loadTab(name,tab,d){
       var ownNeedsAttention=(ownFilled<ownTotal)||!ownMetaComp.complete;
       if(ownNeedsAttention){
         html+='<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:#555;line-height:1.6">';
-        html+='💡 <strong>Vul je profiel aan</strong> via <strong>Profielgegevens</strong> en <strong>Vertel</strong> om je eigenschappen automatisch te verfijnen.';
-        html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="openProfileModal(\'OWN Sense\')">→ Profielgegevens</button></div>';
+        html+='💡 <strong>Profiel aanvullen</strong> — open tab <strong>Profiel</strong> voor vragenlijst en gegevens.';
+        html+='<div style="margin-top:10px"><button class="btn-r" style="max-width:200px;padding:12px" onclick="switchTab(\'profiel\')">→ Naar Profiel</button></div>';
         html+='</div>';
       }
-      html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
-      html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
-      html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
-      html+='<span style="font-size:13px;color:#555">'+ownFilled+'/'+ownTotal+' vragen beantwoord</span>';
-      html+='</div>';
-      var firstOpenSet=false;
-      OWN_CATS.forEach(function(cat){
-        var catData=cats[cat.id]||{};
-        var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
-        var isFilled=filled>0;
-        var isComplete=(filled===cat.prompts.length);
-        var shouldOpen=!firstOpenSet&&!isComplete;
-        if(shouldOpen)firstOpenSet=true;
-        html+='<div class="own-cat '+(shouldOpen?'open ':'')+(isFilled?'filled':'')+'" id="oc-'+cat.id+'">';
-        html+='<div class="own-cat-head" onclick="toggleCat(\''+cat.id+'\')">';
-        html+='<div class="own-cat-icon">'+cat.icon+'</div>';
-        html+='<div class="own-cat-info">';
-        var ownCatUpd=getCategoryUpdate(d.meta||{},'own',cat.id);
-        html+='<div class="own-cat-title">'+cat.title+'</div>';
-        html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(ownCatUpd)+'</div>';
-        html+='<div class="own-cat-prog '+(filled===cat.prompts.length?'done':'')+'">'+filled+'/'+cat.prompts.length+' vragen beantwoord'+(filled===cat.prompts.length?' ✓':'')+'</div>';
-        html+='</div>';
-        html+='<div class="own-cat-arrow">›</div>';
-        html+='</div>';
-        html+='<div class="own-cat-body">';
-        cat.prompts.forEach(function(p,i){
-          var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          var ownFieldUpd=getFieldUpdate(d.meta||{},'own',cat.id,'a'+i);
-          html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(ownFieldUpd)+'</span></div>';
-          html+=renderTextareaVoiceRow(
-            'oc-'+cat.id+'-a'+i,
-            p.ph,
-            saved,
-            'autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')'
-          );
-          html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
-        });
-        html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
-        html+='<div id="own-voorstel-'+cat.id+'"></div>';
-        html+='</div></div>';
-      });
+      html+='<div style="font-size:13px;color:var(--m);margin:0 0 14px;line-height:1.5">'+ownFilled+'/'+ownTotal+' vragen beantwoord. Details staan onder tab <strong>Profiel</strong>.</div>';
     }
 
-    // Contact: invulcategorieën
+    // Contact: red flags (compact + uitklapbaar)
     if(!isOwnDossier){
       var rf=((d.meta||{}).red_flags)||null;
       if(rf&&typeof rf.score==='number'){
         var rfs=Math.max(0,Math.min(100,parseInt(rf.score,10)||0));
-        var rfc=rfs>=65?'#C62828':rfs>=35?'#E07800':'#2E7D32';
-        var rfl=rfs>=65?'Hoog waakzaam':'Aandacht nodig';
-        if(rfs<35)rfl='Lager risico';
+        var rv=redFlagVisuals(rfs);
         var reasons=(rf.reasons||[]).slice(0,3);
-        html+='<div class="ai-rich-card" style="margin:0 0 14px">';
-        html+='<div class="ai-sec"><div class="ai-sec-title"><span>🚩</span><span>Red flags</span></div>';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:800;color:#333">Score</span><span style="font-size:18px;font-weight:800;color:'+rfc+'">'+rfs+'%</span></div>';
-        html+='<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+rfs+'%;background:'+rfc+'"></div></div>';
-        html+='<div style="font-size:12px;color:'+rfc+';font-weight:700;margin-top:6px">'+rfl+'</div>';
+        html+='<div style="margin-bottom:14px">';
+        html+='<button type="button" class="dossier-rf-row" aria-expanded="false" onclick="var w=document.getElementById(\'dossierRfAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
+        html+='<span class="rf-dot" style="background:'+rv.dot+'"></span>';
+        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · red flags</span>';
+        html+='<span class="rf-pct" style="color:'+rv.txt+'">'+rfs+'%</span>';
+        html+='<span style="font-size:11px;color:#aaa;flex-shrink:0">▼</span>';
+        html+='</button>';
+        html+='<div id="dossierRfAcc" class="dossier-rf-acc"><div class="dossier-rf-acc-inn">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:800;color:#333">Score</span><span style="font-size:18px;font-weight:800;color:'+rv.bar+'">'+rfs+'%</span></div>';
+        html+='<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+rfs+'%;background:'+rv.bar+'"></div></div>';
         if(reasons.length){
-          html+='<ul class="ai-sec-list" style="margin-top:8px">';
-          reasons.forEach(function(rr){
-            html+='<li>'+escHTML(rr)+'</li>';
-          });
+          html+='<ul class="ai-sec-list" style="margin-top:10px">';
+          reasons.forEach(function(rr){ html+='<li>'+escHTML(rr)+'</li>'; });
           html+='</ul>';
         }
-        html+='<p class="ai-sec-text" style="font-size:11px;color:#8a8f97">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen).</p>';
-        html+='</div></div>';
+        html+='<p class="ai-sec-text" style="font-size:11px;color:#8a8f97;margin-top:8px">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen).</p>';
+        html+='</div></div></div>';
       }else{
         html+='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:14px;padding:14px 14px;margin:0 0 14px">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
@@ -5613,49 +5667,6 @@ async function loadTab(name,tab,d){
         html+='<button class="btn-g" style="max-width:170px;padding:8px 12px" onclick="switchTab(\'advies\')">Naar Advies</button>';
         html+='</div></div>';
       }
-      html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
-      html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
-      html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
-      html+='<span style="font-size:13px;color:#555">'+contactFilled+'/'+contactTotal+' vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>';
-      html+='</div>';
-
-      var firstContactOpenSet=false;
-      CONTACT_CATS.forEach(function(cat){
-        var prog=contactCatProgress(cat.id);
-        var catData=cats[cat.id]||{};
-        var isFilled=prog.filled>0;
-        var isComplete=(prog.filled===prog.total);
-        var shouldOpen=!firstContactOpenSet&&!isComplete;
-        if(shouldOpen)firstContactOpenSet=true;
-        html+='<div class="own-cat '+(shouldOpen?'open ':'')+(isFilled?'filled':'')+'" id="cc-'+cat.id+'">';
-        html+='<div class="own-cat-head" onclick="toggleContactCat(\''+cat.id+'\')">';
-        html+='<div class="own-cat-icon">'+cat.icon+'</div>';
-        html+='<div class="own-cat-info">';
-        var contactCatUpd=getCategoryUpdate(d.meta||{},'contact',cat.id);
-        html+='<div class="own-cat-title">'+cat.title+'</div>';
-        html+='<div id="cc-cat-upd-'+cat.id+'" style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(contactCatUpd)+'</div>';
-        html+='<div class="own-cat-prog '+(prog.filled===prog.total?'done':'')+'">';
-        html+=prog.filled+'/'+prog.total+' vragen beantwoord'+(prog.filled===prog.total?' ✓':'');
-        html+='</div></div>';
-        html+='<div class="own-cat-arrow">›</div>';
-        html+='</div>'; // own-cat-head
-        html+='<div class="own-cat-body">';
-        cat.prompts.forEach(function(p,i){
-          var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          var contactFieldUpd=getFieldUpdate(d.meta||{},'contact',cat.id,'a'+i);
-          html+='<div class="own-q-label">'+p.q+' <span id="cc-field-upd-'+cat.id+'-a'+i+'" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
-          html+=renderTextareaVoiceRow(
-            'cc-'+cat.id+'-a'+i,
-            p.ph,
-            saved,
-            'autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')'
-          );
-          html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
-        });
-        html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
-        html+='</div>'; // own-cat-body
-        html+='</div>'; // own-cat
-      });
     }
 
     // Status
@@ -5664,40 +5675,19 @@ async function loadTab(name,tab,d){
     html+=d.count+' berichten opgeslagen'+(d.lastActive?' · Laatste: '+timeAgo(d.lastActive):'');
     html+='</div>';
 
-    if(!isOwnDossier){
-      html+='<div style="margin-top:16px"><div class="g2"><button class="btn-r" onclick="S.vertelFrom=S.viewDossier;goScreen(\'vertel\')">🎤 Vertel</button><button class="btn-g" onclick="switchTab(\'advies\')">💡 Advies</button></div></div>';
-    }
-
     cont.innerHTML=html;
-
-    // Vul textareas/progress in zonder alles open te klappen
-    if(!isOwnDossier){
-      ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
-        var catData=(d.categories||{})[catId]||{};
-        var hasFilled=Object.values(catData).some(function(v){return(v||'').trim().length>0;});
-        if(!hasFilled)return;
-        var catEl=document.getElementById('cc-'+catId);
-        if(!catEl)return;
-        catEl.classList.add('filled');
-        [0,1,2].forEach(function(i){
-          var ta=document.getElementById('cc-'+catId+'-a'+i);
-          if(ta&&catData['a'+i]){ta.value=catData['a'+i];autoResize(ta);}
-        });
-        var filled=Object.values(catData).filter(function(v){return(v||'').trim().length>0;}).length;
-        var progEl=catEl.querySelector('.own-cat-prog');
-        if(progEl){progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');progEl.className='own-cat-prog'+(filled===3?' done':'');}
-      });
-      // Update totaalteller
-      var totalF=0;
-      ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
-        Object.values((d.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())totalF++;});
-      });
-      cont.querySelectorAll('div,span').forEach(function(el){
-        if(el.textContent.match(/^\d+\/9 vragen/))el.textContent=totalF+'/9 vragen beantwoord · eigenschappen worden automatisch bijgewerkt';
-      });
-    }
     }catch(err){
       console.error('loadTab overzicht error:',err);
+      cont.innerHTML='<div style="padding:20px;color:red;font-size:13px">Fout bij laden: '+err.message+'</div>';
+    }
+  }
+  else if(tab==='profiel'){
+    try{
+      var isPr=name==='OWN Sense';
+      cont.innerHTML=isPr?buildProfielOwnHtml(d):buildProfielContactHtml(name,d);
+      if(!isPr)hydrateContactProfileFields(cont,name,d);
+    }catch(err){
+      console.error('loadTab profiel error:',err);
       cont.innerHTML='<div style="padding:20px;color:red;font-size:13px">Fout bij laden: '+err.message+'</div>';
     }
   }
@@ -5889,6 +5879,9 @@ async function loadTab(name,tab,d){
     advHtml+='</div>';
     // Body
     advHtml+='<div style="background:#fff;padding:18px 16px">';
+    if(name!=='OWN Sense'){
+      advHtml+='<div style="margin-bottom:14px"><button type="button" class="coach-save-other" style="padding:10px 14px;border-color:#FFE0BF;background:#FFF7F0;color:#A55B00;font-weight:700" onclick="openPlanner(\''+name+'\')">📅 Plan iets leuks</button></div>';
+    }
     if(cache){
       advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px">'
         +'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>'
@@ -5966,7 +5959,7 @@ async function genAdvies(name,forced){
   var relType=String(dMeta.relationship_type||'').trim();
   var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
   var priorRiskScore=parseInt(((dMeta.red_flags||{}).score||0),10)||0;
-  var autoStrict=priorRiskScore>=65;
+  var autoStrict=priorRiskScore>=66;
   var toneInstr=autoStrict?getPromptText('tone_strict'):getPromptText('tone_honest');
   var modeInstruction=isOwnAdv
     ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
@@ -6664,6 +6657,7 @@ async function rVertel(el){
     </button>
     <div style="flex:1">
       <div style="font-size:15px;font-weight:700;color:var(--t)" id="sessieTitle">Nieuw gesprek</div>
+      <div id="vertelGesprekBanner" class="vertel-gesprek-banner" style="display:none"></div>
       <div style="font-size:11px;color:#666;margin-top:2px" id="vertelSaveMode">Opslagmodus: Altijd vragen</div>
       <div style="font-size:11px;color:#9aa0a8;margin-top:1px" id="vertelSaveHint">Na elk AI-antwoord kies jij eerst in welk dossier het wordt opgeslagen.</div>
     </div>
@@ -6678,7 +6672,7 @@ async function rVertel(el){
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
     var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! Vertel me alles wat er speelt — in één bericht mag. Ik herken automatisch of iets over jou gaat of over iemand anders, en ik sla het op in het juiste dossier. <strong>Jij bevestigt altijd voor er iets opgeslagen wordt.</strong></div>`;
+    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! Vertel me alles wat er speelt, in één bericht mag ook. Ik herken automatisch of iets over jou gaat of over iemand anders, en ik sla het op in het juiste dossier. <strong>Jij bevestigt altijd voor er iets opgeslagen wordt.</strong> Boven het invoerveld kun je dit gesprek aan een dossier koppelen en later weer wijzigen.</div>`;
     ca.appendChild(welcome);
 
     if(!S.apiKey){
@@ -6712,6 +6706,7 @@ async function rVertel(el){
   updateVertelSaveModeUI();
   if(S._forceFreshVertel)S._forceFreshVertel=false;
   renderVertelInputCoachTip();
+  updateVertelGesprekBanner();
 }
 
 function rImport(el){
@@ -7276,6 +7271,164 @@ function dn(dosName){
   if(dosName==='OWN Sense')return'OWN Sense';
   return dosName.replace(/Sense$/,'').trim();
 }
+function getContactCatsDef(personName){
+  return [
+    {id:'karakter_contact',title:'Karakter & Persoonlijkheid',icon:'🧠',prompts:[
+      {q:'Hoe zou jij '+personName+' omschrijven?',ph:'Bv: open, gesloten, grappig, serieus...'},
+      {q:'Hoe gedraagt hij/zij zich in gesprekken?',ph:'Bv: luistert goed, praat veel, vermijdt onderwerp...'},
+      {q:'Wat zijn opvallende eigenschappen of gewoontes?',ph:'Bv: altijd te laat, erg ambitieus, warm naar anderen...'}
+    ]},
+    {id:'patronen_contact',title:'Patronen & Gedrag',icon:'🔄',prompts:[
+      {q:'Welke patronen merk je op?',ph:'Bv: trekt zich terug als het spannend wordt, blaast warm en koud...'},
+      {q:'Hoe reageert hij/zij op emoties of conflict?',ph:'Bv: vermijdt conflict, wordt defensief, blijft rustig...'},
+      {q:'Is hij/zij consistent in woorden en daden?',ph:'Bv: zegt X maar doet Y, of altijd betrouwbaar...'}
+    ]},
+    {id:'gevoel_contact',title:'Jouw Gevoel bij Hem/Haar',icon:'❤️',prompts:[
+      {q:'Hoe voel jij je bij deze persoon?',ph:'Bv: energiek, onzeker, rustig, geprikkeld...'},
+      {q:'Wat trekt jou aan in hem/haar?',ph:'Bv: humor, diepgang, energie, uiterlijk...'},
+      {q:'Wat stoort of twijfelt je?',ph:'Bv: reageert traag, weinig initiatief, onduidelijkheid...'}
+    ]}
+  ];
+}
+function redFlagVisuals(score){
+  var s=Math.max(0,Math.min(100,parseInt(score,10)||0));
+  if(s<=35)return{dot:'#2E7D32',lbl:'Lager risico',bar:'#2E7D32',txt:'#1B5E20'};
+  if(s<=65)return{dot:'#E65100',lbl:'Matig risico',bar:'#E65100',txt:'#BF360C'};
+  return{dot:'#C62828',lbl:'Hoger risico',bar:'#C62828',txt:'#B71C1C'};
+}
+function buildProfielOwnHtml(d){
+  var cats=d.categories||{};
+  var metaC=getProfileMetaCompletion('OWN Sense');
+  var html='';
+  html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Vragenlijst en gegevens voor <strong>OWN Sense</strong>.</div>';
+  html+='<div style="margin-bottom:16px"><button class="btn-g" style="max-width:280px;padding:12px 14px" onclick="openProfileModal(\'OWN Sense\')">'+(metaC.complete?'Profielgegevens':'Profiel onvolledig — aanvullen')+'</button></div>';
+  var ownFilled=OWN_CATS.reduce(function(sum,cat){
+    var catData=cats[cat.id]||{};
+    return sum+cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+  },0);
+  var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
+  html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
+  html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
+  html+='<span style="font-size:13px;color:#555">'+ownFilled+'/'+ownTotal+' vragen beantwoord</span>';
+  html+='</div>';
+  var firstOpenSet=false;
+  OWN_CATS.forEach(function(cat){
+    var catData=cats[cat.id]||{};
+    var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+    var shouldOpen=!firstOpenSet&&(filled<cat.prompts.length);
+    if(shouldOpen)firstOpenSet=true;
+    html+='<div class="own-cat '+(shouldOpen?'open ':'')+(filled>0?'filled':'')+'" id="oc-'+cat.id+'">';
+    html+='<div class="own-cat-head" onclick="toggleCat(\''+cat.id+'\')">';
+    html+='<div class="own-cat-icon">'+cat.icon+'</div>';
+    html+='<div class="own-cat-info">';
+    var ownCatUpd=getCategoryUpdate(d.meta||{},'own',cat.id);
+    html+='<div class="own-cat-title">'+cat.title+'</div>';
+    html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(ownCatUpd)+'</div>';
+    html+='<div class="own-cat-prog '+(filled===cat.prompts.length?'done':'')+'">'+filled+'/'+cat.prompts.length+' vragen beantwoord'+(filled===cat.prompts.length?' ✓':'')+'</div>';
+    html+='</div><div class="own-cat-arrow">›</div></div>';
+    html+='<div class="own-cat-body">';
+    cat.prompts.forEach(function(p,i){
+      var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var ownFieldUpd=getFieldUpdate(d.meta||{},'own',cat.id,'a'+i);
+      html+='<div class="own-q-label">'+p.q+' <span style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(ownFieldUpd)+'</span></div>';
+      html+=renderTextareaVoiceRow(
+        'oc-'+cat.id+'-a'+i,
+        p.ph,
+        saved,
+        'autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')'
+      );
+      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
+    });
+    html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
+    html+='<div id="own-voorstel-'+cat.id+'"></div>';
+    html+='</div></div>';
+  });
+  return html;
+}
+function buildProfielContactHtml(name,d){
+  var cats=d.categories||{};
+  var personName=name.replace('Sense','').trim();
+  var CONTACT_CATS=getContactCatsDef(personName);
+  function contactCatProgress(catId){
+    var catData=cats[catId]||{};
+    var cat=CONTACT_CATS.find(function(c){return c.id===catId;});
+    if(!cat)return{filled:0,total:0};
+    var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+    return{filled:filled,total:cat.prompts.length};
+  }
+  var contactFilled=CONTACT_CATS.reduce(function(s,c){return s+contactCatProgress(c.id).filled;},0);
+  var contactTotal=CONTACT_CATS.reduce(function(s,c){return s+c.prompts.length;},0);
+  var metaCC=getProfileMetaCompletion(name);
+  var html='';
+  html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Invullen voor <strong>'+personName+'</strong> — dit stuurt eigenschappen en advies.</div>';
+  html+='<div style="margin-bottom:16px"><button class="btn-g" style="max-width:280px;padding:12px 14px" onclick="openProfileModal(\''+name+'\')">'+(metaCC.complete?'Profielgegevens':'Profiel onvolledig — aanvullen')+'</button></div>';
+  html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
+  html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
+  html+='<span style="font-size:13px;color:#555">'+contactFilled+'/'+contactTotal+' vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>';
+  html+='</div>';
+  var firstContactOpenSet=false;
+  CONTACT_CATS.forEach(function(cat){
+    var prog=contactCatProgress(cat.id);
+    var catData=cats[cat.id]||{};
+    var shouldOpen=!firstContactOpenSet&&(prog.filled<prog.total);
+    if(shouldOpen)firstContactOpenSet=true;
+    html+='<div class="own-cat '+(shouldOpen?'open ':'')+(prog.filled>0?'filled':'')+'" id="cc-'+cat.id+'">';
+    html+='<div class="own-cat-head" onclick="toggleContactCat(\''+cat.id+'\')">';
+    html+='<div class="own-cat-icon">'+cat.icon+'</div>';
+    html+='<div class="own-cat-info">';
+    var contactCatUpd=getCategoryUpdate(d.meta||{},'contact',cat.id);
+    html+='<div class="own-cat-title">'+cat.title+'</div>';
+    html+='<div id="cc-cat-upd-'+cat.id+'" style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: '+fmtPropUpdate(contactCatUpd)+'</div>';
+    html+='<div class="own-cat-prog '+(prog.filled===prog.total?'done':'')+'">';
+    html+=prog.filled+'/'+prog.total+' vragen beantwoord'+(prog.filled===prog.total?' ✓':'');
+    html+='</div></div><div class="own-cat-arrow">›</div></div>';
+    html+='<div class="own-cat-body">';
+    cat.prompts.forEach(function(p,i){
+      var saved=(catData['a'+i]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var contactFieldUpd=getFieldUpdate(d.meta||{},'contact',cat.id,'a'+i);
+      html+='<div class="own-q-label">'+p.q+' <span id="cc-field-upd-'+cat.id+'-a'+i+'" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: '+fmtPropUpdate(contactFieldUpd)+'</span></div>';
+      html+=renderTextareaVoiceRow(
+        'cc-'+cat.id+'-a'+i,
+        p.ph,
+        saved,
+        'autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')'
+      );
+      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
+    });
+    html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
+    html+='</div></div>';
+  });
+  return html;
+}
+function hydrateContactProfileFields(cont,name,d){
+  if(!cont)return;
+  ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(catId){
+    var catData=(d.categories||{})[catId]||{};
+    var hasFilled=Object.values(catData).some(function(v){return(v||'').trim().length>0;});
+    if(!hasFilled)return;
+    var catEl=document.getElementById('cc-'+catId);
+    if(!catEl)return;
+    catEl.classList.add('filled');
+    [0,1,2].forEach(function(i){
+      var ta=document.getElementById('cc-'+catId+'-a'+i);
+      if(ta&&catData['a'+i]){ta.value=catData['a'+i];autoResize(ta);}
+    });
+    var filled=Object.values(catData).filter(function(v){return(v||'').trim().length>0;}).length;
+    var progEl=catEl.querySelector('.own-cat-prog');
+    if(progEl){progEl.textContent=filled+'/3 vragen beantwoord'+(filled===3?' ✓':'');progEl.className='own-cat-prog'+(filled===3?' done':'');}
+  });
+  var totalF=0;
+  ['karakter_contact','patronen_contact','gevoel_contact'].forEach(function(cid){
+    Object.values((d.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())totalF++;});
+  });
+  cont.querySelectorAll('div,span').forEach(function(el){
+    if(el.textContent&&el.textContent.match(/^\d+\/9 vragen/))el.textContent=totalF+'/9 vragen beantwoord · eigenschappen worden automatisch bijgewerkt';
+  });
+}
 
 // Kleur per dossier (consistent)
 function dossierColor(dosName){
@@ -7293,6 +7446,91 @@ function dossierSegInitial(dosName){
   var d=String(dn(dosName)||'').trim();
   var m=d.match(/[A-Za-zÀ-ÿ]/);
   return m?m[0].toUpperCase():'?';
+}
+
+function normalizeSegmentDossier(suggested){
+  var all=['OWN Sense'].concat(S.profiles.filter(function(p){return p!=='OWN Sense';}));
+  var t=String(suggested||'').trim();
+  if(!t)return'OWN Sense';
+  var i;
+  for(i=0;i<all.length;i++){
+    if(all[i]===t)return all[i];
+  }
+  var tl=t.toLowerCase();
+  for(i=0;i<all.length;i++){
+    if(String(all[i]).toLowerCase()===tl)return all[i];
+    if(String(dn(all[i])).toLowerCase()===tl)return all[i];
+  }
+  if(!/sense/i.test(t)){
+    for(i=0;i<all.length;i++){
+      var base=String(dn(all[i])).replace(/\s+Sense$/i,'').trim().toLowerCase();
+      if(base&&tl===base)return all[i];
+    }
+  }
+  return'OWN Sense';
+}
+
+async function fetchVertelSegmentation(userText){
+  if(!S.apiKey)return null;
+  var dossiers=['OWN Sense'].concat(S.profiles.filter(function(p){return p!=='OWN Sense';}));
+  var sys='Je bent een classificatie-assistent voor DateSense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; contactnamen = dossiers zoals in de lijst). '
+    +'Regels: (1) elk fragment is letterlijke tekst uit het bericht (geen parafrase). (2) Alle fragmenten samen dekken het volledige bericht zonder overlap. '
+    +'(3) Minimaal 2 fragmenten als er inhoud voor meerdere onderdelen is; anders 1 fragment. '
+    +'(4) dossier moet exact één van deze waarden zijn: '+JSON.stringify(dossiers)+'. '
+    +'(5) negeer: true alleen bij duidelijke fout of dubbel stuk — bijna altijd false. '
+    +'Antwoord ALLEEN met JSON: {"segmenten":[{"tekst":"...","dossier":"OWN Sense","negeer":false}]}';
+  try{
+    var raw=await callAPI(sys,[{role:'user',content:String(userText||'').substring(0,2800)}],900);
+    var clean=String(raw||'').replace(/```json|```/gi,'').trim();
+    var obj=parseFirstJSONObject(clean);
+    if(!obj||!obj.segmenten||!Array.isArray(obj.segmenten))return null;
+    var out=[];
+    obj.segmenten.forEach(function(seg){
+      if(!seg||seg.tekst==null)return;
+      var tx=String(seg.tekst).trim();
+      if(!tx)return;
+      out.push({tekst:tx,dossier:normalizeSegmentDossier(seg.dossier),negeer:!!seg.negeer});
+    });
+    if(out.length<2)return null;
+    return out;
+  }catch(e){
+    console.warn('fetchVertelSegmentation',e);
+    return null;
+  }
+}
+
+function buildSegmentReviewCardHtml(){
+  var segs=window._pendingSegmenten;
+  if(!segs||!segs.length)return'';
+  var html='<div class="ai-result-box">';
+  html+='<div class="ai-result-header"><span>📋</span> Verdeling naar dossiers</div>';
+  html+='<div class="seg-text-wrap">';
+  segs.forEach(function(seg,idx){
+    var cls=seg.negeer?'seg-unk seg negeer':(dossierSegClass(seg.dossier)+' seg');
+    var ini='<span class="seg-ini" aria-hidden="true">'+escHTML(dossierSegInitial(seg.dossier))+'</span>';
+    html+='<span class="'+cls+'" data-idx="'+idx+'" onclick="openSegModal('+idx+')">'+ini+escHTML(seg.tekst)+'</span> ';
+  });
+  html+='</div>';
+  var telPerDossier={};
+  segs.forEach(function(seg){
+    if(!seg.negeer)telPerDossier[seg.dossier]=(telPerDossier[seg.dossier]||0)+1;
+  });
+  html+='<div class="dossier-cards">';
+  Object.entries(telPerDossier).forEach(function(bericht){
+    var d=bericht[0],cnt=bericht[1];
+    var col=dossierColor(d);
+    html+='<div class="dossier-card" style="border-color:'+col+'">';
+    html+='<div class="dossier-card-num" style="color:'+col+'">'+cnt+'</div>';
+    html+='<div class="dossier-card-lbl">'+escHTML(dn(d))+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div id="segActieBar" class="result-actions" style="flex-wrap:wrap">';
+  html+='<button type="button" class="btn-voeg-alles" onclick="bevestigAlles()">✓ Bevestig &amp; opslaan</button>';
+  html+='<button type="button" class="btn-hoe-werkt" onclick="toonHoeWerktDit()">Hoe werkt dit?</button>';
+  html+='</div>';
+  html+='</div>';
+  return html;
 }
 
 // ══ Segment Modal ════════════════════════════════════════════════
@@ -7409,9 +7647,9 @@ async function sendMsg(){
   addMsg('user',txt);
   showT();
 
-  // Detecteer over wie het gaat voor opslagvoorstel
+  // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
-  var voorgesteldDossier=forcedDossier||S.vertelFrom||null;
+  var voorgesteldDossier=forcedDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   if(!voorgesteldDossier){
     var contacts=getActiveContactNames();
     var bestM=null,bestC=0;
@@ -7441,17 +7679,29 @@ async function sendMsg(){
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
+    +' Gebruik geen lange gedachtestreep (—); gebruik een komma of punt.'
     +' CONTEXT: '+coachCtxFinal;
 
 
 
   try{
+    var segPromise=null;
+    if(!forcedDossier&&txtForAI.length>=180){
+      segPromise=fetchVertelSegmentation(txtForAI);
+    }
     var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history,{role:'user',content:txtForAI}];
-    var fullSys=sys+(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'');
+    var gesprekFocus=forcedDossier||S.vertelGesprekDossier||S.vertelFrom;
+    var fullSys=sys
+      +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
+      +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'');
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var raw=await callAPI(fullSys,messages,400);
+    var segData=null;
+    if(segPromise){
+      try{segData=await segPromise;}catch(segE){segData=null;}
+    }
     hideT();
 
     // Sla sessie-bericht op in Supabase (stil als geen sessie)
@@ -7465,9 +7715,14 @@ async function sendMsg(){
     // addMsg() heeft user + AI al in S.vertelMsgs gezet — niet opnieuw pushen (dubbel = corrupte geschiedenis).
 
     if(forcedDossier){
+      window._pendingSegmenten=null;
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier);
       addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
+    }else if(segData&&segData.length>=2){
+      window._pendingSegmenten=segData;
+      addMsg('ai',formatAiCard(raw)+buildSegmentReviewCardHtml());
     }else{
+      window._pendingSegmenten=null;
     // Toon AI antwoord + opslaan-balk
       var saveId='sv'+Date.now();
       window._saveData=window._saveData||{};
@@ -7510,7 +7765,7 @@ async function bevestigAlles(){
   var genegeerd=segs.filter(s=>s.negeer);
 
   if(!teOpslaan.length){
-    toast('Alles als niet-relevant gemarkeerd — niets opgeslagen.');
+    toast('Alles als niet-relevant gemarkeerd, niets opgeslagen.');
     window._pendingSegmenten=null;
     return;
   }
@@ -7543,6 +7798,14 @@ async function bevestigAlles(){
 
   window._pendingSegmenten=null;
 
+  var kd=Object.keys(perDossier);
+  if(kd.length===1){
+    S.vertelGesprekDossier=kd[0];
+    S.vertelFrom=kd[0];
+    updateVertelGesprekBanner();
+    if(S.screen==='vertel')renderVertelInputCoachTip();
+  }
+
   // Toon bevestiging
   var html='<div class="saved-confirm">';
   html+='<div class="saved-confirm-title">✅ Opgeslagen!</div>';
@@ -7550,7 +7813,7 @@ async function bevestigAlles(){
     var doss=bericht[0], teksten=bericht[1];
     var col=dossierColor(doss);
     html+='<div class="saved-row"><div class="saved-dot" style="background:'+col+'"></div>';
-    html+='<span><strong>'+dn(doss)+'</strong> — '+teksten.length+' fragment'+(teksten.length>1?'s':'')+' opgeslagen</span></div>';
+    html+='<span><strong>'+dn(doss)+'</strong>, '+teksten.length+' fragment'+(teksten.length>1?'s':'')+' opgeslagen</span></div>';
   });
   if(genegeerd.length){
     html+='<div style="font-size:13px;color:#aaa;margin-top:6px">'+genegeerd.length+' stukje'+(genegeerd.length>1?'s':'')+' genegeerd</div>';
@@ -7595,7 +7858,7 @@ async function bevestigNieuwe(dosName,toevoegen){
 function toonHoeWerktDit(){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var d=document.createElement('div');d.className='msg-ai';
-  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>De gekleurde stukjes tonen wie iets over jou zegt of over wie het gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Voeg alles toe</strong>.</div>';
+  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>De gekleurde stukjes tonen over wie elk deel van je bericht gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Bevestig &amp; opslaan</strong>.</div>';
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
 }
 
@@ -7623,6 +7886,8 @@ function allesNaarDossier(dosName){
 // Wis de chat na opslaan (voor een verse start)
 function clearChat(){
   S.vertelMsgs=[];
+  S.vertelGesprekDossier=null;
+  S.vertelFrom=null;
   window._pendingSegmenten=null;
   var ca=document.getElementById('chatArea');
   if(!ca)return;
@@ -8614,6 +8879,10 @@ async function _doOpslaan(sid,tekst,dossier){
   else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
   rDrawer();
   if(sid&&window._saveData)delete window._saveData[sid];
+  S.vertelGesprekDossier=dossier;
+  S.vertelFrom=dossier;
+  updateVertelGesprekBanner();
+  if(S.screen==='vertel')renderVertelInputCoachTip();
   return inserted;
 }
 
