@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-5 15:28">
+<meta name="ds-build" content="v2026-04-03-6 15:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -859,7 +859,13 @@ const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
 var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
 const APP_BUILD_LABEL=String(_metaBuildContent||'v2026-03-27-1').trim();
-const sb=(window.supabase&&window.supabase.createClient)?supabase.createClient(SURL,SKEY):null;
+var sb=null;
+try{
+  if(window.supabase&&typeof window.supabase.createClient==='function')
+    sb=window.supabase.createClient(SURL,SKEY);
+}catch(e){
+  console.warn('Supabase client init:',e);
+}
 function showFatalUi(msg){
   try{
     var mc=document.getElementById('mainContent');
@@ -9118,4 +9124,30 @@ document.addEventListener('input',function(e){
     var catId=m[1];
     var dossierEl=ta.closest('[id^="cc-"]');
     // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDo
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+// Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
+try{
+  window.goScreen=goScreen;
+  window.goBack=goBack;
+  window.switchTab=switchTab;
+  window.viewDossier=viewDossier;
+  window.safeSignOut=safeSignOut;
+  window.closeDrawer=closeDrawer;
+  window.openDrawer=openDrawer;
+  window.nieuwGesprek=nieuwGesprek;
+  window.openSidebar=openSidebar;
+  window.closeSidebar=closeSidebar;
+}catch(e){console.warn('window exports:',e);}
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
