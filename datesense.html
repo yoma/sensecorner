@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:22">
+<meta name="ds-build" content="03-04-2026 21:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -478,6 +478,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* ══ COACH CHAT UI ══ */
 .coach-save-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
+.coach-save-bar-done{flex-wrap:nowrap;justify-content:space-between}
+.coach-save-bar-done .coach-save-lbl{flex:1;min-width:0}
+.coach-save-switch-btn{flex-shrink:0;width:38px;height:38px;padding:0;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--t);font-size:18px;line-height:1;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.coach-save-switch-btn:active{opacity:.85;background:#f5f5f5}
 .coach-save-sticky{padding:6px 10px;font-size:0.92em;background:#8B1538}
 .coach-save-lbl{font-size:13px;color:#555;flex:1}
 .coach-save-dos{font-size:13px;font-weight:700;color:var(--r)}
@@ -2309,6 +2313,8 @@ async function selectDossierFromPick(dossier){
     await koppelSessieMsgNaar(ctx.payload,dossier,false);
   }else if(ctx.type==='bulk'){
     await koppelAlleOngekoppeldNaar(dossier,ctx.payload||[]);
+  }else if(ctx.type==='reassign_vertel_save'){
+    await herkoppelVertelSaveNaarDossier(ctx.payload,dossier);
   }else if(ctx.type==='vertel_focus'){
     S.vertelGesprekDossier=dossier;
     S.vertelFrom=dossier;
@@ -2375,6 +2381,50 @@ async function bevestigVerplaats(msgId, vanDossier, naarDossier){
     // Herlaad tijdlijn
     await loadTab(vanDossier,'tijdlijn',S.pdata[vanDossier]||{});
   }catch(e){toast('Fout: '+e.message);}
+}
+
+function openVertelSaveNaarAnderDossier(sessionMsgId){
+  if(!S.user||!sessionMsgId)return;
+  var map=getSessAssignMap();
+  var m=map[sessionMsgId]||{};
+  if(!m.senseMsgId){toast('Geen koppeling gevonden — herlaad het gesprek.');return;}
+  var van=m.dossier||'';
+  openDossierPickModal(
+    'Ander dossier',
+    'Alleen dit bericht verplaatsen. «Altijd in dit gesprek» geldt nog voor je volgende berichten.',
+    'reassign_vertel_save',
+    {sessionMsgId:String(sessionMsgId),senseMsgId:m.senseMsgId,vanDossier:van}
+  );
+}
+
+async function herkoppelVertelSaveNaarDossier(payload,naarDossier){
+  if(!S.user||!payload||!payload.senseMsgId)return;
+  var van=payload.vanDossier;
+  if(!naarDossier||naarDossier===van){toast('Kies een ander dossier.');return;}
+  try{
+    await sb.from('sense_messages').update({profile_name:naarDossier}).eq('id',payload.senseMsgId).eq('user_id',S.user.id);
+    var vanP=S.pdata[van];
+    var naarP=S.pdata[naarDossier]||{props:{...DP},count:0,categories:{}};
+    if(vanP&&vanP.count>0){vanP.count--;await saveP(van,vanP.props,vanP.count,vanP.categories);}
+    naarP.count=(naarP.count||0)+1;
+    await ensureP(naarDossier);
+    await saveP(naarDossier,naarP.props,naarP.count,naarP.categories);
+    var map=getSessAssignMap();
+    if(map[payload.sessionMsgId]){map[payload.sessionMsgId].dossier=naarDossier;setSessAssignMap(map);}
+    updateCoachSaveBarDossierLabel(payload.sessionMsgId,dn(naarDossier));
+    toast('✓ Dit bericht staat nu bij '+dn(naarDossier));
+    rDrawer();
+  }catch(e){toast('Fout: '+(e&&e.message?e.message:String(e)));}
+}
+
+function updateCoachSaveBarDossierLabel(sessionMsgId,dossierShortName){
+  var ca=document.getElementById('chatArea');
+  if(!ca||!sessionMsgId)return;
+  var sid=String(sessionMsgId);
+  var btn=ca.querySelector('.coach-save-switch-btn[data-smid="'+sid.replace(/"/g,'')+'"]');
+  if(!btn)return;
+  var dosEl=btn.closest('.coach-save-bar')&&btn.closest('.coach-save-bar').querySelector('.coach-save-dos');
+  if(dosEl)dosEl.textContent=dossierShortName;
 }
 
 async function verwijderEntry(msgId, dossier){
@@ -8409,6 +8459,15 @@ function rerenderSegmenten(){
   }
 }
 
+function buildCoachSaveDoneBar(labelInnerHtml,sessionUserMsgId){
+  var sw='';
+  if(sessionUserMsgId&&S.user){
+    var sid=String(sessionUserMsgId).replace(/"/g,'');
+    sw='<button type="button" class="coach-save-switch-btn" data-smid="'+sid+'" onclick="openVertelSaveNaarAnderDossier(this.getAttribute(\'data-smid\'))" title="Alleen dit bericht naar een ander dossier" aria-label="Ander dossier voor dit bericht">⇄</button>';
+  }
+  return '<div class="coach-save-bar coach-save-bar-done">'+labelInnerHtml+sw+'</div>';
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -8507,7 +8566,7 @@ async function sendMsg(){
     if(forcedDossier){
       window._pendingSegmenten=null;
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
-      addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
+      addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
     }else if(segData&&segData.length>=2){
       window._pendingSegmenten=segData;
       addMsg('ai',formatAiCard(raw)+buildSegmentReviewCardHtml());
@@ -8522,7 +8581,7 @@ async function sendMsg(){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
         await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
-        addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span></div>');
+        addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
         didSticky=true;
       }
       if(!didSticky){
@@ -9855,6 +9914,7 @@ try{
   window.createNewDossierFromPick=createNewDossierFromPick;
   window.koppelSessieMsg=koppelSessieMsg;
   window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
+  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
 }catch(e){console.warn('window exports:',e);}
 try{
   init();
