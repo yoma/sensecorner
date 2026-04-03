@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): revisie + lokaal uur — bij wijziging: Get-Date -Format 'yyyy-MM-dd HH:mm' (PowerShell) -->
-<meta name="ds-build" content="v2026-04-03-8 16:20">
+<meta name="ds-build" content="v2026-04-03-10 16:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -177,8 +177,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* Dossier detail */
 .tabs-bar{display:flex;border-bottom:1px solid var(--b);background:#fff;flex-shrink:0}
-.dtab{flex:1;padding:12px 4px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.1px;color:var(--m);cursor:pointer;border-bottom:3px solid transparent}
+.dtab{flex:1;padding:12px 4px;padding-right:14px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.1px;color:var(--m);cursor:pointer;border-bottom:3px solid transparent;position:relative}
 .dtab.active{color:var(--r);border-bottom-color:var(--r)}
+.dtab-badge{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--r);box-shadow:0 0 0 2px #fff;pointer-events:none;display:none}
+.dtab-badge.show{display:block}
 .props-stack{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
 .props-bars-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 10px;margin-bottom:4px}
 @media (min-width:380px){.props-bars-grid{grid-template-columns:repeat(3,1fr)}}
@@ -641,6 +643,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .own-cat-title{font-size:15px;font-weight:700;color:var(--t)}
 .own-cat-prog{font-size:12px;color:var(--m);margin-top:2px}
 .own-cat-prog.done{color:#2E7D32}
+.own-meta-check{color:#2E7D32;font-size:16px;font-weight:800;line-height:1;flex-shrink:0;margin-right:2px}
 .own-cat-arrow{color:var(--m);transition:transform .2s;flex-shrink:0;font-size:18px}
 .own-cat.open .own-cat-arrow{transform:rotate(90deg)}
 .own-cat-body{display:none;padding:0 16px 16px;border-top:1px solid #F0F0F0}
@@ -1848,25 +1851,33 @@ function isAdviceStaleForDossier(d){
   var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
   return (d.count||0)>=8&&adviceOld;
 }
-function needsContactAttention(p){
-  if(getDossierLifecycle(p)!=='active')return false;
+function needsDossierProfielAttention(p){
+  if(!p||getDossierLifecycle(p)!=='active')return false;
   var d=S.pdata[p]||{count:0,categories:{},meta:{}};
   var cnt=getProfielProgressCounts(p);
   var metaOk=(getProfileMetaCompletion(p)||{}).complete;
   if((cnt.total>0&&cnt.filled<cnt.total)||!metaOk)return true;
-  if(isAdviceStaleForDossier(d))return true;
-  if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis))return true;
+  if(p==='OWN Sense'&&!getOwnDailyMoodMeta(d.meta||{}))return true;
   return false;
 }
-function needsOwnTabAttention(){
-  if(!S.user)return false;
-  var d=S.pdata['OWN Sense']||{meta:{},count:0,categories:{}};
+function needsDossierFotoAttention(p){
+  if(!p||getDossierLifecycle(p)!=='active')return false;
+  var d=S.pdata[p]||{count:0,categories:{},meta:{}};
   var m=d.meta||{};
-  if(!(getProfileMetaCompletion('OWN Sense')||{}).complete)return true;
-  if(!String(m.photo_url||'').trim())return true;
-  if(!getOwnDailyMoodMeta(m))return true;
-  if(isAdviceStaleForDossier(d))return true;
+  if(p==='OWN Sense'&&!String(m.photo_url||'').trim())return true;
+  if((d.count||0)>=6&&!(m.photo_analysis))return true;
   return false;
+}
+function needsDossierAdviesAttention(p){
+  if(!p||getDossierLifecycle(p)!=='active')return false;
+  var d=S.pdata[p]||{count:0,categories:{},meta:{}};
+  return isAdviceStaleForDossier(d);
+}
+function needsContactAttention(p){
+  return needsDossierProfielAttention(p)||needsDossierFotoAttention(p)||needsDossierAdviesAttention(p);
+}
+function needsOwnTabAttention(){
+  return S.user&&needsContactAttention('OWN Sense');
 }
 function needsSensesTabAttention(){
   if(!S.user)return false;
@@ -1876,23 +1887,28 @@ function needsSensesTabAttention(){
   }
   return false;
 }
+function updateDossierTabBadges(){
+  if(S.screen!=='dossier'||!S.viewDossier)return;
+  var n=S.viewDossier;
+  var bf=document.getElementById('dtabBadgeFoto');
+  var bp=document.getElementById('dtabBadgeProfiel');
+  var ba=document.getElementById('dtabBadgeAdvies');
+  if(bf)bf.classList.toggle('show',!!needsDossierFotoAttention(n));
+  if(bp)bp.classList.toggle('show',!!needsDossierProfielAttention(n));
+  if(ba)ba.classList.toggle('show',!!needsDossierAdviesAttention(n));
+}
 function updateNavTabIndicators(){
   var bOwn=document.getElementById('tabBadgeOwn');
   var bSen=document.getElementById('tabBadgeSenses');
   var ownNeed=S.user&&needsOwnTabAttention();
   var senNeed=S.user&&needsSensesTabAttention();
-  if(bOwn){
-    bOwn.classList.toggle('show',!!ownNeed);
-    bOwn.setAttribute('title',ownNeed?'Actie nodig op OWN Sense':'');
-  }
-  if(bSen){
-    bSen.classList.toggle('show',!!senNeed);
-    bSen.setAttribute('title',senNeed?'Actie nodig bij een dossier':'');
-  }
+  if(bOwn){bOwn.classList.remove('show');bOwn.removeAttribute('title');}
+  if(bSen){bSen.classList.remove('show');bSen.removeAttribute('title');}
   var tOwn=document.getElementById('tab-own');
   var tSen=document.getElementById('tab-senses');
-  if(tOwn)tOwn.title=ownNeed?'OWN Sense — profiel, stemming vandaag, foto of advies vernieuwen':'OWN Sense';
-  if(tSen)tSen.title=senNeed?'Senses — ergens nog iets te doen bij een dossier':'Mijn Senses';
+  if(tOwn)tOwn.title=ownNeed?'OWN Sense — zie bolletjes op Foto / Profiel / Advies in je dossier':'OWN Sense';
+  if(tSen)tSen.title=senNeed?'Mijn Senses — open een dossier; bolletjes staan bij Foto / Profiel / Advies':'Mijn Senses';
+  updateDossierTabBadges();
 }
 
 async function saveOwnDailyMoodKey(key){
@@ -5851,11 +5867,11 @@ async function rDossier(el){
 
   var vt=S.viewTab;
   var tabs='<div class="dossier-tabs-wrap dtabs-scroll"><div class="tabs-bar">'
-    +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" onclick="switchTab(\'overzicht\')">Overzicht</div>'
-    +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
-    +'<div class="dtab '+(vt==="foto"?"active":"")+'" onclick="switchTab(\'foto\')">Foto</div>'
-    +'<div class="dtab '+(vt==="profiel"?"active":"")+'" onclick="switchTab(\'profiel\')">Profiel</div>'
-    +'<div class="dtab '+(vt==="advies"?"active":"")+'" onclick="switchTab(\'advies\')">Advies</div>'
+    +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" data-dtab="overzicht" onclick="switchTab(\'overzicht\')">Overzicht</div>'
+    +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" data-dtab="tijdlijn" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
+    +'<div class="dtab '+(vt==="foto"?"active":"")+'" data-dtab="foto" onclick="switchTab(\'foto\')">Foto<span class="dtab-badge" id="dtabBadgeFoto" aria-hidden="true"></span></div>'
+    +'<div class="dtab '+(vt==="profiel"?"active":"")+'" data-dtab="profiel" onclick="switchTab(\'profiel\')">Profiel<span class="dtab-badge" id="dtabBadgeProfiel" aria-hidden="true"></span></div>'
+    +'<div class="dtab '+(vt==="advies"?"active":"")+'" data-dtab="advies" onclick="switchTab(\'advies\')">Advies<span class="dtab-badge" id="dtabBadgeAdvies" aria-hidden="true"></span></div>'
     +'</div></div>';
 
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
@@ -5879,6 +5895,7 @@ async function rDossier(el){
       autoVulCategoriesFromTimeline(name);
     }
   }
+  updateDossierTabBadges();
 }
 
 async function switchTab(tab){
@@ -5887,8 +5904,8 @@ async function switchTab(tab){
     S.timelineLimitByDossier[S.viewDossier]=50;
   }
   document.querySelectorAll('.dtab').forEach(t=>{
-    var map={'overzicht':'Overzicht','tijdlijn':'Tijdlijn','foto':'Foto','profiel':'Profiel','advies':'Advies'};
-    t.classList.toggle('active',t.textContent===map[tab]);
+    var dt=t.getAttribute('data-dtab');
+    if(dt)t.classList.toggle('active',dt===tab);
   });
   await loadTab(S.viewDossier,tab,S.pdata[S.viewDossier]||{props:{...DP},count:0,categories:{}});
 }
@@ -6154,6 +6171,7 @@ async function loadTab(name,tab,d){
         +'<p style="font-size:14px;line-height:1.6">Kon tijdlijn niet laden.<br>Controleer je verbinding en probeer opnieuw.</p>'
         +'<button class="btn-g" style="margin-top:16px;max-width:200px" onclick="switchTab(\'tijdlijn\')">↻ Opnieuw proberen</button>'
         +'</div>';
+      updateDossierTabBadges();
       return;
     }
     if(!msgs.length){
@@ -6162,6 +6180,7 @@ async function loadTab(name,tab,d){
         <p style="font-size:14px;line-height:1.6">Nog geen berichten voor <strong>${name}</strong>.<br>Ga naar Vertel om iets toe te voegen.</p>
         <button class="btn-r" style="margin-top:16px;max-width:200px" onclick="goScreen('vertel')">Vertel iets</button>
       </div>`;
+      updateDossierTabBadges();
       return;
     }
     msgs=msgs.slice().reverse();
@@ -6234,6 +6253,7 @@ async function loadTab(name,tab,d){
         +'<div style="margin-top:10px"><button class="btn-g" style="max-width:210px" onclick="openProfileModal(\''+name+'\')">Profielgegevens openen</button></div>'
         +'</div>';
       cont.innerHTML=html;
+      updateDossierTabBadges();
       return;
     }
     var previewPhoto=analysisPhotos[0]||meta.photo_url;
@@ -6375,6 +6395,7 @@ async function loadTab(name,tab,d){
       genAdvies(name,false);
     }
   }
+  updateDossierTabBadges();
 }
 
 async function genAdvies(name,forced){
@@ -6518,6 +6539,7 @@ async function genAdvies(name,forced){
         bodyDiv.appendChild(f);
       }
     }
+    updateDossierTabBadges();
   }catch(x){
     if(reqId!==_adviesReqSeq)return;
     var errMsg=(x&&x.message)?String(x.message):'Onbekende fout';
@@ -7775,13 +7797,51 @@ function redFlagVisuals(score){
   if(s<=65)return{dot:'#E65100',lbl:'Matig risico',bar:'#E65100',txt:'#BF360C'};
   return{dot:'#C62828',lbl:'Hoger risico',bar:'#C62828',txt:'#B71C1C'};
 }
+function buildProfileMetaPreviewRows(name,d){
+  var m=(d&&d.meta)||{};
+  var rows=[];
+  var dnDisplay=String(m.display_name||'').trim();
+  if(dnDisplay)rows.push({k:'Naam',v:dnDisplay});
+  var age=calcAgeFromBirthdate(m.birthdate)||String(m.age||'').trim();
+  if(String(m.birthdate||'').trim()||age)rows.push({k:'Geboortedatum / leeftijd',v:(String(m.birthdate||'').trim()||'')+(age?' (ca. '+age+' jaar)':'')});
+  if(name==='OWN Sense'&&String(m.city||'').trim())rows.push({k:'Woonplaats',v:String(m.city).trim()});
+  if(String(m.intent||'').trim())rows.push({k:'Intentie',v:String(m.intent).trim()});
+  if(String(m.photo_url||'').trim())rows.push({k:'Profielfoto',v:'ingesteld'});
+  else rows.push({k:'Profielfoto',v:'nog niet toegevoegd'});
+  if(!rows.length)return'<p style="font-size:13px;color:#777;margin:0">Nog geen velden ingevuld. Tik op bewerken om te starten.</p>';
+  return'<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(r){
+    return'<div style="font-size:13px;color:#555;line-height:1.45"><span style="color:#8a8f97;display:inline-block;min-width:118px">'+escHTML(r.k)+'</span><strong>'+escHTML(r.v)+'</strong></div>';
+  }).join('')+'</div>';
+}
+function buildProfileMetaAccordionHtml(name,d){
+  var metaC=getProfileMetaCompletion(name);
+  var isOwn=name==='OWN Sense';
+  var catId=isOwn?'own-profile-meta':'contact-profile-meta';
+  var open=!metaC.complete;
+  var html='<div class="own-cat '+(open?'open ':'')+(metaC.complete?'filled':'')+'" id="oc-'+catId+'">';
+  html+='<div class="own-cat-head" onclick="toggleCat(\''+catId+'\')">';
+  html+='<div class="own-cat-icon">👤</div>';
+  html+='<div class="own-cat-info">';
+  html+='<div class="own-cat-title">Profielgegevens</div>';
+  html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Invulvragen · zelfde gegevens als dit tabblad</div>';
+  html+='<div class="own-cat-prog '+(metaC.complete?'done':'')+'">'+metaC.filled+'/'+metaC.total+' basisvelden'+(metaC.complete?' ✓':'')+'</div>';
+  html+='</div>';
+  if(metaC.complete)html+='<span class="own-meta-check" title="Basisvelden ingevuld" aria-label="Compleet">✓</span>';
+  html+='<div class="own-cat-arrow" aria-hidden="true">›</div></div>';
+  html+='<div class="own-cat-body">';
+  html+=buildProfileMetaPreviewRows(name,d);
+  html+='<div style="margin-top:14px"><button type="button" class="btn-g" style="max-width:280px;padding:10px 14px" onclick="openProfileModal(\''+name+'\')">'+(metaC.complete?'Bewerken':'Aanvullen')+'</button></div>';
+  html+='</div></div>';
+  return html;
+}
 function buildProfielOwnHtml(d){
   var cats=d.categories||{};
   var metaC=getProfileMetaCompletion('OWN Sense');
   var html='';
   html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Vragenlijst en gegevens voor <strong>OWN Sense</strong>.</div>';
-  html+='<div style="margin-bottom:16px"><button class="btn-g" style="max-width:280px;padding:12px 14px" onclick="openProfileModal(\'OWN Sense\')">'+(metaC.complete?'Profielgegevens':'Profiel onvolledig — aanvullen')+'</button></div>';
+  html+=buildProfileMetaAccordionHtml('OWN Sense',d);
+  var firstOpenSet=!metaC.complete;
   var ownFilled=OWN_CATS.reduce(function(sum,cat){
     var catData=cats[cat.id]||{};
     return sum+cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
@@ -7793,7 +7853,6 @@ function buildProfielOwnHtml(d){
   html+=buildInvulvragenStripHtml('OWN Sense');
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
-  var firstOpenSet=false;
   OWN_CATS.forEach(function(cat){
     var catData=cats[cat.id]||{};
     var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
@@ -7861,11 +7920,11 @@ function buildProfielContactHtml(name,d){
     html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 12px">Profiel nog niet volledig ingevuld</div>';
   }
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Invullen voor <strong>'+personName+'</strong> — dit stuurt eigenschappen en advies.</div>';
-  html+='<div style="margin-bottom:16px"><button class="btn-g" style="max-width:280px;padding:12px 14px" onclick="openProfileModal(\''+name+'\')">'+(metaCC.complete?'Profielgegevens':'Profiel onvolledig — aanvullen')+'</button></div>';
+  html+=buildProfileMetaAccordionHtml(name,d);
   html+=buildInvulvragenStripHtml(name);
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
-  var firstContactOpenSet=false;
+  var firstContactOpenSet=!metaCC.complete;
   CONTACT_CATS.forEach(function(cat){
     var prog=contactCatProgress(cat.id);
     var catData=cats[cat.id]||{};
@@ -8172,6 +8231,7 @@ async function sendMsg(){
   var sys='Je bent DateSensei, de persoonlijke dating coach van de gebruiker.'
     +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
+    +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier — zeg nooit dat je die persoon niet in de dossiers hebt.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
     +' Gebruik geen lange gedachtestreep (—); gebruik een komma of punt.'
@@ -8952,27 +9012,9 @@ async function updateDossierSummary(dosName){
 
 function buildCoachContext(){
   var lines=[];
-  var own=S.pdata['OWN Sense']||{props:{},categories:{},meta:{}};
-  var ownProps=[];
-  PK.forEach(function(k,i){if((own.props[k]||0)>0)ownProps.push(PL[i]+':'+(own.props[k]||0)+'%');});
-  var ownCat='';
-  if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
-  var ownMeta=own.meta||{};
-  var ownAge=calcAgeFromBirthdate(ownMeta.birthdate)||ownMeta.age||'';
-  var ownMetaParts=[ownMeta.display_name,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
-  if(ownMeta.photo_analysis&&ownMeta.photo_analysis.summary){
-    ownMetaParts.push('foto: '+String(ownMeta.photo_analysis.summary).substring(0,80));
-  }
-  lines.push('JOUW PROFIEL:');
-  if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
-  var dm=getOwnDailyMoodMeta(ownMeta);
-  if(dm&&dm.label)lines.push('Stemming vandaag: '+dm.label+' (gekozen door gebruiker)');
-  if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
-  if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
-
+  /* Contacten eerst: bij afkappen op max. lengte verdwijnen ze anders vaak (OWN-blok is lang). */
   var contacts=getActiveContactNames();
   if(contacts.length){
-    lines.push('');
     lines.push('JOUW CONTACTEN:');
     contacts.forEach(function(p){
       var d=S.pdata[p]||{props:{},count:0,categories:{},meta:{}};
@@ -8984,26 +9026,41 @@ function buildCoachContext(){
       var photoShort=(meta.photo_analysis&&meta.photo_analysis.summary)?(' | foto: '+String(meta.photo_analysis.summary).substring(0,80)):'';
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
-      // Gebruik samenvatting als die beschikbaar is, anders props + cat
       var summary=d.summary||(S._ctxMsgs&&S._ctxMsgs[p+'_summary'])||'';
       if(summary){
-        lines.push(dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+summary.substring(0,200)+photoShort);
+        lines.push(dn(p)+' ['+p+']: '+(metaShort?('['+metaShort+'] '):'')+summary.substring(0,200)+photoShort);
       } else {
-        var line=dn(p)+': '+(metaShort?('['+metaShort+'] '):'')+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'')+photoShort;
+        var line=dn(p)+' ['+p+']: '+(metaShort?('['+metaShort+'] '):'')+(props.length?props.join(', '):'nog weinig info')+(cat.trim()?' | '+cat.trim().substring(0,150):'')+photoShort;
         lines.push(line);
       }
     });
+    lines.push('');
   }
+  var own=S.pdata['OWN Sense']||{props:{},categories:{},meta:{}};
+  var ownProps=[];
+  PK.forEach(function(k,i){if((own.props[k]||0)>0)ownProps.push(PL[i]+':'+(own.props[k]||0)+'%');});
+  var ownCat='';
+  if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
+  var ownMeta=own.meta||{};
+  var ownAge=calcAgeFromBirthdate(ownMeta.birthdate)||ownMeta.age||'';
+  var ownMetaParts=[ownMeta.display_name,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
+  if(ownMeta.photo_analysis&&ownMeta.photo_analysis.summary){
+    ownMetaParts.push('foto: '+String(ownMeta.photo_analysis.summary).substring(0,80));
+  }
+  lines.push('JOUW PROFIEL (OWN Sense):');
+  if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
+  var dm=getOwnDailyMoodMeta(ownMeta);
+  if(dm&&dm.label)lines.push('Stemming vandaag: '+dm.label+' (gekozen door gebruiker)');
+  if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
+  if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
   return lines.join('\n');
 }
 
 function buildContactNamesLine(){
-  var contacts=S.profiles
-    .filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';})
-    .map(function(p){return dn(p);})
-    .filter(Boolean);
+  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';});
   if(!contacts.length)return'';
-  return'CONTACTNAMEN: '+contacts.join(', ');
+  var parts=contacts.map(function(p){return dn(p)+' (dossier '+p+')';});
+  return'CONTACTNAMEN (actief): '+parts.join(', ')+'. Een voornaam in je tekst hoort bij het dossier met dezelfde voornaam (voor de naam «Sense»).';
 }
 
 async function buildDossierContextForAI(dosName){
