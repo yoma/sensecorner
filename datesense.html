@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-3 15:16">
+<meta name="ds-build" content="v2026-04-03-5 15:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -20,8 +20,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);
   --fs-xs:12px;--fs-sm:14px;--fs-md:16px;--fs-xl:22px;
   --rad-sm:10px;--rad-md:14px;--rad-lg:18px;
-  /* Afstand van viewport-onderkant tot bovenkant bottom-nav (incl. typische tab + safe area in nav-padding) */
-  --dock-above-nav:calc(52px + var(--sb));
+  /* Afstand viewport-onderkant → onderkant dossier-dock = tabbar + extra ademruimte (niet plakken) */
+  --dock-gap:14px;
+  --dock-above-nav:calc(52px + var(--sb) + var(--dock-gap));
   /* Ruimte die dossier-dock + adem inneemt boven de tabbar */
   --dossier-dock-core:56px;
 }
@@ -83,20 +84,20 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* Ruimte onderaan: tabbar + dossier-dock + kleine ademruimte (zelfde logica als --nav-bar-core + --dossier-dock-core) */
-.app.dossier-mode .main{padding-bottom:calc(var(--dossier-dock-core) + 52px + var(--sb) + 10px)}
+.app.dossier-mode .main{padding-bottom:calc(var(--dossier-dock-core) + 52px + var(--sb) + 10px + var(--dock-gap))}
 
 .dossier-dock{
   display:none;flex-direction:row;
   position:fixed;left:0;right:0;z-index:25;
   bottom:var(--dock-above-nav);
-  padding:10px 12px;padding-left:max(12px,var(--sl));padding-right:max(12px,var(--sr));
+  padding:8px 12px 10px;padding-left:max(12px,var(--sl));padding-right:max(12px,var(--sr));
   background:linear-gradient(180deg,rgba(255,255,255,.98),#fff);
   border-top:1px solid var(--b);box-shadow:0 -6px 20px rgba(0,0,0,.06);
   gap:10px;align-items:stretch;justify-content:center;
   -webkit-backface-visibility:hidden;backface-visibility:hidden;
 }
 .dossier-dock .dd-btn{
-  flex:1;min-width:0;max-width:min(200px,46vw);margin:0 auto;padding:12px 10px;border-radius:14px;font-size:14px;font-weight:800;
+  flex:1;min-width:0;max-width:min(200px,46vw);margin:0 auto;padding:9px 10px;border-radius:12px;font-size:13px;font-weight:800;
   font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
   border:1.5px solid var(--b);background:#fff;color:var(--t);
   touch-action:manipulation;-webkit-user-select:none;user-select:none;
@@ -170,12 +171,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .tabs-bar{display:flex;border-bottom:1px solid var(--b);background:#fff;flex-shrink:0}
 .dtab{flex:1;padding:12px 4px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.1px;color:var(--m);cursor:pointer;border-bottom:3px solid transparent}
 .dtab.active{color:var(--r);border-bottom-color:var(--r)}
-.prop{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:11px}
-.pn{width:96px;font-size:var(--fs-sm);color:#333;flex-shrink:0}
-.track{flex:1;height:6px;background:var(--b);border-radius:3px;overflow:hidden}
-.fill{height:100%;background:var(--r);border-radius:3px;transition:width .6s ease}
-.pct{width:38px;font-size:var(--fs-xs);color:var(--r);font-weight:700;text-align:right}
-.prop-row-upd{flex:0 0 100%;width:100%;font-size:10px;color:#8a8f97;margin-top:-2px;padding-left:2px}
+.props-stack{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
+.prop{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-bottom:4px}
+.pn{width:78px;flex-shrink:0;font-size:11px;line-height:1.15;color:#333;display:flex;flex-direction:column;gap:1px}
+.pn .prop-row-inl{font-size:9px;color:#8a8f97;line-height:1.1;font-weight:500}
+.track{flex:1;min-width:0;height:4px;background:var(--b);border-radius:2px;overflow:hidden}
+.fill{height:100%;background:var(--r);border-radius:2px;transition:width .6s ease}
+.pct{width:30px;font-size:10px;color:var(--r);font-weight:700;text-align:right;flex-shrink:0;line-height:1}
 .match-bar{background:var(--g);border-radius:var(--rad-md);padding:14px 16px;margin-bottom:14px;border:1px solid var(--b)}
 
 /* Prop leeg state */
@@ -2275,12 +2277,11 @@ function renderProps(props,showSource,opt){
     var barColor=v===0?'var(--b)':'var(--r)';
     var pu=propUpdates[k];
     var upd=pu?fmtPropUpdate(pu):'';
-    var updLine='<div class="prop-row-upd">'+(upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>')+'</div>';
+    var updTxt=upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>';
     return'<div class="prop">'
-      +'<div class="pn">'+PL[i]+'</div>'
+      +'<div class="pn">'+PL[i]+'<span class="prop-row-inl">'+updTxt+'</span></div>'
       +'<div class="track"><div class="fill" style="width:'+v+'%;background:'+barColor+'"></div></div>'
       +'<div class="pct" style="color:'+(v===0?'#ccc':'var(--r)')+'">'+v+'%</div>'
-      +updLine
       +'</div>';
   }).join('');
   var extraBars='';
@@ -2293,19 +2294,18 @@ function renderProps(props,showSource,opt){
     var k='extra_'+idx;
     var pu=propUpdates[k];
     var upd=pu?fmtPropUpdate(pu):'';
-    var updLine='<div class="prop-row-upd">'+(upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>')+'</div>';
+    var updTxtX=upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>';
     var barColor=vv===0?'var(--b)':'var(--r)';
     extraBars+='<div class="prop">'
-      +'<div class="pn">'+escHTML(label)+'</div>'
+      +'<div class="pn">'+escHTML(label)+'<span class="prop-row-inl">'+updTxtX+'</span></div>'
       +'<div class="track"><div class="fill" style="width:'+vv+'%;background:'+barColor+'"></div></div>'
       +'<div class="pct" style="color:'+(vv===0?'#ccc':'var(--r)')+'">'+vv+'%</div>'
-      +updLine
       +'</div>';
   });
 
   // Bronnen uitleg
   var srcId='src'+Math.floor(Math.random()*99999);
-  var srcHtml='<div style="margin-top:10px">'
+  var srcHtml='<div style="margin-top:6px">'
     +'<button onclick="toggleSrcBox(this)" '
     +'style="font-size:12px;color:var(--m);background:none;border:none;cursor:pointer;padding:4px 0;font-family:inherit;text-decoration:underline">'
     +'ℹ️ Hoe worden deze berekend?</button>'
@@ -2317,7 +2317,7 @@ function renderProps(props,showSource,opt){
     +'&bull; Meer info = nauwkeuriger schatting'
     +'</div></div>';
 
-  return barsHtml+extraBars+srcHtml;
+  return '<div class="props-stack">'+barsHtml+extraBars+'</div>'+srcHtml;
 }
 
 // ══ Auth ═════════════════════════════════════════════════════════
@@ -5745,8 +5745,8 @@ async function loadTab(name,tab,d){
 
     // Eigenschappen
     var propsLastIso=getPropsUpdatedAt(d.meta||{});
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">'
-      +'<div style="font-size:14px;font-weight:700;color:#333">'+(isOwnDossier?'Jouw eigenschappen':'Eigenschappen')+'</div>'
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px">'
+      +'<div style="font-size:13px;font-weight:700;color:#333">'+(isOwnDossier?'Jouw eigenschappen':'Eigenschappen')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
       +'</div>';
     var extraMetrics=[];
@@ -9118,17 +9118,4 @@ document.addEventListener('input',function(e){
     var catId=m[1];
     var dossierEl=ta.closest('[id^="cc-"]');
     // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+    var dosName=S.viewDo
