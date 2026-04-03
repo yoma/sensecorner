@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-01-1 08:39">
+<meta name="ds-build" content="v2026-04-03-1 10:46">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -539,6 +539,20 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .autosave-indicator.saving{color:var(--r)}
 .autosave-indicator.saved{color:#4CAF50}
 .own-last-saved{font-size:12px;color:#2E7D32;text-align:center;margin-top:8px;display:none}
+.help-tour-shade{position:fixed;inset:0;background:rgba(13,15,20,.55);z-index:85;display:none}
+.help-tour-target{position:relative;z-index:87;box-shadow:0 0 0 3px rgba(255,255,255,.96),0 0 0 6px rgba(174,0,0,.35);border-radius:12px}
+.help-tour-card{position:fixed;z-index:90;display:none;width:min(320px,calc(100vw - 24px));background:#fff;border:1px solid #F2D6D6;border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,.24);padding:12px 12px 10px}
+.help-tour-kicker{font-size:11px;font-weight:800;letter-spacing:.08em;color:#AE0000;text-transform:uppercase}
+.help-tour-title{font-size:15px;font-weight:800;color:#202327;margin-top:2px}
+.help-tour-text{font-size:13px;line-height:1.55;color:#525862;margin-top:6px}
+.help-tour-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.help-tour-btn{padding:7px 10px;border-radius:9px;border:1px solid var(--b);background:#fff;color:#555;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.help-tour-btn.primary{background:var(--r);border-color:var(--r);color:#fff}
+.vertel-coach-tip{margin:6px 10px 0;padding:10px 12px;border:1px solid #F2D6D6;border-radius:12px;background:linear-gradient(180deg,#FFF9F9 0%,#FFFDFD 100%)}
+.vertel-coach-head{font-size:12px;font-weight:800;color:#AE0000;margin-bottom:5px}
+.vertel-coach-text{font-size:12px;color:#545b64;line-height:1.5}
+.vertel-coach-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.vertel-chip{padding:6px 9px;border-radius:999px;border:1px solid #F3D6D6;background:#fff;color:#8A2D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
 </style>
 </head>
 <body>
@@ -607,6 +621,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
   </div>
 </div>
+<div id="helpTourShade" class="help-tour-shade" onclick="endQuickHelpTour(true)"></div>
+<div id="helpTourCard" class="help-tour-card"></div>
 
 <!-- ══ SIDEBAR ══ -->
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
@@ -837,6 +853,7 @@ var _autoPlannerWarmBusy=false;
 var _autoPlannerWarmKey='';
 var _plannerIdeaRefreshTimer=null;
 var _adviesReqSeq=0;
+var _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -910,7 +927,154 @@ function renderOnboardingCard(){
         +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;margin-top:6px" onclick="'+item.action+'">'+(item.done?'Open':'Nu doen')+'</button></div>'
         +'</div>';
     }).join('')
+    +'<div style="margin-top:10px"><button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="startQuickHelpTour(true)">🧭 Korte rondleiding</button></div>'
     +'</div></div>';
+}
+
+function getQuickHelpSteps(){
+  return [
+    {targetId:'tab-own',title:'OwnSense = jouw basisprofiel',text:'Dit is jouw eigen dossier. Hoe beter je OwnSense is ingevuld, hoe scherper je matches, advies en checks worden.'},
+    {targetId:'tab-senses',title:'Mijn Senses = je contactdossiers',text:'Hier beheer je de personen met wie je date of praat. Open dossiers, zet on hold of vergelijk ze naast elkaar.'},
+    {targetId:'tab-vertel',title:'Vertel = context doorgeven',text:'Gebruik Vertel om updates, gevoelens en gebeurtenissen toe te voegen. Dit voedt je advies en coachmeldingen.'}
+  ];
+}
+function quickHelpSeen(){
+  return String(getScopedStorage('ds_quick_help_seen','0')||'0')==='1';
+}
+function markQuickHelpSeen(){
+  setScopedStorage('ds_quick_help_seen','1');
+}
+function hasSeenVertelCoachTip(){
+  return String(getScopedStorage('ds_vertel_tip_seen','0')||'0')==='1';
+}
+function markVertelCoachTipSeen(){
+  setScopedStorage('ds_vertel_tip_seen','1');
+}
+function addVertelHintToInput(text){
+  var inp=document.getElementById('msgInput');
+  if(!inp)return;
+  var val=(inp.value||'').trim();
+  if(val){
+    inp.value=val+'\n'+text;
+  }else{
+    inp.value=text;
+  }
+  autoResize(inp);
+  inp.focus();
+}
+function renderVertelInputCoachTip(){
+  var host=document.querySelector('#inputBar .input-bar');
+  if(!host)return;
+  if(hasSeenVertelCoachTip()&&S.vertelMsgs&&S.vertelMsgs.length>0)return;
+  var old=document.getElementById('vertelInputCoachTip');
+  if(old&&old.parentNode)old.parentNode.removeChild(old);
+  var firstUse=!hasSeenVertelCoachTip();
+  var forced=getForcedDossier();
+  var target=forced||S.vertelFrom||'';
+  var isOwnTarget=!target||target==='OWN Sense';
+  var tLabel=isOwnTarget?'jezelf':dn(target);
+  var chip1Text=isOwnTarget
+    ?'Context: Ik merk dat ik sneller onzeker word als iemand traag antwoordt. Gevoel: ik twijfel aan mezelf. Vraag: hoe blijf ik rustig?'
+    :('Context over '+tLabel+': We zagen elkaar gisteren. Gevoel: ik voelde afstand. Vraag: hoe pak ik dit best aan?');
+  var chip2Text=isOwnTarget
+    ?'Persoonlijke update: ik wil duidelijker communiceren over mijn grenzen en verwachtingen.'
+    :('Update voor dossier '+tLabel+': laatste gesprek ging goed, maar afspraken blijven vaag.');
+  var chip3Text=isOwnTarget
+    ?'Coach, geef me 2 concrete acties om sterker in mijn datingstijl te staan deze week.'
+    :('Coach, geef me 2 concrete acties voor mijn volgende stap met '+tLabel+'.');
+  function asJsSingleQuoted(v){
+    return String(v||'')
+      .replace(/\\/g,'\\\\')
+      .replace(/'/g,"\\'")
+      .replace(/\r?\n/g,'\\n');
+  }
+  var tip=document.createElement('div');
+  tip.id='vertelInputCoachTip';
+  tip.className='vertel-coach-tip';
+  tip.innerHTML=''
+    +'<div class="vertel-coach-head">Hulp bij Vertel</div>'
+    +'<div class="vertel-coach-text">Je werkt nu vooral rond <strong>'+escHTML(tLabel)+'</strong>. Vertel wat er gebeurde, wat je voelde en waar je op vastloopt. Dan krijg je veel gerichter advies.</div>'
+    +'<div class="vertel-coach-chips">'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')">🧭 Context + gevoel + vraag</button>'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</button>'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip3Text)+'\')">🎯 Vraag om acties</button>'
+    +'</div>'
+    +'<div style="margin-top:8px;display:flex;justify-content:flex-end">'
+    +'<button class="coach-save-other" style="font-size:11px;padding:5px 8px" onclick="closeVertelInputCoachTip()">'+(firstUse?'Begrepen':'Sluiten')+'</button>'
+    +'</div>';
+  host.insertBefore(tip,host.firstChild);
+}
+function closeVertelInputCoachTip(){
+  var tip=document.getElementById('vertelInputCoachTip');
+  if(tip&&tip.parentNode)tip.parentNode.removeChild(tip);
+  markVertelCoachTipSeen();
+}
+function startQuickHelpTour(force){
+  if(!S.user)return;
+  if(_quickHelpTour.active)return;
+  if(!force&&quickHelpSeen())return;
+  var steps=getQuickHelpSteps().filter(function(s){
+    return !!document.getElementById(s.targetId);
+  });
+  if(!steps.length)return;
+  _quickHelpTour={active:true,idx:0,steps:steps,targetEl:null};
+  renderQuickHelpStep();
+}
+function renderQuickHelpStep(){
+  if(!_quickHelpTour.active)return;
+  var shade=document.getElementById('helpTourShade');
+  var card=document.getElementById('helpTourCard');
+  if(!shade||!card){_quickHelpTour.active=false;return;}
+  var step=_quickHelpTour.steps[_quickHelpTour.idx];
+  if(!step){endQuickHelpTour(false);return;}
+  if(_quickHelpTour.targetEl)_quickHelpTour.targetEl.classList.remove('help-tour-target');
+  var el=document.getElementById(step.targetId);
+  if(!el){
+    _quickHelpTour.idx++;
+    renderQuickHelpStep();
+    return;
+  }
+  _quickHelpTour.targetEl=el;
+  el.classList.add('help-tour-target');
+  shade.style.display='block';
+  card.style.display='block';
+  var isLast=_quickHelpTour.idx>=_quickHelpTour.steps.length-1;
+  card.innerHTML=''
+    +'<div class="help-tour-kicker">DateSense gids '+(_quickHelpTour.idx+1)+'/'+_quickHelpTour.steps.length+'</div>'
+    +'<div class="help-tour-title">'+escHTML(step.title)+'</div>'
+    +'<div class="help-tour-text">'+escHTML(step.text)+'</div>'
+    +'<div class="help-tour-actions">'
+    +'<button class="help-tour-btn" onclick="endQuickHelpTour(true)">Sluiten</button>'
+    +(_quickHelpTour.idx?'<button class="help-tour-btn" onclick="prevQuickHelpStep()">Vorige</button>':'')
+    +'<button class="help-tour-btn primary" onclick="'+(isLast?'endQuickHelpTour(false)':'nextQuickHelpStep()')+'">'+(isLast?'Klaar':'Volgende')+'</button>'
+    +'</div>';
+  var r=el.getBoundingClientRect();
+  var cr=card.getBoundingClientRect();
+  var top=r.top-cr.height-10;
+  if(top<10)top=r.bottom+10;
+  if(top+cr.height>window.innerHeight-8)top=Math.max(8,window.innerHeight-cr.height-8);
+  var left=Math.min(window.innerWidth-cr.width-8,Math.max(8,r.left+(r.width/2)-(cr.width/2)));
+  card.style.top=Math.round(top)+'px';
+  card.style.left=Math.round(left)+'px';
+}
+function nextQuickHelpStep(){
+  if(!_quickHelpTour.active)return;
+  _quickHelpTour.idx++;
+  renderQuickHelpStep();
+}
+function prevQuickHelpStep(){
+  if(!_quickHelpTour.active)return;
+  _quickHelpTour.idx=Math.max(0,_quickHelpTour.idx-1);
+  renderQuickHelpStep();
+}
+function endQuickHelpTour(cancelOnly){
+  var shade=document.getElementById('helpTourShade');
+  var card=document.getElementById('helpTourCard');
+  if(_quickHelpTour.targetEl)_quickHelpTour.targetEl.classList.remove('help-tour-target');
+  if(shade)shade.style.display='none';
+  if(card){card.style.display='none';card.innerHTML='';}
+  _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
+  if(!cancelOnly)markQuickHelpSeen();
 }
 
 function updateProfileAgePreview(){
@@ -2090,6 +2254,9 @@ function goScreen(sc){
   renderOwnAvatar();
   renderBrandTag();
   if(S.user)rDrawer();
+  if(sc==='home'&&S.user&&!_quickHelpTour.active){
+    setTimeout(function(){startQuickHelpTour(false);},180);
+  }
 
   // Hide bottom-nav actions when not logged in
   ['tab-senses','tab-own','tab-vertel'].forEach(function(id){
@@ -2207,14 +2374,36 @@ function closeProfileModal(){
 }
 
 function chooseProfilePhoto(){
+  if(_profileUploadBusy){toast('Bezig met foto uploaden...');return;}
   var inp=document.getElementById('profilePhotoInput');
   if(inp)inp.click();
 }
 
 function chooseAnalysisPhoto(dosName){
+  if(_analysisUploadBusy){toast('Bezig met analysefoto uploaden...');return;}
   _analysisPhotoFor=dosName||S.viewDossier||'OWN Sense';
   var inp=document.getElementById('analysisPhotoInput');
   if(inp)inp.click();
+}
+async function uploadToPhotoStorage(path,file){
+  var lastErr=null;
+  for(var attempt=1;attempt<=2;attempt++){
+    try{
+      var up=await withTimeout(
+        sb.storage.from('datesense-photos').upload(path,file,{upsert:true,contentType:(file&&file.type)||'image/jpeg'}),
+        45000,
+        'Upload timeout na 45s. Probeer opnieuw.'
+      );
+      if(up&&up.error)throw up.error;
+      return up;
+    }catch(err){
+      lastErr=err;
+      if(attempt<2){
+        await new Promise(function(resolve){setTimeout(resolve,500);});
+      }
+    }
+  }
+  throw lastErr||new Error('Upload mislukt');
 }
 
 async function handleAnalysisPhotoInput(input){
@@ -2223,16 +2412,15 @@ async function handleAnalysisPhotoInput(input){
   var dos=_analysisPhotoFor||S.viewDossier;
   if(!dos)return;
   _analysisUploadBusy=true;
-  toast('Foto uploaden...');
+  if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto'){
+    await loadTab(dos,'foto',S.pdata[dos]||d);
+  }
+  toast('Analysefoto uploaden...');
   try{
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
-    var up=await withTimeout(
-      sb.storage.from('datesense-photos').upload(path,file,{upsert:true}),
-      25000,
-      'Upload timeout na 25s. Probeer opnieuw.'
-    );
+    var up=await uploadToPhotoStorage(path,file);
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -2256,6 +2444,9 @@ async function handleAnalysisPhotoInput(input){
   }finally{
     input.value='';
     _analysisUploadBusy=false;
+    if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto'){
+      await loadTab(dos,'foto',S.pdata[dos]||d);
+    }
   }
 }
 
@@ -2278,16 +2469,12 @@ async function handleProfilePhotoInput(input){
   if(!file||!S.user||_profileUploadBusy)return;
   _profileUploadBusy=true;
   var status=document.getElementById('profilePhotoStatus');
-  if(status)status.textContent='Uploaden...';
+  if(status)status.textContent='Uploaden... even wachten';
   try{
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/'+safeName+'_'+Date.now()+'.'+ext;
-    var up=await withTimeout(
-      sb.storage.from('datesense-photos').upload(path,file,{upsert:true}),
-      25000,
-      'Upload timeout na 25s. Probeer opnieuw.'
-    );
+    var up=await uploadToPhotoStorage(path,file);
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
@@ -5150,9 +5337,12 @@ async function loadTab(name,tab,d){
     }
     html+='</div>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      +'<button class="btn-g" style="max-width:220px;padding:9px 12px" onclick="chooseAnalysisPhoto()">+ Analysefoto toevoegen</button>'
+      +'<button class="btn-g" style="max-width:220px;padding:9px 12px;'+(_analysisUploadBusy?'opacity:.7;pointer-events:none;':'')+'" onclick="chooseAnalysisPhoto()">'+(_analysisUploadBusy?'Uploaden...':'+ Analysefoto toevoegen')+'</button>'
       +(hasFallbackProfile?'<span style="font-size:12px;color:var(--m);align-self:center">Fallback: profielfoto wordt gebruikt als er geen analysefoto is.</span>':'')
       +'</div>';
+    if(_analysisUploadBusy){
+      html+='<div style="font-size:12px;color:#8a8f97;margin-top:8px">⏳ Analysefoto wordt toegevoegd...</div>';
+    }
     html+='<div style="font-size:12px;color:#6e747d;margin-top:8px">'+analysisSourceLabel+'</div>';
     html+='</div>';
     if(!analysisPhotos.length&&!hasFallbackProfile){
@@ -6020,6 +6210,7 @@ async function rVertel(el){
   ca.scrollTop=ca.scrollHeight;
   updateVertelSaveModeUI();
   if(S._forceFreshVertel)S._forceFreshVertel=false;
+  renderVertelInputCoachTip();
 }
 
 function rImport(el){
@@ -6053,6 +6244,7 @@ function rSettings(el){
     +renderSettingsTile('📘','Over DateSense','Info over de app','about')
     +renderSettingsTile('❓',"FAQ's",'Veelgestelde vragen','faq')
     +renderSettingsTile('📦','Export data','Download je gegevens','export')
+    +renderSettingsTile('🧭','Korte rondleiding','Uitleg van de hoofdschermen','quick-tour')
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data');
 
   el.innerHTML=`<div style="padding:32px 20px">
@@ -6147,6 +6339,7 @@ async function exportAllData(){
 }
 
 function settingsAction(action){
+  if(action==='quick-tour'){goScreen('home');setTimeout(function(){startQuickHelpTour(true);},220);return;}
   if(action==='my-data'){openProfileModal('OWN Sense');return;}
   if(action==='notifications'){goScreen('notifications');return;}
   if(action==='export'){exportAllData();return;}
@@ -7591,272 +7784,4 @@ async function laadSessie(sessionId){
   if(!S.user)return;
   S.currentSessionId=sessionId;
   S.vertelMsgs=[];
-  var ca=document.getElementById('chatArea');
-  if(ca)ca.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Gesprek laden...</div>';
-  try{
-    var {data}=await sb.from('sense_session_msgs')
-      .select('*').eq('session_id',sessionId)
-      .order('created_at').limit(50);
-    if(!data||!data.length){if(ca)ca.innerHTML='';return;}
-    if(ca)ca.innerHTML='';
-    function escSess(s){
-      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-    var assignMap=getSessAssignMap();
-    window._sessieKoppelData=[];
-    data.forEach(function(m,idx){
-      S.vertelMsgs.push({role:m.role,html:m.content});
-      if(m.role==='user'){
-        var nextAi='';
-        for(var j=idx+1;j<data.length;j++){
-          if(data[j].role==='ai'){nextAi=data[j].content||'';break;}
-          if(data[j].role==='user')break;
-        }
-        var kIdx=window._sessieKoppelData.length;
-        var a=assignMap[m.id]||{};
-        window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
-        var userWrap=document.createElement('div');
-        userWrap.className='msg-user';
-        userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
-          +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
-          +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
-          +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
-          +'</div></div>';
-        if(ca)ca.appendChild(userWrap);
-      } else {
-        var aiWrap=document.createElement('div');
-        aiWrap.className='msg-ai';
-        aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
-        if(ca)ca.appendChild(aiWrap);
-      }
-    });
-    if(ca)ca.scrollTop=ca.scrollHeight;
-    updateSessBulkBar();
-    var t=document.getElementById('sessieTitle');
-    if(t&&data[0]){
-      var firstUser=(data.find(function(x){return x.role==='user';})||data[0]);
-      t.textContent=buildSessionPreview(firstUser.content||'');
-    }
-  }catch(e){console.warn('laadSessie error:',e);}
-}
-
-function updateSessBulkBar(){
-  var bar=document.getElementById('sessBulkBar');
-  if(!bar)return;
-  var arr=window._sessieKoppelData||[];
-  var unc=arr.filter(function(x){return !x.dossier;}).length;
-  if(!arr.length){bar.style.display='none';bar.innerHTML='';return;}
-  bar.style.display='block';
-  bar.innerHTML='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666;flex:1">'+unc+' ongekoppeld van '+arr.length+' user-berichten</span>'
-    +'<button class="coach-save-other" onclick="koppelAlleOngekoppeld()">Koppel alle ongekoppelde</button></div>';
-}
-
-function openGekoppeldDossierFromSess(idx){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!item.dossier)return;
-  viewDossier(item.dossier);
-}
-
-async function koppelAlleOngekoppeld(){
-  var arr=window._sessieKoppelData||[];
-  var targets=arr.map(function(x,i){return {item:x,idx:i};}).filter(function(x){return !x.item.dossier;});
-  if(!targets.length){toast('Alles is al gekoppeld');return;}
-  openDossierPickModal(
-    'Koppel alle ongekoppelde',
-    'Kies 1 dossier voor alle '+targets.length+' ongekoppelde berichten.',
-    'bulk',
-    targets.map(function(t){return t.idx;})
-  );
-}
-
-async function koppelAlleOngekoppeldNaar(dossier,targetIdxs){
-  var idxs=targetIdxs||[];
-  for(var i=0;i<idxs.length;i++){
-    await koppelSessieMsgNaar(idxs[i],dossier,true);
-  }
-  toast('✅ '+idxs.length+' berichten gekoppeld aan '+dn(dossier));
-  await laadSessie(S.currentSessionId);
-}
-
-async function koppelSessieMsg(idx){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!S.user)return;
-  openDossierPickModal(
-    'Kies dossier',
-    'Aan welk dossier wil je dit sessiebericht koppelen?',
-    'single',
-    idx
-  );
-}
-
-async function koppelSessieMsgNaar(idx,dossier,silent){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!S.user)return;
-  try{
-    var map=getSessAssignMap();
-    var m=map[item.sessionMsgId]||{};
-    if(m.senseMsgId){
-      await sb.from('sense_messages').update({profile_name:dossier}).eq('id',m.senseMsgId).eq('user_id',S.user.id);
-    }else{
-      var payload=(item.text||'')+((item.aiText||'')?('\n'+item.aiText):'');
-      var inserted=await _doOpslaan(null,payload,dossier);
-      if(inserted&&inserted.id)m.senseMsgId=inserted.id;
-    }
-    m.dossier=dossier;
-    map[item.sessionMsgId]=m;
-    setSessAssignMap(map);
-    item.dossier=dossier;
-    item.senseMsgId=m.senseMsgId||null;
-    var lbl=document.getElementById('sessAssignLbl-'+idx);
-    if(lbl)lbl.textContent='📌 Gekoppeld aan '+dn(dossier);
-    if(!silent){
-      toast('✅ Gekoppeld aan '+dn(dossier));
-      await laadSessie(S.currentSessionId);
-    }else{
-      updateSessBulkBar();
-    }
-  }catch(e){
-    console.warn('koppelSessieMsg error:',e);
-    if(!silent)toast('Koppelen mislukt');
-  }
-}
-
-async function saveSessionMsg(sessionId,role,content){
-  if(!S.user||!sessionId)return;
-  try{
-    await sb.from('sense_session_msgs').insert({
-      session_id:sessionId,user_id:S.user.id,
-      role:role,content:content,
-      created_at:new Date().toISOString()
-    });
-  }catch(e){console.warn('saveSessionMsg:',e);}
-}
-
-async function ensureActiveSessionForMessage(previewText){
-  if(!S.user)return null;
-  if(S.currentSessionId)return S.currentSessionId;
-  try{
-    var preview=buildSessionPreview(previewText||'Nieuw gesprek');
-    var {data,error}=await sb.from('sense_sessions')
-      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString()})
-      .select().single();
-    if(error)throw error;
-    if(data&&data.id){
-      S.currentSessionId=data.id;
-      laadSessies();
-      return data.id;
-    }
-  }catch(e){
-    console.warn('ensureActiveSessionForMessage error:',e);
-  }
-  return null;
-}
-
-async function updateSessiePreview(sessionId,tekst){
-  if(!S.user||!sessionId)return;
-  var preview=buildSessionPreview(tekst);
-  var t=document.getElementById('sessieTitle');
-  if(t)t.textContent=preview;
-  try{
-    await sb.from('sense_sessions').update({
-      preview:preview,updated_at:new Date().toISOString()
-    }).eq('id',sessionId).eq('user_id',S.user.id);
-  }catch(e){console.warn('updateSessiePreview:',e);}
-}
-
-async function initSessie(){
-  if(!S.user||S.currentSessionId)return;
-  try{
-    var {data,error}=await sb.from('sense_sessions')
-      .select('*').eq('user_id',S.user.id)
-      .order('updated_at',{ascending:false}).limit(1);
-    if(error)throw error;
-    // Geen automatische lege sessies meer aanmaken.
-    // Alleen bestaande laatste sessie gebruiken als referentie.
-    if(data&&data.length)S.currentSessionId=data[0].id;
-  }catch(e){
-    console.warn('initSessie stil gefaald:',e);
-    // Geen fallback ID — sessie wordt gewoon niet bewaard
-  }
-}
-
-// ══ Coach opslaan functies ════════════════════════════════════════
-
-async function opslaanInDossier(sid){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  var dossier=data.dossier;
-  if(!dossier){kiesAnderDossier(sid);return;}
-  await _doOpslaan(sid,data.tekst,dossier);
-}
-
-function kiesAnderDossier(sid){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  openDossierPickModal(
-    'Opslaan bij dossier',
-    'Kies een bestaand dossier of maak een nieuw dossier.',
-    'save',
-    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||''}
-  );
-}
-
-async function _opslaanKeuze(dossier){
-  var sid=window._saveKiesSid;
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  await _doOpslaan(sid,data.tekst,dossier);
-}
-
-async function maakNieuwDossierEnOpslaan(sid,useSuggested){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  var suggested=data.suggestedName||'';
-  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
-  if(inputName===null)return;
-  var base=String(inputName||'').trim();
-  if(!base){toast('Naam is leeg');return;}
-  var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier);
-}
-
-async function _doOpslaan(sid,tekst,dossier){
-  var bar=document.getElementById(sid);
-  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
-  await ensureP(dossier);
-  var inserted=await saveMsg(dossier,'user',tekst);
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
-  pd.count=(pd.count||0)+1;
-  S.pdata[dossier]=pd;
-  await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  return inserted;
-}
-
-// ══ Init ══════════════════════════════════════════════════════════
-// Event delegation: auto-save voor contact categorieën via data attributen
-document.addEventListener('input',function(e){
-  var ta=e.target;
-  if(!ta.classList.contains('own-ta'))return;
-  // Contact categorie textareas hebben id="cc-CATID-aN"
-  var m=ta.id.match(/^cc-(.+)-a\d+$/);
-  if(m){
-    var catId=m[1];
-    var dossierEl=ta.closest('[id^="cc-"]');
-    // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-init();
-</script>
-</body>
-</html>
+  var ca=document.getElementById('cha
