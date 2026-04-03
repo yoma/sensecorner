@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:07">
+<meta name="ds-build" content="03-04-2026 21:15">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -628,10 +628,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .save-modal-overlay{position:fixed;inset:0;z-index:320;display:none;align-items:flex-end;justify-content:center}
 .save-modal-overlay.show{display:flex}
 .save-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
-.save-modal-sheet{position:relative;z-index:1;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + var(--sb));max-height:78vh;overflow:auto;box-shadow:0 -8px 24px rgba(0,0,0,.16)}
+.save-modal-sheet{position:relative;z-index:2;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + var(--sb));max-height:78vh;overflow:auto;box-shadow:0 -8px 24px rgba(0,0,0,.16);pointer-events:auto}
 .save-modal-title{font-size:16px;font-weight:800;color:var(--t);margin-bottom:4px}
 .save-modal-sub{font-size:13px;color:#666;line-height:1.5;margin-bottom:12px}
-.save-modal-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px}
+.save-modal-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .save-modal-opt:active{opacity:.75}
 .save-modal-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0;background:#ccc}
 
@@ -2269,43 +2269,32 @@ function openDossierPickModal(title,sub,type,payload){
   subEl.textContent=sub||'Selecteer een dossier.';
   window._dossierPickCtx={type:type,payload:payload||null};
   var all=['OWN Sense',...S.profiles.filter(function(p){return p!=='OWN Sense';})];
+  window._modalPickDossiers=all.slice();
   var html='';
   if(type==='save'){
     var sug=payload&&payload.suggestedName?payload.suggestedName:'';
     if(sug){
-      html+='<button type="button" class="save-modal-opt" data-pick-action="new-suggested"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Maak '+String(sug).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+' aan</strong><br><span style="font-size:12px;color:#666">Nieuw dossier en meteen opslaan</span></span></button>';
+      html+='<button type="button" class="save-modal-opt" onclick="createNewDossierFromPick(true)"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Maak '+String(sug).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+' aan</strong><br><span style="font-size:12px;color:#666">Nieuw dossier en meteen opslaan</span></span></button>';
     }
-    html+='<button type="button" class="save-modal-opt" data-pick-action="new-prompt"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nieuw dossier...</strong><br><span style="font-size:12px;color:#666">Voer zelf een naam in</span></span></button>';
+    html+='<button type="button" class="save-modal-opt" onclick="createNewDossierFromPick(false)"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nieuw dossier...</strong><br><span style="font-size:12px;color:#666">Voer zelf een naam in</span></span></button>';
     html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Bestaande dossiers</div>';
   }
   all.forEach(function(p,i){
     var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
-    var enc=encodeURIComponent(p);
-    html+='<button type="button" class="save-modal-opt" data-pick-dossier="'+enc+'">'
+    html+='<button type="button" class="save-modal-opt" onclick="selectDossierFromPickFromModal('+i+')">'
       +'<span class="save-modal-dot" style="background:'+col+'"></span>'
       +'<span style="flex:1">'+dn(p)+'</span></button>';
   });
   opts.innerHTML=html;
   modal.classList.add('show');
 }
-function initDossierPickModalDelegation(){
-  if(window._dossierPickDelegated)return;
-  var modal=document.getElementById('dossierPickModal');
-  if(!modal)return;
-  modal.addEventListener('click',function(e){
-    var btn=e.target.closest('.save-modal-opt');
-    if(!btn||!modal.contains(btn))return;
-    var act=btn.getAttribute('data-pick-action');
-    if(act==='new-suggested'){e.preventDefault();createNewDossierFromPick(true);return;}
-    if(act==='new-prompt'){e.preventDefault();createNewDossierFromPick(false);return;}
-    var enc=btn.getAttribute('data-pick-dossier');
-    if(enc!==null&&enc!==''){
-      e.preventDefault();
-      try{selectDossierFromPick(decodeURIComponent(enc));}
-      catch(err){console.warn('dossier pick decode',err);toast('Ongeldige dossierkeuze');}
-    }
-  });
-  window._dossierPickDelegated=true;
+/** Dossierkeuze via index: werkt op mobiel / enterprise waar delegated click + closest() faalt. */
+function selectDossierFromPickFromModal(idx){
+  var list=window._modalPickDossiers;
+  var i=parseInt(idx,10);
+  if(!list||isNaN(i)||i<0||i>=list.length)return;
+  var p=list[i];
+  if(p)selectDossierFromPick(p).catch(function(e){console.warn('selectDossierFromPick',e);toast('Koppelen mislukt');});
 }
 
 function closeDossierPickModal(){
@@ -2694,7 +2683,6 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
-  initDossierPickModalDelegation();
   if(!sb){
     goScreen('home');
     var mc=document.getElementById('mainContent');
@@ -9864,6 +9852,7 @@ try{
   window.openSidebar=openSidebar;
   window.closeSidebar=closeSidebar;
   window.selectDossierFromPick=selectDossierFromPick;
+  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
   window.createNewDossierFromPick=createNewDossierFromPick;
   window.koppelSessieMsg=koppelSessieMsg;
   window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
