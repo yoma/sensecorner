@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-3 13:52">
+<meta name="ds-build" content="v2026-04-03-4 13:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1146,7 +1146,29 @@ function resetAllHelpPopups(){
   removeScopedStorage('ds_quick_help_seen');
   removeScopedStorage('ds_help_seen_map');
   removeScopedStorage('ds_vertel_tip_seen');
+  removeScopedStorage('ds_auto_full_tour_offered');
+  removeScopedStorage('ds_auto_full_tour_completed');
+  removeScopedStorage('ds_auto_tour_flags_migrated');
   toast('Hulp opnieuw ingesteld. Kies «Korte rondleiding» of het vraagteken voor de volledige rondleiding door Home, Senses, Vertel en OwnSense.');
+}
+/** Eénmalige migratie: bestaande users die al hulp zagen krijgen geen automatische rondleiding meer. */
+function migrateAutoTourFlags(){
+  if(!S.user)return;
+  if(String(getScopedStorage('ds_auto_tour_flags_migrated','0'))==='1')return;
+  if(quickHelpSeen()){
+    setScopedStorage('ds_auto_full_tour_offered','1');
+  }
+  try{
+    var map=getQuickHelpSeenMap();
+    if(map&&map.home&&map.senses&&map.vertel&&map.dossier){
+      setScopedStorage('ds_auto_full_tour_completed','1');
+    }
+  }catch(e){}
+  setScopedStorage('ds_auto_tour_flags_migrated','1');
+}
+function markAutoFullTourCompleted(){
+  setScopedStorage('ds_auto_full_tour_completed','1');
+  setScopedStorage('ds_auto_full_tour_offered','1');
 }
 function getQuickHelpStepsForScreen(screen){
   var sc=String(screen||S.screen||'').trim();
@@ -1264,6 +1286,7 @@ function startQuickHelpTour(force){
       setTimeout(function(){startQuickHelpTour(true);},420);
     }else if(_tourChain){
       _tourChain=null;
+      markAutoFullTourCompleted();
       toast('✓ Rondleiding klaar — veel plezier met DateSense!');
     }
     return;
@@ -1342,6 +1365,7 @@ function endQuickHelpTour(cancelOnly){
   }
   if(_tourChain){
     _tourChain=null;
+    markAutoFullTourCompleted();
     toast('✓ Rondleiding klaar — veel plezier met DateSense!');
   }
 }
@@ -2581,8 +2605,15 @@ function goScreen(sc){
   });
   var homeTab=document.getElementById('tab-home');
   if(homeTab)homeTab.style.display='';
-  if(S.user&&!_quickHelpTour.active&&!_tourChain&&['home','senses','dossier','vertel'].indexOf(sc)!==-1){
-    setTimeout(function(){startQuickHelpTour(false);},220);
+  // Geen automatische scherm-rondleiding bij elke tab; wel éénmalig volledige tour na eerste login tot afgerond.
+  if(S.user&&!_quickHelpTour.active&&!_tourChain&&sc==='home'){
+    migrateAutoTourFlags();
+    var off=String(getScopedStorage('ds_auto_full_tour_offered','0'));
+    var done=String(getScopedStorage('ds_auto_full_tour_completed','0'));
+    if(off!=='1'&&done!=='1'){
+      setScopedStorage('ds_auto_full_tour_offered','1');
+      setTimeout(function(){startFullAppTour();},450);
+    }
   }
   setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
