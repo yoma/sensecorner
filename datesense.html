@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 11:09">
+<meta name="ds-build" content="v2026-04-03-1 11:13">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -933,6 +933,35 @@ function getPromptText(key){
   var custom=String(ov[k]||'').trim();
   if(custom)return custom;
   return String(PROMPT_DEFAULTS[k]||'').trim();
+}
+function getPromptDefaultText(key){
+  return String(PROMPT_DEFAULTS[String(key||'').trim()]||'').trim();
+}
+function getPromptDiffHtml(key){
+  var base=getPromptDefaultText(key);
+  var cur=getPromptText(key);
+  if(!base||cur===base){
+    return '<div style="font-size:12px;color:#2E7D32;background:#F0FFF4;border:1px solid #CFEAD6;border-radius:10px;padding:10px 12px">Geen verschil met standaardprompt.</div>';
+  }
+  var a=base.split('\n');
+  var b=cur.split('\n');
+  var max=Math.max(a.length,b.length);
+  var rows=[];
+  for(var i=0;i<max;i++){
+    var av=(a[i]||'');
+    var bv=(b[i]||'');
+    if(av===bv){
+      rows.push('<div style="font-size:11px;color:#7f8790;padding:2px 6px">  '+escHTML(bv||'')+'</div>');
+      continue;
+    }
+    if(av){
+      rows.push('<div style="font-size:11px;color:#8D2C2C;background:#FFF3F3;padding:3px 6px;border-left:3px solid #E9A8A8">- '+escHTML(av)+'</div>');
+    }
+    if(bv){
+      rows.push('<div style="font-size:11px;color:#1B5E20;background:#F1FBF3;padding:3px 6px;border-left:3px solid #9DD7A8">+ '+escHTML(bv)+'</div>');
+    }
+  }
+  return '<div style="border:1px solid var(--b);border-radius:10px;overflow:auto;max-height:220px;background:#fff">'+rows.join('')+'</div>';
 }
 function setPromptText(key,val){
   var k=String(key||'').trim();
@@ -6298,6 +6327,9 @@ function rPromptCenter(el){
   _promptCenterKey=key;
   var cur=defs.filter(function(x){return x.k===key;})[0]||defs[0];
   var txt=getPromptText(key);
+  var ov=getPromptOverrides();
+  var isCustom=!!String(ov[key]||'').trim();
+  var diffHtml=getPromptDiffHtml(key);
   function escA(v){
     return String(v||'')
       .replace(/&/g,'&amp;')
@@ -6317,12 +6349,17 @@ function rPromptCenter(el){
     +'<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px">'
     +'<div style="font-size:14px;font-weight:800;color:#333">'+cur.title+'</div>'
     +'<div style="font-size:12px;color:#7f8790;margin:3px 0 10px">'+cur.sub+'</div>'
+    +'<div style="font-size:12px;color:'+(isCustom?'#A55B00':'#2E7D32')+';margin:-2px 0 10px">'+(isCustom?'Actieve versie: aangepast':'Actieve versie: standaard')+'</div>'
     +'<textarea id="promptCenterText" class="form-input" style="min-height:280px;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45">'+escA(txt)+'</textarea>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
     +'<button class="btn-r" style="max-width:180px;padding:9px 12px" onclick="savePromptCenterCurrent()">Opslaan</button>'
     +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="resetPromptCenterCurrent()">Reset standaard</button>'
     +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="copyPromptCenterCurrent()">Kopieer prompt</button>'
     +'</div></div></div>';
+  var host=document.createElement('div');
+  host.style.cssText='margin:10px 16px 0';
+  host.innerHTML='<div style="font-size:12px;font-weight:800;color:#444;margin-bottom:6px">Verschil met standaard</div>'+diffHtml;
+  el.appendChild(host);
 }
 function savePromptCenterCurrent(){
   if(!isAdminUser())return;
@@ -8129,50 +8166,4 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var suggested=data.suggestedName||'';
   var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
   if(inputName===null)return;
-  var base=String(inputName||'').trim();
-  if(!base){toast('Naam is leeg');return;}
-  var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier);
-}
-
-async function _doOpslaan(sid,tekst,dossier){
-  var bar=document.getElementById(sid);
-  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
-  await ensureP(dossier);
-  var inserted=await saveMsg(dossier,'user',tekst);
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
-  pd.count=(pd.count||0)+1;
-  S.pdata[dossier]=pd;
-  await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  return inserted;
-}
-
-// ══ Init ══════════════════════════════════════════════════════════
-// Event delegation: auto-save voor contact categorieën via data attributen
-document.addEventListener('input',function(e){
-  var ta=e.target;
-  if(!ta.classList.contains('own-ta'))return;
-  // Contact categorie textareas hebben id="cc-CATID-aN"
-  var m=ta.id.match(/^cc-(.+)-a\d+$/);
-  if(m){
-    var catId=m[1];
-    var dossierEl=ta.closest('[id^="cc-"]');
-    // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+  var 
