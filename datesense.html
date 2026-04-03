@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-7 15:45">
+<meta name="ds-build" content="v2026-04-03-9 17:20">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -120,6 +120,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .dossier-rf-acc{max-height:0;overflow:hidden;transition:max-height .35s ease}
 .dossier-rf-acc.open{max-height:400px}
 .dossier-rf-acc-inn{padding:0 0 14px}
+.dossier-open-prof-cta{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;margin-bottom:14px;border-radius:14px;border:1.5px solid #FFE082;background:#FFF8E1;cursor:pointer;font-family:inherit;text-align:left;box-sizing:border-box}
+.dossier-open-prof-cta:focus{outline:2px solid var(--r);outline-offset:2px}
+.dossier-open-prof-cta-strong{font-size:14px;font-weight:800;color:#333;line-height:1.35}
+.dossier-open-prof-cta-sub{font-size:12px;color:#666;line-height:1.4}
 .dtabs-scroll .tabs-bar{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;justify-content:flex-start}
 .dtabs-scroll .tabs-bar::-webkit-scrollbar{display:none}
 .dtabs-scroll .dtab{flex:0 0 auto;min-width:max-content;padding:12px 14px}
@@ -2855,7 +2859,7 @@ function openDossierProfiel(name){
   closeDrawer();
   goScreen('dossier');
 }
-function getProfielProgressHtml(dossierName){
+function getProfielProgressCounts(dossierName){
   var d=S.pdata[dossierName]||{categories:{}};
   var cats=d.categories||{};
   var filled=0,total=0;
@@ -2874,15 +2878,103 @@ function getProfielProgressHtml(dossierName){
       filled+=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
     });
   }
-  var pct=total?Math.round(filled/total*100):0;
-  var enc=encodeURIComponent(dossierName);
-  return '<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
-    +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Invulvragen · zelfde gegevens als tab Profiel</div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'
-    +'<span style="font-size:12px;font-weight:600;color:#555">'+filled+'/'+total+'</span>'
-    +'<button type="button" class="coach-save-other" style="font-size:10px;padding:4px 8px" data-dos="'+enc+'" onclick="event.stopPropagation();openDossierProfiel(decodeURIComponent(this.dataset.dos))">Open profiel</button>'
+  return{filled:filled,total:total,pct:total?Math.round(filled/total*100):0};
+}
+function computeDossierMatchSummary(name){
+  var d=S.pdata[name]||{props:{...DP},count:0,categories:{}};
+  var isOwn=name==='OWN Sense';
+  if(isOwn){
+    return{isOwn:true,matchPct:null,traitMatchPct:null,photoMatchPct:null,matchLabel:'',matchColor:'#888'};
+  }
+  var hasData=PK.some(function(k){return(d.props[k]||0)>0;});
+  var matchPct=null;
+  var traitMatchPct=null;
+  var photoMatchPct=null;
+  var own=S.pdata['OWN Sense']||{props:{...DP}};
+  var ownHasData=PK.some(function(k){return(own.props[k]||0)>0;});
+  if(!ownHasData){
+    matchPct=-1;
+  }else if(!hasData){
+    matchPct=-2;
+  }else{
+    var diffs=[];
+    PK.forEach(function(k){
+      var ov=own.props[k]||0,cv=d.props[k]||0;
+      if(ov>0&&cv>0)diffs.push(100-Math.abs(ov-cv));
+      else if(ov>0&&cv===0){diffs.push(50);}
+    });
+    if(diffs.length>=1){
+      traitMatchPct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
+      traitMatchPct=Math.min(98,Math.max(10,traitMatchPct));
+      matchPct=traitMatchPct;
+    }else{
+      matchPct=-2;
+    }
+  }
+  var ownMeta=((S.pdata['OWN Sense']||{}).meta)||{};
+  var ownPa=ownMeta.photo_analysis||null;
+  var contactPa=((d.meta||{}).photo_analysis)||null;
+  if(ownPa&&contactPa){
+    photoMatchPct=computePhotoMatchPct(ownPa,contactPa);
+    if(matchPct>=0){
+      matchPct=Math.round((matchPct*0.75)+(photoMatchPct*0.25));
+    }else{
+      matchPct=photoMatchPct;
+    }
+    matchPct=Math.min(98,Math.max(10,matchPct));
+  }
+  var ci=S.profiles.filter(function(p){return p!=='OWN Sense';}).indexOf(name);
+  var col=SEG_DOT_COLORS[(ci+1)%SEG_DOT_COLORS.length];
+  var matchLabel='',matchColor='#888';
+  if(matchPct>=0){
+    matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
+    matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
+  }
+  return{isOwn:false,matchPct:matchPct,traitMatchPct:traitMatchPct,photoMatchPct:photoMatchPct,matchLabel:matchLabel,matchColor:matchColor};
+}
+function buildInvulvragenStripHtml(dossierName){
+  var c=getProfielProgressCounts(dossierName);
+  return'<div class="ds-invul-strip" style="margin-bottom:14px">'
+    +'<div style="font-size:11px;color:#8a8f97;margin-bottom:6px">Invulvragen · zelfde gegevens als dit tabblad</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'
+    +'<span style="font-size:14px;font-weight:700;color:#333">'+c.filled+'/'+c.total+'</span>'
     +'</div>'
-    +'<div style="height:3px;background:var(--b);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--r);border-radius:2px;transition:width .4s"></div></div>'
+    +'<div style="height:4px;background:var(--b);border-radius:2px;overflow:hidden">'
+    +'<div style="height:100%;width:'+c.pct+'%;background:var(--r);border-radius:2px;transition:width .4s"></div>'
+    +'</div></div>';
+}
+function getSensesCardMatchHtml(name){
+  var counts=getProfielProgressCounts(name);
+  var filled=counts.filled,total=counts.total;
+  var metaOk=(getProfileMetaCompletion(name)||{}).complete;
+  var incomplete=(total>0&&filled<total)||!metaOk;
+  if(name==='OWN Sense'){
+    return'<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
+      +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Profiel</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
+      +'<span style="font-size:13px;font-weight:700;color:#333">'+filled+'/'+total+' ingevuld</span>'
+      +(incomplete?'<span style="font-size:10px;font-weight:600;color:#B00020">Nog niet volledig</span>':'<span style="font-size:10px;color:#1B5E20">Klaar ✓</span>')
+      +'</div></div>';
+  }
+  var ms=computeDossierMatchSummary(name);
+  var line1='';
+  if(ms.matchPct!==null&&ms.matchPct>=0){
+    line1='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
+      +'<span style="font-size:24px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>'
+      +'<span style="font-size:12px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>'
+      +'</div>';
+  }else if(ms.matchPct===-1){
+    line1='<span style="font-size:12px;color:#666;line-height:1.4">Match na invullen van <strong>OWN Sense</strong></span>';
+  }else{
+    line1='<span style="font-size:12px;color:#666;line-height:1.4">Meer profielinfo voor betere match</span>';
+  }
+  var line2=incomplete
+    ?'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
+    :'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+'</div>';
+  return'<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
+    +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Match</div>'
+    +line1
+    +line2
     +'</div>';
 }
 function openPlanner(dosName){
@@ -5367,7 +5459,7 @@ function rSenses(el){
   ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
-  ${getProfielProgressHtml('OWN Sense')}
+  ${getSensesCardMatchHtml('OWN Sense')}
 </div>`;
   if(usageMode==='single'){
     h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. DateSense volgt nu je relatie met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
@@ -5402,7 +5494,7 @@ function rSenses(el){
           <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
           <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
         </div>
-        ${getProfielProgressHtml(p)}
+        ${getSensesCardMatchHtml(p)}
       </div>`;
     });
   } else {
@@ -5426,7 +5518,7 @@ function rSenses(el){
           <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();reopenDossier('${p}')">Heropen</button>
           <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="event.stopPropagation();delSense('${p}')">Verwijder definitief</button>
         </div>
-        ${getProfielProgressHtml(p)}
+        ${getSensesCardMatchHtml(p)}
       </div>`;
     });
   }
@@ -5485,47 +5577,15 @@ async function rDossier(el){
   var isOwn=name==='OWN Sense';
   var ci=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
   var col=isOwn?SEG_DOT_COLORS[0]:SEG_DOT_COLORS[(ci+1)%SEG_DOT_COLORS.length];
-  var hasData=PK.some(k=>(d.props[k]||0)>0);
-  // Match % = gemiddelde van hoe dicht contact-props bij OWN props liggen
-  // Alleen voor properties waar beide > 0 zijn
   var matchPct=null;
   var traitMatchPct=null;
   var photoMatchPct=null;
+  var ms=null;
   if(!isOwn){
-    var own=S.pdata['OWN Sense']||{props:{...DP}};
-    var ownHasData=PK.some(function(k){return(own.props[k]||0)>0;});
-    if(!ownHasData){
-      matchPct=-1; // OWN Sense nog niet ingevuld
-    } else if(!hasData){
-      matchPct=-2; // Contact nog geen props — wel OWN ingevuld
-    } else {
-      // Bereken match op basis van beschikbare overlappende properties
-      var diffs=[];
-      PK.forEach(function(k){
-        var ov=own.props[k]||0,cv=d.props[k]||0;
-        if(ov>0&&cv>0)diffs.push(100-Math.abs(ov-cv));
-        else if(ov>0&&cv===0){diffs.push(50);} // onbekend = neutraal
-      });
-      if(diffs.length>=1){
-        traitMatchPct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
-        traitMatchPct=Math.min(98,Math.max(10,traitMatchPct));
-        matchPct=traitMatchPct;
-      } else {
-        matchPct=-2;
-      }
-    }
-    var ownMeta=((S.pdata['OWN Sense']||{}).meta)||{};
-    var ownPa=ownMeta.photo_analysis||null;
-    var contactPa=((d.meta||{}).photo_analysis)||null;
-    if(ownPa&&contactPa){
-      photoMatchPct=computePhotoMatchPct(ownPa,contactPa);
-      if(matchPct>=0){
-        matchPct=Math.round((matchPct*0.75)+(photoMatchPct*0.25));
-      }else{
-        matchPct=photoMatchPct;
-      }
-      matchPct=Math.min(98,Math.max(10,matchPct));
-    }
+    ms=computeDossierMatchSummary(name);
+    matchPct=ms.matchPct;
+    traitMatchPct=ms.traitMatchPct;
+    photoMatchPct=ms.photoMatchPct;
   }
 
   // Stats: berichten count
@@ -5535,9 +5595,9 @@ async function rDossier(el){
 
   var matchLabel='',matchColor='#888',reden='',donutSvgSmall='';
   var goedMatch=[],slecht=[];
-  if(!isOwn&&matchPct>=0){
-    matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
-    matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
+  if(!isOwn&&matchPct>=0&&ms){
+    matchLabel=ms.matchLabel;
+    matchColor=ms.matchColor;
     var own2pre=S.pdata['OWN Sense']||{props:{...DP}};
     PK.forEach(function(k,i){
       var ov=own2pre.props[k]||0,cv=d.props[k]||0;
@@ -5700,28 +5760,6 @@ function buildOwnOverzichtSummaryAndMood(d){
   return html;
 }
 
-function buildOwnProfielVolledigheidCard(d){
-  var cats=d.categories||{};
-  var ownFilled=OWN_CATS.reduce(function(sum,cat){
-    var catData=cats[cat.id]||{};
-    return sum+cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
-  },0);
-  var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
-  var pct=ownTotal?Math.round(ownFilled/ownTotal*100):0;
-  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:18px 0 8px">Profiel volledigheid</div>';
-  html+='<div style="background:var(--g);border-radius:12px;padding:12px 14px;margin-bottom:4px;border:1px solid var(--b)">';
-  html+='<div style="display:flex;justify-content:space-between;margin-bottom:6px;align-items:center">';
-  html+='<span style="font-size:13px;font-weight:700;color:#333">Voortgang invulvakken</span>';
-  html+='<span style="font-size:15px;font-weight:800;color:var(--r)">'+pct+'%</span>';
-  html+='</div>';
-  html+='<div style="height:6px;background:var(--b);border-radius:3px;overflow:hidden">';
-  html+='<div style="height:100%;background:var(--r);border-radius:3px;width:'+pct+'%;transition:width .6s"></div>';
-  html+='</div>';
-  html+='<div style="font-size:11px;color:var(--m);margin-top:6px">'+ownFilled+' van '+ownTotal+' vragen beantwoord. Details bewerk je op tab <strong>Profiel</strong>.</div>';
-  html+='</div>';
-  return html;
-}
-
 function buildOwnCategoryPreviewRows(d){
   var cats=d.categories||{};
   var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 8px">Vragenlijst per thema</div>';
@@ -5806,13 +5844,39 @@ async function loadTab(name,tab,d){
         +'</div>';
     }
 
+    var openProfielCta='';
+    if(isOwnDossier){
+      var ownF=OWN_CATS.reduce(function(sum,cat){
+        var cd=cats[cat.id]||{};
+        return sum+cat.prompts.filter(function(_,i){return(cd['a'+i]||'').trim().length>0;}).length;
+      },0);
+      var ownT=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
+      var ownMc=getProfileMetaCompletion('OWN Sense');
+      if(ownF<ownT||!ownMc.complete){
+        var p=[];
+        if(ownF<ownT)p.push('Nog '+(ownT-ownF)+' van '+ownT+' vragen open');
+        if(!ownMc.complete)p.push('basisgegevens nog niet af');
+        openProfielCta='<button type="button" class="dossier-open-prof-cta" onclick="switchTab(\'profiel\')">'
+          +'<span class="dossier-open-prof-cta-strong">'+escHTML(p.join(' · '))+'</span>'
+          +'<span class="dossier-open-prof-cta-sub">Alles invullen op tab Profiel — tik hier</span>'
+          +'</button>';
+      }
+    }else if(contactTotal>contactFilled){
+      var oc=contactTotal-contactFilled;
+      openProfielCta='<button type="button" class="dossier-open-prof-cta" onclick="switchTab(\'profiel\')">'
+        +'<span class="dossier-open-prof-cta-strong">Nog '+oc+' van '+contactTotal+' profielvragen open</span>'
+        +'<span class="dossier-open-prof-cta-sub">Invullen op tab Profiel — tik hier</span>'
+        +'</button>';
+    }
+    html+=openProfielCta;
+
     // Eigenschappen
     var propsLastIso=getPropsUpdatedAt(d.meta||{});
     html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px">'
       +'<div style="font-size:13px;font-weight:700;color:#333">'+(isOwnDossier?'Jouw eigenschappen':'Eigenschappen')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
       +'</div>';
-    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Zelfde scores en invulvragen als op tab <strong>Profiel</strong> — één databron, geen dubbele invoer.</div>';
+    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Zelfde scores als op tab <strong>Profiel</strong> (één databron). Invulvragen en aanpassingen doe je daar; hieronder de balken.</div>';
     var extraMetrics=[];
     if(!isOwnDossier){
       var ownMetaX=((S.pdata['OWN Sense']||{}).meta)||{};
@@ -5821,7 +5885,7 @@ async function loadTab(name,tab,d){
       var pmX=computePhotoMatchPct(ownPaX,contactPaX);
       if(pmX!==null)extraMetrics.push({label:'Fotoanalyse',v:pmX});
     }
-    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
+    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{bars:true,extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
     var lastFieldsIso=isOwnDossier
       ?getLatestScopeFieldUpdate(d.meta,'own')
       :getLatestScopeFieldUpdate(d.meta,'contact');
@@ -5830,26 +5894,13 @@ async function loadTab(name,tab,d){
     }
 
     if(!isOwnDossier){
+      html+=buildInvulvragenStripHtml(name);
       html+=buildContactCategoryPreviewRows(d,name);
     }
 
     if(isOwnDossier){
-      html+=buildOwnProfielVolledigheidCard(d);
+      html+=buildInvulvragenStripHtml(name);
       html+=buildOwnCategoryPreviewRows(d);
-      var ownFilled=OWN_CATS.reduce(function(sum,cat){
-        var catData=cats[cat.id]||{};
-        var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
-        return sum+filled;
-      },0);
-      var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
-      var ownMetaComp=getProfileMetaCompletion('OWN Sense');
-      var ownNeedsAttention=(ownFilled<ownTotal)||!ownMetaComp.complete;
-      if(ownNeedsAttention){
-        html+='<div style="background:#FFF8E1;border:1.5px solid #FFE082;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#555;line-height:1.55">';
-        html+='💡 <strong>Profiel aanvullen</strong>: basisgegevens of vragenlijst nog niet compleet. Open tab <strong>Profiel</strong> om alles af te werken.';
-        html+='<div style="margin-top:8px"><button class="btn-r" style="max-width:220px;padding:10px 12px" onclick="switchTab(\'profiel\')">→ Naar Profiel</button></div>';
-        html+='</div>';
-      }
     }
 
     // Contact: red flags (compact + uitklapbaar)
@@ -7558,11 +7609,12 @@ function buildProfielOwnHtml(d){
     return sum+cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
   },0);
   var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
+  if(ownFilled<ownTotal||!metaC.complete){
+    html+='<div style="font-size:11px;color:#8a8f97;margin:-4px 0 12px">Profiel nog niet volledig ingevuld</div>';
+  }
+  html+=buildInvulvragenStripHtml('OWN Sense');
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
-  html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
-  html+='<span style="font-size:13px;color:#555">'+ownFilled+'/'+ownTotal+' vragen beantwoord</span>';
-  html+='</div>';
   var firstOpenSet=false;
   OWN_CATS.forEach(function(cat){
     var catData=cats[cat.id]||{};
@@ -7611,15 +7663,30 @@ function buildProfielContactHtml(name,d){
   var contactFilled=CONTACT_CATS.reduce(function(s,c){return s+contactCatProgress(c.id).filled;},0);
   var contactTotal=CONTACT_CATS.reduce(function(s,c){return s+c.prompts.length;},0);
   var metaCC=getProfileMetaCompletion(name);
+  var ms=computeDossierMatchSummary(name);
+  var profielIncomplete=!metaCC.complete||(contactTotal>0&&contactFilled<contactTotal);
   var html='';
   html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
+  if(ms.matchPct!==null&&ms.matchPct>=0){
+    html+='<div style="background:linear-gradient(135deg,#fafbfc 0%,#fff 100%);border:1px solid var(--b);border-radius:14px;padding:14px 16px;margin-bottom:10px">';
+    html+='<div style="font-size:11px;color:#8a8f97;margin-bottom:6px">Match met jou (OWN)</div>';
+    html+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">';
+    html+='<span style="font-size:36px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>';
+    html+='<span style="font-size:15px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>';
+    html+='</div></div>';
+  }else if(ms.matchPct===-1){
+    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Vul eerst <strong>OWN Sense</strong> in om een matchscore te zien.</div>';
+  }else{
+    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen) geeft een betere match.</div>';
+  }
+  if(profielIncomplete){
+    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 12px">Profiel nog niet volledig ingevuld</div>';
+  }
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Invullen voor <strong>'+personName+'</strong> — dit stuurt eigenschappen en advies.</div>';
   html+='<div style="margin-bottom:16px"><button class="btn-g" style="max-width:280px;padding:12px 14px" onclick="openProfileModal(\''+name+'\')">'+(metaCC.complete?'Profielgegevens':'Profiel onvolledig — aanvullen')+'</button></div>';
+  html+=buildInvulvragenStripHtml(name);
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
   html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
-  html+='<div style="background:var(--g);border-radius:12px;padding:10px 16px;margin-bottom:14px;border:1px solid var(--b)">';
-  html+='<span style="font-size:13px;color:#555">'+contactFilled+'/'+contactTotal+' vragen beantwoord · eigenschappen worden automatisch bijgewerkt</span>';
-  html+='</div>';
   var firstContactOpenSet=false;
   CONTACT_CATS.forEach(function(cat){
     var prog=contactCatProgress(cat.id);
