@@ -8,8 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
-<!-- DateSense build tag (debug): revisie + lokaal uur — bij wijziging: Get-Date -Format 'yyyy-MM-dd HH:mm' (PowerShell) -->
-<meta name="ds-build" content="v2026-04-03-13 16:47">
+<!-- DateSense build tag (debug): zet dit op je lokale tijd — PowerShell: Get-Date -Format 'yyyy-MM-dd HH:mm' -->
+<meta name="ds-build" content="2026-04-03 20:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -169,8 +169,24 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* Senses lijst */
 .srow{display:flex;align-items:center;gap:12px;padding:14px 14px;border:1px solid var(--b);border-radius:var(--rad-md);cursor:pointer;margin-bottom:10px;background:#fff;box-shadow:0 2px 8px rgba(20,20,20,.04)}
-.srow.srow-dossier{flex-wrap:wrap;align-items:flex-start}
-.srow.srow-dossier .srow-actions{flex-shrink:0;margin-left:auto}
+.srow.srow-dossier{flex-direction:column;align-items:stretch;gap:0;padding:12px 12px}
+.srow.srow-own-card{flex-direction:column;align-items:stretch;gap:0;padding:12px 12px}
+.srow-dossier-main{display:flex;align-items:flex-start;gap:12px;width:100%;min-width:0}
+.srow.srow-dossier .srow-actions{display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;margin-left:auto;justify-content:flex-end;max-width:100%}
+.srow-dossier-match{width:100%;margin-top:8px;padding-top:8px;border-top:1px dashed #E8E8E8}
+.senses-sort-bar{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.senses-sort-lbl{font-size:10px;font-weight:700;color:#9aa0a8;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
+.senses-sort-select{flex:1;min-width:0;max-width:100%;font-size:12px;font-family:inherit;padding:6px 10px;border-radius:10px;border:1px solid var(--b);background:#fafbfc;color:#444;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+@media (min-width:520px){
+  .senses-sort-select{max-width:280px;flex:0 1 auto}
+}
+.senses-match-pct{font-size:18px;font-weight:800;line-height:1}
+.senses-match-lbl{font-size:11px;font-weight:800;line-height:1.15}
+@media (max-width:520px){
+  .senses-match-pct{font-size:15px}
+  .senses-match-lbl{font-size:10px}
+  .srow.srow-dossier .coach-save-other{padding:4px 6px;font-size:10px}
+}
 .srow:active{transform:translateY(1px)}
 .sdot{width:10px;height:10px;border-radius:5px;background:var(--r);flex-shrink:0}
 .del-btn{background:#FFF0F0;border:1px solid #ffd9d9;color:var(--r);font-size:var(--fs-xs);font-weight:700;padding:6px 12px;border-radius:var(--rad-sm);cursor:pointer;font-family:inherit;flex-shrink:0}
@@ -1068,7 +1084,9 @@ var S={
   vertelGesprekDossier:null,
   /** In dit Vertel-gesprek: automatisch opslaan bij dit dossier (tot Ander/Nieuw gesprek). */
   vertelSessionStickyDossier:null,
-  timelineLimitByDossier:{}
+  timelineLimitByDossier:{},
+  /** Vertel geschiedenis: {sessionId,rows,chronological DB rows,hasOlder} */
+  sessionHistoryPager:null
 };
 
 var _profileModalFor='OWN Sense';
@@ -1396,8 +1414,12 @@ function renderVertelInputCoachTip(){
     +'<button type="button" class="vertel-help-toggle" id="vertelHelpToggle" aria-expanded="false" onclick="toggleVertelHelpPanel()">'
     +'<span>Hulp bij Vertel</span><span class="chev" aria-hidden="true">▸</span></button>'
     +'<div class="vertel-help-panel" id="vertelHelpPanel" role="region" aria-label="Hulp bij Vertel">'
-    +'<div class="vertel-coach-head">Tips</div>'
-    +'<div class="vertel-coach-text">Je werkt nu vooral rond <strong>'+escHTML(tLabel)+'</strong>. Vertel wat er gebeurde, wat je voelde en waar je op vastloopt. Dan krijg je gerichter advies.</div>'
+    +'<div class="vertel-coach-head">Wat is Vertel?</div>'
+    +'<div class="vertel-coach-text"><strong>Vertel</strong> is je vrije gesprek met DateSense: wat er speelt, hoe je je voelt en wat je wil uitproberen. De coach gebruikt je dossiers, je profiel en (als je die gebruikt) je relatie-focus. Onder <strong>Geschiedenis</strong> staan eerdere chats. Opslaan in een dossier gebeurt doorgaans na jouw bevestiging, tenzij je dit gesprek vast aan één dossier koppelt. '
+    +(isOwnTarget
+      ?'<strong>Tip:</strong> combineer kort wat er gebeurde, wat je voelde en welke vraag je hebt — dan wordt het antwoord scherper.'
+      :('<strong>Context nu:</strong> dit gesprek is gekoppeld aan <strong>'+escHTML(tLabel)+'</strong> (pas aan boven het invoerveld als je van onderwerp wisselt).'))
+    +'</div>'
     +'<div class="vertel-coach-chips">'
     +'<button type="button" class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')"><span class="chip-long">🧭 Context + gevoel + vraag</span><span class="chip-short">🧭 Context</span></button>'
     +'<button type="button" class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')"><span class="chip-long">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</span><span class="chip-short">📝 Update</span></button>'
@@ -2852,6 +2874,7 @@ async function loadAll(){
   }
   scrubCrossAccountRuntimeState();
   updateNavTabIndicators();
+  try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
 }
 
 async function ensureP(name){
@@ -3059,7 +3082,7 @@ function rDrawer(){
 }
 function openDrawer(){rDrawer();document.getElementById('drawer').classList.add('open');document.getElementById('ovl').classList.add('show');}
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('ovl').classList.remove('show');}
-function viewDossier(name){S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');}
+function viewDossier(name){S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=3;closeDrawer();goScreen('dossier');}
 function openDossierProfiel(name){
   S.viewDossier=name;
   S.viewTab='profiel';
@@ -3150,13 +3173,18 @@ function buildInvulvragenStripHtml(dossierName){
     +'<div style="height:100%;width:'+c.pct+'%;background:var(--r);border-radius:2px;transition:width .4s"></div>'
     +'</div></div>';
 }
-function getSensesCardMatchHtml(name){
+function getSensesCardMatchHtml(name,opts){
+  opts=opts||{};
+  var strip=!!opts.stripTopRule;
+  var top=strip
+    ?'flex:1 1 100%;width:100%'
+    :'flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8';
   var counts=getProfielProgressCounts(name);
   var filled=counts.filled,total=counts.total;
   var metaOk=(getProfileMetaCompletion(name)||{}).complete;
   var incomplete=(total>0&&filled<total)||!metaOk;
   if(name==='OWN Sense'){
-    return'<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
+    return'<div class="senses-match-inner" style="'+top+'">'
       +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Profiel</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
       +'<span style="font-size:13px;font-weight:700;color:#333">'+filled+'/'+total+' ingevuld</span>'
@@ -3167,8 +3195,8 @@ function getSensesCardMatchHtml(name){
   var line1='';
   if(ms.matchPct!==null&&ms.matchPct>=0){
     line1='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">'
-      +'<span style="font-size:18px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>'
-      +'<span style="font-size:11px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>'
+      +'<span class="senses-match-pct" style="color:'+ms.matchColor+'">'+ms.matchPct+'%</span>'
+      +'<span class="senses-match-lbl" style="color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>'
       +'</div>';
   }else if(ms.matchPct===-1){
     line1='<span style="font-size:12px;color:#666;line-height:1.4">Match na invullen van <strong>OWN Sense</strong></span>';
@@ -3178,11 +3206,91 @@ function getSensesCardMatchHtml(name){
   var line2=incomplete
     ?'<div style="font-size:10px;color:#B00020;font-weight:600;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
     :'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+'</div>';
-  return'<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
+  return'<div class="senses-match-inner" style="'+top+'">'
     +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Match</div>'
     +line1
     +line2
     +'</div>';
+}
+
+var SENSES_SORT_VALUES=['match_desc','match_asc','newest','alpha','age_young','complete_desc'];
+function getSensesSortMode(){
+  var v=String(getScopedStorage('ds_senses_sort','match_desc')||'');
+  if(SENSES_SORT_VALUES.indexOf(v)===-1)return'match_desc';
+  return v;
+}
+function setSensesSortMode(v){
+  if(SENSES_SORT_VALUES.indexOf(v)===-1)return;
+  setScopedStorage('ds_senses_sort',v);
+}
+function setSensesSortFromUi(v){
+  setSensesSortMode(v);
+  goScreen('senses');
+}
+function getSortableMatchScore(name){
+  var ms=computeDossierMatchSummary(name);
+  if(!ms||ms.matchPct===null||ms.matchPct===undefined)return -9999;
+  if(ms.matchPct<0)return -5000+ms.matchPct;
+  return ms.matchPct;
+}
+function getContactAgeYears(name){
+  if(name==='OWN Sense')return null;
+  var m=((S.pdata[name]||{}).meta)||{};
+  var a=calcAgeFromBirthdate(m.birthdate);
+  if(a)return parseInt(a,10);
+  if(String(m.age||'').trim()){
+    var n=parseInt(String(m.age).replace(/\D/g,''),10);
+    if(!isNaN(n))return n;
+  }
+  return null;
+}
+function sortContactsForSenses(names,mode){
+  var arr=(names||[]).slice();
+  var m=mode||getSensesSortMode();
+  function cmp(a,b){
+    var da=S.pdata[a]||{},db=S.pdata[b]||{};
+    if(m==='match_desc'){
+      var sa=getSortableMatchScore(a),sb=getSortableMatchScore(b);
+      if(sb!==sa)return sb-sa;
+      return String(a).localeCompare(String(b),'nl');
+    }
+    if(m==='match_asc'){
+      function unk(x){return x<-4000;}
+      var ua=unk(getSortableMatchScore(a)),ub=unk(getSortableMatchScore(b));
+      if(ua&&ub)return String(a).localeCompare(String(b),'nl');
+      if(ua)return 1;
+      if(ub)return -1;
+      var sa2=getSortableMatchScore(a),sb2=getSortableMatchScore(b);
+      if(sa2!==sb2)return sa2-sb2;
+      return String(a).localeCompare(String(b),'nl');
+    }
+    if(m==='newest'){
+      var ta=da.lastActive?new Date(da.lastActive).getTime():0;
+      var tb=db.lastActive?new Date(db.lastActive).getTime():0;
+      if(tb!==ta)return tb-ta;
+      return String(a).localeCompare(String(b),'nl');
+    }
+    if(m==='alpha'){
+      return dn(a).localeCompare(dn(b),'nl',{sensitivity:'base'});
+    }
+    if(m==='age_young'){
+      var aa=getContactAgeYears(a),ab=getContactAgeYears(b);
+      if(aa==null&&ab==null)return String(a).localeCompare(String(b),'nl');
+      if(aa==null)return 1;
+      if(ab==null)return -1;
+      if(aa!==ab)return aa-ab;
+      return String(a).localeCompare(String(b),'nl');
+    }
+    if(m==='complete_desc'){
+      var ca=getProfielProgressCounts(a),cb=getProfielProgressCounts(b);
+      var pa=ca.total?ca.filled/ca.total:0,pb=cb.total?cb.filled/cb.total:0;
+      if(pb!==pa)return pb-pa;
+      return String(a).localeCompare(String(b),'nl');
+    }
+    return 0;
+  }
+  arr.sort(cmp);
+  return arr;
 }
 function openPlanner(dosName){
   var name=String(dosName||'').trim();
@@ -3218,7 +3326,7 @@ function openPlannerDraft(dosName,idea){
   goScreen('planner');
 }
 async function viewDossierTijdlijn(name){
-  S.viewDossier=name;S.viewTab='tijdlijn';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');
+  S.viewDossier=name;S.viewTab='tijdlijn';S.timelineLimitByDossier[name]=3;closeDrawer();goScreen('dossier');
 }
 
 function openProfileModal(name){
@@ -3719,41 +3827,27 @@ function activateDateModeFromHome(){
   }
   goScreen('home');
 }
-async function applyFocusFromHome(autoHold){
+async function applyFocusFromHome(){
   var sel=document.getElementById('homeFocusSelect');
   var n=sel?sel.value:'';
   if(!n){toast('Kies eerst een dossier');return;}
   setFocusRelationType(stageRelationTypeValue(getDossierStage(n)));
   S.homeModeDraft='single';
   S.homeModeEditorOpen=false;
-  await activateRelationshipFocus(n,!!autoHold);
+  await activateRelationshipFocus(n);
 }
-async function activateRelationshipFocus(name,autoHold){
+async function activateRelationshipFocus(name){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
-  if(autoHold){
-    var targets=(S.profiles||[]).filter(function(p){
-      return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
-    });
-    if(targets.length){
-      var ok=confirm(
-        'Relatie-focus op '+dn(name)+' activeren?\n\n'
-        +'- '+targets.length+' ander(e) actief(e) dossier(s) gaan op on hold\n'
-        +'- Je kan ze later altijd heropenen'
-      );
-      if(!ok)return;
-    }
-    setUsageMode('single');
-    setFocusDossier(name);
-    for(var i=0;i<targets.length;i++){
-      await setDossierLifecycle(targets[i],'on_hold');
-    }
-    if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' dossier(s) op on hold');
-    else toast('🎯 Relatie-focus op '+dn(name));
-  }else{
-    setUsageMode('single');
-    setFocusDossier(name);
-    toast('🎯 Relatie-focus op '+dn(name));
+  var targets=(S.profiles||[]).filter(function(p){
+    return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
+  });
+  setUsageMode('single');
+  setFocusDossier(name);
+  for(var i=0;i<targets.length;i++){
+    await setDossierLifecycle(targets[i],'on_hold');
   }
+  if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
+  else toast('🎯 Relatie-focus op '+dn(name));
   goScreen('senses');
 }
 
@@ -3836,7 +3930,7 @@ async function handleStageFocusChoice(choice){
   if(choice==='activate'){
     var relType=stageRelationTypeValue(ctx.stage);
     if(relType)setFocusRelationType(relType);
-    await activateRelationshipFocus(ctx.name,true);
+    await activateRelationshipFocus(ctx.name);
     return;
   }
   toast('Date modus behouden voor '+dn(ctx.name));
@@ -3859,6 +3953,25 @@ async function setDossierLifecycle(name,status){
   d.meta.lifecycle_status=status;
   S.pdata[name]=d;
   await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+}
+
+async function ensureSingleModeHolds(silent){
+  if(!S.user||getUsageMode()!=='single')return;
+  var focus=String(getFocusDossier()||'').trim();
+  if(!focus||focus==='OWN Sense')return;
+  var others=(S.profiles||[]).filter(function(p){
+    return p!=='OWN Sense'&&p!==focus&&getDossierLifecycle(p)==='active';
+  });
+  if(!others.length)return;
+  for(var i=0;i<others.length;i++){
+    try{
+      await setDossierLifecycle(others[i],'on_hold');
+    }catch(e){
+      console.warn('ensureSingleModeHolds',e);
+    }
+  }
+  if(!silent)toast('📌 Relatie-modus: '+others.length+' ander(e) dossier(s) automatisch op on hold');
+  rDrawer();
 }
 
 function _coachState(){
@@ -3913,6 +4026,7 @@ async function closeDossier(name){
 async function reopenDossier(name){
   if(!name||name==='OWN Sense')return;
   await setDossierLifecycle(name,'active');
+  try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
   toast('🔄 '+dn(name)+' opnieuw actief');
   goScreen('senses');
 }
@@ -4343,7 +4457,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome(true)">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
           :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
@@ -5668,27 +5782,41 @@ function rNotifications(el){
 // ══ Senses lijst ═════════════════════════════════════════════════
 function rSenses(el){
   var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
-  var cs=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
-  var archived=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
+  var csRaw=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
+  var archivedRaw=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
+  var sortM=getSensesSortMode();
+  var cs=sortContactsForSenses(csRaw,sortM);
+  var archived=sortContactsForSenses(archivedRaw,sortM);
   var usageMode=getUsageMode();
   var focusName=getFocusDossier();
   if(typeof S.compareMode!=='boolean')S.compareMode=false;
   if(!Array.isArray(S.compareDraft))S.compareDraft=[];
-  S.compareDraft=S.compareDraft.filter(function(n){return cs.indexOf(n)>=0;}).slice(0,3);
+  S.compareDraft=S.compareDraft.filter(function(n){return csRaw.indexOf(n)>=0;}).slice(0,3);
   var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
-<div class="srow" style="flex-wrap:wrap" onclick="goScreen('own')">
+<div class="srow srow-own-card" onclick="goScreen('own')">
+  <div class="srow-dossier-main" style="align-items:center">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+'"></div>'}
-  <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
-  ${getSensesCardMatchHtml('OWN Sense')}
+  <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" style="flex-shrink:0"><polyline points="9,6 15,12 9,18"/></svg>
+  </div>
+  <div class="srow-dossier-match">${getSensesCardMatchHtml('OWN Sense',{stripTopRule:true})}</div>
 </div>`;
   if(usageMode==='single'){
     h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. DateSense volgt nu je relatie met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
   }
   if(cs.length){
     h+='<div class="sh">Contacten</div>';
-    h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-6px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
+    h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
+      +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
+      +'<option value="match_desc"'+(sortM==='match_desc'?' selected':'')+'>Hoogste match</option>'
+      +'<option value="match_asc"'+(sortM==='match_asc'?' selected':'')+'>Laagste match</option>'
+      +'<option value="newest"'+(sortM==='newest'?' selected':'')+'>Nieuwste activiteit</option>'
+      +'<option value="alpha"'+(sortM==='alpha'?' selected':'')+'>Alfabetisch</option>'
+      +'<option value="age_young"'+(sortM==='age_young'?' selected':'')+'>Leeftijd · jongst eerst</option>'
+      +'<option value="complete_desc"'+(sortM==='complete_desc'?' selected':'')+'>Meest volledig profiel</option>'
+      +'</select></div>';
+    h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-4px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
     if(allContacts.length>=2){
       h+='<div style="margin:-2px 0 10px">'
         +'<button class="'+(usageMode==='single'?'coach-save-other':'btn-r')+'" style="'+(usageMode==='single'?'':'max-width:240px;padding:9px 14px;font-size:13px;font-weight:800;box-shadow:0 6px 16px rgba(174,0,0,.22)')+'" onclick="toggleCompareMode()">'+(S.compareMode?'✕ Vergelijking sluiten':'⚖️ Vergelijk dossiers')+'</button>'
@@ -5704,19 +5832,21 @@ function rSenses(el){
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
       var picked=S.compareDraft.indexOf(p)>=0;
       h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+p+'\')"')+`>
-        ${S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer">':''}
-        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
+        <div class="srow-dossier-main">
+        ${S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">':''}
+        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+'"></div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:700">${p}</div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span> <span style="font-size:10px;font-weight:700;color:#1B5E20;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:999px;padding:2px 6px">Actief ✓</span></div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
-          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${p}',true)">🎯 Focus</button>
+          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${p}')">🎯 Focus</button>
           <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
           <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${p}')">On hold</button>
           <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${p}')">Sluit af</button>
         </div>
-        ${getSensesCardMatchHtml(p)}
+        </div>
+        <div class="srow-dossier-match">${getSensesCardMatchHtml(p,{stripTopRule:true})}</div>
       </div>`;
     });
   } else {
@@ -5730,7 +5860,8 @@ function rSenses(el){
       var stLbl=st==='on_hold'?'On hold':'Afgesloten';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
       h+=`<div class="srow srow-dossier" onclick="viewDossier('${p}')">
-        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65"/>':'<div class="sdot" style="background:'+col+';opacity:.55"></div>'}
+        <div class="srow-dossier-main">
+        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65;flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';opacity:.55"></div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:700;color:#666">${p}</div>
           <div style="font-size:12px;color:#999">${stLbl} · ${d.count||0} berichten</div>
@@ -5740,7 +5871,8 @@ function rSenses(el){
           <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="reopenDossier('${p}')">Heropen</button>
           <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="delSense('${p}')">Verwijder definitief</button>
         </div>
-        ${getSensesCardMatchHtml(p)}
+        </div>
+        <div class="srow-dossier-match">${getSensesCardMatchHtml(p,{stripTopRule:true})}</div>
       </div>`;
     });
   }
@@ -5947,7 +6079,7 @@ async function rDossier(el){
 async function switchTab(tab){
   S.viewTab=tab;
   if(tab==='tijdlijn'&&S.viewDossier&&!S.timelineLimitByDossier[S.viewDossier]){
-    S.timelineLimitByDossier[S.viewDossier]=50;
+    S.timelineLimitByDossier[S.viewDossier]=3;
   }
   document.querySelectorAll('.dtab').forEach(t=>{
     var dt=t.getAttribute('data-dtab');
@@ -5958,8 +6090,8 @@ async function switchTab(tab){
 
 async function laadOudereTijdlijn(name){
   if(!name)return;
-  var current=S.timelineLimitByDossier[name]||50;
-  S.timelineLimitByDossier[name]=Math.min(500,current+50);
+  var current=S.timelineLimitByDossier[name]||3;
+  S.timelineLimitByDossier[name]=Math.min(500,current+3);
   await loadTab(name,'tijdlijn',S.pdata[name]||{props:{...DP},count:0,categories:{}});
 }
 
@@ -6205,11 +6337,15 @@ async function loadTab(name,tab,d){
     cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
     // Gefilterd — alleen dit dossier!
     var msgs=[];
+    var hasOlder=false;
     try{
       // Timeout na 8 seconden
       var timeoutPromise=new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},8000);});
-      var tlLimit=S.timelineLimitByDossier[name]||50;
-      msgs=await Promise.race([loadMsgs(name,{limit:tlLimit,asc:false}),timeoutPromise]);
+      var tlLimit=S.timelineLimitByDossier[name]||3;
+      var fetchCap=Math.min(500,tlLimit+1);
+      msgs=await Promise.race([loadMsgs(name,{limit:fetchCap,asc:false}),timeoutPromise]);
+      hasOlder=(msgs&&msgs.length>tlLimit)&&tlLimit<500;
+      msgs=(msgs||[]).slice(0,tlLimit);
     }catch(e){
       console.error('loadMsgs error:',e);
       cont.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--m)">'
@@ -6254,9 +6390,8 @@ async function loadTab(name,tab,d){
         ${isU?`<button onclick="verplaatsEntry('${msgId}','${name}')" style="flex-shrink:0;padding:5px 10px;background:none;border:1px solid var(--b);border-radius:8px;font-size:12px;color:var(--m);cursor:pointer;font-family:inherit;margin-left:8px">↔</button>`:''}
       </div>`;
     }).join('');
-    var tlLimit2=S.timelineLimitByDossier[name]||50;
-    if(msgs.length>=tlLimit2&&tlLimit2<500){
-      cont.innerHTML+='<div style="text-align:center;margin-top:14px"><button class="btn-g" style="max-width:220px" onclick="laadOudereTijdlijn(\''+name+'\')">Laad ouder</button></div>';
+    if(hasOlder){
+      cont.innerHTML+='<div style="text-align:center;margin-top:14px"><button class="btn-g" style="max-width:260px" onclick="laadOudereTijdlijn(\''+name+'\')">+3 oudere berichten</button></div>';
     }
   }
   else if(tab==='foto'){
@@ -7161,15 +7296,17 @@ async function saveOwnCat(catId,silent){
 
 // ══ VERTEL scherm ════════════════════════════════════════════════
 // S.vertelMsgs = tijdelijke sessie-chat (array van {role, html})
-// Blijft bewaard bij navigeren weg/terug.
-// Wordt alleen geleegd na bevestigen (bevestigAlles) of handmatig (clearChat).
+// Bij openen Vertel vanuit het menu (ander scherm → Vertel): leeg scherm; vorige chats blijven onder Geschiedenis.
+// Tijdens hetzelfde bezoek blijven berichten in geheugen tot je opnieuw naar Vertel navigeert of Nieuw gesprek kiest.
 
 async function rVertel(el){
   var hadForce=S._forceFreshVertel;
   if(S._forceFreshVertel){
     S.vertelMsgs=[];
+    S.sessionHistoryPager=null;
     window._sessieKoppelData=[];
-    // S.currentSessionId niet wissen: komt uit initSessie of actief gesprek — anders verdwijnt DB-geschiedenis bij elke keer Home→Vertel
+    S.vertelSessionStickyDossier=null;
+    S.currentSessionId=null;
   }
   el.innerHTML=`
 <div class="vertel-shell">
@@ -7195,31 +7332,12 @@ async function rVertel(el){
 
   refreshVertelMoodStrip();
   var ca=document.getElementById('chatArea');
-
-  if(hadForce && S.currentSessionId && S.user){
-    await laadSessie(S.currentSessionId,{skipCloseSidebar:true});
-    S._forceFreshVertel=false;
-    if(!S.vertelMsgs||!S.vertelMsgs.length){
-      var welcome=document.createElement('div');welcome.className='msg-ai';
-      welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! Vertel me alles wat er speelt, in één bericht mag ook. Ik herken automatisch of iets over jou gaat of over iemand anders, en ik sla het op in het juiste dossier. <strong>Jij bevestigt altijd voor er iets opgeslagen wordt.</strong> Boven het invoerveld kun je dit gesprek aan een dossier koppelen en later weer wijzigen.</div>`;
-      ca.appendChild(welcome);
-      if(!S.apiKey){
-        var w0=document.createElement('div');w0.className='msg-ai';
-        w0.innerHTML='<div class="bbl-ai mobile-soft-card vertel-welcome-card" style="background:#FFF8E1;border-color:#FFE082"><div class="sndr" style="color:#F57F17">LET OP</div>Voeg je Anthropic API key toe via ⚙️ rechtsboven om de AI te activeren!</div>';
-        ca.appendChild(w0);
-      }
-    }
-    ca.scrollTop=ca.scrollHeight;
-    updateVertelSaveModeUI();
-    renderVertelInputCoachTip();
-    updateVertelGesprekBanner();
-    return;
-  }
+  if(hadForce)S._forceFreshVertel=false;
 
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
     var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! Vertel me alles wat er speelt, in één bericht mag ook. Ik herken automatisch of iets over jou gaat of over iemand anders, en ik sla het op in het juiste dossier. <strong>Jij bevestigt altijd voor er iets opgeslagen wordt.</strong> Boven het invoerveld kun je dit gesprek aan een dossier koppelen en later weer wijzigen.</div>`;
+    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.</div>`;
     ca.appendChild(welcome);
 
     if(!S.apiKey){
@@ -7251,7 +7369,6 @@ async function rVertel(el){
 
   ca.scrollTop=ca.scrollHeight;
   updateVertelSaveModeUI();
-  if(S._forceFreshVertel)S._forceFreshVertel=false;
   renderVertelInputCoachTip();
   updateVertelGesprekBanner();
 }
@@ -7405,8 +7522,8 @@ function rSettings(el){
     <option value="weekend" ${boostPrefs.time==='weekend'?'selected':''}>Weekend</option>
   </select>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(true)">Focus + zet andere op on hold</button>
-    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings(false)">Alleen focus instellen</button>
+    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings()">Relatie-focus activeren</button>
+    <span style="font-size:11px;color:#8a8f97;align-self:center;line-height:1.4">Alle andere contactdossiers gaan automatisch op on hold (OWN Sense blijft actief).</span>
   </div>
 </div>
 <button class="form-btn" onclick="saveSettings()">Opslaan instellingen</button>
@@ -7518,11 +7635,12 @@ async function saveSettings(){
     if(fName)setFocusDossier(fName);
     setFocusRelationType(stageRelationTypeValue(getDossierStage(fName)));
     setBoostPrefs(boostPrefs);
+    try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
   }
   toast('✅ Instellingen opgeslagen');
   goScreen('home');
 }
-async function activateRelationshipFocusFromSettings(autoHold){
+async function activateRelationshipFocusFromSettings(){
   var fd=document.getElementById('focusDossierField');
   var name=fd?fd.value:'';
   setFocusRelationType(stageRelationTypeValue(getDossierStage(name)));
@@ -7533,7 +7651,7 @@ async function activateRelationshipFocusFromSettings(autoHold){
     time:(document.getElementById('focusBoostTimeField')||{}).value||''
   });
   if(!name){toast('Kies eerst een dossier');return;}
-  await activateRelationshipFocus(name,!!autoHold);
+  await activateRelationshipFocus(name);
 }
 
 // ══ Compare ══════════════════════════════════════════════════════
@@ -8287,7 +8405,8 @@ async function sendMsg(){
 
   try{
     var segPromise=null;
-    if(!forcedDossier&&txtForAI.length>=180){
+    // AI-segmentatie (kleuren / opsplitsen) uit: triggert te vaak bij lang getypte tekst op mobiel; later optioneel terug via vlag.
+    if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
     var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
@@ -8307,13 +8426,22 @@ async function sendMsg(){
 
     // Sla sessie-bericht op in Supabase (stil als geen sessie)
     var userSessionMsgId=null;
+    var aiSessionMsgId=null;
     try{
       var sid=await ensureActiveSessionForMessage(txt);
       if(sid){
         userSessionMsgId=await saveSessionMsg(sid,'user',txt);
-        await saveSessionMsg(sid,'ai',raw);
+        aiSessionMsgId=await saveSessionMsg(sid,'ai',raw);
       }
     }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
+    try{
+      var sidLive=S.currentSessionId;
+      if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){
+        var ts=new Date().toISOString();
+        S.sessionHistoryPager.rows.push({id:userSessionMsgId,role:'user',content:txt,created_at:ts});
+        if(aiSessionMsgId)S.sessionHistoryPager.rows.push({id:aiSessionMsgId,role:'ai',content:raw,created_at:ts});
+      }
+    }catch(_pe){}
     // addMsg() heeft user + AI al in S.vertelMsgs gezet — niet opnieuw pushen (dubbel = corrupte geschiedenis).
 
     if(forcedDossier){
@@ -8503,6 +8631,7 @@ function allesNaarDossier(dosName){
 // Wis de chat na opslaan (voor een verse start)
 function clearChat(){
   S.vertelMsgs=[];
+  S.sessionHistoryPager=null;
   S.vertelGesprekDossier=null;
   S.vertelFrom=null;
   S.vertelSessionStickyDossier=null;
@@ -8511,10 +8640,11 @@ function clearChat(){
   if(!ca)return;
   ca.innerHTML='';
   var d=document.createElement('div');d.className='msg-ai';
-  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>Klaar voor het volgende! Wat speelt er?</div>';
+  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>Je start een nieuw Vertel-gesprek. Wat wil je kwijt?</div>';
   ca.appendChild(d);
   // Welkomstbericht ook in S.vertelMsgs zetten
-  S.vertelMsgs.push({role:'ai',html:'Klaar voor het volgende! Wat speelt er?'});
+  S.vertelMsgs.push({role:'ai',html:'Je start een nieuw Vertel-gesprek. Wat wil je kwijt?'});
+  S.currentSessionId=null;
 }
 
 // WhatsApp dialoog — vraag met wie het gesprek is
@@ -9266,334 +9396,155 @@ async function nieuwGesprek(){
   toast('Nieuw gesprek gestart');
 }
 
+var SESS_HISTORY_PAGE=20;
+
+async function fetchSenseSessionMsgBatch(sessionId,beforeCreatedAt){
+  var fetchN=Math.min(501,SESS_HISTORY_PAGE+1);
+  var q=sb.from('sense_session_msgs')
+    .select('*')
+    .eq('session_id',sessionId)
+    .eq('user_id',S.user.id);
+  if(beforeCreatedAt)q=q.lt('created_at',beforeCreatedAt);
+  q=q.order('created_at',{ascending:false}).limit(fetchN);
+  var res=await q;
+  var data=res.data;
+  if(res.error){
+    q=sb.from('sense_session_msgs').select('*').eq('session_id',sessionId);
+    if(beforeCreatedAt)q=q.lt('created_at',beforeCreatedAt);
+    q=q.order('created_at',{ascending:false}).limit(fetchN);
+    res=await q;
+    data=res.data;
+  }
+  if(res.error)throw res.error;
+  data=data||[];
+  var hasMore=data.length>SESS_HISTORY_PAGE;
+  var slice=data.slice(0,SESS_HISTORY_PAGE);
+  var chron=slice.slice().reverse();
+  chron.forEach(function(m){
+    if(m&&!m.created_at&&(m.inserted_at||m.updated_at)){
+      m.created_at=m.inserted_at||m.updated_at;
+    }
+  });
+  return{chron:chron,hasMore:hasMore};
+}
+
+async function applyVertelSessionTitleFromDb(sessionId,fallbackRows){
+  var t=document.getElementById('sessieTitle');
+  if(!t)return;
+  try{
+    var r=await sb.from('sense_sessions').select('preview').eq('id',sessionId).eq('user_id',S.user.id).limit(1);
+    var row=(r&&r.data&&r.data[0])?r.data[0]:null;
+    if(row&&String(row.preview||'').trim()){
+      t.textContent=String(row.preview).trim();
+      return;
+    }
+  }catch(e){}
+  var rows=fallbackRows||[];
+  var fu=rows.find(function(x){return x.role==='user';});
+  t.textContent=fu?buildSessionPreview(fu.content||''):'Gesprek';
+}
+
+function renderVertelSessionFromRows(rows){
+  var ca=document.getElementById('chatArea');
+  if(!ca)return;
+  var pager=S.sessionHistoryPager;
+  var hasOlder=pager&&pager.hasOlder;
+  ca.innerHTML='';
+  if(hasOlder){
+    var top=document.createElement('div');
+    top.style.cssText='text-align:center;padding:10px 12px;border-bottom:1px solid var(--b);background:#fafbfc';
+    top.innerHTML='<button type="button" class="btn-g" style="max-width:300px" onclick="laadOudereSessieBerichten()">Laad '+SESS_HISTORY_PAGE+' eerdere berichten</button>';
+    ca.appendChild(top);
+  }
+  function escSess(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  var assignMap=getSessAssignMap();
+  S.vertelMsgs=[];
+  window._sessieKoppelData=[];
+  rows.forEach(function(m,idx){
+    S.vertelMsgs.push({role:m.role,html:m.content||''});
+    if(m.role==='user'){
+      var nextAi='';
+      for(var j=idx+1;j<rows.length;j++){
+        if(rows[j].role==='ai'){nextAi=rows[j].content||'';break;}
+        if(rows[j].role==='user')break;
+      }
+      var kIdx=window._sessieKoppelData.length;
+      var a=assignMap[m.id]||{};
+      window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
+      var userWrap=document.createElement('div');
+      userWrap.className='msg-user';
+      userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
+        +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
+        +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
+        +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
+        +'</div></div>';
+      ca.appendChild(userWrap);
+    }else{
+      var aiWrap=document.createElement('div');
+      aiWrap.className='msg-ai';
+      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
+      ca.appendChild(aiWrap);
+    }
+  });
+}
+
+async function laadOudereSessieBerichten(){
+  var sid=S.currentSessionId;
+  var pager=S.sessionHistoryPager;
+  if(!sid||!pager||pager.sessionId!==sid||!pager.rows||!pager.rows.length||!pager.hasOlder)return;
+  var ca=document.getElementById('chatArea');
+  var beforeTs=pager.rows[0].created_at;
+  if(!beforeTs)return;
+  var oldH=ca?ca.scrollHeight:0;
+  var oldTop=ca?ca.scrollTop:0;
+  try{
+    var batch=await fetchSenseSessionMsgBatch(sid,beforeTs);
+    if(!batch.chron.length){
+      pager.hasOlder=false;
+      renderVertelSessionFromRows(pager.rows);
+      updateSessBulkBar();
+      return;
+    }
+    pager.rows=batch.chron.concat(pager.rows);
+    pager.hasOlder=!!batch.hasMore;
+    renderVertelSessionFromRows(pager.rows);
+    updateSessBulkBar();
+    if(ca){
+      ca.scrollTop=oldTop+(ca.scrollHeight-oldH);
+    }
+  }catch(e){
+    console.warn('laadOudereSessieBerichten',e);
+    toast('Kon oudere berichten niet laden');
+  }
+}
+
 async function laadSessie(sessionId,opt){
   opt=opt||{};
   if(!opt.skipCloseSidebar)closeSidebar();
   if(!S.user)return;
   S.currentSessionId=sessionId;
   S.vertelMsgs=[];
+  S.sessionHistoryPager=null;
   var ca=document.getElementById('chatArea');
   if(ca)ca.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Gesprek laden...</div>';
   try{
-    var q=sb.from('sense_session_msgs')
-      .select('*').eq('session_id',sessionId).eq('user_id',S.user.id)
-      .order('created_at',{ascending:true}).limit(50);
-    var res=await q;
-    var data=res.data;
-    if(res.error){
-      res=await sb.from('sense_session_msgs')
-        .select('*').eq('session_id',sessionId)
-        .order('created_at',{ascending:true}).limit(50);
-      data=res.data;
-    }
-    if(res.error)throw res.error;
-    if(!data||!data.length){if(ca)ca.innerHTML='';return;}
-    if(ca)ca.innerHTML='';
-    function escSess(s){
-      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-    var assignMap=getSessAssignMap();
-    window._sessieKoppelData=[];
-    data.forEach(function(m,idx){
-      S.vertelMsgs.push({role:m.role,html:m.content});
-      if(m.role==='user'){
-        var nextAi='';
-        for(var j=idx+1;j<data.length;j++){
-          if(data[j].role==='ai'){nextAi=data[j].content||'';break;}
-          if(data[j].role==='user')break;
-        }
-        var kIdx=window._sessieKoppelData.length;
-        var a=assignMap[m.id]||{};
-        window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
-        var userWrap=document.createElement('div');
-        userWrap.className='msg-user';
-        userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
-          +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
-          +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
-          +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
-          +'</div></div>';
-        if(ca)ca.appendChild(userWrap);
-      } else {
-        var aiWrap=document.createElement('div');
-        aiWrap.className='msg-ai';
-        aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
-        if(ca)ca.appendChild(aiWrap);
-      }
-    });
+    var batch=await fetchSenseSessionMsgBatch(sessionId,null);
+    var data=batch.chron;
+    if(!data||!data.length){if(ca)ca.innerHTML='';S.sessionHistoryPager=null;return;}
+    S.sessionHistoryPager={sessionId:sessionId,rows:data.slice(),hasOlder:!!batch.hasMore};
+    await applyVertelSessionTitleFromDb(sessionId,S.sessionHistoryPager.rows);
+    renderVertelSessionFromRows(S.sessionHistoryPager.rows);
     if(ca)ca.scrollTop=ca.scrollHeight;
     updateSessBulkBar();
-    var t=document.getElementById('sessieTitle');
-    if(t&&data[0]){
-      var firstUser=(data.find(function(x){return x.role==='user';})||data[0]);
-      t.textContent=buildSessionPreview(firstUser.content||'');
-    }
   }catch(e){
     console.warn('laadSessie error:',e);
     if(ca)ca.innerHTML='';
+    S.sessionHistoryPager=null;
     if(!opt.silent)toast('Gesprek laden mislukt');
   }
 }
 
 function updateSessBulkBar(){
-  var bar=document.getElementById('sessBulkBar');
-  if(!bar)return;
-  var arr=window._sessieKoppelData||[];
-  var unc=arr.filter(function(x){return !x.dossier;}).length;
-  if(!arr.length){bar.style.display='none';bar.innerHTML='';return;}
-  bar.style.display='block';
-  bar.innerHTML='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666;flex:1">'+unc+' ongekoppeld van '+arr.length+' user-berichten</span>'
-    +'<button class="coach-save-other" onclick="koppelAlleOngekoppeld()">Koppel alle ongekoppelde</button></div>';
-}
-
-function openGekoppeldDossierFromSess(idx){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!item.dossier)return;
-  viewDossier(item.dossier);
-}
-
-async function koppelAlleOngekoppeld(){
-  var arr=window._sessieKoppelData||[];
-  var targets=arr.map(function(x,i){return {item:x,idx:i};}).filter(function(x){return !x.item.dossier;});
-  if(!targets.length){toast('Alles is al gekoppeld');return;}
-  openDossierPickModal(
-    'Koppel alle ongekoppelde',
-    'Kies 1 dossier voor alle '+targets.length+' ongekoppelde berichten.',
-    'bulk',
-    targets.map(function(t){return t.idx;})
-  );
-}
-
-async function koppelAlleOngekoppeldNaar(dossier,targetIdxs){
-  var idxs=targetIdxs||[];
-  for(var i=0;i<idxs.length;i++){
-    await koppelSessieMsgNaar(idxs[i],dossier,true);
-  }
-  toast('✅ '+idxs.length+' berichten gekoppeld aan '+dn(dossier));
-  await laadSessie(S.currentSessionId);
-}
-
-async function koppelSessieMsg(idx){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!S.user)return;
-  openDossierPickModal(
-    'Kies dossier',
-    'Aan welk dossier wil je dit sessiebericht koppelen?',
-    'single',
-    idx
-  );
-}
-
-async function koppelSessieMsgNaar(idx,dossier,silent){
-  var arr=window._sessieKoppelData||[];
-  var item=arr[idx];
-  if(!item||!S.user)return;
-  try{
-    var map=getSessAssignMap();
-    var m=map[item.sessionMsgId]||{};
-    if(m.senseMsgId){
-      await sb.from('sense_messages').update({profile_name:dossier}).eq('id',m.senseMsgId).eq('user_id',S.user.id);
-    }else{
-      var payload=(item.text||'')+((item.aiText||'')?('\n'+item.aiText):'');
-      var inserted=await _doOpslaan(null,payload,dossier,item.sessionMsgId);
-      if(inserted&&inserted.id)m.senseMsgId=inserted.id;
-    }
-    m.dossier=dossier;
-    map[item.sessionMsgId]=m;
-    setSessAssignMap(map);
-    item.dossier=dossier;
-    item.senseMsgId=m.senseMsgId||null;
-    var lbl=document.getElementById('sessAssignLbl-'+idx);
-    if(lbl)lbl.textContent='📌 Gekoppeld aan '+dn(dossier);
-    if(!silent){
-      toast('✅ Gekoppeld aan '+dn(dossier));
-      await laadSessie(S.currentSessionId);
-    }else{
-      updateSessBulkBar();
-    }
-  }catch(e){
-    console.warn('koppelSessieMsg error:',e);
-    if(!silent)toast('Koppelen mislukt');
-  }
-}
-
-async function saveSessionMsg(sessionId,role,content){
-  if(!S.user||!sessionId)return null;
-  try{
-    var res=await sb.from('sense_session_msgs').insert({
-      session_id:sessionId,user_id:S.user.id,
-      role:role,content:content,
-      created_at:new Date().toISOString()
-    }).select('id').single();
-    if(res&&res.error)console.warn('saveSessionMsg insert:',res.error);
-    return res&&res.data&&res.data.id?res.data.id:null;
-  }catch(e){console.warn('saveSessionMsg:',e);return null;}
-}
-
-async function ensureActiveSessionForMessage(previewText){
-  if(!S.user)return null;
-  if(S.currentSessionId)return S.currentSessionId;
-  try{
-    var preview=buildSessionPreview(previewText||'Nieuw gesprek');
-    var {data,error}=await sb.from('sense_sessions')
-      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString()})
-      .select().single();
-    if(error)throw error;
-    if(data&&data.id){
-      S.currentSessionId=data.id;
-      laadSessies();
-      return data.id;
-    }
-  }catch(e){
-    console.warn('ensureActiveSessionForMessage error:',e);
-  }
-  return null;
-}
-
-async function updateSessiePreview(sessionId,tekst){
-  if(!S.user||!sessionId)return;
-  var preview=buildSessionPreview(tekst);
-  var t=document.getElementById('sessieTitle');
-  if(t)t.textContent=preview;
-  try{
-    await sb.from('sense_sessions').update({
-      preview:preview,updated_at:new Date().toISOString()
-    }).eq('id',sessionId).eq('user_id',S.user.id);
-  }catch(e){console.warn('updateSessiePreview:',e);}
-}
-
-async function initSessie(){
-  if(!S.user||S.currentSessionId)return;
-  try{
-    var {data,error}=await sb.from('sense_sessions')
-      .select('*').eq('user_id',S.user.id)
-      .order('updated_at',{ascending:false}).limit(1);
-    if(error)throw error;
-    // Geen automatische lege sessies meer aanmaken.
-    // Alleen bestaande laatste sessie gebruiken als referentie.
-    if(data&&data.length)S.currentSessionId=data[0].id;
-  }catch(e){
-    console.warn('initSessie stil gefaald:',e);
-    // Geen fallback ID — sessie wordt gewoon niet bewaard
-  }
-}
-
-// ══ Coach opslaan functies ════════════════════════════════════════
-
-async function opslaanInDossier(sid){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  var dossier=data.dossier;
-  if(!dossier){kiesAnderDossier(sid);return;}
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
-}
-
-async function opslaanInDossierSticky(sid){
-  var data=window._saveData&&window._saveData[sid];
-  if(!data||!data.dossier)return;
-  S.vertelSessionStickyDossier=data.dossier;
-  await opslaanInDossier(sid);
-  toast('Oké — volgende berichten in dit gesprek gaan automatisch naar '+dn(data.dossier)+'.');
-}
-
-function kiesAnderDossier(sid){
-  S.vertelSessionStickyDossier=null;
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  openDossierPickModal(
-    'Opslaan bij dossier',
-    'Kies een bestaand dossier of maak een nieuw dossier.',
-    'save',
-    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||'',sessionUserMsgId:data.sessionUserMsgId}
-  );
-}
-
-async function _opslaanKeuze(dossier){
-  var sid=window._saveKiesSid;
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
-}
-
-async function maakNieuwDossierEnOpslaan(sid,useSuggested){
-  S.vertelSessionStickyDossier=null;
-  var data=window._saveData&&window._saveData[sid];
-  if(!data)return;
-  var suggested=data.suggestedName||'';
-  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
-  if(inputName===null)return;
-  var base=String(inputName||'').trim();
-  if(!base){toast('Naam is leeg');return;}
-  var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
-}
-
-async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
-  if(sid){
-    var bar=document.getElementById(sid);
-    if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
-  }
-  await ensureP(dossier);
-  var inserted=await saveMsg(dossier,'user',tekst);
-  if(sessionUserMsgId&&inserted&&inserted.id){
-    var map=getSessAssignMap();
-    map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
-    setSessAssignMap(map);
-  }
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
-  pd.count=(pd.count||0)+1;
-  S.pdata[dossier]=pd;
-  await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  S.vertelGesprekDossier=dossier;
-  S.vertelFrom=dossier;
-  updateVertelGesprekBanner();
-  if(S.screen==='vertel')renderVertelInputCoachTip();
-  return inserted;
-}
-
-// ══ Init ══════════════════════════════════════════════════════════
-// Event delegation: auto-save voor contact categorieën via data attributen
-document.addEventListener('input',function(e){
-  var ta=e.target;
-  if(!ta.classList.contains('own-ta'))return;
-  // Contact categorie textareas hebben id="cc-CATID-aN"
-  var m=ta.id.match(/^cc-(.+)-a\d+$/);
-  if(m){
-    var catId=m[1];
-    var dossierEl=ta.closest('[id^="cc-"]');
-    // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-// Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
-try{
-  window.goScreen=goScreen;
-  window.goBack=goBack;
-  window.switchTab=switchTab;
-  window.viewDossier=viewDossier;
-  window.openDossierProfiel=openDossierProfiel;
-  window.opslaanInDossierSticky=opslaanInDossierSticky;
-  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
-  window.safeSignOut=safeSignOut;
-  window.closeDrawer=closeDrawer;
-  window.openDrawer=openDrawer;
-  window.nieuwGesprek=nieuwGesprek;
-  window.openSidebar=openSidebar;
-  window.closeSidebar=closeSidebar;
-}catch(e){console.warn('window exports:',e);}
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+  var bar=document.getElemen
