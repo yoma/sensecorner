@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-1 15:05">
+<meta name="ds-build" content="v2026-04-03-3 15:16">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2222,7 +2222,7 @@ function getLatestScopeFieldUpdate(meta,scope){
 function renderProps(props,showSource,opt){
   var hasData=PK.some(k=>(props[k]||0)>0);
   var o=opt||{};
-  var compact=o.compact!==false;
+  var compact=o.compact===true;
   var extras=Array.isArray(o.extra)?o.extra:[];
   var propUpdates=(o.propUpdates&&typeof o.propUpdates==='object')?o.propUpdates:{};
   if(!hasData){
@@ -2283,6 +2283,25 @@ function renderProps(props,showSource,opt){
       +updLine
       +'</div>';
   }).join('');
+  var extraBars='';
+  extras.forEach(function(e,idx){
+    if(!e)return;
+    var vv=parseInt(e.v,10);
+    if(isNaN(vv))return;
+    vv=Math.max(0,Math.min(100,vv));
+    var label=String(e.label||'Extra');
+    var k='extra_'+idx;
+    var pu=propUpdates[k];
+    var upd=pu?fmtPropUpdate(pu):'';
+    var updLine='<div class="prop-row-upd">'+(upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>')+'</div>';
+    var barColor=vv===0?'var(--b)':'var(--r)';
+    extraBars+='<div class="prop">'
+      +'<div class="pn">'+escHTML(label)+'</div>'
+      +'<div class="track"><div class="fill" style="width:'+vv+'%;background:'+barColor+'"></div></div>'
+      +'<div class="pct" style="color:'+(vv===0?'#ccc':'var(--r)')+'">'+vv+'%</div>'
+      +updLine
+      +'</div>';
+  });
 
   // Bronnen uitleg
   var srcId='src'+Math.floor(Math.random()*99999);
@@ -2298,7 +2317,7 @@ function renderProps(props,showSource,opt){
     +'&bull; Meer info = nauwkeuriger schatting'
     +'</div></div>';
 
-  return barsHtml+srcHtml;
+  return barsHtml+extraBars+srcHtml;
 }
 
 // ══ Auth ═════════════════════════════════════════════════════════
@@ -5663,6 +5682,31 @@ function buildOwnCategoryPreviewRows(d){
   return html;
 }
 
+function buildContactCategoryPreviewRows(d,dossierName){
+  var personName=String(dossierName||'').replace('Sense','').trim();
+  var cats=d.categories||{};
+  var CONTACT_CATS=getContactCatsDef(personName);
+  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 8px">Vragenlijst per thema</div>';
+  html+='<div class="own-ov-cat-list">';
+  CONTACT_CATS.forEach(function(cat){
+    var catData=cats[cat.id]||{};
+    var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+    var total=cat.prompts.length;
+    var catLast=getCategoryUpdate(d.meta||{},'contact',cat.id);
+    html+='<button type="button" class="own-ov-cat" onclick="switchTab(\'profiel\')">';
+    html+='<span class="own-ov-cat-ic">'+cat.icon+'</span>';
+    html+='<span class="own-ov-cat-mid">';
+    html+='<span class="own-ov-cat-t">'+escHTML(cat.title)+'</span>';
+    html+='<span class="own-ov-cat-sub">'+filled+'/'+total+' vragen beantwoord · thema upd. '+fmtPropUpdate(catLast)+'</span>';
+    html+='</span>';
+    html+='<span class="own-ov-cat-ar" aria-hidden="true">›</span>';
+    html+='</button>';
+  });
+  html+='</div>';
+  html+='<p style="font-size:11px;color:#8a8f97;margin:0 0 4px;line-height:1.45">Invulvakjes bewerk je op tab <strong>Profiel</strong>; hier zie je per thema de voortgang.</p>';
+  return html;
+}
+
 async function loadTab(name,tab,d){
   var cont=document.getElementById('tabContent');if(!cont)return;
   // Altijd de meest recente data uit memory gebruiken
@@ -5719,6 +5763,10 @@ async function loadTab(name,tab,d){
       :getLatestScopeFieldUpdate(d.meta,'contact');
     if(lastFieldsIso){
       html+='<div style="font-size:11px;color:#8a8f97;margin-top:-4px;margin-bottom:12px">Laatste wijziging invulvakjes (profiel, algemeen): '+fmtPropUpdate(lastFieldsIso)+'</div>';
+    }
+
+    if(!isOwnDossier){
+      html+=buildContactCategoryPreviewRows(d,name);
     }
 
     if(isOwnDossier){
@@ -6758,10 +6806,11 @@ async function saveOwnCat(catId,silent){
 // Wordt alleen geleegd na bevestigen (bevestigAlles) of handmatig (clearChat).
 
 async function rVertel(el){
+  var hadForce=S._forceFreshVertel;
   if(S._forceFreshVertel){
     S.vertelMsgs=[];
     window._sessieKoppelData=[];
-    S.currentSessionId=null;
+    // S.currentSessionId niet wissen: komt uit initSessie of actief gesprek — anders verdwijnt DB-geschiedenis bij elke keer Home→Vertel
   }
   el.innerHTML=`
 <div class="vertel-shell">
@@ -6785,6 +6834,26 @@ async function rVertel(el){
 </div></div>`;
 
   var ca=document.getElementById('chatArea');
+
+  if(hadForce && S.currentSessionId && S.user){
+    await laadSessie(S.currentSessionId,{skipCloseSidebar:true});
+    S._forceFreshVertel=false;
+    if(!S.vertelMsgs||!S.vertelMsgs.length){
+      var welcome=document.createElement('div');welcome.className='msg-ai';
+      welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! Vertel me alles wat er speelt, in één bericht mag ook. Ik herken automatisch of iets over jou gaat of over iemand anders, en ik sla het op in het juiste dossier. <strong>Jij bevestigt altijd voor er iets opgeslagen wordt.</strong> Boven het invoerveld kun je dit gesprek aan een dossier koppelen en later weer wijzigen.</div>`;
+      ca.appendChild(welcome);
+      if(!S.apiKey){
+        var w0=document.createElement('div');w0.className='msg-ai';
+        w0.innerHTML='<div class="bbl-ai mobile-soft-card vertel-welcome-card" style="background:#FFF8E1;border-color:#FFE082"><div class="sndr" style="color:#F57F17">LET OP</div>Voeg je Anthropic API key toe via ⚙️ rechtsboven om de AI te activeren!</div>';
+        ca.appendChild(w0);
+      }
+    }
+    ca.scrollTop=ca.scrollHeight;
+    updateVertelSaveModeUI();
+    renderVertelInputCoachTip();
+    updateVertelGesprekBanner();
+    return;
+  }
 
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
@@ -8678,10 +8747,21 @@ async function laadSessies(){
   if(!S.user)return;
   var el=document.getElementById('sidebarSessions');
   if(!el)return;
+  el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#888;text-align:center">Laden…</div>';
   try{
-    var {data}=await sb.from('sense_sessions')
+    var res=await sb.from('sense_sessions')
       .select('*').eq('user_id',S.user.id)
       .order('updated_at',{ascending:false}).limit(30);
+    var data=res.data;
+    var err=res.error;
+    if(err){
+      res=await sb.from('sense_sessions')
+        .select('*').eq('user_id',S.user.id)
+        .order('created_at',{ascending:false}).limit(30);
+      data=res.data;
+      err=res.error;
+    }
+    if(err)throw err;
     if(!data||!data.length){
       el.innerHTML='<div style="padding:20px 10px;font-size:13px;color:#666;text-align:center">Nog geen gesprekken</div>';
       return;
@@ -8689,8 +8769,9 @@ async function laadSessies(){
     window._sessieIds=data.map(function(s){return s.id;});
     el.innerHTML=data.map(function(s,si){
       var isActive=S.currentSessionId===s.id;
-      var date=new Date(s.updated_at).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
-      var time=new Date(s.updated_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      var ts=s.updated_at||s.created_at||new Date().toISOString();
+      var date=new Date(ts).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
+      var time=new Date(ts).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
       return'<div class="sess-row">'
         +'<div class="sess-item'+(isActive?' active':'')+' " data-si="'+si+'" onclick="laadSessie(window._sessieIds[parseInt(this.dataset.si)])">' 
           +'<div class="sess-date">'+date+' · '+time+'</div>'
@@ -8699,7 +8780,10 @@ async function laadSessies(){
         +'<button class="sess-del" title="Verwijderen" data-si="'+si+'" onclick="event.stopPropagation();verwijderSessie(window._sessieIds[parseInt(this.dataset.si)])">✕</button>'
       +'</div>';
     }).join('');
-  }catch(e){console.warn('laadSessies error:',e);}
+  }catch(e){
+    console.warn('laadSessies error:',e);
+    el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#7A2A2A;text-align:center;line-height:1.45">Geschiedenis laden mislukt. Controleer verbinding en of tabellen <code style="font-size:11px">sense_sessions</code> bestaan.</div>';
+  }
 }
 
 async function verwijderSessie(sessionId){
@@ -8751,17 +8835,27 @@ async function nieuwGesprek(){
   toast('Nieuw gesprek gestart');
 }
 
-async function laadSessie(sessionId){
-  closeSidebar();
+async function laadSessie(sessionId,opt){
+  opt=opt||{};
+  if(!opt.skipCloseSidebar)closeSidebar();
   if(!S.user)return;
   S.currentSessionId=sessionId;
   S.vertelMsgs=[];
   var ca=document.getElementById('chatArea');
   if(ca)ca.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Gesprek laden...</div>';
   try{
-    var {data}=await sb.from('sense_session_msgs')
-      .select('*').eq('session_id',sessionId)
-      .order('created_at').limit(50);
+    var q=sb.from('sense_session_msgs')
+      .select('*').eq('session_id',sessionId).eq('user_id',S.user.id)
+      .order('created_at',{ascending:true}).limit(50);
+    var res=await q;
+    var data=res.data;
+    if(res.error){
+      res=await sb.from('sense_session_msgs')
+        .select('*').eq('session_id',sessionId)
+        .order('created_at',{ascending:true}).limit(50);
+      data=res.data;
+    }
+    if(res.error)throw res.error;
     if(!data||!data.length){if(ca)ca.innerHTML='';return;}
     if(ca)ca.innerHTML='';
     function escSess(s){
@@ -8802,7 +8896,11 @@ async function laadSessie(sessionId){
       var firstUser=(data.find(function(x){return x.role==='user';})||data[0]);
       t.textContent=buildSessionPreview(firstUser.content||'');
     }
-  }catch(e){console.warn('laadSessie error:',e);}
+  }catch(e){
+    console.warn('laadSessie error:',e);
+    if(ca)ca.innerHTML='';
+    if(!opt.silent)toast('Gesprek laden mislukt');
+  }
 }
 
 function updateSessBulkBar(){
