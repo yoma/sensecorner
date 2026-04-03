@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 10:46">
+<meta name="ds-build" content="v2026-04-03-1 10:53">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -462,6 +462,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   .home-mini-card .ai-sec-text{font-size:11px}
   .home-note-actions .coach-save-other{flex:1 1 100%}
   .dossier-head-actions{grid-template-columns:1fr}
+  .vertel-chip .chip-long{display:none}
+  .vertel-chip .chip-short{display:inline}
 }
 
 /* Nieuwe personen sectie */
@@ -553,6 +555,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .vertel-coach-text{font-size:12px;color:#545b64;line-height:1.5}
 .vertel-coach-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .vertel-chip{padding:6px 9px;border-radius:999px;border:1px solid #F3D6D6;background:#fff;color:#8A2D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+.vertel-chip .chip-short{display:none}
 </style>
 </head>
 <body>
@@ -995,9 +998,9 @@ function renderVertelInputCoachTip(){
     +'<div class="vertel-coach-head">Hulp bij Vertel</div>'
     +'<div class="vertel-coach-text">Je werkt nu vooral rond <strong>'+escHTML(tLabel)+'</strong>. Vertel wat er gebeurde, wat je voelde en waar je op vastloopt. Dan krijg je veel gerichter advies.</div>'
     +'<div class="vertel-coach-chips">'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')">🧭 Context + gevoel + vraag</button>'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</button>'
-    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip3Text)+'\')">🎯 Vraag om acties</button>'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip1Text)+'\')"><span class="chip-long">🧭 Context + gevoel + vraag</span><span class="chip-short">🧭 Context</span></button>'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip2Text)+'\')"><span class="chip-long">'+(isOwnTarget?'📝 Persoonlijke update':'📝 Dossier-update')+'</span><span class="chip-short">📝 Update</span></button>'
+    +'<button class="vertel-chip" onclick="addVertelHintToInput(\''+asJsSingleQuoted(chip3Text)+'\')"><span class="chip-long">🎯 Vraag om acties</span><span class="chip-short">🎯 Acties</span></button>'
     +'</div>'
     +'<div style="margin-top:8px;display:flex;justify-content:flex-end">'
     +'<button class="coach-save-other" style="font-size:11px;padding:5px 8px" onclick="closeVertelInputCoachTip()">'+(firstUse?'Begrepen':'Sluiten')+'</button>'
@@ -2209,6 +2212,10 @@ function goBack(){
 
 function goScreen(sc){
   var prevScreen=S.screen;
+  var shadeEl=document.getElementById('helpTourShade');
+  var cardEl=document.getElementById('helpTourCard');
+  if(shadeEl)shadeEl.style.display='none';
+  if(cardEl)cardEl.style.display='none';
   // Protect screens when not authenticated
   if(!S.user && ['senses','own','vertel','compare','dossier','notifications','planner'].includes(sc)){
     sc='login';
@@ -2221,6 +2228,9 @@ function goScreen(sc){
   S.prev=S.screen;S.screen=sc;
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
+  }
+  if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
+    endQuickHelpTour(true);
   }
   var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan iets leuks',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
@@ -2254,9 +2264,6 @@ function goScreen(sc){
   renderOwnAvatar();
   renderBrandTag();
   if(S.user)rDrawer();
-  if(sc==='home'&&S.user&&!_quickHelpTour.active){
-    setTimeout(function(){startQuickHelpTour(false);},180);
-  }
 
   // Hide bottom-nav actions when not logged in
   ['tab-senses','tab-own','tab-vertel'].forEach(function(id){
@@ -7768,20 +7775,4 @@ async function nieuwGesprek(){
   var ca=document.getElementById('chatArea');
   if(ca)ca.innerHTML='';
   var t=document.getElementById('sessieTitle');
-  if(t)t.textContent='Nieuw gesprek';
-  var bulk=document.getElementById('sessBulkBar');
-  if(bulk){bulk.style.display='none';bulk.innerHTML='';}
-  S.vertelMsgs=[];
-  window._sessieKoppelData=[];
-  S.currentSessionId=null;
-
-  // Geen DB-opslag zonder echte input; sessie wordt pas aangemaakt bij eerste verzonden bericht.
-  toast('✏️ Nieuw gesprek gestart');
-}
-
-async function laadSessie(sessionId){
-  closeSidebar();
-  if(!S.user)return;
-  S.currentSessionId=sessionId;
-  S.vertelMsgs=[];
-  var ca=document.getElementById('cha
+  if(t)t.textCont
