@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 12:22">
+<meta name="ds-build" content="v2026-04-03-1 13:22">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -279,7 +279,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 @keyframes fup{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .hdate{font-size:11px;color:#bbb;text-align:center;margin:6px 0;font-weight:600}
 .sync-bar{font-size:11px;text-align:center;padding:2px;flex-shrink:0;min-height:16px;color:transparent}
-.sync-bar.s{color:var(--r)} .sync-bar.ok{color:#4CAF50}
+.sync-bar.s{color:var(--r)} .sync-bar.ok{color:#4CAF50} .sync-bar.err{color:#C62828}
 .mbtn{padding:10px 16px;border-radius:22px;background:var(--g);border:1px solid var(--b);font-size:14px;cursor:pointer;font-family:inherit}
 .mbtn.on{background:#FFE8E8;color:var(--r);border-color:#FFD5D5;font-weight:700}
 .tl-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #F5F5F5}
@@ -520,8 +520,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .profile-field{width:100%;padding:11px 12px;border:1px solid var(--b);border-radius:10px;font-size:13px;font-family:inherit}
 .profile-field.full{grid-column:1/-1}
-.profile-photo-row{display:flex;align-items:center;gap:10px;margin:10px 0 12px}
-.profile-avatar{width:46px;height:46px;border-radius:23px;background:#eceff3;border:1px solid #d8dde3;object-fit:cover}
+.profile-photo-row{display:flex;align-items:flex-start;gap:12px;margin:10px 0 12px}
+.profile-avatar-wrap{position:relative;width:46px;height:46px;flex-shrink:0}
+.profile-avatar{width:46px;height:46px;border-radius:23px;background:#eceff3;border:1px solid #d8dde3;object-fit:cover;display:block}
+.photo-busy-overlay{display:none;position:absolute;inset:0;border-radius:23px;background:rgba(255,255,255,.78);align-items:center;justify-content:center;pointer-events:none}
+.profile-avatar-wrap.is-uploading .photo-busy-overlay{display:flex}
+.profile-avatar-wrap.is-uploading .profile-avatar{filter:grayscale(.2);opacity:.88}
+.profile-photo-status{min-height:18px}
 
 /* ══ OWN SENSE CATEGORIEËN ══ */
 .own-cat{background:#fff;border:1.5px solid var(--b);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:border-color .2s}
@@ -722,9 +727,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <div class="save-modal-title" id="profileModalTitle">Profielgegevens</div>
     <div class="save-modal-sub">Optioneel, helpt DateSense gerichter adviseren.</div>
     <div class="profile-photo-row">
-      <img id="profileModalAvatar" class="profile-avatar" alt="profiel foto"/>
-      <button class="coach-save-other" onclick="chooseProfilePhoto()">Foto kiezen</button>
-      <span id="profilePhotoStatus" style="font-size:12px;color:#7b8088"></span>
+      <div class="profile-avatar-wrap" id="profileAvatarWrap">
+        <img id="profileModalAvatar" class="profile-avatar" alt="profiel foto"/>
+        <div id="profilePhotoBusyOverlay" class="photo-busy-overlay" aria-hidden="true"><div class="photo-loading-spinner" style="width:20px;height:20px"></div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+        <button type="button" id="btnProfilePhotoPick" class="coach-save-other" onclick="chooseProfilePhoto()">Foto kiezen</button>
+        <div id="profilePhotoStatus" class="profile-photo-status" style="font-size:12px;color:#7b8088;line-height:1.4"></div>
+      </div>
     </div>
     <div class="profile-grid" id="profileModalFields"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
@@ -918,7 +928,7 @@ var _renderHealthBusy=false;
 var _segModalIdx=-1;
 
 // ══ Helpers ═════════════════════════════════════════════════════
-function sync(s){var e=document.getElementById('syncBar');if(s==='s'){e.textContent='↑ Synchroniseren...';e.className='sync-bar s';}else if(s==='ok'){e.textContent='✓ Gesynchroniseerd';e.className='sync-bar ok';setTimeout(()=>{e.textContent='';e.className='sync-bar';},2000);}else{e.textContent='';e.className='sync-bar';}}
+function sync(s){var e=document.getElementById('syncBar');if(!e)return;if(s==='s'){e.textContent='↑ Synchroniseren...';e.className='sync-bar s';}else if(s==='ok'){e.textContent='✓ Gesynchroniseerd';e.className='sync-bar ok';setTimeout(()=>{e.textContent='';e.className='sync-bar';},2000);}else if(s==='e'){e.textContent='✗ Opslaan mislukt';e.className='sync-bar err';setTimeout(()=>{e.textContent='';e.className='sync-bar';},4200);}else{e.textContent='';e.className='sync-bar';}}
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
 
@@ -1097,6 +1107,12 @@ function isScreenHelpSeen(screen){
   if(!key)return false;
   var map=getQuickHelpSeenMap();
   return !!map[key];
+}
+function resetAllHelpPopups(){
+  removeScopedStorage('ds_quick_help_seen');
+  removeScopedStorage('ds_help_seen_map');
+  removeScopedStorage('ds_vertel_tip_seen');
+  toast('Hulp opnieuw ingesteld. Open Home of Vertel — de rondleiding en uitleg verschijnen weer als je ze nog niet hebt afgesloten.');
 }
 function getQuickHelpStepsForScreen(screen){
   var sc=String(screen||S.screen||'').trim();
@@ -2135,9 +2151,14 @@ async function init(){
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       goScreen('home');
     } else if(ev==='SIGNED_OUT'){
-      S.user=null;S.profiles=['OWN Sense'];S.pdata={};goScreen('login');
+      applySignedOutClientState();
+      goScreen('login');
     }
   });
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden')flushPendingAutosaves();
+  });
+  window.addEventListener('pagehide',function(){flushPendingAutosaves();});
   setTimeout(function(){ensureRenderHealthy('init');},120);
 }
 
@@ -2271,7 +2292,26 @@ async function doRegister(){
   }
 }
 
-async function doSignOut(){closeDrawer();await sb.auth.signOut();toast('👋 Tot ziens!');}
+function applySignedOutClientState(){
+  S.user=null;
+  S.profiles=['OWN Sense'];
+  S.pdata={};
+}
+async function doSignOut(){
+  closeDrawer();
+  try{
+    if(sb){
+      var res=await sb.auth.signOut();
+      if(res&&res.error)console.warn('auth.signOut error:',res.error);
+    }
+  }catch(e){
+    console.warn('doSignOut:',e);
+  }
+  // Altijd lokaal afmelden + naar login — niet enkel vertrouwen op onAuthStateChange (kan uitblijven in sommige browsers/extensies).
+  applySignedOutClientState();
+  goScreen('login');
+  toast('👋 Tot ziens!');
+}
 
 // ══ Data ═════════════════════════════════════════════════════════
 async function loadAll(){
@@ -2346,16 +2386,28 @@ async function saveP(name,props,count,categories,summary,meta){
   if(propsToSave.meta&&Object.keys(propsToSave.meta).length===0)delete propsToSave.meta;
   var _upsert={user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()};
   if(summary)_upsert.summary=summary;
-  await sb.from('sense_profiles').upsert(_upsert,{onConflict:'user_id,name'});
-  if(S.pdata[name]){
-    S.pdata[name].props=props;
-    S.pdata[name].count=count;
-    S.pdata[name].lastActive=new Date().toISOString();
-    if(categories)S.pdata[name].categories=categories;
-    if(meta)S.pdata[name].meta=meta;
+  var lastErr=null;
+  for(var attempt=1;attempt<=3;attempt++){
+    try{
+      var res=await sb.from('sense_profiles').upsert(_upsert,{onConflict:'user_id,name'});
+      if(res&&res.error)throw new Error(res.error.message||'Profiel opslaan mislukt');
+      if(S.pdata[name]){
+        S.pdata[name].props=props;
+        S.pdata[name].count=count;
+        S.pdata[name].lastActive=new Date().toISOString();
+        if(categories)S.pdata[name].categories=categories;
+        if(meta)S.pdata[name].meta=meta;
+      }
+      sync('ok');
+      renderOwnAvatar();
+      return;
+    }catch(e){
+      lastErr=e;
+      if(attempt<3)await new Promise(function(r){setTimeout(r,380*attempt);});
+    }
   }
-  sync('ok');
-  renderOwnAvatar();
+  sync('e');
+  throw lastErr||new Error('Profiel opslaan mislukt na 3 pogingen');
 }
 
 // Berichten per dossier opslaan/laden (gefilterd op profile_name!)
@@ -2404,6 +2456,7 @@ function goBack(){
 }
 
 function goScreen(sc){
+  if(S.user)flushPendingAutosaves();
   var prevScreen=S.screen;
   var shadeEl=document.getElementById('helpTourShade');
   var cardEl=document.getElementById('helpTourCard');
@@ -2498,7 +2551,7 @@ function rDrawer(){
   }
   h+=`<div class="dlbl">Acties</div>
 <div class="drow" onclick="newSenseFromDrawer()"><div style="width:10px;height:10px;border-radius:5px;border:2px solid var(--r)"></div><div style="font-size:15px;color:var(--r);font-weight:600">+ Nieuw Sense aanmaken</div></div>`;
-  if(S.user)h+=`<div style="margin-top:28px;padding-top:18px;border-top:1px solid var(--b)"><div style="font-size:12px;color:var(--m);margin-bottom:6px">Ingelogd als</div><div style="font-size:14px;font-weight:600;color:var(--t);margin-bottom:14px;word-break:break-all">${S.user.email}</div><button onclick="doSignOut()" style="width:100%;padding:12px;background:#FFF0F0;color:var(--r);border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Uitloggen</button></div>`;
+  if(S.user)h+=`<div style="margin-top:28px;padding-top:18px;border-top:1px solid var(--b)"><div style="font-size:12px;color:var(--m);margin-bottom:6px">Ingelogd als</div><div style="font-size:14px;font-weight:600;color:var(--t);margin-bottom:14px;word-break:break-all">${S.user.email}</div><button type="button" onclick="safeSignOut()" style="width:100%;padding:12px;background:#FFF0F0;color:var(--r);border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Uitloggen</button></div>`;
   document.getElementById('drIn').innerHTML=h;
 }
 function openDrawer(){rDrawer();document.getElementById('drawer').classList.add('open');document.getElementById('ovl').classList.add('show');}
@@ -2549,6 +2602,7 @@ function openProfileModal(name){
   var status=document.getElementById('profilePhotoStatus');
   var fields=document.getElementById('profileModalFields');
   if(!modal||!title||!avatar||!fields)return;
+  setProfilePhotoUploadingUi(false);
   var meta=getMetaFor(_profileModalFor);
   function escA(v){
     return String(v||'')
@@ -2595,7 +2649,7 @@ function chooseAnalysisPhoto(dosName){
 }
 async function uploadToPhotoStorage(path,file){
   var lastErr=null;
-  for(var attempt=1;attempt<=2;attempt++){
+  for(var attempt=1;attempt<=3;attempt++){
     try{
       var up=await withTimeout(
         sb.storage.from('datesense-photos').upload(path,file,{upsert:true,contentType:(file&&file.type)||'image/jpeg'}),
@@ -2606,25 +2660,62 @@ async function uploadToPhotoStorage(path,file){
       return up;
     }catch(err){
       lastErr=err;
-      if(attempt<2){
-        await new Promise(function(resolve){setTimeout(resolve,500);});
+      if(attempt<3){
+        await new Promise(function(resolve){setTimeout(resolve,600);});
       }
     }
   }
   throw lastErr||new Error('Upload mislukt');
 }
 
-async function handleAnalysisPhotoInput(input){
-  var file=input.files&&input.files[0];
-  if(!file||!S.user||_analysisUploadBusy)return;
-  var dos=_analysisPhotoFor||S.viewDossier;
-  if(!dos)return;
-  _analysisUploadBusy=true;
-  if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto'){
-    await loadTab(dos,'foto',S.pdata[dos]||d);
+function newDossierDataStub(){
+  return{props:{...DP},count:0,categories:{},meta:{}};
+}
+function setProfilePhotoUploadingUi(busy){
+  var wrap=document.getElementById('profileAvatarWrap');
+  var btn=document.getElementById('btnProfilePhotoPick');
+  var status=document.getElementById('profilePhotoStatus');
+  var ov=document.getElementById('profilePhotoBusyOverlay');
+  if(wrap)wrap.classList.toggle('is-uploading',!!busy);
+  if(ov)ov.setAttribute('aria-hidden',busy?'false':'true');
+  if(btn){
+    btn.disabled=!!busy;
+    btn.style.opacity=busy?'.72':'';
+    btn.style.pointerEvents=busy?'none':'';
   }
-  toast('Analysefoto uploaden...');
+  if(status&&busy){
+    status.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px;color:#5c6470"><span class="photo-loading-spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></span><span>Bezig met uploaden…</span></span>';
+  }
+}
+async function handleAnalysisPhotoInput(input){
+  var inp=input;
+  var file=inp&&inp.files&&inp.files[0];
+  if(!file){
+    if(inp)inp.value='';
+    return;
+  }
+  if(!S.user){
+    toast('Log in om foto\'s te uploaden.');
+    if(inp)inp.value='';
+    return;
+  }
+  if(_analysisUploadBusy){
+    toast('Er wordt al een foto geüpload. Even wachten…');
+    if(inp)inp.value='';
+    return;
+  }
+  var dos=_analysisPhotoFor||S.viewDossier;
+  if(!dos){
+    toast('Geen dossier gevonden. Open het dossier opnieuw en probeer nog eens.');
+    if(inp)inp.value='';
+    return;
+  }
+  _analysisUploadBusy=true;
   try{
+    if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto'){
+      await loadTab(dos,'foto',S.pdata[dos]||newDossierDataStub());
+    }
+    toast('Analysefoto uploaden...');
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
@@ -2632,8 +2723,8 @@ async function handleAnalysisPhotoInput(input){
     if(up.error)throw up.error;
     var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
-    if(!url)throw new Error('Kon analysefoto URL niet maken');
-    var d=S.pdata[dos]||{props:{...DP},count:0,categories:{},meta:{}};
+    if(!url)throw new Error('Kon analysefoto-URL niet ophalen na upload.');
+    var d=S.pdata[dos]||newDossierDataStub();
     d.meta=d.meta||{};
     if(!Array.isArray(d.meta.analysis_photos))d.meta.analysis_photos=[];
     d.meta.analysis_photos.unshift(url);
@@ -2650,10 +2741,12 @@ async function handleAnalysisPhotoInput(input){
     console.warn('handleAnalysisPhotoInput error:',e);
     toast(e&&e.message?e.message:'Analysefoto upload mislukt');
   }finally{
-    input.value='';
+    if(inp)inp.value='';
     _analysisUploadBusy=false;
     if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto'){
-      await loadTab(dos,'foto',S.pdata[dos]||d);
+      try{
+        await loadTab(dos,'foto',S.pdata[dos]||newDossierDataStub());
+      }catch(_e){}
     }
   }
 }
@@ -2673,11 +2766,30 @@ async function verwijderAnalysisPhoto(dosName,idx){
 }
 
 async function handleProfilePhotoInput(input){
-  var file=input.files&&input.files[0];
-  if(!file||!S.user||_profileUploadBusy)return;
+  var inp=input;
+  var file=inp&&inp.files&&inp.files[0];
+  if(!file){
+    if(inp)inp.value='';
+    return;
+  }
+  if(!S.user){
+    toast('Log in om een profielfoto te uploaden.');
+    if(inp)inp.value='';
+    return;
+  }
+  if(_profileUploadBusy){
+    toast('Er wordt al een foto geüpload. Even wachten…');
+    if(inp)inp.value='';
+    return;
+  }
+  if(!_profileModalFor){
+    toast('Open eerst profielgegevens en probeer opnieuw.');
+    if(inp)inp.value='';
+    return;
+  }
   _profileUploadBusy=true;
+  setProfilePhotoUploadingUi(true);
   var status=document.getElementById('profilePhotoStatus');
-  if(status)status.textContent='Uploaden... even wachten';
   try{
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
@@ -2706,8 +2818,9 @@ async function handleProfilePhotoInput(input){
     if(status)status.textContent='Upload mislukt';
     toast(e&&e.message?e.message:'Foto upload mislukt');
   }finally{
-    input.value='';
+    if(inp)inp.value='';
     _profileUploadBusy=false;
+    setProfilePhotoUploadingUi(false);
   }
 }
 
@@ -2750,8 +2863,8 @@ async function newSenseFromDrawer(){
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
-function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><input class="form-input" id="lEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" type="password" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')doLogin()"/><button id="pwToggleBtn" type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button id="lLoginBtn" class="form-btn" onclick="doLogin()">Inloggen</button><div style="text-align:center;margin-top:8px"><button class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div>`;}
-function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in DateSense.</div><input class="form-input" id="rEmail" type="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" type="password" placeholder="Wachtwoord (min. 6 tekens)" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button id="rRegisterBtn" class="form-btn" onclick="doRegister()">Maak mijn account aan</button><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
+function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen — overal, op elk apparaat.</p><form class="ds-auth-form" onsubmit="event.preventDefault();doLogin();return false;" autocomplete="on"><input class="form-input" id="lEmail" name="email" type="email" autocomplete="username" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" name="password" type="password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/><button type="button" id="pwToggleBtn" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button type="submit" id="lLoginBtn" class="form-btn">Inloggen</button></form><div style="text-align:center;margin-top:8px"><button type="button" class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button type="button" class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div>`;}
+function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in DateSense.</div><form class="ds-auth-form" onsubmit="event.preventDefault();doRegister();return false;" autocomplete="on"><input class="form-input" id="rEmail" name="email" type="email" autocomplete="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" name="new-password" type="password" placeholder="Wachtwoord (min. 6 tekens)" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button type="submit" id="rRegisterBtn" class="form-btn">Maak mijn account aan</button></form><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button type="button" class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
 
 function getScopedStorageKey(base){
   var userPart='';
@@ -3684,6 +3797,46 @@ function buildAdviceContextPayload(name,d,msgs){
   }
   if(lines.length)payload+='\n'+lines.join('\n');
   return payload;
+}
+function dossierHasAdviceInput(name){
+  var d=S.pdata[name];
+  if(!d)return false;
+  if((d.count||0)>0)return true;
+  var sum=String(d.summary||'').trim();
+  if(sum)return true;
+  if(d.categories){
+    var cats=d.categories;
+    for(var ck in cats){
+      if(!cats.hasOwnProperty(ck))continue;
+      var cat=cats[ck]||{};
+      for(var fk in cat){
+        if(!cat.hasOwnProperty(fk))continue;
+        if(String(cat[fk]||'').trim())return true;
+      }
+    }
+  }
+  return false;
+}
+function renderAdviceEmptyState(name){
+  var isOwn=name==='OWN Sense';
+  var label=dn(name);
+  var escN=String(name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var apiNote=!S.apiKey
+    ?'<div style="margin-top:14px;padding:14px;background:#FFF8E0;border:1px solid #FFE0A3;border-radius:12px;text-align:left;font-size:13px;color:#5c4a20;line-height:1.5"><strong>API-sleutel ontbreekt.</strong> Voeg je Anthropic key toe onder Instellingen — zonder key kan er geen advies worden gemaakt.</div>'
+    :'';
+  return '<div class="adv-empty-premium" style="text-align:center;padding:8px 4px 20px;color:var(--m)">'
+    +'<div style="font-size:34px;margin-bottom:10px">💬</div>'
+    +'<div style="font-size:17px;font-weight:800;color:#333;margin-bottom:10px">Waarom je nog geen advies ziet</div>'
+    +'<p style="font-size:14px;color:#555;line-height:1.55;margin:0 auto 14px;max-width:340px;text-align:left">DateSensei bouwt advies op basis van <strong>jouw echte input</strong> over <strong>'+escHTML(label)+'</strong>: berichten in de tijdlijn (via Vertel), wat je op <strong>Overzicht</strong> invult, en je profiel. Zonder minimaal één bron is er niets om op te baseren — dan blijft dit bewust leeg.</p>'
+    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij date of wat je voelt, of vul je categorieën op Overzicht in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op Overzicht in.')+'</p>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;max-width:340px;margin:0 auto">'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel — voeg een tijdlijnbericht toe</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'overzicht\')">📋 Overzicht — invulvakjes &amp; eigenschappen</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="openProfileModal(\''+escN+'\')">'+(isOwn?'👤 Profielgegevens (OWN Sense)':'👤 Profielgegevens van dit dossier')+'</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="goScreen(\'settings\')">⚙️ Instellingen (API-sleutel)</button>'
+    +'</div>'
+    +apiNote
+    +'</div>';
 }
 function plannerSelect(id,value,options,placeholder){
   return '<select id="'+id+'" class="form-input" style="margin:0"><option value="">'+placeholder+'</option>'+options.map(function(opt){
@@ -4778,7 +4931,7 @@ function rPlanner(el){
     +'</div>';
 }
 
-function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button class="btn-g" onclick="doSignOut()">Uitloggen</button></div></div>`;}
+function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
 
 function rNotifications(el){
   var q=(S.notificationsFilter||'all');
@@ -5533,7 +5686,10 @@ async function loadTab(name,tab,d){
       +(hasFallbackProfile?'<span style="font-size:12px;color:var(--m);align-self:center">Fallback: profielfoto wordt gebruikt als er geen analysefoto is.</span>':'')
       +'</div>';
     if(_analysisUploadBusy){
-      html+='<div style="font-size:12px;color:#8a8f97;margin-top:8px">⏳ Analysefoto wordt toegevoegd...</div>';
+      html+='<div class="photo-loading" style="margin-top:10px;margin-bottom:2px;padding:12px 14px">'
+        +'<div class="photo-loading-top"><div class="photo-loading-spinner"></div><div class="photo-loading-title">Upload bezig</div></div>'
+        +'<p class="photo-loading-text" style="margin:0;font-size:13px;color:#444;line-height:1.55">Je foto wordt nu geüpload en veilig gekoppeld aan dit dossier. Laat dit scherm even open tot de bevestiging verschijnt.</p>'
+        +'</div>';
     }
     html+='<div style="font-size:12px;color:#6e747d;margin-top:8px">'+analysisSourceLabel+'</div>';
     html+='</div>';
@@ -5621,6 +5777,7 @@ async function loadTab(name,tab,d){
     }
     var currentCount=d.count||0;
     var hasNewData=!cache||cache.count!==currentCount;
+    var hasAdviceInput=dossierHasAdviceInput(name);
 
     // Bouw mooie advies UI
     var advHtml='<div id="adviesBox" style="border-radius:16px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.07)">';
@@ -5650,8 +5807,8 @@ async function loadTab(name,tab,d){
           +'</div>';
       }
       advHtml+=(cache.html||'');
-    } else if(currentCount===0){
-      advHtml+='<div style="text-align:center;padding:20px 0;color:var(--m)"><div style="font-size:32px;margin-bottom:10px">💬</div>Voeg eerst iets toe via <strong>Vertel</strong> of vul de invulvakjes in.</div>';
+    } else if(!hasAdviceInput){
+      advHtml+=renderAdviceEmptyState(name);
     } else {
       advHtml+=renderAdviceLoadingCard();
     }
@@ -5676,7 +5833,7 @@ async function loadTab(name,tab,d){
 
     // Genereer enkel automatisch als er nog geen advies bestaat.
     // Bij nieuwe data blijft het laatste advies staan tot gebruiker op update klikt.
-    if(currentCount>0&&!cache){
+    if(hasAdviceInput&&!cache){
       genAdvies(name,false);
     }
   }
@@ -5843,6 +6000,25 @@ async function resetOwnProps(){
 // ══ Auto-save ════════════════════════════════════════════════════
 var _autoSaveTimers={};
 
+function parseAutoSaveKey(key){
+  var i=String(key||'').indexOf(':');
+  var j=String(key||'').indexOf(':',i+1);
+  if(i<0||j<0)return null;
+  return{type:key.substring(0,i),dosName:key.substring(i+1,j),catId:key.substring(j+1)};
+}
+function flushPendingAutosaves(){
+  var keys=Object.keys(_autoSaveTimers);
+  if(!keys.length)return;
+  keys.forEach(function(key){
+    clearTimeout(_autoSaveTimers[key]);
+    delete _autoSaveTimers[key];
+    var p=parseAutoSaveKey(key);
+    if(!p)return;
+    if(p.type==='own')void saveOwnCat(p.catId,true);
+    else void saveContactCat(p.dosName,p.catId,true);
+  });
+}
+
 function scheduleAutoSave(type,dosName,catId,fieldIdx){
   var key=type+':'+dosName+':'+catId;
   clearTimeout(_autoSaveTimers[key]);
@@ -5854,7 +6030,7 @@ function scheduleAutoSave(type,dosName,catId,fieldIdx){
   _autoSaveTimers[key]=setTimeout(function(){
     if(type==='own')saveOwnCat(catId,true);
     else saveContactCat(dosName,catId,true);
-  },1400);
+  },900);
 }
 
 function showAutoSaveIndicator(catId,ok,fieldIdx){
@@ -5917,7 +6093,14 @@ async function saveContactCat(dosName,catId,silent){
   var catUpdEl=document.getElementById('cc-cat-upd-'+catId);
   if(catUpdEl)catUpdEl.textContent='Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
   S.pdata[dosName]=d;
-  await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
+  try{
+    await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
+  }catch(e){
+    console.error('saveContactCat',e);
+    toast('Kon tekst niet opslaan. Controleer verbinding en probeer opnieuw.');
+    showAutoSaveIndicator(catId,false);
+    return;
+  }
   // Update progress indicator
   var filled=Object.values(answers).filter(v=>v.length>0).length;
   var catEl=document.getElementById('cc-'+catId);
@@ -5928,7 +6111,7 @@ async function saveContactCat(dosName,catId,silent){
   }
   showAutoSaveIndicator(catId,true);
   // Herbereken op achtergrond en update balkjes in-place
-  herbereken(dosName);
+  herbereken(dosName).catch(function(he){console.warn('herbereken:',he);});
 }
 
 async function herbereken(dosName,silent=true){
@@ -6263,17 +6446,29 @@ async function saveOwnCat(catId,silent){
   // Als er niks ingevuld is, sla gewoon op zonder AI
   if(!allCatText.trim()){
     S.pdata['OWN Sense']=d;
-    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-    showAutoSaveIndicator(catId,true);
+    try{
+      await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+      showAutoSaveIndicator(catId,true);
+    }catch(e){
+      console.error('saveOwnCat',e);
+      toast('Kon niet opslaan. Controleer verbinding.');
+      showAutoSaveIndicator(catId,false);
+    }
     if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
     return;
   }
   if(!S.apiKey){
     S.pdata['OWN Sense']=d;
-    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-    showAutoSaveIndicator(catId,true);
+    try{
+      await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+      showAutoSaveIndicator(catId,true);
+      toast('Opgeslagen. Voeg een API key toe om eigenschappen ook automatisch te laten herberekenen.');
+    }catch(e){
+      console.error('saveOwnCat',e);
+      toast('Kon niet opslaan. Controleer verbinding.');
+      showAutoSaveIndicator(catId,false);
+    }
     if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-    toast('Opgeslagen. Voeg een API key toe om eigenschappen ook automatisch te laten herberekenen.');
     return;
   }
   try{
@@ -6294,8 +6489,14 @@ async function saveOwnCat(catId,silent){
     console.error('saveOwnCat AI error:',x.message,x);
     // Sla toch op ook al mislukte AI
     S.pdata['OWN Sense']=d;
-    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-    showAutoSaveIndicator(catId,true);
+    try{
+      await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+      showAutoSaveIndicator(catId,true);
+    }catch(e2){
+      console.error('saveOwnCat persist after AI fail',e2);
+      toast('Tekst niet opgeslagen. Controleer verbinding.');
+      showAutoSaveIndicator(catId,false);
+    }
     if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
     return;
   }
@@ -6303,7 +6504,15 @@ async function saveOwnCat(catId,silent){
   d.count=(d.count||0);
   d.meta=touchPropUpdates(d.meta,prevProps,d.props);
   S.pdata['OWN Sense']=d;
-  await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+  try{
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+  }catch(e){
+    console.error('saveOwnCat',e);
+    toast('Kon profiel niet opslaan. Controleer verbinding.');
+    showAutoSaveIndicator(catId,false);
+    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
+    return;
+  }
 
   if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
   var savedEl=document.getElementById('oc-saved-'+catId);
@@ -6515,12 +6724,13 @@ function rSettings(el){
     +renderSettingsTile('📦','Export data','Download je gegevens','export')
     +adminTile
     +renderSettingsTile('🧭','Korte rondleiding','Uitleg van de hoofdschermen','quick-tour')
+    +renderSettingsTile('🔁','Hulp opnieuw tonen','Rondleiding + uitlegballonnetjes resetten','help-reset')
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data');
 
   el.innerHTML=`<div style="padding:32px 20px">
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
-<input class="form-input" id="akField" type="password" placeholder="sk-ant-api..." value="${S.apiKey||''}"/>
+<form class="ds-settings-api-form" onsubmit="event.preventDefault();return false;" autocomplete="off"><input class="form-input" id="akField" name="apikey" type="password" autocomplete="off" placeholder="sk-ant-api..." value="${S.apiKey||''}"/></form>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:16px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
 <div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
 <select class="form-input" id="usageModeField">
@@ -6561,7 +6771,7 @@ ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-r
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
   <p style="font-size:15px;color:#666;margin-bottom:14px">Ingelogd als: <strong>${S.user?S.user.email:''}</strong></p>
-  <button class="form-btn sec" onclick="doSignOut()">Uitloggen</button>
+  <button type="button" class="form-btn sec" onclick="safeSignOut()">Uitloggen</button>
 </div>
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Extra's</div>
@@ -6606,6 +6816,7 @@ async function exportAllData(){
 function settingsAction(action){
   if(action==='prompt-center'){goScreen('promptcenter');return;}
   if(action==='quick-tour'){goScreen('home');setTimeout(function(){startQuickHelpTour(true);},220);return;}
+  if(action==='help-reset'){resetAllHelpPopups();return;}
   if(action==='my-data'){openProfileModal('OWN Sense');return;}
   if(action==='notifications'){goScreen('notifications');return;}
   if(action==='export'){exportAllData();return;}
@@ -7134,9 +7345,7 @@ async function sendMsg(){
         await saveSessionMsg(sid,'ai',raw);
       }
     }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
-    S.vertelMsgs=S.vertelMsgs||[];
-    S.vertelMsgs.push({role:'user',html:txt});
-    S.vertelMsgs.push({role:'ai',html:raw});
+    // addMsg() heeft user + AI al in S.vertelMsgs gezet — niet opnieuw pushen (dubbel = corrupte geschiedenis).
 
     if(forcedDossier){
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier);
@@ -8178,11 +8387,12 @@ async function koppelSessieMsgNaar(idx,dossier,silent){
 async function saveSessionMsg(sessionId,role,content){
   if(!S.user||!sessionId)return;
   try{
-    await sb.from('sense_session_msgs').insert({
+    var ins=await sb.from('sense_session_msgs').insert({
       session_id:sessionId,user_id:S.user.id,
       role:role,content:content,
       created_at:new Date().toISOString()
     });
+    if(ins&&ins.error)console.warn('saveSessionMsg insert:',ins.error);
   }catch(e){console.warn('saveSessionMsg:',e);}
 }
 
