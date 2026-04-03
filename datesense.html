@@ -8,8 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
-<!-- DateSense build tag (debug): zet dit op je lokale tijd — PowerShell: Get-Date -Format 'yyyy-MM-dd HH:mm' -->
-<meta name="ds-build" content="2026-04-03 20:53">
+<!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
+<meta name="ds-build" content="03-04-2026 21:07">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -925,8 +925,7 @@ const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
 var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
-const APP_BUILD_LABEL=String(_metaBuildContent||'v2026-03-27-1').trim();
-/** Build-label: volledige `ds-build` meta (revisie + uur uit bestand). */
+const APP_BUILD_LABEL=String(_metaBuildContent||'—').trim();
 function getAppBuildDisplay(){
   return APP_BUILD_LABEL;
 }
@@ -1138,9 +1137,47 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
+function _sessAssignStorageKey(){
+  return (S.user&&S.user.id)?('ds_sess_assign_map_'+S.user.id):'ds_sess_assign_map';
+}
+function schedulePersistSessAssignMap(map){
+  if(!S.user)return;
+  clearTimeout(window._sessAssignPersistT);
+  window._sessAssignPersistT=setTimeout(function(){
+    try{
+      var own=S.pdata['OWN Sense'];
+      if(!own)return;
+      var meta=Object.assign({},own.meta||{},{sess_assign_map:map||{}});
+      saveP('OWN Sense',own.props,own.count,own.categories,own.summary,meta).catch(function(e){console.warn('sess_assign persist',e);});
+    }catch(e){console.warn('schedulePersistSessAssignMap',e);}
+  },700);
+}
+/** Na loadAll: merge server (OWN meta) + localStorage; lokale wijzigingen winnen. Synchroniseert terug naar server indien nodig. */
+function reconcileSessAssignMapsAtLogin(){
+  if(!S.user)return;
+  try{
+    var key=_sessAssignStorageKey();
+    var local={};
+    try{
+      var localRaw=localStorage.getItem(key);
+      local=localRaw?JSON.parse(localRaw):{};
+    }catch(_p){local={};}
+    if(!local||typeof local!=='object')local={};
+    var srv=(S.pdata['OWN Sense']&&S.pdata['OWN Sense'].meta&&S.pdata['OWN Sense'].meta.sess_assign_map)||{};
+    if(!srv||typeof srv!=='object')srv={};
+    var merged=Object.assign({},srv,local);
+    localStorage.setItem(key,JSON.stringify(merged));
+    if(JSON.stringify(merged)!==JSON.stringify(srv)){
+      schedulePersistSessAssignMap(merged);
+    }
+    if(S.pdata['OWN Sense']){
+      S.pdata['OWN Sense'].meta=Object.assign({},S.pdata['OWN Sense'].meta||{},{sess_assign_map:merged});
+    }
+  }catch(e){console.warn('reconcileSessAssign',e);}
+}
 function getSessAssignMap(){
   try{
-    var key=(S.user&&S.user.id)?('ds_sess_assign_map_'+S.user.id):'ds_sess_assign_map';
+    var key=_sessAssignStorageKey();
     var raw=localStorage.getItem(key);
     var parsed=raw?JSON.parse(raw):{};
     return parsed&&typeof parsed==='object'?parsed:{};
@@ -1148,9 +1185,13 @@ function getSessAssignMap(){
 }
 function setSessAssignMap(map){
   try{
-    var key=(S.user&&S.user.id)?('ds_sess_assign_map_'+S.user.id):'ds_sess_assign_map';
+    var key=_sessAssignStorageKey();
     localStorage.setItem(key,JSON.stringify(map||{}));
-  }catch(e){}
+    schedulePersistSessAssignMap(map||{});
+  }catch(e){
+    if(e&&e.name==='QuotaExceededError')toast('Browseropslag vol: koppelingen niet lokaal bewaard. Ruim ruimte of gebruik één vaste browser.');
+    console.warn('setSessAssignMap',e);
+  }
 }
 function isAdminUser(){
   var em=((S.user&&S.user.email)||'').toLowerCase().trim();
@@ -2232,19 +2273,39 @@ function openDossierPickModal(title,sub,type,payload){
   if(type==='save'){
     var sug=payload&&payload.suggestedName?payload.suggestedName:'';
     if(sug){
-      html+='<button class="save-modal-opt" onclick="createNewDossierFromPick(true)"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Maak '+sug+' aan</strong><br><span style="font-size:12px;color:#666">Nieuw dossier en meteen opslaan</span></span></button>';
+      html+='<button type="button" class="save-modal-opt" data-pick-action="new-suggested"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Maak '+String(sug).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+' aan</strong><br><span style="font-size:12px;color:#666">Nieuw dossier en meteen opslaan</span></span></button>';
     }
-    html+='<button class="save-modal-opt" onclick="createNewDossierFromPick(false)"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nieuw dossier...</strong><br><span style="font-size:12px;color:#666">Voer zelf een naam in</span></span></button>';
+    html+='<button type="button" class="save-modal-opt" data-pick-action="new-prompt"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nieuw dossier...</strong><br><span style="font-size:12px;color:#666">Voer zelf een naam in</span></span></button>';
     html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Bestaande dossiers</div>';
   }
   all.forEach(function(p,i){
     var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
-    html+='<button class="save-modal-opt" onclick="selectDossierFromPick(\''+p.replace(/'/g,"\\'")+'\')">'
+    var enc=encodeURIComponent(p);
+    html+='<button type="button" class="save-modal-opt" data-pick-dossier="'+enc+'">'
       +'<span class="save-modal-dot" style="background:'+col+'"></span>'
       +'<span style="flex:1">'+dn(p)+'</span></button>';
   });
   opts.innerHTML=html;
   modal.classList.add('show');
+}
+function initDossierPickModalDelegation(){
+  if(window._dossierPickDelegated)return;
+  var modal=document.getElementById('dossierPickModal');
+  if(!modal)return;
+  modal.addEventListener('click',function(e){
+    var btn=e.target.closest('.save-modal-opt');
+    if(!btn||!modal.contains(btn))return;
+    var act=btn.getAttribute('data-pick-action');
+    if(act==='new-suggested'){e.preventDefault();createNewDossierFromPick(true);return;}
+    if(act==='new-prompt'){e.preventDefault();createNewDossierFromPick(false);return;}
+    var enc=btn.getAttribute('data-pick-dossier');
+    if(enc!==null&&enc!==''){
+      e.preventDefault();
+      try{selectDossierFromPick(decodeURIComponent(enc));}
+      catch(err){console.warn('dossier pick decode',err);toast('Ongeldige dossierkeuze');}
+    }
+  });
+  window._dossierPickDelegated=true;
 }
 
 function closeDossierPickModal(){
@@ -2633,6 +2694,7 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
+  initDossierPickModalDelegation();
   if(!sb){
     goScreen('home');
     var mc=document.getElementById('mainContent');
@@ -2872,6 +2934,7 @@ async function loadAll(){
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
   }
+  reconcileSessAssignMapsAtLogin();
   scrubCrossAccountRuntimeState();
   updateNavTabIndicators();
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
@@ -9635,7 +9698,7 @@ async function koppelSessieMsgNaar(idx,dossier,silent){
     }
   }catch(e){
     console.warn('koppelSessieMsg error:',e);
-    if(!silent)toast('Koppelen mislukt');
+    if(!silent)toast('Koppelen mislukt'+(e&&e.message?(': '+e.message):''));
   }
 }
 
@@ -9800,6 +9863,10 @@ try{
   window.laadOudereSessieBerichten=laadOudereSessieBerichten;
   window.openSidebar=openSidebar;
   window.closeSidebar=closeSidebar;
+  window.selectDossierFromPick=selectDossierFromPick;
+  window.createNewDossierFromPick=createNewDossierFromPick;
+  window.koppelSessieMsg=koppelSessieMsg;
+  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
 }catch(e){console.warn('window exports:',e);}
 try{
   init();
