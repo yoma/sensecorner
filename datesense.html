@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:31">
+<meta name="ds-build" content="03-04-2026 21:39">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -9562,6 +9562,34 @@ async function applyVertelSessionTitleFromDb(sessionId,fallbackRows){
   t.textContent=fu?buildSessionPreview(fu.content||''):'Gesprek';
 }
 
+/** Laatste gekoppelde dossier in deze sessie → Vertel-opslagvoorstel (zelfde als «Gekoppeld aan …» in Geschiedenis). */
+function syncVertelGesprekFocusFromRows(rows){
+  if(!rows||!rows.length){
+    S.vertelGesprekDossier=null;
+    S.vertelFrom=null;
+    updateVertelGesprekBanner();
+    if(S.screen==='vertel')renderVertelInputCoachTip();
+    return;
+  }
+  var assignMap=getSessAssignMap();
+  var lastLinked=null;
+  rows.forEach(function(m){
+    if(m.role==='user'){
+      var a=assignMap[m.id]||{};
+      if(a.dossier)lastLinked=a.dossier;
+    }
+  });
+  if(lastLinked){
+    S.vertelGesprekDossier=lastLinked;
+    S.vertelFrom=lastLinked;
+  }else{
+    S.vertelGesprekDossier=null;
+    S.vertelFrom=null;
+  }
+  updateVertelGesprekBanner();
+  if(S.screen==='vertel')renderVertelInputCoachTip();
+}
+
 function renderVertelSessionFromRows(rows){
   var ca=document.getElementById('chatArea');
   if(!ca)return;
@@ -9606,6 +9634,7 @@ function renderVertelSessionFromRows(rows){
       ca.appendChild(aiWrap);
     }
   });
+  syncVertelGesprekFocusFromRows(rows);
 }
 
 async function laadOudereSessieBerichten(){
