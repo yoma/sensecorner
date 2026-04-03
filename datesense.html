@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): revisie + lokaal uur — bij wijziging: Get-Date -Format 'yyyy-MM-dd HH:mm' (PowerShell) -->
-<meta name="ds-build" content="v2026-04-03-10 16:28">
+<meta name="ds-build" content="v2026-04-03-13 16:47">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -491,6 +491,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .dossier-head-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dossier-head-actions button{min-height:38px}
 .dossier-tabs-wrap{background:#fff;position:sticky;top:0;z-index:3}
+.dossier-tab-hint{font-size:10px;color:#8a8f97;line-height:1.4;padding:0 12px 8px;letter-spacing:.02em;display:flex;align-items:flex-start;gap:6px}
+.dth-dot{flex-shrink:0;width:7px;height:7px;border-radius:50%;background:var(--r);margin-top:3px;box-shadow:0 0 0 1px #fff}
 .vertel-shell{display:flex;flex-direction:column;height:100%}
 .vertel-empty-tip{padding:0 16px 10px}
 .mobile-soft-card{border-radius:16px;box-shadow:0 4px 16px rgba(20,20,20,.05)}
@@ -644,6 +646,21 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .own-cat-prog{font-size:12px;color:var(--m);margin-top:2px}
 .own-cat-prog.done{color:#2E7D32}
 .own-meta-check{color:#2E7D32;font-size:16px;font-weight:800;line-height:1;flex-shrink:0;margin-right:2px}
+.own-cat--profile-meta{box-shadow:0 2px 14px rgba(20,24,30,.05)}
+.own-cat--profile-meta .own-cat-head{align-items:flex-start;padding-bottom:14px}
+.own-cat-body--profile{padding-top:0}
+.pm-meta-panel{background:linear-gradient(165deg,#f8fafc 0%,#fff 55%);border:1px solid #e6e9ef;border-radius:12px;padding:4px 14px 12px;margin:0 0 2px}
+.pm-meta-row{display:grid;grid-template-columns:minmax(0,44%) minmax(0,56%);gap:10px 18px;align-items:baseline;padding:11px 0;border-bottom:1px solid #eef1f6}
+.pm-meta-row:last-child{border-bottom:none;padding-bottom:2px}
+.pm-meta-k{font-size:11px;font-weight:700;color:#7a828d;text-transform:uppercase;letter-spacing:.045em;line-height:1.35}
+.pm-meta-v{font-size:14px;font-weight:650;color:var(--t);line-height:1.45;word-break:break-word}
+.pm-meta-actions{margin-top:14px}
+.pm-meta-edit-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:12px 16px;font-size:14px;font-weight:700;border-radius:12px;border:none;background:var(--r);color:#fff;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(174,0,0,.2);transition:transform .1s ease,box-shadow .15s ease}
+.pm-meta-edit-btn:active{transform:translateY(1px);box-shadow:0 2px 8px rgba(174,0,0,.18)}
+@media (max-width:360px){
+  .pm-meta-row{grid-template-columns:1fr;gap:4px;padding:10px 0}
+  .pm-meta-v{padding-bottom:2px}
+}
 .own-cat-arrow{color:var(--m);transition:transform .2s;flex-shrink:0;font-size:18px}
 .own-cat.open .own-cat-arrow{transform:rotate(90deg)}
 .own-cat-body{display:none;padding:0 16px 16px;border-top:1px solid #F0F0F0}
@@ -1105,13 +1122,17 @@ function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMs
 
 function getSessAssignMap(){
   try{
-    var raw=localStorage.getItem('ds_sess_assign_map');
+    var key=(S.user&&S.user.id)?('ds_sess_assign_map_'+S.user.id):'ds_sess_assign_map';
+    var raw=localStorage.getItem(key);
     var parsed=raw?JSON.parse(raw):{};
     return parsed&&typeof parsed==='object'?parsed:{};
   }catch(e){return{};}
 }
 function setSessAssignMap(map){
-  try{localStorage.setItem('ds_sess_assign_map',JSON.stringify(map||{}));}catch(e){}
+  try{
+    var key=(S.user&&S.user.id)?('ds_sess_assign_map_'+S.user.id):'ds_sess_assign_map';
+    localStorage.setItem(key,JSON.stringify(map||{}));
+  }catch(e){}
 }
 function isAdminUser(){
   var em=((S.user&&S.user.email)||'').toLowerCase().trim();
@@ -1864,13 +1885,22 @@ function needsDossierFotoAttention(p){
   if(!p||getDossierLifecycle(p)!=='active')return false;
   var d=S.pdata[p]||{count:0,categories:{},meta:{}};
   var m=d.meta||{};
-  if(p==='OWN Sense'&&!String(m.photo_url||'').trim())return true;
-  if((d.count||0)>=6&&!(m.photo_analysis))return true;
-  return false;
+  var hasAnalysis=!!(m.photo_analysis);
+  var hasAnalysisPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
+  var hasPhotoUrl=!!String(m.photo_url||'').trim();
+  if(p==='OWN Sense'){
+    if(!hasPhotoUrl)return true;
+    return (d.count||0)>=6&&!hasAnalysis;
+  }
+  if((d.count||0)>=1&&!hasPhotoUrl&&!hasAnalysisPhotos&&!hasAnalysis)return true;
+  return (d.count||0)>=6&&!hasAnalysis;
 }
 function needsDossierAdviesAttention(p){
   if(!p||getDossierLifecycle(p)!=='active')return false;
   var d=S.pdata[p]||{count:0,categories:{},meta:{}};
+  var la=(d.meta||{}).last_advice||{};
+  var hasAdvice=!!(la.html&&String(la.html).trim());
+  if((d.count||0)>=1&&!hasAdvice)return true;
   return isAdviceStaleForDossier(d);
 }
 function needsContactAttention(p){
@@ -2215,7 +2245,7 @@ async function selectDossierFromPick(dossier){
     toast('Opslagvoorstel: '+dn(dossier));
   }else if(ctx.type==='save'){
     S.vertelSessionStickyDossier=null;
-    await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
+    await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
   }
 }
 
@@ -2230,7 +2260,7 @@ async function createNewDossierFromPick(useSuggested){
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
   closeDossierPickModal();
   S.vertelSessionStickyDossier=null;
-  await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
+  await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
 }
 
 // Verplaats tijdlijn bericht naar ander dossier
@@ -3906,16 +3936,29 @@ function buildCoachTasks(){
     var stage=getDossierStage(p);
     var hasRealActivity=!!d.lastActive||((d.count||0)>0);
     var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
-    if(hasRealActivity&&days>=7&&stage!=='geen_contact'){
-      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':'medium'),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+    if(hasRealActivity&&days>=4&&stage!=='geen_contact'){
+      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':(days>=7?'medium':'low')),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
     }
-    var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
+    var lastAdviceBlock=((d.meta||{}).last_advice)||{};
+    var lastAdviceAt=lastAdviceBlock.updated_at||'';
+    var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
+    if((d.count||0)>=1&&!hasAdviceBody){
+      tasks.push({id:'actie-eerste-advies-'+p,type:'a',prio:'high',dossier:p,msg:'Vraag een <strong>eerste advies</strong> voor '+person+' op basis van je berichten.',openMsg:'Nog openstaand: nog geen advies voor <strong>'+person+'</strong>.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+    }
     var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
-    if((d.count||0)>=8&&adviceOld){
+    if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
       tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
     }
-    if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis)){
-      tasks.push({id:'sense-foto-'+p,type:'s',prio:'low',dossier:p,msg:'Nog geen fotoanalyse voor <strong>'+person+'</strong>. Dit kan je match-uitleg verfijnen.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong> ontbreekt nog.',link:'Fotoanalyse openen →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+    var m=d.meta||{};
+    var hasPhotoUrl=!!(m&&m.photo_url);
+    var hasAnPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
+    if((d.count||0)>=1&&!(m&&m.photo_analysis)){
+      var pr=(d.count||0)>=6?'medium':'low';
+      if(!hasPhotoUrl&&!hasAnPhotos){
+        tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+person+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+person+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+      }else if((d.count||0)>=6){
+        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+person+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+      }
     }
     if(stage==='geen_contact'&&days<=30){
       tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
@@ -4230,15 +4273,15 @@ function rHome(el){
       var ordered=openTasks.slice(idx).concat(openTasks.slice(0,idx));
       var picked=[],usedType={};
       ordered.forEach(function(t){
-        if(picked.length>=3)return;
+        if(picked.length>=5)return;
         if(!usedType[t.type]){
           picked.push(t);
           usedType[t.type]=true;
         }
       });
-      if(picked.length<3){
+      if(picked.length<5){
         ordered.forEach(function(t){
-          if(picked.length>=3)return;
+          if(picked.length>=5)return;
           if(picked.indexOf(t)===-1)picked.push(t);
         });
       }
@@ -4249,6 +4292,7 @@ function rHome(el){
   var notesHtml='';
   if(notes.length){
     notesHtml='<div class="home-notes">';
+    notesHtml+='<div style="font-size:12px;color:#5f6b67;line-height:1.45;margin-bottom:8px">Openstaande coachmeldingen (max. 5): <strong>Sense</strong> = context/foto, <strong>Actie</strong> = iets doen, <strong>Check</strong> = even stilstaan.</div>';
     notesHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
       +'<span style="font-size:11px;font-weight:700;color:var(--r);background:#FFF1F1;border:1px solid #FFD9D9;border-radius:999px;padding:4px 8px">🔴 SENSE</span>'
       +'<span style="font-size:11px;font-weight:700;color:#A55B00;background:#FFF6EA;border:1px solid #FFE1BE;border-radius:999px;padding:4px 8px">🟡 ACTIE</span>'
@@ -5872,7 +5916,9 @@ async function rDossier(el){
     +'<div class="dtab '+(vt==="foto"?"active":"")+'" data-dtab="foto" onclick="switchTab(\'foto\')">Foto<span class="dtab-badge" id="dtabBadgeFoto" aria-hidden="true"></span></div>'
     +'<div class="dtab '+(vt==="profiel"?"active":"")+'" data-dtab="profiel" onclick="switchTab(\'profiel\')">Profiel<span class="dtab-badge" id="dtabBadgeProfiel" aria-hidden="true"></span></div>'
     +'<div class="dtab '+(vt==="advies"?"active":"")+'" data-dtab="advies" onclick="switchTab(\'advies\')">Advies<span class="dtab-badge" id="dtabBadgeAdvies" aria-hidden="true"></span></div>'
-    +'</div></div>';
+    +'</div>'
+    +'<div class="dossier-tab-hint" role="note"><span class="dth-dot" aria-hidden="true"></span><span>Openstaande actie op die tab (rode bolletje) — tik de tab om af te werken.</span></div>'
+    +'</div>';
 
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
   await loadTab(name,S.viewTab,d);
@@ -7808,9 +7854,9 @@ function buildProfileMetaPreviewRows(name,d){
   if(String(m.intent||'').trim())rows.push({k:'Intentie',v:String(m.intent).trim()});
   if(String(m.photo_url||'').trim())rows.push({k:'Profielfoto',v:'ingesteld'});
   else rows.push({k:'Profielfoto',v:'nog niet toegevoegd'});
-  if(!rows.length)return'<p style="font-size:13px;color:#777;margin:0">Nog geen velden ingevuld. Tik op bewerken om te starten.</p>';
-  return'<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(r){
-    return'<div style="font-size:13px;color:#555;line-height:1.45"><span style="color:#8a8f97;display:inline-block;min-width:118px">'+escHTML(r.k)+'</span><strong>'+escHTML(r.v)+'</strong></div>';
+  if(!rows.length)return'<p class="pm-meta-empty" style="font-size:13px;color:#777;margin:0;padding:8px 2px">Nog geen velden ingevuld. Tik op de knop hieronder om te starten.</p>';
+  return'<div class="pm-meta-panel" role="group" aria-label="Profielgegevens overzicht">'+rows.map(function(r){
+    return'<div class="pm-meta-row"><span class="pm-meta-k">'+escHTML(r.k)+'</span><span class="pm-meta-v">'+escHTML(r.v)+'</span></div>';
   }).join('')+'</div>';
 }
 function buildProfileMetaAccordionHtml(name,d){
@@ -7818,19 +7864,19 @@ function buildProfileMetaAccordionHtml(name,d){
   var isOwn=name==='OWN Sense';
   var catId=isOwn?'own-profile-meta':'contact-profile-meta';
   var open=!metaC.complete;
-  var html='<div class="own-cat '+(open?'open ':'')+(metaC.complete?'filled':'')+'" id="oc-'+catId+'">';
+  var html='<div class="own-cat own-cat--profile-meta '+(open?'open ':'')+(metaC.complete?'filled':'')+'" id="oc-'+catId+'">';
   html+='<div class="own-cat-head" onclick="toggleCat(\''+catId+'\')">';
   html+='<div class="own-cat-icon">👤</div>';
   html+='<div class="own-cat-info">';
   html+='<div class="own-cat-title">Profielgegevens</div>';
-  html+='<div style="font-size:11px;color:#8a8f97;margin-top:2px">Invulvragen · zelfde gegevens als dit tabblad</div>';
+  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">Invulvragen · zelfde gegevens als dit tabblad</div>';
   html+='<div class="own-cat-prog '+(metaC.complete?'done':'')+'">'+metaC.filled+'/'+metaC.total+' basisvelden'+(metaC.complete?' ✓':'')+'</div>';
   html+='</div>';
   if(metaC.complete)html+='<span class="own-meta-check" title="Basisvelden ingevuld" aria-label="Compleet">✓</span>';
   html+='<div class="own-cat-arrow" aria-hidden="true">›</div></div>';
-  html+='<div class="own-cat-body">';
+  html+='<div class="own-cat-body own-cat-body--profile">';
   html+=buildProfileMetaPreviewRows(name,d);
-  html+='<div style="margin-top:14px"><button type="button" class="btn-g" style="max-width:280px;padding:10px 14px" onclick="openProfileModal(\''+name+'\')">'+(metaC.complete?'Bewerken':'Aanvullen')+'</button></div>';
+  html+='<div class="pm-meta-actions"><button type="button" class="pm-meta-edit-btn" onclick="openProfileModal(\''+name+'\')">'+(metaC.complete?'Bewerken':'Aanvullen')+'</button></div>';
   html+='</div></div>';
   return html;
 }
@@ -8260,10 +8306,11 @@ async function sendMsg(){
     hideT();
 
     // Sla sessie-bericht op in Supabase (stil als geen sessie)
+    var userSessionMsgId=null;
     try{
       var sid=await ensureActiveSessionForMessage(txt);
       if(sid){
-        await saveSessionMsg(sid,'user',txt);
+        userSessionMsgId=await saveSessionMsg(sid,'user',txt);
         await saveSessionMsg(sid,'ai',raw);
       }
     }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
@@ -8271,7 +8318,7 @@ async function sendMsg(){
 
     if(forcedDossier){
       window._pendingSegmenten=null;
-      await _doOpslaan(null,txt+'\n'+raw,forcedDossier);
+      await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
       addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span></div>');
     }else if(segData&&segData.length>=2){
       window._pendingSegmenten=segData;
@@ -8286,7 +8333,7 @@ async function sendMsg(){
           S.vertelSessionStickyDossier=null;
           toast('Onderwerp lijkt gewijzigd — kies opnieuw waar je opslaat.');
         }else{
-          await _doOpslaan(null,txt+'\n'+raw,sticky);
+          await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
           addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span></div>');
           didSticky=true;
         }
@@ -8295,7 +8342,7 @@ async function sendMsg(){
         var saveId='sv'+Date.now();
         window._saveData=window._saveData||{};
         var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(txt):'';
-        window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam};
+        window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
         var saveLbl=voorgesteldDossier
           ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
           :'Opslaan in een dossier?';
@@ -9349,7 +9396,7 @@ async function koppelSessieMsgNaar(idx,dossier,silent){
       await sb.from('sense_messages').update({profile_name:dossier}).eq('id',m.senseMsgId).eq('user_id',S.user.id);
     }else{
       var payload=(item.text||'')+((item.aiText||'')?('\n'+item.aiText):'');
-      var inserted=await _doOpslaan(null,payload,dossier);
+      var inserted=await _doOpslaan(null,payload,dossier,item.sessionMsgId);
       if(inserted&&inserted.id)m.senseMsgId=inserted.id;
     }
     m.dossier=dossier;
@@ -9372,15 +9419,16 @@ async function koppelSessieMsgNaar(idx,dossier,silent){
 }
 
 async function saveSessionMsg(sessionId,role,content){
-  if(!S.user||!sessionId)return;
+  if(!S.user||!sessionId)return null;
   try{
-    var ins=await sb.from('sense_session_msgs').insert({
+    var res=await sb.from('sense_session_msgs').insert({
       session_id:sessionId,user_id:S.user.id,
       role:role,content:content,
       created_at:new Date().toISOString()
-    });
-    if(ins&&ins.error)console.warn('saveSessionMsg insert:',ins.error);
-  }catch(e){console.warn('saveSessionMsg:',e);}
+    }).select('id').single();
+    if(res&&res.error)console.warn('saveSessionMsg insert:',res.error);
+    return res&&res.data&&res.data.id?res.data.id:null;
+  }catch(e){console.warn('saveSessionMsg:',e);return null;}
 }
 
 async function ensureActiveSessionForMessage(previewText){
@@ -9438,7 +9486,7 @@ async function opslaanInDossier(sid){
   if(!data)return;
   var dossier=data.dossier;
   if(!dossier){kiesAnderDossier(sid);return;}
-  await _doOpslaan(sid,data.tekst,dossier);
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
 }
 
 async function opslaanInDossierSticky(sid){
@@ -9457,7 +9505,7 @@ function kiesAnderDossier(sid){
     'Opslaan bij dossier',
     'Kies een bestaand dossier of maak een nieuw dossier.',
     'save',
-    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||''}
+    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||'',sessionUserMsgId:data.sessionUserMsgId}
   );
 }
 
@@ -9465,7 +9513,7 @@ async function _opslaanKeuze(dossier){
   var sid=window._saveKiesSid;
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
-  await _doOpslaan(sid,data.tekst,dossier);
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
 }
 
 async function maakNieuwDossierEnOpslaan(sid,useSuggested){
@@ -9478,14 +9526,21 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier);
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
 }
 
-async function _doOpslaan(sid,tekst,dossier){
-  var bar=document.getElementById(sid);
-  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
+  if(sid){
+    var bar=document.getElementById(sid);
+    if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+  }
   await ensureP(dossier);
   var inserted=await saveMsg(dossier,'user',tekst);
+  if(sessionUserMsgId&&inserted&&inserted.id){
+    var map=getSessAssignMap();
+    map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
+    setSessAssignMap(map);
+  }
   var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
   pd.count=(pd.count||0)+1;
   S.pdata[dossier]=pd;
