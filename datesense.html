@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:39">
+<meta name="ds-build" content="03-04-2026 21:51">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3044,7 +3044,7 @@ async function saveMsg(pn,role,html){
 async function loadMsgs(pn,opt){
   if(!S.user)return[];
   var o=opt||{};
-  var limit=Math.max(1,Math.min(500,parseInt(o.limit||50,10)));
+  var limit=Math.max(1,Math.min(1000,parseInt(o.limit||50,10)));
   var asc=o.asc===undefined?true:!!o.asc;
   // Gefilterd op specifiek dossier
   var q=sb.from('sense_messages')
@@ -3056,9 +3056,80 @@ async function loadMsgs(pn,opt){
   var {data,error}=await q;
   if(error){
     console.warn('loadMsgs failed for',pn,error.message||error);
+    if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
     return [];
   }
   return data||[];
+}
+
+function downloadTextFileBase(filename,text){
+  var blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){
+    if(a.parentNode)a.parentNode.removeChild(a);
+    try{URL.revokeObjectURL(a.href);}catch(_e){}
+  },800);
+}
+
+function stripTagsPlainExport(html){
+  return String(html==null?'':html).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+}
+
+async function exportDossierTimelineTxt(dossierName){
+  if(!S.user||!sb){toast('Log eerst in.');return;}
+  try{
+    toast('Bezig met export…');
+    var lines=[];
+    var pageSize=400;
+    var from=0;
+    var more=true;
+    var safe=String(dn(dossierName)||'dossier').replace(/[^\w\u00C0-\u024f\-]+/gi,'_').substring(0,48);
+    while(more){
+      var to=from+pageSize-1;
+      var res=await sb.from('sense_messages')
+        .select('created_at,role,html')
+        .eq('user_id',S.user.id)
+        .eq('profile_name',dossierName)
+        .order('created_at',{ascending:true})
+        .range(from,to);
+      if(res.error)throw new Error(res.error.message||'query');
+      var batch=res.data||[];
+      batch.forEach(function(m){
+        var ts=m.created_at?new Date(m.created_at).toLocaleString('nl-BE'):'';
+        var who=m.role==='user'?'Jij':'DateSense';
+        lines.push('['+ts+'] '+who+': '+stripTagsPlainExport(m.html));
+      });
+      more=(batch.length===pageSize);
+      from+=pageSize;
+      if(from>250000){more=false;lines.push('\n… export gestopt (veiligheidsgrens)');}
+    }
+    if(!lines.length){toast('Geen berichten in dit dossier.');return;}
+    var head='DateSense — tijdlijn '+dn(dossierName)+' ('+dossierName+')\nGeëxporteerd '+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n';
+    downloadTextFileBase('DateSense-tijdlijn-'+safe+'.txt',head+lines.join('\n\n'));
+    toast('✓ Tijdlijn geëxporteerd');
+  }catch(e){
+    console.warn('exportDossierTimelineTxt',e);
+    toast('Export mislukt: '+(e&&e.message?e.message:'onbekend'));
+  }
+}
+
+function exportVertelThreadTxt(){
+  var arr=S.vertelMsgs||[];
+  if(!arr.length){toast('Geen berichten om te exporteren.');return;}
+  var lines=[];
+  arr.forEach(function(m){
+    var who=m.role==='user'?'Jij':'DATESENSE';
+    lines.push(who+': '+stripTagsPlainExport(m.html));
+  });
+  var tEl=document.getElementById('sessieTitle');
+  var title=(tEl&&tEl.textContent)?String(tEl.textContent).trim().replace(/[^\w\u00C0-\u024f\- ]+/gi,'').substring(0,40):'gesprek';
+  var safe=title.replace(/\s+/g,'-')||'gesprek';
+  downloadTextFileBase('DateSense-vertel-'+safe+'.txt','DateSense — Vertel\n'+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n'+lines.join('\n\n'));
+  toast('✓ Gesprek geëxporteerd');
 }
 
 async function delP(name){
@@ -6196,7 +6267,8 @@ async function switchTab(tab){
 async function laadOudereTijdlijn(name){
   if(!name)return;
   var current=S.timelineLimitByDossier[name]||3;
-  S.timelineLimitByDossier[name]=Math.min(500,current+3);
+  /* +3 per tik; max 1000 zichtbaar (Supabase haalt typisch max ~1000 rijen per query). Voor alles: export. */
+  S.timelineLimitByDossier[name]=Math.min(1000,current+3);
   await loadTab(name,'tijdlijn',S.pdata[name]||{props:{...DP},count:0,categories:{}});
 }
 
@@ -6444,18 +6516,33 @@ async function loadTab(name,tab,d){
     var msgs=[];
     var hasOlder=false;
     try{
-      // Timeout na 8 seconden
-      var timeoutPromise=new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},8000);});
       var tlLimit=S.timelineLimitByDossier[name]||3;
-      var fetchCap=Math.min(500,tlLimit+1);
-      msgs=await Promise.race([loadMsgs(name,{limit:fetchCap,asc:false}),timeoutPromise]);
-      hasOlder=(msgs&&msgs.length>tlLimit)&&tlLimit<500;
+      var fetchCap=Math.min(1000,tlLimit+1);
+      var lastErr=null;
+      for(var att=1;att<=3;att++){
+        try{
+          msgs=await loadMsgs(name,{limit:fetchCap,asc:false,throwOnError:true});
+          lastErr=null;
+          break;
+        }catch(e2){
+          lastErr=e2;
+          console.warn('loadTab tijdlijn poging '+att+'/3',e2&&e2.message?e2.message:e2);
+          if(att<3)await new Promise(function(r){setTimeout(r,600*att);});
+        }
+      }
+      if(lastErr)throw lastErr;
+      hasOlder=(msgs&&msgs.length>tlLimit)&&tlLimit<1000;
       msgs=(msgs||[]).slice(0,tlLimit);
     }catch(e){
       console.error('loadMsgs error:',e);
+      var errHint='';
+      var em=String(e&&e.message?e.message:'').toLowerCase();
+      if(em==='timeout'||em.includes('timeout'))errHint='<p style="font-size:12px;color:#8a9099;margin-top:10px;line-height:1.45">Het laden duurde te lang (traag netwerk of server). Probeer opnieuw.</p>';
+      else if(e&&e.message)errHint='<p style="font-size:12px;color:#8a9099;margin-top:10px;line-height:1.45">'+String(e.message).replace(/</g,'&lt;').substring(0,200)+'</p>';
       cont.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--m)">'
         +'<div style="font-size:36px;margin-bottom:10px">⚠️</div>'
         +'<p style="font-size:14px;line-height:1.6">Kon tijdlijn niet laden.<br>Controleer je verbinding en probeer opnieuw.</p>'
+        +errHint
         +'<button class="btn-g" style="margin-top:16px;max-width:200px" onclick="switchTab(\'tijdlijn\')">↻ Opnieuw proberen</button>'
         +'</div>';
       updateDossierTabBadges();
@@ -6497,12 +6584,15 @@ async function loadTab(name,tab,d){
           +'<div class="tl-time">'+escHTML(timeLbl)+' · '+(isU?'Jij':'DateSensei')+'</div>'
           +'<div class="tl-text">'+txt+'</div>'
         +'</div>'
-        +(isU?('<button onclick="verplaatsEntry(\''+msgId+'\',\''+name+'\')" style="flex-shrink:0;padding:5px 10px;background:none;border:1px solid var(--b);border-radius:8px;font-size:12px;color:var(--m);cursor:pointer;font-family:inherit;margin-left:8px">↔</button>'):'')
+        +(isU?('<button onclick="verplaatsEntry(\''+msgId+'\',\''+name.replace(/'/g,"\\'")+'\')" style="flex-shrink:0;padding:5px 10px;background:none;border:1px solid var(--b);border-radius:8px;font-size:12px;color:var(--m);cursor:pointer;font-family:inherit;margin-left:8px">↔</button>'):'')
       +'</div>';
     }).join('');
+    var escN=name.replace(/'/g,"\\'");
     if(hasOlder){
-      cont.innerHTML+='<div style="text-align:center;margin-top:14px"><button class="btn-g" style="max-width:260px" onclick="laadOudereTijdlijn(\''+name+'\')">+3 oudere berichten</button></div>';
+      cont.innerHTML+='<div style="text-align:center;margin-top:14px"><button type="button" class="btn-g" style="max-width:280px" onclick="laadOudereTijdlijn(\''+escN+'\')">+3 oudere berichten</button>'
+        +'<p style="font-size:11px;color:#8a9099;margin:8px 16px 0;line-height:1.45">Blijf tikken tot alles geladen is (tot 1000 in dit scherm). Oudere of volledige geschiedenis: export hieronder.</p></div>';
     }
+    cont.innerHTML+='<div style="text-align:center;margin-top:12px;padding-bottom:8px"><button type="button" class="coach-save-other" style="max-width:300px" onclick="exportDossierTimelineTxt(\''+escN+'\')">📥 Hele tijdlijn export (.txt)</button></div>';
   }
   else if(tab==='foto'){
     var meta=(d&&d.meta)||{};
@@ -7427,6 +7517,7 @@ async function rVertel(el){
       <span style="font-size:12px;font-weight:700">Geschiedenis</span>
     </button>
     <button type="button" class="vertel-btn-new" onclick="nieuwGesprek()" title="Nieuw gesprek starten (leeg scherm)">Nieuw gesprek</button>
+    <button type="button" class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="exportVertelThreadTxt()" title="Dit gesprek als .txt">Export</button>
     <div style="flex:1;min-width:min(100%,160px)">
       <div style="font-size:15px;font-weight:700;color:var(--t)" id="sessieTitle">Nieuw gesprek</div>
       <div id="vertelGesprekBanner" class="vertel-gesprek-banner" style="display:none"></div>
@@ -9944,6 +10035,9 @@ try{
   window.koppelSessieMsg=koppelSessieMsg;
   window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
   window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
+  window.laadOudereTijdlijn=laadOudereTijdlijn;
+  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
+  window.exportVertelThreadTxt=exportVertelThreadTxt;
 }catch(e){console.warn('window exports:',e);}
 try{
   init();
