@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 12:13">
+<meta name="ds-build" content="v2026-04-03-1 12:15">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -579,7 +579,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
       <svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.5" width="22" height="22"><polyline points="15,18 9,12 15,6"/></svg>
     </button>
     <div class="tb-title" id="pgTitle">Home</div>
-    <button class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
+    <button class="ico" id="btnHelpTour" onclick="startQuickHelpTour(true)" title="Hulp"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
     <button class="ico" onclick="goScreen('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
 
@@ -1072,18 +1072,66 @@ function renderOnboardingCard(){
     +'</div></div>';
 }
 
-function getQuickHelpSteps(){
-  return [
-    {targetId:'tab-own',title:'OwnSense = jouw basisprofiel',text:'Dit is jouw eigen dossier. Hoe beter je OwnSense is ingevuld, hoe scherper je matches, advies en checks worden.'},
-    {targetId:'tab-senses',title:'Mijn Senses = je contactdossiers',text:'Hier beheer je de personen met wie je date of praat. Open dossiers, zet on hold of vergelijk ze naast elkaar.'},
-    {targetId:'tab-vertel',title:'Vertel = context doorgeven',text:'Gebruik Vertel om updates, gevoelens en gebeurtenissen toe te voegen. Dit voedt je advies en coachmeldingen.'}
-  ];
-}
 function quickHelpSeen(){
   return String(getScopedStorage('ds_quick_help_seen','0')||'0')==='1';
 }
 function markQuickHelpSeen(){
   setScopedStorage('ds_quick_help_seen','1');
+}
+function getQuickHelpSeenMap(){
+  var raw=getScopedStorage('ds_help_seen_map','{}')||'{}';
+  try{
+    var parsed=JSON.parse(raw);
+    return parsed&&typeof parsed==='object'?parsed:{};
+  }catch(e){return{};}
+}
+function markScreenHelpSeen(screen){
+  var key=String(screen||'').trim();
+  if(!key)return;
+  var map=getQuickHelpSeenMap();
+  map[key]=Date.now();
+  setScopedStorage('ds_help_seen_map',JSON.stringify(map));
+}
+function isScreenHelpSeen(screen){
+  var key=String(screen||'').trim();
+  if(!key)return false;
+  var map=getQuickHelpSeenMap();
+  return !!map[key];
+}
+function getQuickHelpStepsForScreen(screen){
+  var sc=String(screen||S.screen||'').trim();
+  if(sc==='home'){
+    return[
+      {targetSel:'#tab-home',title:'Home',text:'Hier zie je je coachmeldingen, focus en snelkoppelingen.'},
+      {targetSel:'.home-shell .home-notes',title:'Coach meldingen',text:'Deze kaarten roteren. Je kan snoozen, afronden of openen per dossier.'},
+      {targetSel:'.home-shell .mic-btn',title:'Startpunt Vertel',text:'Via de microfoon geef je snel context door die je advies direct verbetert.'}
+    ];
+  }
+  if(sc==='senses'){
+    return[
+      {targetSel:'#tab-senses',title:'Mijn Senses',text:'Overzicht van je contactdossiers met status en acties.'},
+      {targetSel:'.srow',title:'Dossierkaart',text:'Open een dossier, bekijk updates, of zet het op on hold.'},
+      {targetSel:'.btn-r[onclick*=\"toggleCompareMode\"]',title:'Vergelijken',text:'Vergelijk geselecteerde dossiers side-by-side voor scherpere keuzes.'}
+    ];
+  }
+  if(sc==='vertel'){
+    return[
+      {targetSel:'#tab-vertel',title:'Vertel',text:'Hier zet je gebeurtenissen, gevoelens en vragen om naar bruikbare context.'},
+      {targetSel:'#chatArea',title:'Gespreksoverzicht',text:'Je ziet wat jij en DateSense al bespraken in deze sessie.'},
+      {targetSel:'#msgInput',title:'Inputvak',text:'Typ vrij of gebruik de voorbeeldchips; DateSense koppelt slim aan dossiers.'}
+    ];
+  }
+  if(sc==='dossier'){
+    var own=S.viewDossier==='OWN Sense';
+    return[
+      {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Fotoanalyse en Advies.'},
+      {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
+      {targetSel:'.dossier-head-actions',title:'Snelle acties',text:'Met deze knoppen stuur je snel door naar Vertel of andere relevante acties.'}
+    ];
+  }
+  return[
+    {targetSel:'#tab-home',title:'Navigatie',text:'Je kan altijd starten via Home, Senses, OwnSense en Vertel.'}
+  ];
 }
 function hasSeenVertelCoachTip(){
   return String(getScopedStorage('ds_vertel_tip_seen','0')||'0')==='1';
@@ -1153,12 +1201,14 @@ function closeVertelInputCoachTip(){
 function startQuickHelpTour(force){
   if(!S.user)return;
   if(_quickHelpTour.active)return;
-  if(!force&&quickHelpSeen())return;
-  var steps=getQuickHelpSteps().filter(function(s){
-    return !!document.getElementById(s.targetId);
+  var sc=String(S.screen||'home');
+  if(!force&&isScreenHelpSeen(sc))return;
+  var steps=getQuickHelpStepsForScreen(sc).filter(function(s){
+    var el=s.targetId?document.getElementById(s.targetId):document.querySelector(s.targetSel||'');
+    return !!el;
   });
   if(!steps.length)return;
-  _quickHelpTour={active:true,idx:0,steps:steps,targetEl:null};
+  _quickHelpTour={active:true,idx:0,steps:steps,targetEl:null,screen:sc};
   renderQuickHelpStep();
 }
 function renderQuickHelpStep(){
@@ -1169,7 +1219,7 @@ function renderQuickHelpStep(){
   var step=_quickHelpTour.steps[_quickHelpTour.idx];
   if(!step){endQuickHelpTour(false);return;}
   if(_quickHelpTour.targetEl)_quickHelpTour.targetEl.classList.remove('help-tour-target');
-  var el=document.getElementById(step.targetId);
+  var el=step.targetId?document.getElementById(step.targetId):document.querySelector(step.targetSel||'');
   if(!el){
     _quickHelpTour.idx++;
     renderQuickHelpStep();
@@ -1214,8 +1264,12 @@ function endQuickHelpTour(cancelOnly){
   if(_quickHelpTour.targetEl)_quickHelpTour.targetEl.classList.remove('help-tour-target');
   if(shade)shade.style.display='none';
   if(card){card.style.display='none';card.innerHTML='';}
-  _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
-  if(!cancelOnly)markQuickHelpSeen();
+  var sc=String((_quickHelpTour&&_quickHelpTour.screen)||S.screen||'home');
+  _quickHelpTour={active:false,idx:0,steps:[],targetEl:null,screen:''};
+  if(!cancelOnly){
+    markQuickHelpSeen();
+    markScreenHelpSeen(sc);
+  }
 }
 
 function updateProfileAgePreview(){
@@ -2416,6 +2470,9 @@ function goScreen(sc){
   });
   var homeTab=document.getElementById('tab-home');
   if(homeTab)homeTab.style.display='';
+  if(S.user&&!_quickHelpTour.active&&['home','senses','dossier','vertel'].indexOf(sc)!==-1){
+    setTimeout(function(){startQuickHelpTour(false);},220);
+  }
   setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
 
@@ -8242,4 +8299,19 @@ document.addEventListener('input',function(e){
   var m=ta.id.match(/^cc-(.+)-a\d+$/);
   if(m){
     var catId=m[1];
-    var dossier
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
