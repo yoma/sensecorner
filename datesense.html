@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 10:53">
+<meta name="ds-build" content="v2026-04-03-1 10:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -773,6 +773,14 @@ const DP={gevoeligheid:0,openheid:0,humor:0,directheid:0,avontuur:0,stabiliteit:
 // Kleuren per dossier-slot
 const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
+const ADMIN_EMAILS=['youri77@gmail.com'];
+const PROMPT_DEFAULTS={
+  advice_core:'Je bent DateSensei, empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} Geef daarnaast op NIEUWE REGEL exact dit formaat: REDFLAGS:score;reden1|reden2|reden3 (score 0-100, hoger=meer risico). Daarna geef je op een NIEUWE REGEL exact dit formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀). Gebruik geen nummering in woorden zoals "een/twee/drie"; gebruik gewone zinnen of bulletstijl. {{relationship_guard}} Maximaal 5 zinnen advies. Nederlands.',
+  planner_core:'Je bent DateSensei. Geef exact 2 Nederlandse planvoorstellen. Schrijf warm, volwassen, vloeiend en premium. GEEN virtuele of symbolische voorstellen. Gebruik herkenbare buurten/pleinen/straten/kaaien/stationsomgevingen (geen vage "in de buurt van"). Formaat strikt: per voorstel deze labels op aparte regels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+  planner_fallback:'Je bent DateSensei. Geef exact 2 creatieve, concrete en haalbare plannen in het Nederlands. Geen virtuele voorstellen. Gebruik hetzelfde strikte label-formaat per voorstel: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+  compare_core:'Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er kort naar. Gebruik OOK recente context en vermijd feitelijke fouten over wat al gebeurd is. Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). Max 6 zinnen totaal. Nederlands.',
+  photo_analysis_core:'Je bent DateSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
+};
 
 // OWN Sense categorieën definitie
 const OWN_CATS=[
@@ -857,6 +865,7 @@ var _autoPlannerWarmKey='';
 var _plannerIdeaRefreshTimer=null;
 var _adviesReqSeq=0;
 var _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
+var _promptCenterKey='advice_core';
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -878,6 +887,36 @@ function getSessAssignMap(){
 }
 function setSessAssignMap(map){
   try{localStorage.setItem('ds_sess_assign_map',JSON.stringify(map||{}));}catch(e){}
+}
+function isAdminUser(){
+  var em=((S.user&&S.user.email)||'').toLowerCase().trim();
+  return !!em&&ADMIN_EMAILS.indexOf(em)!==-1;
+}
+function getPromptOverrides(){
+  var raw=getScopedStorage('ds_prompt_overrides','{}')||'{}';
+  try{
+    var obj=JSON.parse(raw);
+    return obj&&typeof obj==='object'?obj:{};
+  }catch(e){return{};}
+}
+function setPromptOverrides(map){
+  setScopedStorage('ds_prompt_overrides',JSON.stringify(map||{}));
+}
+function getPromptText(key){
+  var k=String(key||'').trim();
+  var ov=getPromptOverrides();
+  var custom=String(ov[k]||'').trim();
+  if(custom)return custom;
+  return String(PROMPT_DEFAULTS[k]||'').trim();
+}
+function setPromptText(key,val){
+  var k=String(key||'').trim();
+  if(!k)return;
+  var ov=getPromptOverrides();
+  var v=String(val||'').trim();
+  if(v)ov[k]=v;
+  else delete ov[k];
+  setPromptOverrides(ov);
 }
 
 function getMetaFor(name){
@@ -1333,7 +1372,7 @@ async function analyseerFotoVoorDossier(dosName){
       var prompt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
       +'openheid (0-100), glimlach (0-100), energie (0-100), verzorging (0-100), benaderbaarheid (0-100), '
       +'mood (korte tekst), summary (max 2 zinnen in het Nederlands).';
-      var raw=await callAPI('',[{role:'user',content:[
+      var raw=await callAPI(getPromptText('photo_analysis_core'),[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:optimized.mediaType,data:b64}},
         {type:'text',text:prompt}
       ]}],220,45000);
@@ -2217,8 +2256,12 @@ function goScreen(sc){
   if(shadeEl)shadeEl.style.display='none';
   if(cardEl)cardEl.style.display='none';
   // Protect screens when not authenticated
-  if(!S.user && ['senses','own','vertel','compare','dossier','notifications','planner'].includes(sc)){
+  if(!S.user && ['senses','own','vertel','compare','dossier','notifications','planner','promptcenter'].includes(sc)){
     sc='login';
+  }
+  if(sc==='promptcenter'&&!isAdminUser()){
+    sc='settings';
+    toast('Alleen admin heeft toegang tot Prompt Center.');
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
   if(sc==='own' && S.user){
@@ -2232,14 +2275,14 @@ function goScreen(sc){
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan iets leuks',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan iets leuks',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',promptcenter:'Prompt Center'};
   document.getElementById('pgTitle').textContent=T[sc]||sc;
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
   ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,planner:rPlanner,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
+  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,planner:rPlanner,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications,promptcenter:rPromptCenter};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -4074,20 +4117,7 @@ async function requestPlannerIdeas(name,answers){
   var ideaMeta=plannerIdeaMeta(answers.idea);
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
   var hasConcreteRegion=String(answers.region||'').trim().length>=3;
-  var sys='Je bent DateSensei. Geef exact 2 Nederlandse planvoorstellen. '
-    +'Schrijf warm, volwassen, vloeiend en premium. '
-    +'Geen links, geen tabellen, geen virtuele of symbolische invulling. '
-    +'Respecteer de fase. '
-    +'Werk met buurten, streken, zones en type plekken, nooit met concrete bedrijven of adressen. '
-    +'Gebruik liever herkenbare buurtnamen, pleinen, kaaien, straten of stationsomgevingen dan vage formuleringen zoals "in de buurt van". '
-    +'Gebruik exact deze labels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:. '
-    +'Bij Praktisch noem je starttype, duur, afstand of rijtijd als inschatting. '
-    +'Gebruik per onderdeel bij voorkeur 2 volledige zinnen in plaats van losse woorden of afgeknepen fragmenten. '
-    +'Vermijd staccato stijl, te korte opsommingen of lege placeholderzinnen. '
-    +'Voorstel 1 en voorstel 2 moeten echt verschillend aanvoelen in sfeer, opbouw en energie. '
-    +'Vermijd brave opvultekst of lege managementtaal. Elk voorstel moet een helder, aantrekkelijk haakje hebben waardoor het bijzonder voelt. '
-    +'Kies liever 1 sterk, origineel idee met mooie flow dan 2 generieke beschrijvingen van "iets gezelligs". '
-    +'Extra stijlrichting: '+ideaGuidance+'.';
+  var sys=getPromptText('planner_core')+' Extra stijlrichting: '+ideaGuidance+'.';
   var userContent='Dossier: '+dn(name)
     +'\nFase: '+stage
     +(dCtx?('\nContext:\n'+dCtx):'')
@@ -4110,10 +4140,7 @@ async function requestPlannerIdeas(name,answers){
     return plannerNormalizeResult(raw,name,answers,regionAnchors);
   }catch(e){
     // Fallback prompt: korter en sneller, vooral voor mobiele/tragere netwerken.
-    var fastSys='Je bent DateSensei. Geef exact 2 creatieve, aantrekkelijke en concrete planvoorstellen in het Nederlands. '
-      +' Alleen echte, offline haalbare voorstellen; geen virtuele of symbolische invulling. '
-      +'Geen links, geen tabellen. Gebruik exact labels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.'
-      +' Laat voorstel 1 en 2 duidelijk verschillen in sfeer en opbouw, en vermijd brave opvultekst.';
+    var fastSys=getPromptText('planner_fallback');
     var fastUser='Dossier: '+dn(name)
       +'\nRegio: '+(answers.region||'flexibel')
       +'\nIdee: '+(answers.idea||'koffie')
@@ -5531,20 +5558,16 @@ async function genAdvies(name,forced){
     :tone==='zacht'
       ?'Wees warm en voorzichtig, maar blijf eerlijk.'
       :'Wees warm, direct en eerlijk.';
-  var sys='Je bent DateSensei, empathische AI dating coach. '
-    +(isOwnAdv
-      ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
-      :'Analyseer dossier "'+dn(name)+'": karakter, patronen, jouw gevoel. Geef 2 concrete adviezen.')
-    +' '+toneInstr
-    +' Geef daarnaast op NIEUWE REGEL exact dit formaat: REDFLAGS:score;reden1|reden2|reden3 (score 0-100, hoger=meer risico).'
-    +' Daarna geef je op een NIEUWE REGEL exact dit formaat:'
-    +' ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg'
-    +' (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀)'
-    +' Gebruik geen nummering in woorden zoals "één/twee/drie"; gebruik gewone zinnen of bulletstijl.'
-    +(name!=='OWN Sense'
-      ?' Respecteer de relatie-fase. Als relatie al lopend is (bv. prille/vaste relatie of meerdere dates), geef GEEN advies zoals "plan eerste date".'
-      :'')
-    +' Maximaal 5 zinnen advies. Nederlands.';
+  var modeInstruction=isOwnAdv
+    ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
+    :'Analyseer dossier "'+dn(name)+'": karakter, patronen, jouw gevoel. Geef 2 concrete adviezen.';
+  var relationshipGuard=name!=='OWN Sense'
+    ?'Respecteer de relatie-fase. Als relatie al lopend is (bv. prille/vaste relatie of meerdere dates), geef GEEN advies zoals "plan eerste date".'
+    :'';
+  var sys=getPromptText('advice_core')
+    .replace('{{mode_instruction}}',modeInstruction)
+    .replace('{{tone_instruction}}',toneInstr)
+    .replace('{{relationship_guard}}',relationshipGuard);
   var usageLine=buildUsageModeContextLine();
   if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
   var userContent=buildAdviceContextPayload(name,d,msgs);
@@ -6234,6 +6257,73 @@ function renderSettingsTile(icon,title,sub,action){
     +'</span></button>';
 }
 
+function rPromptCenter(el){
+  if(!isAdminUser()){
+    el.innerHTML='<div style="padding:24px;color:#7A2A2A">Geen toegang.</div>';
+    return;
+  }
+  var defs=[
+    {k:'advice_core',title:'Advies prompt',sub:'Kernprompt voor advies in dossiers'},
+    {k:'planner_core',title:'Planner prompt',sub:'Primaire prompt voor planvoorstellen'},
+    {k:'planner_fallback',title:'Planner fallback',sub:'Fallback als planner-call faalt'},
+    {k:'compare_core',title:'Vergelijk prompt',sub:'AI vergelijking tussen dossiers'},
+    {k:'photo_analysis_core',title:'Fotoanalyse prompt',sub:'Prompt voor visuele foto-analyse'}
+  ];
+  var key=defs.some(function(x){return x.k===_promptCenterKey;})?_promptCenterKey:defs[0].k;
+  _promptCenterKey=key;
+  var cur=defs.filter(function(x){return x.k===key;})[0]||defs[0];
+  var txt=getPromptText(key);
+  function escA(v){
+    return String(v||'')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+  el.innerHTML='<div style="padding:18px 16px 30px">'
+    +'<div style="font-size:12px;color:#8a8f97;margin-bottom:10px">Admin-only overzicht van system prompts. Wijzigingen zijn live na opslaan.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    +defs.map(function(d){
+      var on=d.k===key;
+      return '<button class="'+(on?'btn-r':'coach-save-other')+'" style="'+(on?'max-width:220px;padding:8px 10px;font-size:12px':'font-size:12px;padding:7px 9px')+'" onclick="_promptCenterKey=\''+d.k+'\';goScreen(\'promptcenter\')">'+d.title+'</button>';
+    }).join('')
+    +'</div>'
+    +'<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px">'
+    +'<div style="font-size:14px;font-weight:800;color:#333">'+cur.title+'</div>'
+    +'<div style="font-size:12px;color:#7f8790;margin:3px 0 10px">'+cur.sub+'</div>'
+    +'<textarea id="promptCenterText" class="form-input" style="min-height:280px;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45">'+escA(txt)+'</textarea>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    +'<button class="btn-r" style="max-width:180px;padding:9px 12px" onclick="savePromptCenterCurrent()">Opslaan</button>'
+    +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="resetPromptCenterCurrent()">Reset standaard</button>'
+    +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="copyPromptCenterCurrent()">Kopieer prompt</button>'
+    +'</div></div></div>';
+}
+function savePromptCenterCurrent(){
+  if(!isAdminUser())return;
+  var ta=document.getElementById('promptCenterText');
+  if(!ta){toast('Prompt veld niet gevonden.');return;}
+  var v=String(ta.value||'').trim();
+  if(v.length<60){toast('Prompt is te kort.');return;}
+  setPromptText(_promptCenterKey,v);
+  toast('✅ Prompt opgeslagen');
+}
+function resetPromptCenterCurrent(){
+  if(!isAdminUser())return;
+  var ov=getPromptOverrides();
+  delete ov[_promptCenterKey];
+  setPromptOverrides(ov);
+  goScreen('promptcenter');
+  toast('Standaardprompt hersteld');
+}
+function copyPromptCenterCurrent(){
+  var ta=document.getElementById('promptCenterText');
+  if(!ta){toast('Geen prompt om te kopieren.');return;}
+  ta.select();
+  document.execCommand('copy');
+  toast('Prompt gekopieerd');
+}
+
 function rSettings(el){
   var usageMode=getUsageMode();
   var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
@@ -6241,6 +6331,7 @@ function rSettings(el){
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
   if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
+  var adminTile=isAdminUser()?renderSettingsTile('🛠️','Prompt Center','Bekijk en finetune system prompts','prompt-center'):'';
   var extraHtml=''
     +renderSettingsTile('⚙️','Instellingen','Algemene voorkeuren','settings-placeholder')
     +renderSettingsTile('💳','Abonnement','Plan en facturatie','subscription-placeholder')
@@ -6251,6 +6342,7 @@ function rSettings(el){
     +renderSettingsTile('📘','Over DateSense','Info over de app','about')
     +renderSettingsTile('❓',"FAQ's",'Veelgestelde vragen','faq')
     +renderSettingsTile('📦','Export data','Download je gegevens','export')
+    +adminTile
     +renderSettingsTile('🧭','Korte rondleiding','Uitleg van de hoofdschermen','quick-tour')
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data');
 
@@ -6346,6 +6438,7 @@ async function exportAllData(){
 }
 
 function settingsAction(action){
+  if(action==='prompt-center'){goScreen('promptcenter');return;}
   if(action==='quick-tour'){goScreen('home');setTimeout(function(){startQuickHelpTour(true);},220);return;}
   if(action==='my-data'){openProfileModal('OWN Sense');return;}
   if(action==='notifications'){goScreen('notifications');return;}
@@ -6606,13 +6699,7 @@ async function cmpAdviesCurrent(){
         recent_events:recentFacts
       };
     }));
-    var sys='Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. '
-      +'Schrijf ALLEEN in duidelijke, menselijke taal. '
-      +'Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. '
-      +'Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er alleen kort naar. '
-      +'Gebruik OOK de recente context (events, ingevulde input) en vermijd feitelijke fouten over wat al gebeurd is. '
-      +'Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). '
-      +'Max 6 zinnen totaal. Nederlands.';
+    var sys=getPromptText('compare_core');
     var usageLine=buildUsageModeContextLine();
     if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
     var user='Data:\n'+JSON.stringify(payload);
@@ -7666,113 +7753,4 @@ async function buildDossierContextForAI(dosName){
     if(m.photo_analysis.summary)ptxt+=' | '+String(m.photo_analysis.summary).substring(0,180);
     lines.push(ptxt);
   }
-  if(d.summary)lines.push('Samenvatting '+dn(dosName)+': '+d.summary.substring(0,500));
-  var catTxt='';
-  if(d.categories){
-    Object.values(d.categories).forEach(function(c){
-      Object.values(c||{}).forEach(function(v){if((v||'').trim())catTxt+=' '+v.trim();});
-    });
-  }
-  if(catTxt.trim())lines.push('Ingevulde dossiervelden: '+catTxt.trim().substring(0,700));
-  try{
-    // Context policy: recente details + bestaande samenvatting/velden.
-    var recent=await loadMsgs(dosName,{limit:20,asc:false});
-    var userRecent=(recent||[])
-      .filter(function(m){return m.role==='user';})
-      .map(function(m){return (m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
-      .filter(function(t){return t.length>3;})
-      .slice(0,10);
-    if(userRecent.length)lines.push('Recente kernpunten: '+userRecent.reverse().join(' | ').substring(0,1400));
-  }catch(e){}
-  return lines.join('\n');
-}
-
-// Laad recente berichten voor context (eenmalig bij init)
-async function laadContextMsgs(){
-  if(!S.user||!S.profiles.length)return;
-  S._ctxMsgs={};
-  for(var p of S.profiles){
-    if(p==='OWN Sense'||getDossierLifecycle(p)!=='active')continue;
-    try{
-      var {data}=await sb.from('sense_messages')
-        .select('html').eq('user_id',S.user.id).eq('profile_name',p)
-        .eq('role','user').order('created_at',{ascending:false}).limit(5);
-      if(data)S._ctxMsgs[p]=data.reverse();
-    }catch(e){}
-  }
-}
-
-// ══ Sidebar & Sessies ═══════════════════════════════════════════
-
-function openSidebar(){
-  document.getElementById('sidebar').classList.add('open');
-  document.getElementById('sidebarOverlay').classList.add('open');
-  laadSessies();
-}
-
-function closeSidebar(){
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('open');
-}
-
-async function laadSessies(){
-  if(!S.user)return;
-  var el=document.getElementById('sidebarSessions');
-  if(!el)return;
-  try{
-    var {data}=await sb.from('sense_sessions')
-      .select('*').eq('user_id',S.user.id)
-      .order('updated_at',{ascending:false}).limit(30);
-    if(!data||!data.length){
-      el.innerHTML='<div style="padding:20px 10px;font-size:13px;color:#666;text-align:center">Nog geen gesprekken</div>';
-      return;
-    }
-    window._sessieIds=data.map(function(s){return s.id;});
-    el.innerHTML=data.map(function(s,si){
-      var isActive=S.currentSessionId===s.id;
-      var date=new Date(s.updated_at).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
-      var time=new Date(s.updated_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
-      return'<div class="sess-row">'
-        +'<div class="sess-item'+(isActive?' active':'')+' " data-si="'+si+'" onclick="laadSessie(window._sessieIds[parseInt(this.dataset.si)])">' 
-          +'<div class="sess-date">'+date+' · '+time+'</div>'
-          +'<div class="sess-preview">'+(s.preview||'Nieuw gesprek')+'</div>'
-        +'</div>'
-        +'<button class="sess-del" title="Verwijderen" data-si="'+si+'" onclick="event.stopPropagation();verwijderSessie(window._sessieIds[parseInt(this.dataset.si)])">✕</button>'
-      +'</div>';
-    }).join('');
-  }catch(e){console.warn('laadSessies error:',e);}
-}
-
-async function verwijderSessie(sessionId){
-  if(!S.user||!sessionId)return;
-  if(!confirm('Dit gesprek verwijderen uit je overzicht?'))return;
-  try{
-    await sb.from('sense_session_msgs').delete().eq('session_id',sessionId).eq('user_id',S.user.id);
-    await sb.from('sense_sessions').delete().eq('id',sessionId).eq('user_id',S.user.id);
-    if(S.currentSessionId===sessionId){
-      S.currentSessionId=null;
-      S.vertelMsgs=[];
-      await initSessie();
-      if(S.screen==='vertel'&&S.currentSessionId){
-        await laadSessie(S.currentSessionId);
-      }else{
-        var ca=document.getElementById('chatArea');
-        if(ca)ca.innerHTML='';
-      }
-    }
-    toast('🗑️ Gesprek verwijderd');
-    laadSessies();
-  }catch(e){
-    console.warn('verwijderSessie error:',e);
-    toast('Kon gesprek niet verwijderen');
-  }
-}
-
-async function nieuwGesprek(){
-  closeSidebar();
-  // Altijd direct zichtbare reset in UI, ook als DB traag/faalt.
-  if(S.screen!=='vertel')goScreen('vertel');
-  var ca=document.getElementById('chatArea');
-  if(ca)ca.innerHTML='';
-  var t=document.getElementById('sessieTitle');
-  if(t)t.textCont
+  if(d.summary)lines.push('Samenvatting '+dn(dosNa
