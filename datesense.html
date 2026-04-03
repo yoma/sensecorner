@@ -8,8 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
-<!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-9 17:20">
+<!-- DateSense build tag (debug): revisie + lokaal uur — bij wijziging: Get-Date -Format 'yyyy-MM-dd HH:mm' (PowerShell) -->
+<meta name="ds-build" content="v2026-04-03-8 16:20">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -130,8 +130,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* Nav — altijd boven dossier-dock (z-index) zodat tikken op tabs betrouwbaar blijft */
 .nav{background:#fff;border-top:1px solid var(--b);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none;position:relative}
 .tab.active{color:var(--r)}
+.tab-badge{position:absolute;top:1px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--r);box-shadow:0 0 0 2px #fff;pointer-events:none;display:none}
+.tab-badge.show{display:block}
 .tab svg{width:23px;height:23px}
 .tab span{font-size:var(--fs-xs);font-weight:600}
 
@@ -167,6 +169,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
 /* Senses lijst */
 .srow{display:flex;align-items:center;gap:12px;padding:14px 14px;border:1px solid var(--b);border-radius:var(--rad-md);cursor:pointer;margin-bottom:10px;background:#fff;box-shadow:0 2px 8px rgba(20,20,20,.04)}
+.srow.srow-dossier{flex-wrap:wrap;align-items:flex-start}
+.srow.srow-dossier .srow-actions{flex-shrink:0;margin-left:auto}
 .srow:active{transform:translateY(1px)}
 .sdot{width:10px;height:10px;border-radius:5px;background:var(--r);flex-shrink:0}
 .del-btn{background:#FFF0F0;border:1px solid #ffd9d9;color:var(--r);font-size:var(--fs-xs);font-weight:700;padding:6px 12px;border-radius:var(--rad-sm);cursor:pointer;font-family:inherit;flex-shrink:0}
@@ -176,7 +180,15 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .dtab{flex:1;padding:12px 4px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.1px;color:var(--m);cursor:pointer;border-bottom:3px solid transparent}
 .dtab.active{color:var(--r);border-bottom-color:var(--r)}
 .props-stack{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
+.props-bars-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 10px;margin-bottom:4px}
+@media (min-width:380px){.props-bars-grid{grid-template-columns:repeat(3,1fr)}}
 .prop{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-bottom:4px}
+.prop.prop--compact{flex-direction:column;align-items:stretch;margin-bottom:0;padding:7px 8px;border:1px solid var(--b);border-radius:10px;background:#fafbfc;gap:5px}
+.prop.prop--compact .prop-compact-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.prop.prop--compact .prop-compact-name{font-size:10px;font-weight:700;color:#333;line-height:1.15;flex:1;min-width:0}
+.prop.prop--compact .prop-compact-pct{font-size:10px;font-weight:800;color:var(--r);flex-shrink:0}
+.prop.prop--compact .track{height:3px}
+.prop.prop--compact .pct{display:none}
 .pn{width:78px;flex-shrink:0;font-size:11px;line-height:1.15;color:#333;display:flex;flex-direction:column;gap:1px}
 .pn .prop-row-inl{font-size:9px;color:#8a8f97;line-height:1.1;font-weight:500}
 .track{flex:1;min-width:0;height:4px;background:var(--b);border-radius:2px;overflow:hidden}
@@ -447,7 +459,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .sess-del:hover{color:#2d3136;background:#e6eaf0}
 
 /* ══ COACH CHAT UI ══ */
-.coach-save-bar{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
+.coach-save-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
+.coach-save-sticky{padding:6px 10px;font-size:0.92em;background:#8B1538}
 .coach-save-lbl{font-size:13px;color:#555;flex:1}
 .coach-save-dos{font-size:13px;font-weight:700;color:var(--r)}
 .coach-save-btn{padding:6px 14px;background:var(--r);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
@@ -650,6 +663,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .help-tour-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .help-tour-btn{padding:7px 10px;border-radius:9px;border:1px solid var(--b);background:#fff;color:#555;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 .help-tour-btn.primary{background:var(--r);border-color:var(--r);color:#fff}
+.vertel-mood-strip{margin:0 12px 8px;padding:10px 12px;background:linear-gradient(180deg,#FFFBFB 0%,#fff 100%);border:1px solid #F0D4D4;border-radius:12px}
 .vertel-coach-tip{margin:6px 10px 0;padding:10px 12px;border:1px solid #F2D6D6;border-radius:12px;background:linear-gradient(180deg,#FFF9F9 0%,#FFFDFD 100%)}
 .vertel-coach-head{font-size:12px;font-weight:800;color:#AE0000;margin-bottom:5px}
 .vertel-coach-text{font-size:12px;color:#545b64;line-height:1.5}
@@ -740,11 +754,15 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     <button class="tab active" id="tab-home" onclick="goScreen('home')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg><span>Home</span>
     </button>
-    <button class="tab" id="tab-senses" onclick="goScreen('senses')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Senses</span>
+    <button class="tab" id="tab-senses" onclick="goScreen('senses')" title="Mijn Senses">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
+      <span>Senses</span>
     </button>
-    <button class="tab" id="tab-own" onclick="goScreen('own')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg><span>OwnSense</span>
+    <button class="tab" id="tab-own" onclick="goScreen('own')" title="OWN Sense">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
+      <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
+      <span>OwnSense</span>
     </button>
     <button class="tab" id="tab-vertel" onclick="goScreen('vertel')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg><span>Vertel</span>
@@ -872,6 +890,10 @@ const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
 var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
 const APP_BUILD_LABEL=String(_metaBuildContent||'v2026-03-27-1').trim();
+/** Build-label: volledige `ds-build` meta (revisie + uur uit bestand). */
+function getAppBuildDisplay(){
+  return APP_BUILD_LABEL;
+}
 var sb=null;
 try{
   if(window.supabase&&typeof window.supabase.createClient==='function')
@@ -908,7 +930,7 @@ function setBuildTag(){
   var el=document.getElementById('buildTagTop');
   var userEl=document.getElementById('buildUserTop');
   if(!el)return;
-  el.innerHTML='Build<span class="bt-sub">'+escHTML(APP_BUILD_LABEL)+'</span>';
+  el.innerHTML='Build<span class="bt-sub">'+escHTML(getAppBuildDisplay())+'</span>';
   if(!userEl)return;
   if(S.user){
     var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
@@ -1024,6 +1046,8 @@ var S={
   vertelMsgs:[],
   /** Laatste gekozen dossier voor dit Vertel-gesprek (na opslaan of vanuit dossier); bewaart context tussen berichten. */
   vertelGesprekDossier:null,
+  /** In dit Vertel-gesprek: automatisch opslaan bij dit dossier (tot Ander/Nieuw gesprek). */
+  vertelSessionStickyDossier:null,
   timelineLimitByDossier:{}
 };
 
@@ -1808,6 +1832,120 @@ function getProfileMetaCompletion(name){
   return{filled:filled,total:keys.length,complete:filled===keys.length};
 }
 
+function getLocalDateKey(){
+  return new Date().toLocaleDateString('en-CA');
+}
+function getOwnDailyMoodMeta(meta){
+  meta=meta||{};
+  var dm=meta.daily_mood;
+  if(!dm||typeof dm!=='object')return null;
+  if(dm.day!==getLocalDateKey())return null;
+  return dm;
+}
+function isAdviceStaleForDossier(d){
+  d=d||{};
+  var lastAdviceAt=((d.meta||{}).last_advice||{}).updated_at||'';
+  var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
+  return (d.count||0)>=8&&adviceOld;
+}
+function needsContactAttention(p){
+  if(getDossierLifecycle(p)!=='active')return false;
+  var d=S.pdata[p]||{count:0,categories:{},meta:{}};
+  var cnt=getProfielProgressCounts(p);
+  var metaOk=(getProfileMetaCompletion(p)||{}).complete;
+  if((cnt.total>0&&cnt.filled<cnt.total)||!metaOk)return true;
+  if(isAdviceStaleForDossier(d))return true;
+  if((d.count||0)>=6&&!(d.meta&&d.meta.photo_analysis))return true;
+  return false;
+}
+function needsOwnTabAttention(){
+  if(!S.user)return false;
+  var d=S.pdata['OWN Sense']||{meta:{},count:0,categories:{}};
+  var m=d.meta||{};
+  if(!(getProfileMetaCompletion('OWN Sense')||{}).complete)return true;
+  if(!String(m.photo_url||'').trim())return true;
+  if(!getOwnDailyMoodMeta(m))return true;
+  if(isAdviceStaleForDossier(d))return true;
+  return false;
+}
+function needsSensesTabAttention(){
+  if(!S.user)return false;
+  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';});
+  for(var i=0;i<contacts.length;i++){
+    if(needsContactAttention(contacts[i]))return true;
+  }
+  return false;
+}
+function updateNavTabIndicators(){
+  var bOwn=document.getElementById('tabBadgeOwn');
+  var bSen=document.getElementById('tabBadgeSenses');
+  var ownNeed=S.user&&needsOwnTabAttention();
+  var senNeed=S.user&&needsSensesTabAttention();
+  if(bOwn){
+    bOwn.classList.toggle('show',!!ownNeed);
+    bOwn.setAttribute('title',ownNeed?'Actie nodig op OWN Sense':'');
+  }
+  if(bSen){
+    bSen.classList.toggle('show',!!senNeed);
+    bSen.setAttribute('title',senNeed?'Actie nodig bij een dossier':'');
+  }
+  var tOwn=document.getElementById('tab-own');
+  var tSen=document.getElementById('tab-senses');
+  if(tOwn)tOwn.title=ownNeed?'OWN Sense — profiel, stemming vandaag, foto of advies vernieuwen':'OWN Sense';
+  if(tSen)tSen.title=senNeed?'Senses — ergens nog iets te doen bij een dossier':'Mijn Senses';
+}
+
+async function saveOwnDailyMoodKey(key){
+  var map={goed:'😊 Goed',oke:'😐 Oké',moeilijk:'😟 Moeilijk',sterk:'💪 Sterk',verward:'🤔 Verward'};
+  await saveOwnDailyMood(key,map[key]||key);
+}
+async function saveOwnDailyMood(key,labelDisplay){
+  var d=S.pdata['OWN Sense'];
+  if(!d||!S.user){toast('Log in om op te slaan');return;}
+  var meta=Object.assign({},d.meta||{});
+  meta.daily_mood={day:getLocalDateKey(),key:key,label:labelDisplay};
+  d.meta=meta;
+  S.pdata['OWN Sense']=d;
+  try{
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,meta);
+    toast('Stemming opgeslagen — wordt meegenomen in je gesprekken vandaag.');
+    updateNavTabIndicators();
+    if(S.screen==='dossier'&&S.viewDossier==='OWN Sense'&&S.viewTab==='overzicht'){
+      await loadTab('OWN Sense','overzicht',S.pdata['OWN Sense']);
+    }
+    if(S.screen==='vertel')refreshVertelMoodStrip();
+  }catch(e){
+    toast('Opslaan mislukt');
+  }
+}
+
+function buildVertelMoodStripInnerHtml(){
+  if(!S.user)return'';
+  var d=S.pdata['OWN Sense']||{meta:{}};
+  var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
+  var moodKeys=['goed','oke','moeilijk','sterk','verward'];
+  var dm=getOwnDailyMoodMeta(d.meta||{});
+  var selKey=dm&&dm.key?dm.key:'';
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
+  html+='<span style="font-size:12px;font-weight:800;color:#AE0000">Mijn stemming vandaag</span>';
+  html+='<span style="font-size:10px;color:#8a8f97">Zelfde gegevens als OWN Sense</span>';
+  html+='</div>';
+  html+='<p style="font-size:10px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Even aanklikken — de coach gebruikt dit in dit gesprek (Vertel) en advies.</p>';
+  html+='<div class="own-ov-mood" style="display:flex;gap:5px;flex-wrap:wrap">';
+  moods.forEach(function(m,i){
+    var mk=moodKeys[i];
+    var on=(selKey&&selKey===mk)||(!selKey&&i===0)?' on':'';
+    html+='<button type="button" class="mbtn'+on+'" style="padding:6px 10px;font-size:11px;border-radius:16px" onclick="saveOwnDailyMoodKey(\''+mk+'\')">'+escHTML(m)+'</button>';
+  });
+  html+='</div>';
+  return html;
+}
+function refreshVertelMoodStrip(){
+  var m=document.getElementById('vertelMoodMount');
+  if(!m)return;
+  m.innerHTML=buildVertelMoodStripInnerHtml();
+}
+
 async function focusFirstEmptyContactField(name){
   if(!name||name==='OWN Sense')return;
   if(S.viewDossier!==name)S.viewDossier=name;
@@ -2060,6 +2198,7 @@ async function selectDossierFromPick(dossier){
     if(S.screen==='vertel')renderVertelInputCoachTip();
     toast('Opslagvoorstel: '+dn(dossier));
   }else if(ctx.type==='save'){
+    S.vertelSessionStickyDossier=null;
     await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
   }
 }
@@ -2074,6 +2213,7 @@ async function createNewDossierFromPick(useSuggested){
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
   closeDossierPickModal();
+  S.vertelSessionStickyDossier=null;
   await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier);
 }
 
@@ -2300,11 +2440,19 @@ function renderProps(props,showSource,opt){
       +'</div></div>';
     return pillsBody+srcHtmlC;
   }
+  var barsCompact=o.barsCompact===true;
   var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
     var barColor=v===0?'var(--b)':'var(--r)';
     var pu=propUpdates[k];
     var upd=pu?fmtPropUpdate(pu):'';
+    if(barsCompact){
+      var tipC=(upd?'Laatste update schatting: '+upd:'Zie «Laatst geüpdatet» bovenaan');
+      return'<div class="prop prop--compact" title="'+escHTML(PL[i]+': '+v+'%. '+tipC)+'">'
+        +'<div class="prop-compact-head"><span class="prop-compact-name">'+escHTML(PL[i])+'</span><span class="prop-compact-pct" style="color:'+(v===0?'#ccc':'var(--r)')+'">'+v+'%</span></div>'
+        +'<div class="track"><div class="fill" style="width:'+v+'%;background:'+barColor+'"></div></div>'
+        +'</div>';
+    }
     var updTxt=upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>';
     return'<div class="prop">'
       +'<div class="pn">'+PL[i]+'<span class="prop-row-inl">'+updTxt+'</span></div>'
@@ -2322,13 +2470,21 @@ function renderProps(props,showSource,opt){
     var k='extra_'+idx;
     var pu=propUpdates[k];
     var upd=pu?fmtPropUpdate(pu):'';
-    var updTxtX=upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>';
     var barColor=vv===0?'var(--b)':'var(--r)';
-    extraBars+='<div class="prop">'
-      +'<div class="pn">'+escHTML(label)+'<span class="prop-row-inl">'+updTxtX+'</span></div>'
-      +'<div class="track"><div class="fill" style="width:'+vv+'%;background:'+barColor+'"></div></div>'
-      +'<div class="pct" style="color:'+(vv===0?'#ccc':'var(--r)')+'">'+vv+'%</div>'
-      +'</div>';
+    if(barsCompact){
+      var tipX=(upd?'Laatste update schatting: '+upd:'Zie «Laatst geüpdatet» bovenaan');
+      extraBars+='<div class="prop prop--compact" title="'+escHTML(label+': '+vv+'%. '+tipX)+'">'
+        +'<div class="prop-compact-head"><span class="prop-compact-name">'+escHTML(label)+'</span><span class="prop-compact-pct" style="color:'+(vv===0?'#ccc':'var(--r)')+'">'+vv+'%</span></div>'
+        +'<div class="track"><div class="fill" style="width:'+vv+'%;background:'+barColor+'"></div></div>'
+        +'</div>';
+    }else{
+      var updTxtX=upd?escHTML(upd):'<span class="prop-pill-upd-na">n.v.t.</span>';
+      extraBars+='<div class="prop">'
+        +'<div class="pn">'+escHTML(label)+'<span class="prop-row-inl">'+updTxtX+'</span></div>'
+        +'<div class="track"><div class="fill" style="width:'+vv+'%;background:'+barColor+'"></div></div>'
+        +'<div class="pct" style="color:'+(vv===0?'#ccc':'var(--r)')+'">'+vv+'%</div>'
+        +'</div>';
+    }
   });
 
   // Bronnen uitleg
@@ -2345,7 +2501,8 @@ function renderProps(props,showSource,opt){
     +'&bull; Meer info = nauwkeuriger schatting'
     +'</div></div>';
 
-  return '<div class="props-stack">'+barsHtml+extraBars+'</div>'+srcHtml;
+  var stackCls=barsCompact?'props-bars-grid':'props-stack';
+  return '<div class="'+stackCls+'">'+barsHtml+extraBars+'</div>'+srcHtml;
 }
 
 // ══ Auth ═════════════════════════════════════════════════════════
@@ -2586,6 +2743,7 @@ function applySignedOutClientState(){
   S.user=null;
   S.profiles=['OWN Sense'];
   S.pdata={};
+  updateNavTabIndicators();
 }
 async function doSignOut(){
   closeDrawer();
@@ -2647,6 +2805,7 @@ async function loadAll(){
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
   }
   scrubCrossAccountRuntimeState();
+  updateNavTabIndicators();
 }
 
 async function ensureP(name){
@@ -2690,6 +2849,7 @@ async function saveP(name,props,count,categories,summary,meta){
       }
       sync('ok');
       renderOwnAvatar();
+      updateNavTabIndicators();
       return;
     }catch(e){
       lastErr=e;
@@ -2822,6 +2982,7 @@ function goScreen(sc){
   var homeTab=document.getElementById('tab-home');
   if(homeTab)homeTab.style.display='';
   // Geen automatische rondleiding bij navigatie: enkel via Korte rondleiding / vraagteken / instellingen, of na «Hulp opnieuw tonen».
+  updateNavTabIndicators();
   setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
 
@@ -2959,9 +3120,9 @@ function getSensesCardMatchHtml(name){
   var ms=computeDossierMatchSummary(name);
   var line1='';
   if(ms.matchPct!==null&&ms.matchPct>=0){
-    line1='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
-      +'<span style="font-size:24px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>'
-      +'<span style="font-size:12px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>'
+    line1='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">'
+      +'<span style="font-size:18px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>'
+      +'<span style="font-size:11px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>'
       +'</div>';
   }else if(ms.matchPct===-1){
     line1='<span style="font-size:12px;color:#666;line-height:1.4">Match na invullen van <strong>OWN Sense</strong></span>';
@@ -2969,7 +3130,7 @@ function getSensesCardMatchHtml(name){
     line1='<span style="font-size:12px;color:#666;line-height:1.4">Meer profielinfo voor betere match</span>';
   }
   var line2=incomplete
-    ?'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
+    ?'<div style="font-size:10px;color:#B00020;font-weight:600;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
     :'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+'</div>';
   return'<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
     +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Match</div>'
@@ -3269,6 +3430,7 @@ async function saveProfileMetaForm(){
   if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
   else if(S.screen==='own'&&_profileModalFor==='OWN Sense')goScreen('own');
   else renderOwnAvatar();
+  updateNavTabIndicators();
   toast('✅ Profielgegevens opgeslagen');
 }
 
@@ -5481,18 +5643,18 @@ function rSenses(el){
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
       var picked=S.compareDraft.indexOf(p)>=0;
-      h+=`<div class="srow" style="flex-wrap:wrap">
+      h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+p+'\')"')+`>
         ${S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer">':''}
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
-        <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
+        <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:700">${p}</div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--m)">${la} · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count} berichten</span> <span style="font-size:10px;font-weight:700;color:#1B5E20;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:999px;padding:2px 6px">Actief ✓</span></div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();activateRelationshipFocus('${p}',true)">🎯 Focus</button>
-          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
-          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
-          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
+        <div class="srow-actions" onclick="event.stopPropagation()">
+          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${p}',true)">🎯 Focus</button>
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${p}')">On hold</button>
+          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${p}')">Sluit af</button>
         </div>
         ${getSensesCardMatchHtml(p)}
       </div>`;
@@ -5507,16 +5669,16 @@ function rSenses(el){
       var st=getDossierLifecycle(p);
       var stLbl=st==='on_hold'?'On hold':'Afgesloten';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="srow" style="flex-wrap:wrap">
+      h+=`<div class="srow srow-dossier" onclick="viewDossier('${p}')">
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65"/>':'<div class="sdot" style="background:'+col+';opacity:.55"></div>'}
-        <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
+        <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:700;color:#666">${p}</div>
           <div style="font-size:12px;color:#999">${stLbl} · ${d.count||0} berichten</div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
-          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();reopenDossier('${p}')">Heropen</button>
-          <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="event.stopPropagation();delSense('${p}')">Verwijder definitief</button>
+        <div class="srow-actions" onclick="event.stopPropagation()">
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="reopenDossier('${p}')">Heropen</button>
+          <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="delSense('${p}')">Verwijder definitief</button>
         </div>
         ${getSensesCardMatchHtml(p)}
       </div>`;
@@ -5746,15 +5908,21 @@ function buildOwnOverzichtSummaryAndMood(d){
   },0);
   var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
   var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
+  var moodKeys=['goed','oke','moeilijk','sterk','verward'];
+  var dm=getOwnDailyMoodMeta(d.meta||{});
+  var selKey=dm&&dm.key?dm.key:'';
   var html='<div style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.45">'
     +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+ownFilled+'/'+ownTotal+'</strong> invulvragen'
     +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="switchTab(\'profiel\')">Tab Profiel</button>'
     +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="openProfileModal(\'OWN Sense\')">Profielgegevens</button>'
     +'</div>';
   html+='<div style="font-size:12px;font-weight:700;color:#333;margin-bottom:6px">Hoe voel je je vandaag?</div>';
+  html+='<p style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Wordt opgeslagen en meegegeven aan je coach (Vertel, advies) voor vandaag.</p>';
   html+='<div class="own-ov-mood" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">';
   moods.forEach(function(m,i){
-    html+='<button type="button" class="mbtn'+(i===0?' on':'')+'" onclick="this.parentNode.querySelectorAll(\'.mbtn\').forEach(function(b){b.classList.remove(\'on\');});this.classList.add(\'on\');">'+escHTML(m)+'</button>';
+    var mk=moodKeys[i];
+    var on=(selKey&&selKey===mk)||(!selKey&&i===0)?' on':'';
+    html+='<button type="button" class="mbtn'+on+'" onclick="saveOwnDailyMoodKey(\''+mk+'\')">'+escHTML(m)+'</button>';
   });
   html+='</div>';
   return html;
@@ -5885,7 +6053,7 @@ async function loadTab(name,tab,d){
       var pmX=computePhotoMatchPct(ownPaX,contactPaX);
       if(pmX!==null)extraMetrics.push({label:'Fotoanalyse',v:pmX});
     }
-    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{bars:true,extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
+    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{bars:true,barsCompact:true,extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
     var lastFieldsIso=isOwnDossier
       ?getLatestScopeFieldUpdate(d.meta,'own')
       :getLatestScopeFieldUpdate(d.meta,'contact');
@@ -6616,6 +6784,9 @@ function rOWN(el){
   var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
   var cats=d.categories||{};
   var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
+  var moodKeys=['goed','oke','moeilijk','sterk','verward'];
+  var dm=getOwnDailyMoodMeta(d.meta||{});
+  var selKey=dm&&dm.key?dm.key:'';
 
   // Bereken progress per categorie
   function catProgress(catId){
@@ -6634,8 +6805,13 @@ function rOWN(el){
 
 <!-- Stemming vandaag -->
 <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:12px">Hoe voel je je vandaag?</div>
+<p style="font-size:12px;color:#8a8f97;margin:-6px 0 12px;line-height:1.45">Wordt opgeslagen en meegegeven aan je coach (Vertel, advies) voor vandaag.</p>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">
-  ${moods.map((m,i)=>`<button class="mbtn${i===0?' on':''}" onclick="this.parentNode.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">${m}</button>`).join('')}
+  ${moods.map((m,i)=>{
+    var mk=moodKeys[i];
+    var on=(selKey&&selKey===mk)||(!selKey&&i===0)?' on':'';
+    return `<button type="button" class="mbtn${on}" onclick="saveOwnDailyMoodKey('${mk}')">${m}</button>`;
+  }).join('')}
 </div>
 
 <!-- Eigen eigenschappen -->
@@ -6944,10 +7120,12 @@ async function rVertel(el){
     </div>
     <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="kiesVertelSaveMode()">Opslag</button>
   </div>
+  <div id="vertelMoodMount" class="vertel-mood-strip" aria-label="Stemming vandaag"></div>
   <div id="sessBulkBar" class="vertel-empty-tip" style="display:none;padding:8px 16px;border-bottom:1px solid var(--b);background:#fafbfc"></div>
   <div class="chat" id="chatArea"></div>
 </div></div>`;
 
+  refreshVertelMoodStrip();
   var ca=document.getElementById('chatArea');
 
   if(hadForce && S.currentSessionId && S.user){
@@ -7223,7 +7401,7 @@ function settingsAction(action){
       '',
       'DateSense helpt je inzichten krijgen in jezelf en je contacten op basis van profielinput, context en advies.',
       '',
-      'Versie: '+APP_BUILD_LABEL
+      'Versie: '+getAppBuildDisplay()
     ].join('\n');
     alert(aboutMsg);
     return;
@@ -8040,23 +8218,38 @@ async function sendMsg(){
       addMsg('ai',formatAiCard(raw)+buildSegmentReviewCardHtml());
     }else{
       window._pendingSegmenten=null;
-    // Toon AI antwoord + opslaan-balk
-      var saveId='sv'+Date.now();
-      window._saveData=window._saveData||{};
-      var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(txt):'';
-      window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam};
-      var saveLbl=voorgesteldDossier
-        ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
-        :'Opslaan in een dossier?';
-      var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
-        +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
-        +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
-        +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
-        +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
-        +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
-        +'</div>';
+      var didSticky=false;
+      if(!forcedDossier&&S.vertelSessionStickyDossier){
+        var sticky=S.vertelSessionStickyDossier;
+        var voorgesteldSticky=voorgesteldDossier;
+        if(voorgesteldSticky&&voorgesteldSticky!==sticky){
+          S.vertelSessionStickyDossier=null;
+          toast('Onderwerp lijkt gewijzigd — kies opnieuw waar je opslaat.');
+        }else{
+          await _doOpslaan(null,txt+'\n'+raw,sticky);
+          addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span></div>');
+          didSticky=true;
+        }
+      }
+      if(!didSticky){
+        var saveId='sv'+Date.now();
+        window._saveData=window._saveData||{};
+        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(txt):'';
+        window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam};
+        var saveLbl=voorgesteldDossier
+          ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
+          :'Opslaan in een dossier?';
+        var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
+          +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
+          +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
+          +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="Voor dit gesprek niet meer vragen">Altijd dit gesprek</button>':'')
+          +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
+          +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
+          +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
+          +'</div>';
 
-      addMsg('ai',formatAiCard(raw)+saveBar);
+        addMsg('ai',formatAiCard(raw)+saveBar);
+      }
     }
     // Update sidebar sessie preview
     updateSessiePreview(S.currentSessionId,txt);
@@ -8205,6 +8398,7 @@ function clearChat(){
   S.vertelMsgs=[];
   S.vertelGesprekDossier=null;
   S.vertelFrom=null;
+  S.vertelSessionStickyDossier=null;
   window._pendingSegmenten=null;
   var ca=document.getElementById('chatArea');
   if(!ca)return;
@@ -8771,6 +8965,8 @@ function buildCoachContext(){
   }
   lines.push('JOUW PROFIEL:');
   if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
+  var dm=getOwnDailyMoodMeta(ownMeta);
+  if(dm&&dm.label)lines.push('Stemming vandaag: '+dm.label+' (gekozen door gebruiker)');
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
   if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
 
@@ -9188,7 +9384,16 @@ async function opslaanInDossier(sid){
   await _doOpslaan(sid,data.tekst,dossier);
 }
 
+async function opslaanInDossierSticky(sid){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data||!data.dossier)return;
+  S.vertelSessionStickyDossier=data.dossier;
+  await opslaanInDossier(sid);
+  toast('Oké — volgende berichten in dit gesprek gaan automatisch naar '+dn(data.dossier)+'.');
+}
+
 function kiesAnderDossier(sid){
+  S.vertelSessionStickyDossier=null;
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
   openDossierPickModal(
@@ -9207,6 +9412,7 @@ async function _opslaanKeuze(dossier){
 }
 
 async function maakNieuwDossierEnOpslaan(sid,useSuggested){
+  S.vertelSessionStickyDossier=null;
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
   var suggested=data.suggestedName||'';
@@ -9262,6 +9468,8 @@ try{
   window.switchTab=switchTab;
   window.viewDossier=viewDossier;
   window.openDossierProfiel=openDossierProfiel;
+  window.opslaanInDossierSticky=opslaanInDossierSticky;
+  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
   window.safeSignOut=safeSignOut;
   window.closeDrawer=closeDrawer;
   window.openDrawer=openDrawer;
