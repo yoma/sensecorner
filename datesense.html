@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 15:40">
+<meta name="ds-build" content="03-04-2026 16:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2166,17 +2166,29 @@ function getOwnNameTokens(){
 }
 
 function detectNieuweNaam(tekst){
-  var existing=S.profiles.map(function(p){return dn(p).toLowerCase();});
+  var existingLow=new Set();
+  (S.profiles||[]).forEach(function(p){
+    if(p==='OWN Sense')return;
+    getDossierNameVariants(p).forEach(function(v){
+      if(v)existingLow.add(v.toLowerCase());
+    });
+  });
   var own=getOwnNameTokens();
   var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die','date','datesense']);
+
+  function isNewNameCandidate(w){
+    if(!w)return false;
+    var low=w.toLowerCase();
+    if(stop.has(low)||own.has(low))return false;
+    if(existingLow.has(low))return false;
+    if(findExistingDossierForMention(w))return false;
+    return true;
+  }
 
   // 1) Sterk signaal: chatlabels "Naam:"
   var labelHits=(String(tekst||'').match(/\b([A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,})\s*:/g)||[])
     .map(function(m){return m.replace(':','').trim();})
-    .filter(function(w){
-      var low=w.toLowerCase();
-      return !stop.has(low)&&!own.has(low)&&!existing.includes(low);
-    });
+    .filter(isNewNameCandidate);
   if(labelHits.length){
     var lc={};
     labelHits.forEach(function(h){lc[h]=(lc[h]||0)+1;});
@@ -2187,10 +2199,7 @@ function detectNieuweNaam(tekst){
   // 2) Fallback: gewone hoofdletterwoorden
   var hits=(String(tekst||'').match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g)||[])
     .map(function(w){return w.trim();})
-    .filter(function(w){
-      var low=w.toLowerCase();
-      return !stop.has(low)&&!own.has(low)&&!existing.includes(low);
-    });
+    .filter(isNewNameCandidate);
   if(!hits.length)return'';
   var counts={};
   hits.forEach(function(h){counts[h]=(counts[h]||0)+1;});
@@ -2204,17 +2213,9 @@ function guessHoofdDossierNaam(tekst){
   if(forced)return dn(forced);
   if(S.vertelGesprekDossier)return dn(S.vertelGesprekDossier);
   if(S.vertelFrom)return dn(S.vertelFrom);
-  var found='';
-  (S.profiles||[]).forEach(function(p){
-    if(found||p==='OWN Sense')return;
-    var n=dn(p);
-    try{
-      var re=new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i');
-      if(re.test(t))found=n;
-    }catch(e){}
-  });
-  if(found)return found;
-  return detectNieuweNaam(t);
+  var pick=pickBestDossierForVertelText(buildVertelDossierMatchText(t));
+  if(pick)return dn(pick);
+  return detectNieuweNaam(buildVertelDossierMatchText(t));
 }
 
 function buildSessionPreview(tekst){
@@ -4112,6 +4113,112 @@ function getActiveContactNames(){
   return(S.profiles||[]).filter(function(p){
     return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';
   });
+}
+/** Actief + on hold (niet gesloten): Vertel moet grote/vaak gebruikte dossiers herkennen ook als focus ergens anders ligt. */
+function getProfilesForVertelNameMatch(){
+  return(S.profiles||[]).filter(function(p){
+    if(p==='OWN Sense')return false;
+    var s=getDossierLifecycle(p);
+    return s==='active'||s==='on_hold';
+  });
+}
+function levenshteinPerson(a,b){
+  a=String(a).toLowerCase();
+  b=String(b).toLowerCase();
+  if(a===b)return 0;
+  var i,j,n=a.length,m=b.length;
+  if(!n)return m;if(!m)return n;
+  var v0=[],v1=[];
+  for(j=0;j<=m;j++)v0[j]=j;
+  for(i=0;i<n;i++){
+    v1[0]=i+1;
+    for(j=0;j<m;j++){
+      var cost=a[i]===b[j]?0:1;
+      v1[j+1]=Math.min(v1[j]+1,v0[j+1]+1,v0[j]+cost);
+    }
+    var t=v0;v0=v1;v1=t;
+  }
+  return v0[m];
+}
+function isLikelySamePersonName(word,canonical){
+  var w=String(word).toLowerCase().trim();
+  var c=String(canonical).toLowerCase().trim();
+  if(!w||!c)return false;
+  if(w===c)return true;
+  if(w.length<4||c.length<4)return false;
+  var short=w.length<=c.length?w:c;
+  var long=w.length<=c.length?c:w;
+  if(short.length>=5&&long.indexOf(short)===0&&long.length-short.length<=2)return true;
+  if(w.length>=5&&c.length>=5&&levenshteinPerson(w,c)<=1)return true;
+  return false;
+}
+function getDossierNameVariants(p){
+  var out=[];
+  var base=dn(p);
+  if(base)out.push(base);
+  if(p&&p!=='OWN Sense'){
+    var disp=String((S.pdata[p]&&S.pdata[p].meta&&S.pdata[p].meta.display_name)||'').trim();
+    if(disp&&disp.toLowerCase()!==String(base).toLowerCase())out.push(disp);
+  }
+  return out;
+}
+function findExistingDossierForMention(token){
+  if(!token)return null;
+  var t=String(token).trim();
+  if(t.length<3)return null;
+  var found=null;
+  getProfilesForVertelNameMatch().forEach(function(p){
+    getDossierNameVariants(p).forEach(function(v){
+      if(v.length<3)return;
+      if(t.toLowerCase()===v.toLowerCase())found=p;
+      else if(!found&&isLikelySamePersonName(t,v))found=p;
+    });
+  });
+  return found;
+}
+function buildVertelDossierMatchText(userTxt){
+  var t=String(userTxt||'').trim();
+  try{
+    var msgs=S.vertelMsgs||[];
+    for(var mi=msgs.length-1;mi>=0;mi--){
+      if(msgs[mi].role==='ai'){
+        var plain=String(msgs[mi].html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        if(plain)t=t+' '+plain.substring(0,1200);
+        break;
+      }
+    }
+  }catch(e){}
+  return t;
+}
+function pickBestDossierForVertelText(matchText){
+  var txt=String(matchText||'');
+  if(!txt)return null;
+  var contacts=getProfilesForVertelNameMatch();
+  var bestM=null,bestC=0;
+  contacts.forEach(function(p){
+    var variants=getDossierNameVariants(p);
+    var cnt=0;
+    variants.forEach(function(n){
+      if(!n||n.length<2)return;
+      try{
+        cnt+=(txt.match(new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi'))||[]).length;
+      }catch(e){}
+    });
+    if(cnt===0){
+      var words=txt.match(/\b[A-Za-zÀ-ÖØ-öø-ÿ]{4,}\b/g)||[];
+      var seen={};
+      words.forEach(function(w){
+        var lw=w.toLowerCase();
+        if(seen[lw])return;
+        seen[lw]=1;
+        variants.forEach(function(v){
+          if(v.length>=4&&isLikelySamePersonName(w,v))cnt+=1;
+        });
+      });
+    }
+    if(cnt>bestC){bestC=cnt;bestM=p;}
+  });
+  return bestM&&bestC>=1?bestM:null;
 }
 function isDossierNotificationsEnabled(name){
   if(!name||name==='OWN Sense')return true;
@@ -8694,14 +8801,8 @@ async function sendMsg(){
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   if(!voorgesteldDossier){
-    var contacts=getActiveContactNames();
-    var bestM=null,bestC=0;
-    contacts.forEach(function(p){
-      var n=dn(p);
-      var cnt=(txt.match(new RegExp('\\b'+n+'\\b','gi'))||[]).length;
-      if(cnt>bestC){bestC=cnt;bestM=p;}
-    });
-    if(bestM&&bestC>=1)voorgesteldDossier=bestM;
+    var matchTxt=buildVertelDossierMatchText(txt);
+    voorgesteldDossier=pickBestDossierForVertelText(matchTxt);
   }
 
   // Bouw gespreksgeschiedenis — strip HTML tags en beperk lengte
@@ -8793,7 +8894,8 @@ async function sendMsg(){
       if(!didSticky){
         var saveId='sv'+Date.now();
         window._saveData=window._saveData||{};
-        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(txt):'';
+        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(buildVertelDossierMatchText(txt)):'';
+        if(nieuwNaam&&findExistingDossierForMention(nieuwNaam))nieuwNaam='';
         window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
         var saveLbl=voorgesteldDossier
           ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
