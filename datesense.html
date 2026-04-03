@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-4 13:57">
+<meta name="ds-build" content="v2026-04-03-9 15:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -178,6 +178,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .seg-c3{background:#E1BEE7;color:#6A1B9A}
 .seg-c4{background:#FFE082;color:#884400}
 .seg-unk{background:#EEEEEE;color:#555}
+.seg-ini{display:inline-block;min-width:15px;height:15px;line-height:15px;margin-right:5px;padding:0 3px;font-size:9px;font-weight:800;text-align:center;border-radius:4px;background:rgba(255,255,255,.55);vertical-align:2px;opacity:.95;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
 .seg-legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .seg-leg-item{display:flex;align-items:center;gap:4px;font-size:12px;color:#444}
 .seg-leg-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0}
@@ -225,6 +226,11 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .rnd:active{opacity:.7}
 .rnd.gr{background:var(--g);border:1.5px solid var(--b)}
 .rnd.rd{background:var(--r)}
+/* Microfoon: grijs in rust, rood alleen tijdens opname (niet twee identieke rode knoppen naast verstuur) */
+.rnd.rd-mic{background:#eceff3;border:1.5px solid #d0d8e0;color:#555}
+.rnd.rd-mic svg{stroke:#555}
+.rnd.rd-mic.rnd-mic-on{background:var(--r);border-color:var(--r);box-shadow:0 4px 12px rgba(174,0,0,.28)}
+.rnd.rd-mic.rnd-mic-on svg{stroke:#fff}
 .input-tip{font-size:12px;color:#ccc;text-align:center;margin-bottom:8px}
 
 /* Forms */
@@ -350,8 +356,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .avb-ja{padding:8px 18px;background:#2E7D32;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .avb-nee{padding:8px 18px;background:var(--g);color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 
-/* ══ SIDEBAR SESSIES ══ */
-.sidebar{position:fixed;top:0;left:0;height:100%;width:260px;background:#f2f3f5;z-index:200;transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;box-shadow:6px 0 18px rgba(0,0,0,.16)}
+/* ══ SIDEBAR SESSIES (rechts — scheidt van drawer/links) ══ */
+.sidebar{position:fixed;top:0;right:0;left:auto;height:100%;width:260px;max-width:86vw;background:#f2f3f5;z-index:200;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;box-shadow:-6px 0 18px rgba(0,0,0,.14)}
 .sidebar.open{transform:translateX(0)}
 .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;display:none}
 .sidebar-overlay.open{display:block}
@@ -427,6 +433,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .seg-c3{background:#E1BEE7;color:#6A1B9A}
 .seg-c4{background:#FFE082;color:#884400}
 .seg-unk{background:#EEEEEE;color:#555}
+.seg-ini{display:inline-block;min-width:15px;height:15px;line-height:15px;margin-right:5px;padding:0 3px;font-size:9px;font-weight:800;text-align:center;border-radius:4px;background:rgba(255,255,255,.55);vertical-align:2px;opacity:.95;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
 
 /* Samenvatting kaartjes */
 .dossier-cards{display:flex;flex-wrap:wrap;gap:10px;padding:14px 16px;border-bottom:1px solid var(--b)}
@@ -621,18 +628,17 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Input bar (alleen Vertel scherm) -->
   <div id="inputBar" style="display:none">
     <div class="input-bar">
-      <div class="input-tip">Typ alles in één keer — ik sorteer het automatisch</div>
-      <div class="input-row">
+      <div class="input-row input-row-vertel">
 
         <button class="rnd gr" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <textarea class="input-area" id="msgInput" placeholder="Vertel me alles wat er in je hoofd zit..." rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <button type="button" class="rnd rd-mic" id="micBtn" onclick="toggleMic()" title="Spraak — tik om te spreken (wordt rood tijdens opname)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <textarea class="input-area" id="msgInput" placeholder="Typ alles in één keer — ik sorteer automatisch naar het juiste dossier. Vertel wat er speelt…" rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
         <button class="rnd rd" onclick="sendMsg()" title="Verstuur">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
-        </button>
-        <button class="rnd rd" id="micBtn" onclick="toggleMic()" title="Spraak">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
         </button>
       </div>
     </div>
@@ -938,6 +944,9 @@ var _adviesReqSeq=0;
 var _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
 /** Volledige app-rondleiding: na Home → Senses → Vertel → OWN-dossier */
 var _tourChain=null;
+/** Verhoog bij annuleren/herstart om oude setTimeout-callbacks te negeren (anders startQuickHelpTour blokkeert). */
+var _tourSchedGen=0;
+function bumpTourSchedGen(){_tourSchedGen++;}
 function navigateTourScreen(id){
   var k=String(id||'').trim();
   if(k==='senses')goScreen('senses');
@@ -949,7 +958,11 @@ function startFullAppTour(){
   endQuickHelpTour(true);
   _tourChain={queue:['senses','vertel','dossier_own']};
   goScreen('home');
-  setTimeout(function(){startQuickHelpTour(true);},380);
+  var scheduledAt=_tourSchedGen;
+  setTimeout(function(){
+    if(scheduledAt!==_tourSchedGen)return;
+    startQuickHelpTour(true);
+  },450);
 }
 var _promptCenterKey='advice_core';
 var _renderHealthBusy=false;
@@ -1143,28 +1156,13 @@ function isScreenHelpSeen(screen){
 }
 function resetAllHelpPopups(){
   _tourChain=null;
+  bumpTourSchedGen();
   removeScopedStorage('ds_quick_help_seen');
   removeScopedStorage('ds_help_seen_map');
   removeScopedStorage('ds_vertel_tip_seen');
   removeScopedStorage('ds_auto_full_tour_offered');
   removeScopedStorage('ds_auto_full_tour_completed');
-  removeScopedStorage('ds_auto_tour_flags_migrated');
   toast('Hulp opnieuw ingesteld. Kies «Korte rondleiding» of het vraagteken voor de volledige rondleiding door Home, Senses, Vertel en OwnSense.');
-}
-/** Eénmalige migratie: bestaande users die al hulp zagen krijgen geen automatische rondleiding meer. */
-function migrateAutoTourFlags(){
-  if(!S.user)return;
-  if(String(getScopedStorage('ds_auto_tour_flags_migrated','0'))==='1')return;
-  if(quickHelpSeen()){
-    setScopedStorage('ds_auto_full_tour_offered','1');
-  }
-  try{
-    var map=getQuickHelpSeenMap();
-    if(map&&map.home&&map.senses&&map.vertel&&map.dossier){
-      setScopedStorage('ds_auto_full_tour_completed','1');
-    }
-  }catch(e){}
-  setScopedStorage('ds_auto_tour_flags_migrated','1');
 }
 function markAutoFullTourCompleted(){
   setScopedStorage('ds_auto_full_tour_completed','1');
@@ -1272,6 +1270,14 @@ function closeVertelInputCoachTip(){
 }
 function startQuickHelpTour(force){
   if(!S.user)return;
+  if(force&&_quickHelpTour.active){
+    if(_quickHelpTour.targetEl)_quickHelpTour.targetEl.classList.remove('help-tour-target');
+    var sh=document.getElementById('helpTourShade');
+    var cd=document.getElementById('helpTourCard');
+    if(sh)sh.style.display='none';
+    if(cd){cd.style.display='none';cd.innerHTML='';}
+    _quickHelpTour={active:false,idx:0,steps:[],targetEl:null,screen:''};
+  }
   if(_quickHelpTour.active)return;
   var sc=String(S.screen||'home');
   if(!force&&isScreenHelpSeen(sc))return;
@@ -1282,8 +1288,12 @@ function startQuickHelpTour(force){
   if(!steps.length){
     if(_tourChain&&_tourChain.queue&&_tourChain.queue.length){
       var next=_tourChain.queue.shift();
+      var gSkip=_tourSchedGen;
       navigateTourScreen(next);
-      setTimeout(function(){startQuickHelpTour(true);},420);
+      setTimeout(function(){
+        if(gSkip!==_tourSchedGen)return;
+        startQuickHelpTour(true);
+      },420);
     }else if(_tourChain){
       _tourChain=null;
       markAutoFullTourCompleted();
@@ -1351,15 +1361,22 @@ function endQuickHelpTour(cancelOnly){
   _quickHelpTour={active:false,idx:0,steps:[],targetEl:null,screen:''};
   if(cancelOnly){
     _tourChain=null;
+    bumpTourSchedGen();
     return;
   }
   markQuickHelpSeen();
   markScreenHelpSeen(sc);
   if(_tourChain&&_tourChain.queue&&_tourChain.queue.length){
     var next=_tourChain.queue.shift();
+    var gChain=_tourSchedGen;
     setTimeout(function(){
+      if(gChain!==_tourSchedGen)return;
       navigateTourScreen(next);
-      setTimeout(function(){startQuickHelpTour(true);},400);
+      var gAfterNav=_tourSchedGen;
+      setTimeout(function(){
+        if(gAfterNav!==_tourSchedGen)return;
+        startQuickHelpTour(true);
+      },400);
     },120);
     return;
   }
@@ -2605,16 +2622,7 @@ function goScreen(sc){
   });
   var homeTab=document.getElementById('tab-home');
   if(homeTab)homeTab.style.display='';
-  // Geen automatische scherm-rondleiding bij elke tab; wel éénmalig volledige tour na eerste login tot afgerond.
-  if(S.user&&!_quickHelpTour.active&&!_tourChain&&sc==='home'){
-    migrateAutoTourFlags();
-    var off=String(getScopedStorage('ds_auto_full_tour_offered','0'));
-    var done=String(getScopedStorage('ds_auto_full_tour_completed','0'));
-    if(off!=='1'&&done!=='1'){
-      setScopedStorage('ds_auto_full_tour_offered','1');
-      setTimeout(function(){startFullAppTour();},450);
-    }
-  }
+  // Geen automatische rondleiding bij navigatie: enkel via Korte rondleiding / vraagteken / instellingen, of na «Hulp opnieuw tonen».
   setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
 
@@ -5979,7 +5987,7 @@ async function genAdvies(name,forced){
     if(boost.prefs&&boostPrefsSummary())userContent+='\nBoost voorkeuren: '+boostPrefsSummary();
   }
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],760,26000);
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,42000);
     if(reqId!==_adviesReqSeq)return;
     var nowTs=new Date();
     var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -6072,7 +6080,14 @@ async function genAdvies(name,forced){
     }
   }catch(x){
     if(reqId!==_adviesReqSeq)return;
-    if(box)box.innerHTML='<div style="color:#c00;font-size:14px">Kon geen advies genereren: '+x.message+'</div>';
+    var errMsg=(x&&x.message)?String(x.message):'Onbekende fout';
+    if(box){
+      if(forced&&oldHtml){
+        box.innerHTML='<div style="background:#FFF3F3;border:1px solid #F2C9C9;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:14px;line-height:1.5;margin-bottom:14px">Kon advies niet vernieuwen: '+escHTML(errMsg)+'</div>'+oldHtml;
+      }else{
+        box.innerHTML='<div style="color:#c00;font-size:14px">Kon geen advies genereren: '+escHTML(errMsg)+'</div>';
+      }
+    }
   }
 }
 
@@ -6643,13 +6658,9 @@ async function rVertel(el){
 <div class="vertel-shell">
 <div style="flex:1;overflow-y:auto;padding:0 0 8px" id="chatWrap">
   <div class="mobile-soft-card" style="padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--b);margin:8px 12px 0;background:#fff">
-    <button onclick="openSidebar()" title="Open chatsessies" style="background:#f2f3f5;border:1px solid var(--b);cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-radius:10px;font-family:inherit">
-      <span style="display:flex;flex-direction:column;gap:3px">
-        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
-        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
-        <span style="width:14px;height:2px;background:#333;border-radius:2px"></span>
-      </span>
-      <span style="font-size:12px;font-weight:700;color:#333">Sessies</span>
+    <button onclick="openSidebar()" title="Geschiedenis: eerdere chatsessies en dit gesprek" style="background:#f2f3f5;border:1px solid var(--b);cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-radius:10px;font-family:inherit;color:#333">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span style="font-size:12px;font-weight:700">Geschiedenis</span>
     </button>
     <div style="flex:1">
       <div style="font-size:15px;font-weight:700;color:var(--t)" id="sessieTitle">Nieuw gesprek</div>
@@ -7182,7 +7193,7 @@ async function cmpAdviesCurrent(){
 
 // ══ API call ══════════════════════════════════════════════════════
 async function callAPI(sys,msgs,maxTok,customTimeoutMs){
-  // Guard against hanging browser requests so the UI never stays stuck on typing.
+  // AbortController stopt de fetch; res.json() kan apart blijven hangen — response daarom met timeout als tekst lezen.
   var controller=new AbortController();
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
@@ -7193,7 +7204,16 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs){
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),
       signal:controller.signal
     });
-    var data=await res.json();
+    clearTimeout(timer);
+    timer=null;
+    var readMs=Math.min(25000,Math.max(6000,Math.floor(timeoutMs*0.65)));
+    var raw=await withTimeout(res.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).');
+    var data;
+    try{
+      data=JSON.parse(raw);
+    }catch(pe){
+      throw new Error('Ongeldig antwoord van API (geen JSON).');
+    }
     if(!res.ok){
       var apiMsg=(data&&data.error&&data.error.message)||('HTTP '+res.status);
       throw new Error(apiMsg);
@@ -7208,7 +7228,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs){
     }
     throw e;
   }finally{
-    clearTimeout(timer);
+    if(timer)clearTimeout(timer);
   }
 }
 
@@ -7267,6 +7287,12 @@ function dossierSegClass(dosName){
   var all=['OWN Sense',...S.profiles.filter(p=>p!=='OWN Sense')];
   var i=all.indexOf(dosName);
   return SEG_COLORS[i>=0?i%SEG_COLORS.length:0];
+}
+function dossierSegInitial(dosName){
+  if(dosName==='OWN Sense')return'I';
+  var d=String(dn(dosName)||'').trim();
+  var m=d.match(/[A-Za-zÀ-ÿ]/);
+  return m?m[0].toUpperCase():'?';
 }
 
 // ══ Segment Modal ════════════════════════════════════════════════
@@ -7342,7 +7368,8 @@ function rerenderSegmenten(){
   var newHtml='';
   segs.forEach(function(seg,idx){
     var cls=seg.negeer?'seg-unk seg negeer':(dossierSegClass(seg.dossier)+' seg');
-    newHtml+='<span class="'+cls+'" data-idx="'+idx+'" onclick="openSegModal('+idx+')">'+seg.tekst+'</span> ';
+    var ini='<span class="seg-ini" aria-hidden="true">'+escHTML(dossierSegInitial(seg.dossier))+'</span>';
+    newHtml+='<span class="'+cls+'" data-idx="'+idx+'" onclick="openSegModal('+idx+')">'+ini+escHTML(seg.tekst)+'</span> ';
   });
   wrapEl.innerHTML=newHtml;
 
@@ -7933,7 +7960,7 @@ function startMic(){
   _recognition.start();
   _micActive=true;
   var btn=document.getElementById('micBtn');
-  if(btn&&_micTextTarget==='msgInput')btn.style.background='#CC0000';
+  if(btn&&_micTextTarget==='msgInput')btn.classList.add('rnd-mic-on');
   toast('🎤 Luisteren...');
 }
 
@@ -7951,7 +7978,7 @@ function stopMic(preserveText){
   }
   _micActive=false;
   var btn=document.getElementById('micBtn');
-  if(btn)btn.style.background='var(--r)';
+  if(btn)btn.classList.remove('rnd-mic-on');
   _recognition=null;
   _micBaseText=inp?inp.value:'';
   _micTextTarget='msgInput';
