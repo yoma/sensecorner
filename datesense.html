@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): handmatig aanpassen bij release -->
-<meta name="ds-build" content="v2026-04-03-6 15:34">
+<meta name="ds-build" content="v2026-04-03-7 15:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -184,12 +184,21 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .prop-empty{text-align:center;padding:22px 16px;background:var(--g);border-radius:var(--rad-md);margin-bottom:14px;border:1px solid var(--b)}
 .prop-empty-icon{font-size:28px;margin-bottom:8px}
 .prop-empty-text{font-size:var(--fs-sm);color:var(--m);line-height:1.6}
-.props-compact{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}
-.prop-pill{border:1px solid var(--b);background:#fff;border-radius:12px;padding:8px 10px;min-height:auto}
-.prop-pill-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:0}
-.prop-pill-name{font-size:11px;color:#444;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prop-pill-val{font-size:11px;font-weight:800;color:var(--r);white-space:nowrap}
-.prop-pill-upd{font-size:10px;color:#8a8f97;margin-top:2px;line-height:1.2;letter-spacing:.01em}
+.props-compact{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:5px;margin-bottom:4px}
+@media (min-width:400px){.props-compact{grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px}}
+@media (min-width:520px){.props-compact{grid-template-columns:repeat(5,1fr)}}
+.props-pills-wrap{margin-bottom:4px}
+.props-fold-panel{display:none;margin-top:4px}
+.props-fold-panel.open{display:block}
+.props-fold-btn{width:100%;margin-top:6px;padding:6px 10px;border-radius:10px;border:1px dashed var(--b);background:#fafbfc;color:#666;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center}
+.props-fold-btn .chev{display:inline-block;transition:transform .2s}
+.props-fold-btn.open .chev{transform:rotate(180deg)}
+.prop-pill{border:1px solid #E8E8E8;background:#fff;border-radius:999px;padding:4px 6px;min-height:0;min-width:0}
+.prop-pill-top{display:flex;justify-content:space-between;align-items:center;gap:4px;margin-bottom:0}
+.prop-pill-name{font-size:9px;color:#9aa0a8;font-weight:600;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58%}
+.prop-pill-val{font-size:10px;font-weight:800;color:var(--r);white-space:nowrap;flex-shrink:0}
+.prop-pill-upd{display:none}
+.prop-pill.prop-pill--detail .prop-pill-upd{display:block;font-size:8px;color:#bbb;margin-top:2px;line-height:1.1}
 .prop-pill-upd-na{color:#bbb}
 .prop-pill-track{display:none}
 .prop-pill-fill{display:none}
@@ -516,7 +525,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   .dossier-tabs-wrap{top:-1px}
   .dossier-head-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .dossier-head-actions button{width:100%}
-  .props-compact{grid-template-columns:1fr 1fr;gap:8px}
+  .props-compact{grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:5px}
   .donut-wrap{flex-direction:column;align-items:flex-start;gap:12px}
   .donut-info{width:100%}
   .planner-shell{padding:16px 12px 28px}
@@ -538,7 +547,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 }
 
 @media (max-width: 360px){
-  .props-compact{grid-template-columns:1fr}
+  .props-compact{grid-template-columns:repeat(3,1fr)}
   .dtab{min-width:80px;font-size:11px}
   .planner-chip{font-size:11px;padding:7px 10px}
   .home-mini-card .ai-sec-text{font-size:11px}
@@ -2131,11 +2140,11 @@ function togglePropsFull(btn,id){
   if(open){
     f.classList.remove('open');
     btn.classList.remove('open');
-    btn.innerHTML='Toon alle 9 eigenschappen <span class="chev">▾</span>';
+    btn.innerHTML='Toon alle eigenschappen <span class="chev">▾</span>';
   }else{
     f.classList.add('open');
     btn.classList.add('open');
-    btn.innerHTML='Verberg volledige lijst <span class="chev">▾</span>';
+    btn.innerHTML='Verberg <span class="chev">▾</span>';
   }
 }
 
@@ -2227,12 +2236,15 @@ function getLatestScopeFieldUpdate(meta,scope){
 }
 
 // Render eigenschappen (alleen als er data is)
+// Standaard: compacte pill-grid (responsive). opt.bars===true → klassieke balken.
 function renderProps(props,showSource,opt){
   var hasData=PK.some(k=>(props[k]||0)>0);
   var o=opt||{};
-  var compact=o.compact===true;
+  var useBars=o.bars===true;
   var extras=Array.isArray(o.extra)?o.extra:[];
   var propUpdates=(o.propUpdates&&typeof o.propUpdates==='object')?o.propUpdates:{};
+  var collapsePills=o.collapsePills!==false;
+  var firstN=Math.max(4,Math.min(9,parseInt(o.pillFirstN||6,10)||6));
   if(!hasData){
     return'<div class="prop-empty">'
       +'<div class="prop-empty-icon">📊</div>'
@@ -2253,21 +2265,27 @@ function renderProps(props,showSource,opt){
   function renderPillRow(it){
     var pu=propUpdates[it.k];
     var upd=pu?fmtPropUpdate(pu):'';
-    var updInner=upd
-      ?'<span title="Laatste update schatting voor deze eigenschap">'+escHTML(upd)+'</span>'
-      :'<span class="prop-pill-upd-na" title="Nog geen aparte update voor dit onderdeel">n.v.t.</span>';
-    return'<div class="prop-pill">'
+    var tip=(upd?'Laatste update schatting: '+upd:'Nog geen aparte update voor dit onderdeel');
+    return'<div class="prop-pill" title="'+escHTML(it.label+': '+it.v+'%. '+tip)+'">'
       +'<div class="prop-pill-top"><div class="prop-pill-name">'+escHTML(it.label)+'</div><div class="prop-pill-val">'+it.v+'%</div></div>'
-      +'<div class="prop-pill-upd">'+updInner+'</div>'
       +'</div>';
   }
   function renderPillsGrid(items){
     return'<div class="props-compact">'+items.map(renderPillRow).join('')+'</div>';
   }
-  if(compact){
+  if(!useBars){
     var allItems=toItemsAll();
-    var compactHtml=renderPillsGrid(allItems);
-    if(showSource===false)return compactHtml;
+    var foldId='pf'+Math.floor(Math.random()*1e9);
+    var showFold=collapsePills&&allItems.length>firstN;
+    var firstItems=showFold?allItems.slice(0,firstN):allItems;
+    var restItems=showFold?allItems.slice(firstN):[];
+    var pillsBody='<div class="props-pills-wrap">'+renderPillsGrid(firstItems);
+    if(showFold){
+      pillsBody+='<div id="'+foldId+'" class="props-fold-panel">'+renderPillsGrid(restItems)+'</div>'
+        +'<button type="button" class="props-fold-btn" onclick="togglePropsFull(this,\''+foldId+'\')">Toon alle eigenschappen <span class="chev">▾</span></button>';
+    }
+    pillsBody+='</div>';
+    if(showSource===false)return pillsBody;
     var srcIdC='src'+Math.floor(Math.random()*99999);
     var srcHtmlC='<div style="margin-top:6px">'
       +'<button onclick="toggleSrcBox(this)" '
@@ -2276,7 +2294,7 @@ function renderProps(props,showSource,opt){
       +'<div id="'+srcIdC+'" style="display:none;margin-top:8px;padding:12px 14px;background:var(--g);border-radius:10px;font-size:13px;color:#555;line-height:1.7;border:1px solid var(--b)">'
       +'<strong>Berekend door AI</strong> op basis van invulvakjes en opgeslagen berichten. Meer info geeft nauwkeurigere schattingen.'
       +'</div></div>';
-    return compactHtml+srcHtmlC;
+    return pillsBody+srcHtmlC;
   }
   var barsHtml=PK.map(function(k,i){
     var v=props[k]||0;
@@ -2831,6 +2849,42 @@ function rDrawer(){
 function openDrawer(){rDrawer();document.getElementById('drawer').classList.add('open');document.getElementById('ovl').classList.add('show');}
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('ovl').classList.remove('show');}
 function viewDossier(name){S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=50;closeDrawer();goScreen('dossier');}
+function openDossierProfiel(name){
+  S.viewDossier=name;
+  S.viewTab='profiel';
+  closeDrawer();
+  goScreen('dossier');
+}
+function getProfielProgressHtml(dossierName){
+  var d=S.pdata[dossierName]||{categories:{}};
+  var cats=d.categories||{};
+  var filled=0,total=0;
+  if(dossierName==='OWN Sense'){
+    OWN_CATS.forEach(function(cat){
+      var catData=cats[cat.id]||{};
+      total+=cat.prompts.length;
+      filled+=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+    });
+  }else{
+    var pn=String(dossierName||'').replace(/Sense$/,'').trim();
+    var CC=getContactCatsDef(pn);
+    CC.forEach(function(cat){
+      var catData=cats[cat.id]||{};
+      total+=cat.prompts.length;
+      filled+=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
+    });
+  }
+  var pct=total?Math.round(filled/total*100):0;
+  var enc=encodeURIComponent(dossierName);
+  return '<div style="flex:1 1 100%;width:100%;padding:8px 0 0 0;margin-top:6px;border-top:1px dashed #E8E8E8">'
+    +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Invulvragen · zelfde gegevens als tab Profiel</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'
+    +'<span style="font-size:12px;font-weight:600;color:#555">'+filled+'/'+total+'</span>'
+    +'<button type="button" class="coach-save-other" style="font-size:10px;padding:4px 8px" data-dos="'+enc+'" onclick="event.stopPropagation();openDossierProfiel(decodeURIComponent(this.dataset.dos))">Open profiel</button>'
+    +'</div>'
+    +'<div style="height:3px;background:var(--b);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--r);border-radius:2px;transition:width .4s"></div></div>'
+    +'</div>';
+}
 function openPlanner(dosName){
   var name=String(dosName||'').trim();
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
@@ -5309,10 +5363,11 @@ function rSenses(el){
   S.compareDraft=S.compareDraft.filter(function(n){return cs.indexOf(n)>=0;}).slice(0,3);
   var own=S.pdata['OWN Sense']||{count:0,meta:{}};
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
-<div class="srow" onclick="goScreen('own')">
+<div class="srow" style="flex-wrap:wrap" onclick="goScreen('own')">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1"><div style="font-size:15px;font-weight:700">OWN Sense</div><div style="font-size:13px;color:var(--m)">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div></div>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9,6 15,12 9,18"/></svg>
+  ${getProfielProgressHtml('OWN Sense')}
 </div>`;
   if(usageMode==='single'){
     h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. DateSense volgt nu je relatie met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
@@ -5334,7 +5389,7 @@ function rSenses(el){
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
       var picked=S.compareDraft.indexOf(p)>=0;
-      h+=`<div class="srow">
+      h+=`<div class="srow" style="flex-wrap:wrap">
         ${S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer">':''}
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div class="sdot" style="background:'+col+'"></div>'}
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
@@ -5347,6 +5402,7 @@ function rSenses(el){
           <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();markDossierOnHold('${p}')">On hold</button>
           <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="event.stopPropagation();closeDossier('${p}')">Sluit af</button>
         </div>
+        ${getProfielProgressHtml(p)}
       </div>`;
     });
   } else {
@@ -5359,7 +5415,7 @@ function rSenses(el){
       var st=getDossierLifecycle(p);
       var stLbl=st==='on_hold'?'On hold':'Afgesloten';
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="srow">
+      h+=`<div class="srow" style="flex-wrap:wrap">
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65"/>':'<div class="sdot" style="background:'+col+';opacity:.55"></div>'}
         <div style="flex:1;cursor:pointer" onclick="viewDossier('${p}')">
           <div style="font-size:15px;font-weight:700;color:#666">${p}</div>
@@ -5370,6 +5426,7 @@ function rSenses(el){
           <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="event.stopPropagation();reopenDossier('${p}')">Heropen</button>
           <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="event.stopPropagation();delSense('${p}')">Verwijder definitief</button>
         </div>
+        ${getProfielProgressHtml(p)}
       </div>`;
     });
   }
@@ -5755,6 +5812,7 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:13px;font-weight:700;color:#333">'+(isOwnDossier?'Jouw eigenschappen':'Eigenschappen')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
       +'</div>';
+    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Zelfde scores en invulvragen als op tab <strong>Profiel</strong> — één databron, geen dubbele invoer.</div>';
     var extraMetrics=[];
     if(!isOwnDossier){
       var ownMetaX=((S.pdata['OWN Sense']||{}).meta)||{};
@@ -9136,6 +9194,7 @@ try{
   window.goBack=goBack;
   window.switchTab=switchTab;
   window.viewDossier=viewDossier;
+  window.openDossierProfiel=openDossierProfiel;
   window.safeSignOut=safeSignOut;
   window.closeDrawer=closeDrawer;
   window.openDrawer=openDrawer;
