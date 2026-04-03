@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:51">
+<meta name="ds-build" content="04-04-2026 00:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -317,18 +317,24 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 /* Input bar */
 .input-bar{background:#fff;border-top:2px solid var(--b);flex-shrink:0;padding:12px 16px;padding-bottom:calc(12px + var(--sb))}
 .input-row{display:flex;align-items:flex-end;gap:10px}
+.input-stack-vertel{display:flex;flex-direction:column;gap:10px;width:100%}
+.input-toolbar-vertel{display:flex;align-items:center;gap:10px;width:100%;flex-wrap:nowrap}
+.input-toolbar-vertel .input-toolbar-spacer{flex:1;min-width:4px}
 .input-area{flex:1;background:var(--g);border:1.5px solid var(--b);border-radius:20px;padding:13px 18px;font-size:var(--fs-md);color:#333;outline:none;font-family:inherit;resize:none;min-height:50px;max-height:130px;line-height:1.4}
+.input-area-vertel{width:100%;flex:none;min-height:100px;max-height:min(44vh,240px)}
 .input-area:focus{border-color:#aaa;background:#fff}
 .input-area::placeholder{color:#bbb}
-.rnd{width:46px;height:46px;border-radius:23px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;border:none}
+.rnd{width:46px;height:46px;border-radius:23px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;border:none;position:relative;z-index:2;touch-action:manipulation}
 .rnd:active{opacity:.7}
 .rnd.gr{background:var(--g);border:1.5px solid var(--b)}
 .rnd.rd{background:var(--r)}
 /* Microfoon: grijs in rust, rood alleen tijdens opname (niet twee identieke rode knoppen naast verstuur) */
-.rnd.rd-mic{background:#eceff3;border:1.5px solid #d0d8e0;color:#555}
+.rnd.rd-mic{background:#eceff3;border:1.5px solid #d0d8e0;color:#555;touch-action:none;-webkit-user-select:none;user-select:none}
 .rnd.rd-mic svg{stroke:#555}
 .rnd.rd-mic.rnd-mic-on{background:var(--r);border-color:var(--r);box-shadow:0 4px 12px rgba(174,0,0,.28)}
 .rnd.rd-mic.rnd-mic-on svg{stroke:#fff}
+.rnd.rd-mic:active{transform:scale(.96)}
+.ptt-dictation-btn{touch-action:none;-webkit-user-select:none;user-select:none}
 .input-tip{font-size:12px;color:#ccc;text-align:center;margin-bottom:8px}
 
 /* Forms */
@@ -583,7 +589,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   .bbl-ai,.bbl-user{max-width:100%;padding:13px 14px}
   .input-bar{padding:10px 12px;padding-bottom:calc(10px + var(--sb))}
   .input-row{gap:8px}
+  .input-stack-vertel{gap:8px}
+  .input-toolbar-vertel{gap:8px}
   .input-area{padding:12px 14px;min-height:46px}
+  .input-area-vertel{min-height:92px;max-height:min(40vh,220px)}
   .rnd{width:42px;height:42px;border-radius:21px}
 }
 
@@ -687,6 +696,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .own-cat.open .own-cat-body{display:block}
 .own-q-label{font-size:12px;font-weight:700;color:var(--m);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px}
 .own-ta{width:100%;padding:12px 14px;border:1.5px solid var(--b);border-radius:11px;font-size:14px;font-family:inherit;color:var(--t);resize:none;outline:none;min-height:72px;line-height:1.5;background:#fff}
+.own-ta-voice-row{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%}
+.own-ta-voice-row .coach-save-other{align-self:flex-start}
 .own-ta:focus{border-color:var(--r);background:#fff}
 .own-ta::placeholder{color:#ccc}
 .own-save-btn{display:none} /* hidden — auto-save replaces this */
@@ -761,18 +772,20 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <div id="inputBar" style="display:none">
     <div class="input-bar">
       <div id="vertelHelpMount" class="vertel-help-mount"></div>
-      <div class="input-row input-row-vertel">
-
-        <button class="rnd gr" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <button type="button" class="rnd rd-mic" id="micBtn" onclick="toggleMic()" title="Spraak: tik om te spreken (wordt rood tijdens opname)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-        </button>
-        <textarea class="input-area" id="msgInput" placeholder="Typ alles in één keer, ik sorteer naar het juiste dossier. Vertel wat er speelt…" rows="2" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
-        <button class="rnd rd" onclick="sendMsg()" title="Verstuur">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
-        </button>
+      <div class="input-stack-vertel">
+        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ alles in één keer, ik sorteer naar het juiste dossier. Vertel wat er speelt…" rows="4" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <div class="input-toolbar-vertel">
+          <button type="button" class="rnd gr" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button type="button" class="rnd rd-mic" id="micBtn" onpointerdown="pttMicPointerDown(event,'msgInput')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)" title="Houd ingedrukt om te spreken, laat los om te stoppen (rood = luistert)" aria-label="Spraak: ingedrukt houden">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+          <span class="input-toolbar-spacer" aria-hidden="true"></span>
+          <button type="button" class="rnd rd" onclick="sendMsg()" title="Verstuur bericht" aria-label="Verstuur">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1010,8 +1023,8 @@ const PROMPT_DEFAULTS={
   tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
-  planner_core:'Je bent DateSensei. Geef exact 2 Nederlandse planvoorstellen. Schrijf warm, volwassen, vloeiend en premium. GEEN virtuele of symbolische voorstellen. Gebruik herkenbare buurten/pleinen/straten/kaaien/stationsomgevingen (geen vage "in de buurt van"). Formaat strikt: per voorstel deze labels op aparte regels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
-  planner_fallback:'Je bent DateSensei. Geef exact 2 creatieve, concrete en haalbare plannen in het Nederlands. Geen virtuele voorstellen. Gebruik hetzelfde strikte label-formaat per voorstel: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+  planner_core:'Je bent DateSensei. Geef exact 1 Nederlands planvoorstel. Schrijf warm, volwassen, vloeiend en premium. GEEN virtuele of symbolische voorstellen. Gebruik herkenbare buurten/pleinen/straten/kaaien/stationsomgevingen (geen vage "in de buurt van"). Formaat strikt: deze labels op aparte regels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+  planner_fallback:'Je bent DateSensei. Geef exact 1 creatief, concreet en haalbaar plan in het Nederlands. Geen virtuele voorstellen. Gebruik hetzelfde strikte label-formaat: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
   compare_core:'Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er kort naar. Gebruik OOK recente context en vermijd feitelijke fouten over wat al gebeurd is. Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). Max 6 zinnen totaal. Nederlands.',
   photo_analysis_core:'Je bent DateSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
 };
@@ -1138,7 +1151,12 @@ function sync(s){var e=document.getElementById('syncBar');if(!e)return;if(s==='s
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
 
-function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px';}
+function autoResize(el){
+  if(!el)return;
+  el.style.height='auto';
+  var cap=el.classList&&el.classList.contains('input-area-vertel')?220:130;
+  el.style.height=Math.min(el.scrollHeight,cap)+'px';
+}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
 function _sessAssignStorageKey(){
@@ -1620,9 +1638,9 @@ function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
   return '<input class="profile-field'+(isFull?' full':'')+'" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'" '+(extraAttrs||'')+'>';
 }
 function renderTextareaVoiceRow(id,placeholder,value,oninput){
-  return '<div style="display:flex;gap:8px;align-items:flex-start">'
-    +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="2" oninput="'+oninput+'">'+value+'</textarea>'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px;white-space:nowrap" onclick="startFieldDictation(\''+id+'\')">🎤 Spreek</button>'
+  return '<div class="own-ta-voice-row">'
+    +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="3" oninput="'+oninput+'">'+value+'</textarea>'
+    +'<button type="button" class="coach-save-other ptt-dictation-btn" style="font-size:12px;padding:8px 10px;white-space:nowrap" title="Houd ingedrukt om te spreken, laat los om te stoppen" onpointerdown="pttMicPointerDown(event,\''+id+'\')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)">🎤 Spreek</button>'
     +'</div>';
 }
 
@@ -4791,7 +4809,7 @@ function plannerHomeCardCopy(name){
   if(stage==='exclusief daten'||stage==='prille relatie')return{title:'Plan quality time',text:'Werk voor <strong>'+dn(name)+'</strong> een verbindend moment uit dat rust, aandacht en nabijheid geeft.'};
   if(stage==='vaste relatie')return{title:'Plan een verbindend moment',text:'Laat DateSense iets uitwerken voor <strong>'+dn(name)+'</strong> dat jullie band versterkt en jullie ritme doorbreekt.'};
   if(stage==='geen_contact')return{title:'Plan alleen als het klopt',text:'DateSense kan voor <strong>'+dn(name)+'</strong> een laagdrempelig voorstel maken, als hernieuwd contact nog passend voelt.'};
-  return{title:'Plan iets leuks',text:'Werk een leuk voorstel uit voor <strong>'+dn(name)+'</strong> met AI-vragen en 3 concrete plannen.'};
+  return{title:'Plan iets leuks',text:'Werk een leuk voorstel uit voor <strong>'+dn(name)+'</strong> met AI-vragen: één concreet plan, en je kan steeds opnieuw vragen voor een ander idee.'};
 }
 function plannerHomeShortcutCopy(){
   var mode=getUsageMode();
@@ -4800,13 +4818,13 @@ function plannerHomeShortcutCopy(){
     return {
       name:focusName,
       title:'Plan iets leuks samen',
-      text:'Laat DateSense 3 concrete plannen uitwerken voor <strong>'+dn(focusName)+'</strong>.'
+      text:'Laat DateSense één concreet plan uitwerken voor <strong>'+dn(focusName)+'</strong>. Niet goed? Vraag in de planner gerust een ander voorstel.'
     };
   }
   return {
     name:'',
     title:'Plan je volgende date',
-    text:'Laat DateSense 3 leuke, concrete ideeën uitwerken voor je volgende date.'
+    text:'Laat DateSense één leuk, concreet idee uitwerken voor je volgende date — en vernieuw het voorstel wanneer je wil.'
   };
 }
 function plannerIdeaMeta(idea){
@@ -4912,7 +4930,7 @@ function plannerLooksUsable(txt){
   if(!raw)return false;
   if(/^fout bij plannen:/i.test(raw))return false;
   if(raw.length<220)return false;
-  return parsePlannerResult(raw).length>=2;
+  return parsePlannerResult(raw).length>=1;
 }
 function plannerAutoAnswersFor(name){
   var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
@@ -4985,7 +5003,7 @@ function plannerIdeaGuidance(idea){
   if(v.indexOf('verrass')>=0){
     return 'Als het idee een verrassing is, houd het haalbaar en charmant: schrijf met net genoeg mysterie om het bijzonder te maken, maar met genoeg concreetheid om het ook echt uitvoerbaar te houden.';
   }
-  return 'Pas de stijl van elk voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan. Gebruik geen houterige of ultrakorte zinnen, maar volwassen, vloeiende formuleringen. Elk voorstel moet een eigen karakter hebben en op een andere manier aantrekkelijk aanvoelen.';
+  return 'Pas de stijl van het voorstel aan het gekozen idee aan, zodat het niet generiek leest maar echt aanvoelt als het juiste type plan. Gebruik geen houterige of ultrakorte zinnen, maar volwassen, vloeiende formuleringen. Het voorstel moet karakter hebben en aantrekkelijk aanvoelen.';
 }
 function plannerRegionAreaHint(region,anchors){
   var regionTxt=String(region||'jouw regio').trim()||'jouw regio';
@@ -5216,9 +5234,23 @@ function plannerHasConcreteSuggestion(item,answers){
   var regionHit=regionWords.some(function(w){return blob.indexOf(w)>=0;});
   return placeCue&&regionHit;
 }
+function plannerFormatNormalizedBlock(item,idx){
+  idx=typeof idx==='number'?idx:0;
+  return [
+    'Voorstel '+(idx+1)+':',
+    'Titel: '+(item.title||''),
+    'Waarom dit past: '+(item.why||''),
+    'Hoe het eruitziet: '+(item.how||''),
+    'Praktisch: '+(item.practical||''),
+    'Beste moment: '+(item.bestMoment||''),
+    'Voorbereiding: '+(item.prep||''),
+    'Mooiste extra: '+(item.extra||''),
+    'Let op: '+(item.warning||'')
+  ].join('\n');
+}
 function plannerNormalizeResult(raw,name,answers,regionAnchors){
   var parsed=parsePlannerResult(raw);
-  var items=parsed.slice().map(function(item){return {...item};});
+  var items=parsed.slice(0,1).map(function(item){return {...item};});
   var fallbacks=plannerFallbackProposals(name,answers,regionAnchors);
   items=items.map(function(item,idx){
     if(plannerItemLooksComplete(item)&&plannerHasConcreteSuggestion(item,answers))return item;
@@ -5235,23 +5267,11 @@ function plannerNormalizeResult(raw,name,answers,regionAnchors){
       warning:(item.warning&&item.warning.length>=18)?item.warning:fb.warning
     };
   });
-  if(items.length>=2)return items.slice(0,2).map(function(item,idx){
-    return [
-      'Voorstel '+(idx+1)+':',
-      'Titel: '+(item.title||''),
-      'Waarom dit past: '+(item.why||''),
-      'Hoe het eruitziet: '+(item.how||''),
-      'Praktisch: '+(item.practical||''),
-      'Beste moment: '+(item.bestMoment||''),
-      'Voorbereiding: '+(item.prep||''),
-      'Mooiste extra: '+(item.extra||''),
-      'Let op: '+(item.warning||'')
-    ].join('\n');
-  }).join('\n\n');
-  for(var i=0;i<fallbacks.length&&items.length<2;i++){
+  if(items.length>=1)return plannerFormatNormalizedBlock(items[0],0);
+  for(var i=0;i<fallbacks.length&&items.length<1;i++){
     var fb=fallbacks[i];
     items.push({
-      idx:items.length+1,
+      idx:1,
       title:fb.title,
       why:fb.why,
       how:fb.how,
@@ -5262,19 +5282,8 @@ function plannerNormalizeResult(raw,name,answers,regionAnchors){
       warning:fb.warning
     });
   }
-  return items.slice(0,2).map(function(item,idx){
-    return [
-      'Voorstel '+(idx+1)+':',
-      'Titel: '+(item.title||''),
-      'Waarom dit past: '+(item.why||''),
-      'Hoe het eruitziet: '+(item.how||''),
-      'Praktisch: '+(item.practical||''),
-      'Beste moment: '+(item.bestMoment||''),
-      'Voorbereiding: '+(item.prep||''),
-      'Mooiste extra: '+(item.extra||''),
-      'Let op: '+(item.warning||'')
-    ].join('\n');
-  }).join('\n\n');
+  if(!items.length)return'';
+  return plannerFormatNormalizedBlock(items[0],0);
 }
 function buildPlannerContextPayload(name){
   if(!name||name==='OWN Sense')return'';
@@ -5334,30 +5343,37 @@ function plannerAutoTaskFor(name){
   var ready=getRecentAutoPlannerEntry(name,72);
   if(!ready)return null;
   var person=dn(name).replace('Sense','');
-  var msg='Voor <strong>'+person+'</strong> staan 2 planvoorstellen klaar als zetje.';
-  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staan 2 eerste-date voorstellen klaar.';
-  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staan 2 originelere datevoorstellen klaar.';
-  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staan 2 quality-time plannen klaar.';
-  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staan 2 verbindende plannen klaar.';
+  var msg='Voor <strong>'+person+'</strong> staat een planvoorstel klaar als zetje.';
+  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staat een eerste-date voorstel klaar.';
+  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staat een origineler datevoorstel klaar.';
+  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staat een quality-time plan klaar.';
+  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staat een verbindend plan klaar.';
   else if(stage==='geen_contact')msg='Voor <strong>'+person+'</strong> staat een voorzichtig herstartplan klaar, als dat nog goed voelt.';
   return {
     id:'plan-auto-'+name,
     type:'a',
     prio:'low',
     msg:msg,
-    openMsg:'Nog openstaand: er staan nog steeds planvoorstellen klaar voor <strong>'+person+'</strong>.',
+    openMsg:'Nog openstaand: er staat nog steeds een planvoorstel klaar voor <strong>'+person+'</strong>.',
     link:'Open voorstel →',
     action:"openPlannerSuggestion('"+name+"')"
   };
 }
-async function requestPlannerIdeas(name,answers){
+async function requestPlannerIdeas(name,answers,opt){
+  opt=opt||{};
   var dCtx=buildPlannerContextPayload(name);
   var regionAnchors=await fetchPlannerRegionAnchors(answers.region||'',answers.country||'België');
   var stage=stageLabel(getDossierStage(name));
   var ideaMeta=plannerIdeaMeta(answers.idea);
   var ideaGuidance=plannerIdeaGuidance(answers.idea);
   var hasConcreteRegion=String(answers.region||'').trim().length>=3;
+  var prevTitle='';
+  if(opt.alternate){
+    var prev=parsePlannerResult(String((S.planner&&S.planner.result)||''));
+    if(prev[0]&&prev[0].title)prevTitle=String(prev[0].title).trim().replace(/\s+/g,' ').substring(0,160);
+  }
   var sys=getPromptText('planner_core')+' Extra stijlrichting: '+ideaGuidance+'.';
+  if(opt.alternate)sys+=' De gebruiker vraagt een alternatief: het plan moet duidelijk anders zijn (andere zone, ander ritme of ander type moment), geen lichte herformulering van hetzelfde idee.';
   var userContent='Dossier: '+dn(name)
     +'\nFase: '+stage
     +(dCtx?('\nContext:\n'+dCtx):'')
@@ -5371,22 +5387,25 @@ async function requestPlannerIdeas(name,answers){
     +'\nTempo: '+(answers.pace||'open')
     +'\nEffect: '+(answers.focus||'verbinden')
     +'\nType hint: '+ideaMeta.moodHint
-    +(hasConcreteRegion?'\nNoem per voorstel minstens 1 passende buurtnaam, plein, straat, kaai, stationsomgeving of streek in deze regio.':'')
+    +(hasConcreteRegion?'\nNoem in dit voorstel minstens 1 passende buurtnaam, plein, straat, kaai, stationsomgeving of streek in deze regio.':'')
     +(regionAnchors.length?('\nLive regio-ankers: '+regionAnchors.slice(0,5).join(', ')):'')
-    +'\nGeef 2 verschillende, haalbare voorstellen.'
-    +'\nMaak ze creatief, origineel en aantrekkelijk genoeg dat iemand spontaan denkt: dit wil ik echt doen.';
+    +'\nGeef exact 1 haalbaar, concreet voorstel.'
+    +'\nMaak het creatief, origineel en aantrekkelijk genoeg dat iemand spontaan denkt: dit wil ik echt doen.'
+    +(opt.alternate&&prevTitle?('\nHet vorige voorstel had als titel: "'+prevTitle+'". Varieer sterk: niet dezelfde plek of hetzelfde ritme herhalen.'):'');
   try{
     var raw=await callAPI(sys,[{role:'user',content:userContent}],520,16000);
     return plannerNormalizeResult(raw,name,answers,regionAnchors);
   }catch(e){
     // Fallback prompt: korter en sneller, vooral voor mobiele/tragere netwerken.
     var fastSys=getPromptText('planner_fallback');
+    if(opt.alternate)fastSys+=' Lever een duidelijk ander plan dan een standaardvariant.';
     var fastUser='Dossier: '+dn(name)
       +'\nRegio: '+(answers.region||'flexibel')
       +'\nIdee: '+(answers.idea||'koffie')
       +'\nSfeer: '+(answers.mood||'nog open')
       +'\nFase: '+stage
-      +'\nGeef exact 2 voorstellen.';
+      +'\nGeef exact 1 voorstel.'
+      +(opt.alternate&&prevTitle?('\nVorige titel (niet herhalen): '+prevTitle):'');
     try{
       var quick=await callAPI(fastSys,[{role:'user',content:fastUser}],420,14000);
       return plannerNormalizeResult(quick,name,answers,regionAnchors);
@@ -5415,7 +5434,7 @@ async function warmAutoPlannerSuggestions(){
       if(getRecentAutoPlannerEntry(name,72))continue;
       var answers=plannerAutoAnswersFor(name);
       var raw=await requestPlannerIdeas(name,answers);
-      if(parsePlannerResult(raw).length<2)continue;
+      if(parsePlannerResult(raw).length<1)continue;
     }
   }catch(_e){
   }finally{
@@ -5634,13 +5653,9 @@ function renderPlannerResultCards(txt){
   var hist=getCurrentPlannerHistoryEntry((S.planner&&S.planner.dossier)||'');
   var favIdxs=hist&&Array.isArray(hist.favorite_idxs)?hist.favorite_idxs:[];
   var chosenIdx=hist&&hist.selected_idx?hist.selected_idx:null;
-  var accents=[
-    {cls:'alt1',icon:'🌿',label:'Rustig voorstel'},
-    {cls:'alt2',icon:'✨',label:'Bijzonder voorstel'},
-    {cls:'alt3',icon:'💬',label:'Verbindend voorstel'}
-  ];
+  var accents=[{cls:'alt1',icon:'🌿',label:'Jouw voorstel'}];
   return '<div class="planner-results">'
-    +'<div class="planner-status" style="margin:0 0 2px"><strong>Kies per voorstel wat je wil bewaren.</strong> Je kan elk voorstel apart opslaan, markeren of later weer verwijderen.</div>'
+    +'<div class="planner-status" style="margin:0 0 2px"><strong>Dit is jouw planvoorstel.</strong> Je kan het opslaan, als favoriet markeren of als gekozen plan zetten. Past het niet? Vraag hieronder een ander voorstel — zelfde voorkeuren, nieuw idee.</div>'
     +items.map(function(item){
     function row(label,val){
       if(!val)return'';
@@ -5648,11 +5663,10 @@ function renderPlannerResultCards(txt){
     }
     var isFav=favIdxs.indexOf(item.idx)>=0;
     var isChosen=chosenIdx===item.idx;
-    var accent=accents[(item.idx-1)%accents.length];
-    var detailBlob=[item.how,item.practical,item.extra,item.warning].join(' \n ').toLowerCase();
+    var accent=accents[0];
     var tips=plannerResourceTips(item,(S.planner&&S.planner.answers)||{});
     return '<div class="planner-result-card '+accent.cls+'">'
-      +'<div class="planner-result-top"><div class="planner-result-kicker">'+accent.icon+' Voorstel '+item.idx+' · '+accent.label+'</div></div>'
+      +'<div class="planner-result-top"><div class="planner-result-kicker">'+accent.icon+' '+accent.label+'</div></div>'
       +'<div class="planner-result-title">'+escHTML(item.title)+'</div>'
       +row('Waarom dit past',item.why)
       +row('Hoe het eruitziet',item.how)
@@ -5671,7 +5685,12 @@ function renderPlannerResultCards(txt){
       +'<button class="coach-save-other" style="font-size:12px;padding:7px 10px;'+(isChosen?'border-color:#CFE7D4;color:#1B5E20;background:#F3FBF5':'')+'" onclick="choosePlannerProposal(\''+((S.planner&&S.planner.dossier)||'')+'\', '+item.idx+')">'+(isChosen?'✓ Gekozen plan':'Kies dit plan')+'</button>'
       +'</div>'
       +'</div>';
-  }).join('')+'</div>';
+  }).join('')
+    +'<div style="text-align:center;margin-top:4px;padding-top:12px;border-top:1px solid var(--b)">'
+    +'<button type="button" class="btn-g" style="max-width:300px" onclick="generatePlannerIdeasAlternate()">↻ Ander voorstel zoeken</button>'
+    +'<div class="planner-sub" style="margin-top:8px;max-width:420px;margin-left:auto;margin-right:auto">Zelfde ingevulde voorkeuren; DateSense denkt opnieuw na en stelt iets anders voor.</div>'
+    +'</div>'
+    +'</div>';
 }
 function plannerHistoryList(name){
   if(!name)return[];
@@ -5738,33 +5757,44 @@ function restorePlannerHistory(name,id){
     if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});
   },40);
 }
+function generatePlannerIdeasAlternate(){
+  if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
+  if(S.planner&&S.planner.loading)return;
+  S.planner=S.planner||{};
+  S.planner._alternateNext=true;
+  generatePlannerIdeas();
+}
 async function generatePlannerIdeas(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var p=S.planner||{};
   var name=String(p.dossier||'').trim();
   if(!name){toast('Kies eerst een dossier');return;}
+  var wantAlternate=!!p._alternateNext;
+  if(S.planner)S.planner._alternateNext=false;
   var answers=readPlannerAnswersFromDom();
   if(!plannerHasEnoughInput(answers)){
     S.planner.answers=answers;
     S.planner.loading=false;
-    S.planner.result='Te weinig input om degelijke plannen te maken. Vul bijvoorbeeld in wat je wil doen, plus nog 1-2 keuzes zoals sfeer, budget, regio of tijd.';
+    S.planner.result='Te weinig input om een degelijk plan te maken. Vul bijvoorbeeld in wat je wil doen, plus nog 1-2 keuzes zoals sfeer, budget, regio of tijd.';
     goScreen('planner');
     return;
   }
   S.planner.answers=answers;
   S.planner.loading=true;
-  S.planner.result='';
-  S.planner.historySelection='';
+  if(!wantAlternate){
+    S.planner.result='';
+    S.planner.historySelection='';
+  }
   goScreen('planner');
   setTimeout(function(){
     var target=document.getElementById('plannerResultsAnchor');
     if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});
   },40);
   try{
-    var raw=await requestPlannerIdeas(name,answers);
+    var raw=await requestPlannerIdeas(name,answers,{alternate:wantAlternate});
     var parsed=parsePlannerResult(raw);
-    if(parsed.length<2){
-      throw new Error('Ik kreeg nog geen 2 volledige planvoorstellen terug. Probeer opnieuw of maak je regio of idee iets specifieker.');
+    if(parsed.length<1){
+      throw new Error('Ik kreeg nog geen volledig planvoorstel terug. Probeer opnieuw of maak je regio of idee iets specifieker.');
     }
     S.planner.loading=false;
     S.planner.result=raw.trim();
@@ -5801,17 +5831,17 @@ function rPlanner(el){
   var resultHtml='';
   if(p.loading){
     resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div class="planner-loading">'
-      +'<div class="planner-loading-top"><div class="planner-spinner"></div><div class="planner-loading-title">Je 2 plannen worden nu uitgewerkt</div></div>'
-      +'<p class="planner-loading-text">DateSense kijkt nu naar jullie fase, context en voorkeuren zodat je straks 2 duidelijke voorstellen krijgt.</p>'
+      +'<div class="planner-loading-top"><div class="planner-spinner"></div><div class="planner-loading-title">Je plan wordt nu uitgewerkt</div></div>'
+      +'<p class="planner-loading-text">DateSense kijkt naar jullie fase, context en voorkeuren zodat je straks één duidelijk voorstel krijgt.</p>'
       +'<div class="planner-loading-steps" style="margin-top:12px">'
-      +'<div class="planner-loading-step">1. Ik kies ideeën die passen bij dit dossier.</div>'
+      +'<div class="planner-loading-step">1. Ik kies een idee dat past bij dit dossier.</div>'
       +'<div class="planner-loading-step">2. Ik werk praktische details uit zoals duur, startpunt en extra tip.</div>'
-      +'<div class="planner-loading-step">3. Ik zet alles klaar in 2 aparte kaarten zodat je meteen kan kiezen.</div>'
+      +'<div class="planner-loading-step">3. Ik zet alles klaar in één kaart; je kan daarna altijd opnieuw vragen voor een ander idee.</div>'
       +'</div>'
       +'</div></div>';
   }else if(p.result){
     var isErr=String(p.result||'').indexOf('Fout bij plannen:')===0;
-    resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:8px">JOUW PLANVOORSTELLEN</div>'
+    resultHtml='<div id="plannerResultsAnchor" style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:var(--r);letter-spacing:.5px;margin-bottom:8px">JOUW PLANVOORSTEL</div>'
       +(isErr
         ?'<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:14px;line-height:1.6">'+escHTML(p.result)+'</div>'
         :renderPlannerResultCards(p.result))
@@ -5837,6 +5867,12 @@ function rPlanner(el){
       }).join('')
       +'</div>';
   }
+  var plannerGenBtnLabel='Genereer plan';
+  if(p.loading)plannerGenBtnLabel='Even wachten...';
+  else{
+    var plannerRes=String(p.result||'').trim();
+    if(plannerRes&&plannerRes.indexOf('Te weinig input')!==0)plannerGenBtnLabel='Opnieuw genereren';
+  }
   el.innerHTML='<div class="planner-shell">'
     +'<div class="planner-hero"><div class="ai-sec" style="padding:0"><div class="ai-sec-title"><span>Plan iets leuks</span></div><p class="ai-sec-text" style="margin-bottom:6px">DateSense houdt rekening met het gekozen dossier, de fase en de context. Elise en Pascale krijgen dus niet zomaar hetzelfde voorstel.</p><div class="planner-status">Vul minstens 2 richtingen in om te plannen. Voorbeeld: <strong>wandeling + romantisch</strong> of <strong>Antwerpen + betaalbaar</strong>.</div></div></div>'
     +plannerField('plannerDossierWrap','Voor welk dossier?',dossierSelect)
@@ -5852,7 +5888,7 @@ function rPlanner(el){
     +plannerField('plannerFocusWrap','Wat wil je dat het moment oplevert?',plannerSelect('plannerFocus',answers.focus||'',plannerFocusOptions(),'Kies focus')+'<div class="planner-sub">Dit gaat over effect: verbinden, speelsheid, dieper gesprek...</div>')
     +'</div>'
     +'<div class="planner-actions">'
-    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+(p.loading?'Even wachten...':'Genereer 2 plannen')+'</button>'
+    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+plannerGenBtnLabel+'</button>'
     +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+name+'\')">Terug naar dossier</button>':'')
     +'</div>'
     +resultHtml
@@ -8565,7 +8601,11 @@ async function sendMsg(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
   if(_micActive)stopMic(true);
-  var txt=inp.value.trim();if(!txt)return;
+  var txt=inp.value.trim();
+  if(!txt){
+    toast('Geen tekst om te versturen — wacht tot je zin verschijnt, of laat de micro los na inspreken.');
+    return;
+  }
   var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
   if(txt.length>2800){
     toast('Lang bericht gedetecteerd: AI verwerkt een ingekorte context voor snelheid.');
@@ -9129,22 +9169,92 @@ async function askAdviceNow(){
   S.busy=false;
 }
 
-// ══ Microfoon (speech-to-text) ════════════════════════════════════
+// ══ Microfoon (speech-to-text) — push-to-talk: ingedrukt houden = luisteren, loslaten = stop ══
 var _recognition=null;
 var _micActive=false;
 var _micStopping=false;
 var _micTextTarget='msgInput';
 var _micBaseText='';
+var _pttHeld=false;
+
+function wireRecognitionHandlers(recognition,inp){
+  recognition.onresult=function(e){
+    var interim='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal){_micBaseText+=e.results[i][0].transcript+' ';}
+      else interim+=e.results[i][0].transcript;
+    }
+    inp.value=_micBaseText+interim;
+    autoResize(inp);
+  };
+  recognition.onerror=function(){stopMic(true);};
+  recognition.onend=function(){
+    if(_micStopping)return;
+    if(_pttHeld){
+      setTimeout(micRestartAfterPttSegment,0);
+      return;
+    }
+    stopMic(true);
+  };
+}
+
+function micRestartAfterPttSegment(){
+  if(!_pttHeld||!_micActive)return;
+  var inp=document.getElementById(_micTextTarget||'msgInput');
+  if(!inp){stopMic(true);return;}
+  var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SRClass){stopMic(true);return;}
+  _micStopping=false;
+  try{
+    _recognition=new SRClass();
+    _recognition.lang='nl-NL';
+    _recognition.continuous=true;
+    _recognition.interimResults=true;
+    _micBaseText=String(inp.value||'');
+    wireRecognitionHandlers(_recognition,inp);
+    _recognition.start();
+  }catch(_e){
+    stopMic(true);
+  }
+}
+
+function pttMicPointerDown(e,fieldId){
+  if(!e)return;
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
+    toast('Spraakherkenning niet beschikbaar in deze browser');return;
+  }
+  var fid=String(fieldId||'msgInput');
+  var inp=document.getElementById(fid);
+  if(!inp){toast('Invulvak niet gevonden');return;}
+  e.preventDefault();
+  try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}
+  if(_micActive)stopMic(true);
+  _micTextTarget=fid;
+  _pttHeld=true;
+  startMic();
+}
+
+function pttMicPointerUp(e){
+  _pttHeld=false;
+  if(e&&e.currentTarget&&typeof e.pointerId==='number'){
+    try{e.currentTarget.releasePointerCapture(e.pointerId);}catch(_){}
+  }
+  if(_micActive)stopMic(true);
+}
 
 function toggleMic(){
   if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
     toast('Spraakherkenning niet beschikbaar in deze browser');return;
   }
   if(_micActive){stopMic();return;}
+  _pttHeld=false;
+  _micTextTarget='msgInput';
   startMic();
 }
 
 function startFieldDictation(fieldId){
+  _pttHeld=false;
   if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
     toast('Spraakherkenning niet beschikbaar in deze browser');return;
   }
@@ -9154,6 +9264,7 @@ function startFieldDictation(fieldId){
   _micTextTarget=fieldId;
   startMic();
 }
+
 function startMic(){
   var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
   var inp=document.getElementById(_micTextTarget||'msgInput');
@@ -9164,29 +9275,23 @@ function startMic(){
   _recognition.interimResults=true;
   _micBaseText=inp.value?String(inp.value):'';
   _micStopping=false;
-
-  _recognition.onresult=function(e){
-    var interim='';
-    for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){_micBaseText+=e.results[i][0].transcript+' ';}
-      else interim+=e.results[i][0].transcript;
-    }
-    inp.value=_micBaseText+interim;
-    autoResize(inp);
-  };
-  _recognition.onerror=function(){stopMic(true);};
-  _recognition.onend=function(){
-    if(_micStopping)return;
-    stopMic(true);
-  };
+  wireRecognitionHandlers(_recognition,inp);
   _recognition.start();
   _micActive=true;
   var btn=document.getElementById('micBtn');
-  if(btn&&_micTextTarget==='msgInput')btn.classList.add('rnd-mic-on');
-  toast('🎤 Luisteren...');
+  if(btn&&_micTextTarget==='msgInput'){
+    btn.classList.add('rnd-mic-on');
+    btn.setAttribute('aria-pressed','true');
+  }
+  if(!_pttHeld){
+    toast(_micTextTarget==='msgInput'
+      ?'🎤 Luisteren… (klassieke modus: tik opnieuw op de micro om te stoppen)'
+      :'🎤 Luisteren… (tik opnieuw op Spreek om te stoppen)');
+  }
 }
 
 function stopMic(preserveText){
+  _pttHeld=false;
   _micStopping=true;
   var targetId=_micTextTarget||'msgInput';
   var inp=document.getElementById(targetId);
@@ -9194,15 +9299,19 @@ function stopMic(preserveText){
     try{_recognition.stop();}catch(_e){}
   }
   if(inp){
-    inp.value=String(_micBaseText||'').trim();
+    var committed=String(inp.value||'').trim();
+    inp.value=committed;
+    _micBaseText=committed;
     autoResize(inp);
     try{inp.focus();}catch(_e){}
   }
   _micActive=false;
   var btn=document.getElementById('micBtn');
-  if(btn)btn.classList.remove('rnd-mic-on');
+  if(btn){
+    btn.classList.remove('rnd-mic-on');
+    btn.setAttribute('aria-pressed','false');
+  }
   _recognition=null;
-  _micBaseText=inp?inp.value:'';
   _micTextTarget='msgInput';
 }
 
@@ -10038,6 +10147,10 @@ try{
   window.laadOudereTijdlijn=laadOudereTijdlijn;
   window.exportDossierTimelineTxt=exportDossierTimelineTxt;
   window.exportVertelThreadTxt=exportVertelThreadTxt;
+  window.generatePlannerIdeas=generatePlannerIdeas;
+  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
+  window.pttMicPointerDown=pttMicPointerDown;
+  window.pttMicPointerUp=pttMicPointerUp;
 }catch(e){console.warn('window exports:',e);}
 try{
   init();
