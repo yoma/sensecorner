@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- DateSense build tag (debug): JS leest dit uit en toont het linksboven -->
-<meta name="ds-build" content="v2026-04-03-1 11:13">
+<meta name="ds-build" content="v2026-04-03-1 11:58">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -34,7 +34,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .av{width:42px;height:42px;border-radius:21px;overflow:hidden;flex-shrink:0;border:2px solid var(--b);background:#eee}
 .brand{font-size:var(--fs-xl);font-weight:800;color:var(--t);letter-spacing:-.5px;line-height:1}
 .brand .dot{color:var(--r)}
-.tag{font-size:var(--fs-xs);color:var(--r);font-style:italic;margin-top:2px}
+.brand .heart{color:#E53935;margin-left:2px}
+.tag{font-size:11px;color:#8A2D2D;margin-top:3px;line-height:1.25}
+.tag .tag-main{font-weight:700}
+.tag .tag-sub{color:#A05A5A}
 
 /* Build label linksboven (debug / versie zichtbaar) */
 .build-tag-top{
@@ -63,7 +66,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   font-weight:600;
   color:#777;
 }
-.build-user-top .bt-logout{color:var(--r);text-decoration:underline;cursor:pointer}
+.build-user-top .bt-logout-btn{margin-left:6px;padding:4px 8px;border-radius:999px;border:1px solid #F0CACA;background:#FFF5F5;color:var(--r);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1.1}
+.build-user-top .bt-logout-btn:active{opacity:.8}
 
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
@@ -582,7 +586,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <!-- Logobar -->
   <div class="logobar">
     <div class="av" id="ownAvatarWrap" onclick="goScreen('home')" style="cursor:pointer"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
-    <div><div class="brand">Date<span>Sense</span><span class="dot">.</span></div><div class="tag" id="brandTag">Jouw persoonlijke dating coach</div></div>
+    <div>
+      <div class="brand">Date<span>Sense</span><span class="heart">♥</span></div>
+      <div class="tag" id="brandTag"><span class="tag-main">Twijfel minder, voel meer.</span> <span class="tag-sub">Jouw persoonlijke dating coach.</span></div>
+    </div>
   </div>
 
   <div class="sync-bar" id="syncBar"></div>
@@ -777,16 +784,24 @@ function setBuildTag(){
     var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
     var email=(S.user&&S.user.email)||'';
     var name=(first&&String(first).trim())||((email&&email.split('@')[0])||'Jij');
-    userEl.innerHTML=escHTML(name)+' · <span class="bt-logout" onclick="doSignOut()">Afmelden</span>';
+    userEl.innerHTML=escHTML(name)+'<button class="bt-logout-btn" type="button" onclick="safeSignOut()">Afmelden</button>';
   }else{
     userEl.innerHTML='';
+  }
+}
+async function safeSignOut(){
+  try{
+    await doSignOut();
+  }catch(e){
+    console.warn('safeSignOut error:',e);
+    toast('Afmelden lukte niet. Probeer opnieuw.');
   }
 }
 
 function renderBrandTag(){
   var el=document.getElementById('brandTag');
   if(!el)return;
-  el.textContent='Jouw persoonlijke dating coach';
+  el.innerHTML='<span class="tag-main">Twijfel minder, voel meer.</span> <span class="tag-sub">Jouw persoonlijke dating coach.</span>';
   setBuildTag();
 }
 
@@ -800,7 +815,10 @@ const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 const PROMPT_DEFAULTS={
-  advice_core:'Je bent DateSensei, empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} Geef daarnaast op NIEUWE REGEL exact dit formaat: REDFLAGS:score;reden1|reden2|reden3 (score 0-100, hoger=meer risico). Daarna geef je op een NIEUWE REGEL exact dit formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (3 concrete aanbevolen acties, emoji uit: 📅💬❤️⚠️🎯💡🚀). Gebruik geen nummering in woorden zoals "een/twee/drie"; gebruik gewone zinnen of bulletstijl. {{relationship_guard}} Maximaal 5 zinnen advies. Nederlands.',
+  advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Geen bullets en geen extra kopjes. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
+  tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
+  tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
+  tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
   planner_core:'Je bent DateSensei. Geef exact 2 Nederlandse planvoorstellen. Schrijf warm, volwassen, vloeiend en premium. GEEN virtuele of symbolische voorstellen. Gebruik herkenbare buurten/pleinen/straten/kaaien/stationsomgevingen (geen vage "in de buurt van"). Formaat strikt: per voorstel deze labels op aparte regels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
   planner_fallback:'Je bent DateSensei. Geef exact 2 creatieve, concrete en haalbare plannen in het Nederlands. Geen virtuele voorstellen. Gebruik hetzelfde strikte label-formaat per voorstel: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
   compare_core:'Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er kort naar. Gebruik OOK recente context en vermijd feitelijke fouten over wat al gebeurd is. Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). Max 6 zinnen totaal. Nederlands.',
@@ -859,7 +877,7 @@ const OWN_CATS=[
 var S={
   user:null,
   apiKey:localStorage.getItem('ds_ak')||'',
-  adviceTone:localStorage.getItem('ds_advice_tone')||'eerlijk',
+  adviceTone:'eerlijk',
   screen:'home',prev:'home',
   busy:false,
   profiles:[],
@@ -891,6 +909,7 @@ var _plannerIdeaRefreshTimer=null;
 var _adviesReqSeq=0;
 var _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
 var _promptCenterKey='advice_core';
+var _renderHealthBusy=false;
 
 // Segment modal state
 var _segModalIdx=-1;
@@ -971,6 +990,29 @@ function setPromptText(key,val){
   if(v)ov[k]=v;
   else delete ov[k];
   setPromptOverrides(ov);
+}
+function ensureRenderHealthy(source){
+  if(_renderHealthBusy)return;
+  var mc=document.getElementById('mainContent');
+  if(!mc)return;
+  var hasChild=!!(mc.children&&mc.children.length);
+  var txt=String(mc.textContent||'').replace(/\s+/g,'').trim();
+  if(hasChild&&txt.length>2)return;
+  _renderHealthBusy=true;
+  console.warn('render health fallback:',source||'unknown');
+  try{
+    if(S.user){
+      S.screen='home';
+      goScreen('home');
+    }else{
+      S.screen='login';
+      goScreen('login');
+    }
+  }catch(e){
+    showFatalUi('Render fallback faalde: '+((e&&e.message)||'onbekend'));
+  }finally{
+    setTimeout(function(){_renderHealthBusy=false;},350);
+  }
 }
 
 function getMetaFor(name){
@@ -2039,6 +2081,7 @@ async function init(){
       S.user=null;S.profiles=['OWN Sense'];S.pdata={};goScreen('login');
     }
   });
+  setTimeout(function(){ensureRenderHealthy('init');},120);
 }
 
 async function doLogin(){
@@ -2370,6 +2413,7 @@ function goScreen(sc){
   });
   var homeTab=document.getElementById('tab-home');
   if(homeTab)homeTab.style.display='';
+  setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
 
 // ══ Drawer ═══════════════════════════════════════════════════════
@@ -5606,12 +5650,9 @@ async function genAdvies(name,forced){
   var dMeta=(d.meta||{});
   var relType=String(dMeta.relationship_type||'').trim();
   var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
-  var tone=S.adviceTone||'eerlijk';
-  var toneInstr=tone==='streng'
-    ?'Wees streng, direct en eerlijk. Als de huidige info zwakke match of risico toont, zeg dat expliciet.'
-    :tone==='zacht'
-      ?'Wees warm en voorzichtig, maar blijf eerlijk.'
-      :'Wees warm, direct en eerlijk.';
+  var priorRiskScore=parseInt(((dMeta.red_flags||{}).score||0),10)||0;
+  var autoStrict=priorRiskScore>=65;
+  var toneInstr=autoStrict?getPromptText('tone_strict'):getPromptText('tone_honest');
   var modeInstruction=isOwnAdv
     ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
     :'Analyseer dossier "'+dn(name)+'": karakter, patronen, jouw gevoel. Geef 2 concrete adviezen.';
@@ -5646,6 +5687,12 @@ async function genAdvies(name,forced){
     adviesTxt=sanitizeAdviceForRelationshipStage(adviesTxt,name,stageNow,relType);
     var actiesTxt=actMatch&&actMatch[1]?actMatch[1].trim():'';
     var result=formatAiCard(adviesTxt);
+    var toneLabelPublic=autoStrict?'extra waakzaam':'helder';
+    var toneLabelAdmin=autoStrict?'tone_strict (risk)':'tone_honest';
+    var toneHtml='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">'
+      +'<span style="font-size:11px;color:#6f7680;background:#F6F7F9;border:1px solid #E4E7EB;border-radius:999px;padding:4px 8px">Adviesmodus: '+toneLabelPublic+'</span>'
+      +(isAdminUser()?'<span style="font-size:11px;color:#8a8f97;background:#fff;border:1px dashed #E2E4E8;border-radius:999px;padding:4px 8px">Admin: '+toneLabelAdmin+'</span>':'')
+      +'</div>';
     var boostHtml='';
     if(boost&&boost.ideas.length){
       var insp=buildBoostInspirationCards(boost).slice(0,3);
@@ -5675,7 +5722,7 @@ async function genAdvies(name,forced){
       S.pdata[name]=d;
       try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e){}
     }
-    if(box)box.innerHTML=redHtml+result+boostHtml;
+    if(box)box.innerHTML=toneHtml+redHtml+result+boostHtml;
 
     // Render aanbevolen acties
     var actiesContainer=document.getElementById('actiesContainer');
@@ -6318,6 +6365,8 @@ function rPromptCenter(el){
   }
   var defs=[
     {k:'advice_core',title:'Advies prompt',sub:'Kernprompt voor advies in dossiers'},
+    {k:'tone_honest',title:'Tone eerlijk',sub:'Toon instructie voor eerlijke standaardstijl'},
+    {k:'tone_strict',title:'Tone streng',sub:'Toon instructie voor strenge adviesstijl'},
     {k:'planner_core',title:'Planner prompt',sub:'Primaire prompt voor planvoorstellen'},
     {k:'planner_fallback',title:'Planner fallback',sub:'Fallback als planner-call faalt'},
     {k:'compare_core',title:'Vergelijk prompt',sub:'AI vergelijking tussen dossiers'},
@@ -6412,12 +6461,7 @@ function rSettings(el){
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
 <input class="form-input" id="akField" type="password" placeholder="sk-ant-api..." value="${S.apiKey||''}"/>
-<div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Adviesstijl</div>
-<select class="form-input" id="adviceToneField">
-  <option value="zacht" ${S.adviceTone==='zacht'?'selected':''}>Zacht</option>
-  <option value="eerlijk" ${S.adviceTone==='eerlijk'?'selected':''}>Eerlijk</option>
-  <option value="streng" ${S.adviceTone==='streng'?'selected':''}>Streng</option>
-</select>
+<div style="font-size:13px;color:#666;line-height:1.6;margin-top:16px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
 <div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
 <select class="form-input" id="usageModeField">
   <option value="multi" ${usageMode==='multi'?'selected':''}>Meerdere dossiers opvolgen</option>
@@ -6537,9 +6581,7 @@ function settingsAction(action){
 
 async function saveSettings(){
   var kEl=document.getElementById('akField');
-  var tEl=document.getElementById('adviceToneField');
   var k=kEl?kEl.value.trim():'';
-  var t=tEl?tEl.value:'eerlijk';
   var usageEl=document.getElementById('usageModeField');
   var usage=usageEl?usageEl.value:'multi';
   var boostPrefs={
@@ -6552,8 +6594,8 @@ async function saveSettings(){
     S.apiKey=k;
     localStorage.setItem('ds_ak',k);
   }
-  S.adviceTone=(t==='zacht'||t==='streng')?t:'eerlijk';
-  localStorage.setItem('ds_advice_tone',S.adviceTone);
+  S.adviceTone='eerlijk';
+  localStorage.removeItem('ds_advice_tone');
   setUsageMode(usage);
   if(usage!=='single')setFocusDossier('');
   if(usage==='single'){
@@ -8166,4 +8208,50 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var suggested=data.suggestedName||'';
   var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
   if(inputName===null)return;
-  var 
+  var base=String(inputName||'').trim();
+  if(!base){toast('Naam is leeg');return;}
+  var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  await _doOpslaan(sid,data.tekst,dossier);
+}
+
+async function _doOpslaan(sid,tekst,dossier){
+  var bar=document.getElementById(sid);
+  if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+  await ensureP(dossier);
+  var inserted=await saveMsg(dossier,'user',tekst);
+  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
+  pd.count=(pd.count||0)+1;
+  S.pdata[dossier]=pd;
+  await saveP(dossier,pd.props,pd.count,pd.categories);
+  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
+  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+  rDrawer();
+  if(sid&&window._saveData)delete window._saveData[sid];
+  return inserted;
+}
+
+// ══ Init ══════════════════════════════════════════════════════════
+// Event delegation: auto-save voor contact categorieën via data attributen
+document.addEventListener('input',function(e){
+  var ta=e.target;
+  if(!ta.classList.contains('own-ta'))return;
+  // Contact categorie textareas hebben id="cc-CATID-aN"
+  var m=ta.id.match(/^cc-(.+)-a\d+$/);
+  if(m){
+    var catId=m[1];
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
