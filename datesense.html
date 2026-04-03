@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:15">
+<meta name="ds-build" content="03-04-2026 21:22">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -8427,7 +8427,7 @@ async function sendMsg(){
 
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
-  var voorgesteldDossier=forcedDossier||S.vertelGesprekDossier||S.vertelFrom||null;
+  var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   if(!voorgesteldDossier){
     var contacts=getActiveContactNames();
     var bestM=null,bestC=0;
@@ -8517,14 +8517,13 @@ async function sendMsg(){
       if(!forcedDossier&&S.vertelSessionStickyDossier){
         var sticky=S.vertelSessionStickyDossier;
         var voorgesteldSticky=voorgesteldDossier;
+        // Sticky = expliciete keuze «Altijd in dit gesprek» — wint altijd tot «Ander» of nieuw gesprek.
         if(voorgesteldSticky&&voorgesteldSticky!==sticky){
-          S.vertelSessionStickyDossier=null;
-          toast('Onderwerp lijkt gewijzigd — kies opnieuw waar je opslaat.');
-        }else{
-          await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
-          addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span></div>');
-          didSticky=true;
+          toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
+        await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
+        addMsg('ai',formatAiCard(raw)+'<div class="coach-save-bar"><span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span></div>');
+        didSticky=true;
       }
       if(!didSticky){
         var saveId='sv'+Date.now();
@@ -8537,7 +8536,7 @@ async function sendMsg(){
         var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
           +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
           +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
-          +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="Voor dit gesprek niet meer vragen">Altijd dit gesprek</button>':'')
+          +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="In dit gesprek niet meer vragen waar je opslaat">Altijd in dit gesprek</button>':'')
           +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
           +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
           +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
@@ -9755,7 +9754,7 @@ async function opslaanInDossierSticky(sid){
   if(!data||!data.dossier)return;
   S.vertelSessionStickyDossier=data.dossier;
   await opslaanInDossier(sid);
-  toast('Oké — volgende berichten in dit gesprek gaan automatisch naar '+dn(data.dossier)+'.');
+  toast('Oké — in dit gesprek gaat alles automatisch naar '+dn(data.dossier)+'. Tik «Ander» om te wisselen.');
 }
 
 function kiesAnderDossier(sid){
