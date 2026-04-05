@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 17:34">
+<meta name="ds-build" content="03-04-2026 18:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -103,7 +103,10 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   border:1.5px solid var(--b);background:#fff;color:var(--t);
   touch-action:manipulation;-webkit-user-select:none;user-select:none;
 }
-.dossier-dock .dd-btn.dd-vertel{background:var(--r);border-color:var(--r);color:#fff;box-shadow:0 4px 14px rgba(174,0,0,.22)}
+.dossier-dock .dd-btn.dd-vertel{background:var(--r);border-color:var(--r);color:#fff;box-shadow:0 4px 14px rgba(174,0,0,.22);flex-direction:column;gap:1px;padding:7px 8px 8px}
+.dossier-dock .dd-btn.dd-vertel .dd-vertel-stack{display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.12;text-align:center}
+.dossier-dock .dd-btn.dd-vertel .dd-vertel-main{font-size:12px;font-weight:800}
+.dossier-dock .dd-btn.dd-vertel .dd-vertel-sub{font-size:9px;font-weight:700;opacity:.88;letter-spacing:.01em}
 .dossier-dock .dd-btn:active{opacity:.92;transform:translateY(1px)}
 
 .dossier-mc-btn{display:flex;flex-direction:column;align-items:flex-end;gap:1px;padding:2px 0 2px 10px;border:none;background:none;cursor:pointer;font-family:inherit;text-align:right;flex-shrink:0;max-width:46%}
@@ -396,6 +399,12 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 .planner-loading-steps{display:grid;gap:8px}
 .planner-loading-step{display:flex;align-items:center;gap:8px;font-size:13px;color:#6a5548;background:#FFF8F3;border:1px solid #F4E0D3;border-radius:10px;padding:8px 10px}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Inline spinner op opslaan-knoppen + sync-balk */
+.ds-save-busy-inner{display:inline-flex;align-items:center;justify-content:center;gap:8px;vertical-align:middle}
+.ds-inline-spin{width:15px;height:15px;border:2px solid rgba(174,0,0,.22);border-top-color:var(--r);border-radius:50%;animation:spin .72s linear infinite;flex-shrink:0;box-sizing:border-box;vertical-align:middle}
+.ds-inline-spin.on-dark{border-color:rgba(255,255,255,.35);border-top-color:#fff}
+.sync-bar.s{justify-content:center;gap:8px;min-height:22px}
+.sync-bar.s .ds-inline-spin{width:12px;height:12px;border-width:2px;border-color:rgba(174,0,0,.2);border-top-color:var(--r)}
 .planner-result-card{background:#fff;border:1px solid #F2D8D1;border-radius:16px;padding:14px 15px;box-shadow:0 6px 18px rgba(122,18,18,.05)}
 .planner-result-card.alt1{border-color:#F2D8D1;background:linear-gradient(180deg,#fff,#fff8f6)}
 .planner-result-card.alt2{border-color:#F4E5D2;background:linear-gradient(180deg,#fff,#fffaf5)}
@@ -854,9 +863,9 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 
   <!-- Dossier: vaste acties (Vertel + Advies) — geen dubbele knoppen in header -->
   <div id="dossierDock" class="dossier-dock" style="display:none" role="group" aria-label="Dossier acties">
-    <button type="button" class="dd-btn dd-vertel" onclick="if(S.viewDossier){S.vertelFrom=S.viewDossier;S.vertelGesprekDossier=S.viewDossier;goScreen('vertel');}">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-      Vertel
+    <button type="button" class="dd-btn dd-vertel" title="Opent het aparte Vertel-scherm (chat), niet de invulvakjes hierboven" onclick="if(S.viewDossier){S.vertelFrom=S.viewDossier;S.vertelGesprekDossier=S.viewDossier;goScreen('vertel');}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      <span class="dd-vertel-stack"><span class="dd-vertel-main">Vrij vertellen</span><span class="dd-vertel-sub">Vertel-tab · apart scherm</span></span>
     </button>
     <button type="button" class="dd-btn dd-advies" onclick="switchTab('advies')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -983,7 +992,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
     </div>
     <div class="profile-grid" id="profileModalFields"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn-r" style="padding:12px 10px" onclick="saveProfileMetaForm()">Opslaan</button>
+      <button type="button" class="btn-r" id="btnProfileMetaSave" style="padding:12px 10px" onclick="saveProfileMetaForm()">Opslaan</button>
       <button class="btn-g" style="padding:12px 10px" onclick="closeProfileModal()">Sluiten</button>
     </div>
   </div>
@@ -1282,7 +1291,60 @@ var _renderHealthBusy=false;
 var _segModalIdx=-1;
 
 // ══ Helpers ═════════════════════════════════════════════════════
-function sync(s){var e=document.getElementById('syncBar');if(!e)return;if(s==='s'){e.textContent='↑ Synchroniseren...';e.className='sync-bar s';}else if(s==='ok'){e.textContent='✓ Gesynchroniseerd';e.className='sync-bar ok';setTimeout(()=>{e.textContent='';e.className='sync-bar';},2000);}else if(s==='e'){e.textContent='✗ Opslaan mislukt';e.className='sync-bar err';setTimeout(()=>{e.textContent='';e.className='sync-bar';},4200);}else{e.textContent='';e.className='sync-bar';}}
+function dsSaveSpinnerHtml(onDark){
+  return '<span class="ds-inline-spin'+(onDark?' on-dark':'')+'" aria-hidden="true"></span>';
+}
+/** Toont draaiend bolletje + label op een knop tijdens opslaan. Herstelt innerHTML na afloop. */
+function setButtonSaveBusy(btn,busy,opts){
+  opts=opts||{};
+  if(!btn)return;
+  var label=String(opts.busyLabel!=null?opts.busyLabel:'Bezig met opslaan…');
+  var onDark=opts.spinnerOnDark;
+  if(onDark===undefined){
+    onDark=!!(btn.classList.contains('btn-r')
+      ||btn.classList.contains('coach-save-btn')
+      ||(btn.classList.contains('form-btn')&&!btn.classList.contains('sec')));
+  }
+  if(busy){
+    if(btn.getAttribute('data-ds-saving')==='1')return;
+    if(!btn.getAttribute('data-ds-rest-html'))btn.setAttribute('data-ds-rest-html',btn.innerHTML);
+    btn.setAttribute('data-ds-saving','1');
+    btn.disabled=true;
+    var op=opts.opacityBusy;
+    btn.style.opacity=(op!==undefined&&op!==null)?String(op):(onDark?'0.92':'0.88');
+    btn.innerHTML='<span class="ds-save-busy-inner">'+dsSaveSpinnerHtml(onDark)+'<span>'+label+'</span></span>';
+    btn.setAttribute('aria-busy','true');
+  }else{
+    btn.removeAttribute('data-ds-saving');
+    var h=btn.getAttribute('data-ds-rest-html');
+    if(h!=null){btn.innerHTML=h;btn.removeAttribute('data-ds-rest-html');}
+    btn.disabled=false;
+    btn.style.opacity='';
+    btn.removeAttribute('aria-busy');
+  }
+}
+function sync(s){
+  var e=document.getElementById('syncBar');
+  if(!e)return;
+  if(s==='s'){
+    e.className='sync-bar s';
+    e.innerHTML='<span class="ds-save-busy-inner"><span class="ds-inline-spin" aria-hidden="true"></span><span>Synchroniseren…</span></span>';
+  }else if(s==='ok'){
+    e.innerHTML='';
+    e.textContent='✓ Gesynchroniseerd';
+    e.className='sync-bar ok';
+    setTimeout(function(){e.textContent='';e.className='sync-bar';},2000);
+  }else if(s==='e'){
+    e.innerHTML='';
+    e.textContent='✗ Opslaan mislukt';
+    e.className='sync-bar err';
+    setTimeout(function(){e.textContent='';e.className='sync-bar';},4200);
+  }else{
+    e.innerHTML='';
+    e.textContent='';
+    e.className='sync-bar';
+  }
+}
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
 
@@ -1558,7 +1620,7 @@ function getQuickHelpStepsForScreen(screen){
     return[
       {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Foto, Profiel en Advies.'},
       {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
-      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan vind je Vertel en Advies — vaste plek, minder verwarring.'}
+      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan: Vrij vertellen (Vertel-tab) en Advies. Dat is iets anders dan «Dikteer dit vak» bij een invulveld.'}
     ];
   }
   return[
@@ -1768,6 +1830,46 @@ function updateProfileAgePreview(){
   if(!bd||!ageEl)return;
   var age=calcAgeFromBirthdate(bd.value);
   ageEl.value=age||'';
+  updateProfileModalCompletionLive();
+}
+function readProfileFormDraftValues(){
+  function v(id){var e=document.getElementById(id);return e?String(e.value||'').trim():'';}
+  return{birthdate:v('pf_birthdate'),city:v('pf_city'),country:v('pf_country'),intent:v('pf_intent')};
+}
+function updateProfileModalCompletionLive(){
+  var box=document.getElementById('profileModalCompletionLive');
+  if(!box)return;
+  var d=readProfileFormDraftValues();
+  var keys=['birthdate','city','country','intent'];
+  var labels={birthdate:'geboortedatum',city:'regio / woonplaats',country:'land',intent:'intentie'};
+  var missing=keys.filter(function(k){return!String(d[k]||'').trim();}).map(function(k){return labels[k];});
+  var photo=!!String(getMetaFor(_profileModalFor).photo_url||'').trim();
+  var complete=!missing.length;
+  if(complete){
+    box.style.borderColor='#C8E6C9';
+    box.style.background='#F1FBF3';
+    box.innerHTML='<div style="font-size:13px;font-weight:700;color:#1B5E20">✓ Alle basisvelden in dit formulier zijn ingevuld</div>'
+      +'<div style="margin-top:6px;font-size:12px;color:#3d5a45;line-height:1.45">'
+      +(photo
+        ?'Profielfoto: ingesteld.'
+        :'<span style="color:#8a6d3b">Optioneel: voeg een profielfoto toe via «Foto kiezen» — handig voor visuele context.</span>')
+      +'</div><div style="margin-top:4px;font-size:11px;color:#6e747d">Tik «Opslaan» om dit definitief te bewaren.</div>';
+  }else{
+    box.style.borderColor='#F0D4D4';
+    box.style.background='#FFFBFB';
+    box.innerHTML='<div style="font-size:13px;color:#7A2A2A;line-height:1.5"><strong>Nog '+missing.length+' verplicht veld'+(missing.length>1?'en':'')+':</strong> '+missing.map(escHTML).join(', ')+'</div>'
+      +'<div style="margin-top:6px;font-size:12px;color:#666">Dit werkt live tijdens het typen. Ontbreekt er iets in de lijst, dan telt het nog niet mee tot je op Opslaan drukt.</div>';
+  }
+}
+function ensureProfileModalLiveListeners(){
+  var modal=document.getElementById('profileModal');
+  if(!modal||modal._pfLiveBound)return;
+  modal._pfLiveBound=true;
+  function tick(e){
+    if(e&&e.target&&e.target.id&&String(e.target.id).indexOf('pf_')===0)updateProfileModalCompletionLive();
+  }
+  modal.addEventListener('input',tick);
+  modal.addEventListener('change',tick);
 }
 function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
   return '<input class="profile-field'+(isFull?' full':'')+'" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'" '+(extraAttrs||'')+'>';
@@ -1775,7 +1877,7 @@ function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
 function renderTextareaVoiceRow(id,placeholder,value,oninput){
   return '<div class="own-ta-voice-row">'
     +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="3" oninput="'+oninput+'">'+value+'</textarea>'
-    +'<button type="button" class="coach-save-other ptt-dictation-btn" style="font-size:12px;padding:8px 10px;white-space:nowrap" title="Houd ingedrukt om te spreken, laat los om te stoppen" onpointerdown="pttMicPointerDown(event,\''+id+'\')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)">🎤 Spreek</button>'
+    +'<button type="button" class="coach-save-other ptt-dictation-btn" style="font-size:12px;padding:8px 10px;white-space:nowrap;max-width:100%" title="Houd ingedrukt: spraak komt in dit ene veld. Loslaten = stoppen. (Niet hetzelfde als «Vrij vertellen» onderaan.)" onpointerdown="pttMicPointerDown(event,\''+id+'\')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)">Dikteer dit vak</button>'
     +'</div>';
 }
 
@@ -2060,10 +2162,8 @@ function renderOwnAvatar(){
 function getProfileMetaCompletion(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
-  // Dossiernaam is vast; enkel echte profielvelden tellen mee.
-  var keys=name==='OWN Sense'
-    ?['birthdate','city','intent','photo_url']
-    :['birthdate','intent','photo_url'];
+  // Zelfde kernvelden voor OWN en contact: geboorte, regio, land, intentie. Foto = apart (foto-tab), niet verplicht voor dit vinkje.
+  var keys=['birthdate','city','country','intent'];
   var filled=keys.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
   return{filled:filled,total:keys.length,complete:filled===keys.length};
 }
@@ -2944,14 +3044,14 @@ async function doLogin(){
   }
 
   var btn=document.getElementById('lLoginBtn');
-  if(btn){btn.disabled=true;btn.style.opacity=.65;}
+  setButtonSaveBusy(btn,true,{busyLabel:'Inloggen…'});
 
   if(err){err.textContent='Even wachten...';err.style.color='#888';}
 
   var uiTimer=setTimeout(function(){
     if(token!==_loginAttemptId)return;
     _loginInFlight=false;
-    if(btn){btn.disabled=false;btn.style.opacity='';}
+    setButtonSaveBusy(btn,false);
     var e2=document.getElementById('lErr')||err;
     if(e2){
       e2.style.color='var(--r)';
@@ -2987,7 +3087,7 @@ async function doLogin(){
     clearTimeout(uiTimer);
     if(token===_loginAttemptId){
       _loginInFlight=false;
-      if(btn){btn.disabled=false;btn.style.opacity='';}
+      setButtonSaveBusy(btn,false);
     }
   }
 }
@@ -3039,7 +3139,7 @@ async function doRegister(){
   if(!e||!p||!p2){err.style.color='var(--r)';err.textContent='Vul email, wachtwoord en herhaal wachtwoord in.';return;}
   if(p.length<6){err.style.color='var(--r)';err.textContent='Wachtwoord moet minstens 6 tekens hebben.';return;}
   if(p!==p2){err.style.color='var(--r)';err.textContent='Wachtwoorden komen niet overeen.';return;}
-  if(btn){btn.disabled=true;btn.style.opacity=.65;}
+  setButtonSaveBusy(btn,true,{busyLabel:'Account aanmaken…'});
   err.textContent='Account wordt aangemaakt...';err.style.color='#888';
   try{
     await sb.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl()}});
@@ -3052,7 +3152,7 @@ async function doRegister(){
     err.style.color='var(--r)';
     err.textContent=msg;
   }finally{
-    if(btn){btn.disabled=false;btn.style.opacity='';}
+    setButtonSaveBusy(btn,false);
   }
 }
 
@@ -3702,8 +3802,11 @@ function openProfileModal(name){
     +(isOwnProf?(renderProfileField('pf_address','Adres (straat + nr)',escA(meta.address),true)
       +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
     +renderProfileField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
-    +(isOwnProf?(renderProfileField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'');
+    +(isOwnProf?(renderProfileField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'')
+    +'<div id="profileModalCompletionLive" style="margin-top:12px;padding:10px 12px;border:1px solid var(--b);border-radius:10px;line-height:1.45" role="status" aria-live="polite"></div>';
+  ensureProfileModalLiveListeners();
   updateProfileAgePreview();
+  updateProfileModalCompletionLive();
   modal.classList.add('show');
 }
 
@@ -3890,6 +3993,7 @@ async function handleProfilePhotoInput(input){
     if(av)av.src=url;
     if(status)status.textContent='Foto toegevoegd';
     toast('✅ Foto opgeslagen');
+    updateProfileModalCompletionLive();
   }catch(e){
     console.warn('handleProfilePhotoInput error:',e);
     if(status)status.textContent='Upload mislukt';
@@ -3902,32 +4006,41 @@ async function handleProfilePhotoInput(input){
 }
 
 async function saveProfileMetaForm(){
-  var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
-  d.meta=d.meta||{};
-  var isOwnProf=_profileModalFor==='OWN Sense';
-  function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
-  d.meta.birthdate=v('pf_birthdate');
-  d.meta.age=calcAgeFromBirthdate(d.meta.birthdate);
-  d.meta.city=v('pf_city');
-  d.meta.country=v('pf_country');
-  d.meta.intent=v('pf_intent');
-  if(isOwnProf){
-    d.meta.address=v('pf_address');
-    d.meta.postal_code=v('pf_postal');
-    d.meta.billing_pref=v('pf_billing_pref');
-  }else{
-    delete d.meta.address;
-    delete d.meta.postal_code;
-    delete d.meta.billing_pref;
+  var btn=document.getElementById('btnProfileMetaSave');
+  setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
+  try{
+    var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
+    d.meta=d.meta||{};
+    var isOwnProf=_profileModalFor==='OWN Sense';
+    function v(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+    d.meta.birthdate=v('pf_birthdate');
+    d.meta.age=calcAgeFromBirthdate(d.meta.birthdate);
+    d.meta.city=v('pf_city');
+    d.meta.country=v('pf_country');
+    d.meta.intent=v('pf_intent');
+    if(isOwnProf){
+      d.meta.address=v('pf_address');
+      d.meta.postal_code=v('pf_postal');
+      d.meta.billing_pref=v('pf_billing_pref');
+    }else{
+      delete d.meta.address;
+      delete d.meta.postal_code;
+      delete d.meta.billing_pref;
+    }
+    S.pdata[_profileModalFor]=d;
+    await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
+    closeProfileModal();
+    if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
+    else if(S.screen==='own'&&_profileModalFor==='OWN Sense')goScreen('own');
+    else renderOwnAvatar();
+    updateNavTabIndicators();
+    toast('✅ Profielgegevens opgeslagen');
+  }catch(e){
+    console.error('saveProfileMetaForm',e);
+    toast(e&&e.message?e.message:'Profiel opslaan mislukt.');
+  }finally{
+    setButtonSaveBusy(btn,false);
   }
-  S.pdata[_profileModalFor]=d;
-  await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
-  closeProfileModal();
-  if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
-  else if(S.screen==='own'&&_profileModalFor==='OWN Sense')goScreen('own');
-  else renderOwnAvatar();
-  updateNavTabIndicators();
-  toast('✅ Profielgegevens opgeslagen');
 }
 
 async function newSenseFromDrawer(){
@@ -6127,11 +6240,13 @@ function rPlanner(el){
       +'</div>';
   }
   var plannerGenBtnLabel='Genereer plan';
-  if(p.loading)plannerGenBtnLabel='Even wachten...';
-  else{
+  if(!p.loading){
     var plannerRes=String(p.result||'').trim();
     if(plannerRes&&plannerRes.indexOf('Te weinig input')!==0)plannerGenBtnLabel='Opnieuw genereren';
   }
+  var plannerGenBtnInner=p.loading
+    ?'<span class="ds-save-busy-inner"><span class="ds-inline-spin on-dark" aria-hidden="true"></span><span>Even wachten…</span></span>'
+    :plannerGenBtnLabel;
   el.innerHTML='<div class="planner-shell">'
     +'<div class="planner-hero"><div class="ai-sec" style="padding:0"><div class="ai-sec-title"><span>Plan iets leuks</span></div><p class="ai-sec-text" style="margin-bottom:6px">DateSense houdt rekening met het gekozen dossier, de fase en de context. Elise en Pascale krijgen dus niet zomaar hetzelfde voorstel.</p><div class="planner-status">Vul minstens 2 richtingen in om te plannen. Voorbeeld: <strong>wandeling + romantisch</strong> of <strong>Antwerpen + betaalbaar</strong>.</div></div></div>'
     +plannerField('plannerDossierWrap','Voor welk dossier?',dossierSelect)
@@ -6147,7 +6262,7 @@ function rPlanner(el){
     +plannerField('plannerFocusWrap','Wat wil je dat het moment oplevert?',plannerSelect('plannerFocus',answers.focus||'',plannerFocusOptions(),'Kies focus')+'<div class="planner-sub">Dit gaat over effect: verbinden, speelsheid, dieper gesprek...</div>')
     +'</div>'
     +'<div class="planner-actions">'
-    +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+plannerGenBtnLabel+'</button>'
+    +'<button type="button" class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()"'+(p.loading?' disabled':'')+'>'+plannerGenBtnInner+'</button>'
     +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+escJsStr(name)+'\')">Terug naar dossier</button>':'')
     +'</div>'
     +resultHtml
@@ -7666,145 +7781,139 @@ function toggleCat(catId){
 }
 
 async function saveOwnCat(catId,silent){
-  var btn=document.getElementById('oc-save-'+catId);
-  if(btn){btn.disabled=true;btn.textContent='Bezig...';}
   var cat=OWN_CATS.find(c=>c.id===catId);
   if(!cat)return;
-
-  // Verzamel antwoorden
-  var answers={};
-  var antwoordTeksten=[];
-  cat.prompts.forEach((p,i)=>{
-    var ta=document.getElementById('oc-'+catId+'-a'+i);
-    var val=(ta?.value||'').trim();
-    answers['a'+i]=val;
-    if(val)antwoordTeksten.push(`${p.q}: ${val}`);
-  });
-
-  // Sla antwoorden op in state en Supabase
-  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
-  if(!d.categories)d.categories={};
-  d.meta=d.meta||{};
-  var prevProps={...d.props};
-  var prevCat={...(d.categories[catId]||{})};
-  d.categories[catId]=answers;
-  if(!d.meta.field_updates)d.meta.field_updates={};
-  if(!d.meta.field_updates.own)d.meta.field_updates.own={};
-  if(!d.meta.field_updates.own[catId])d.meta.field_updates.own[catId]={};
-  var nowIso=new Date().toISOString();
-  cat.prompts.forEach(function(_,i){
-    var aKey='a'+i;
-    if((prevCat[aKey]||'')!==(answers[aKey]||'')){
-      d.meta.field_updates.own[catId][aKey]=nowIso;
-      var fieldUpdEl=document.getElementById('oc-field-upd-'+catId+'-'+aKey);
-      if(fieldUpdEl)fieldUpdEl.textContent='· Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
-    }
-  });
-  var catUpdEl=document.getElementById('oc-cat-upd-'+catId);
-  if(catUpdEl)catUpdEl.textContent='Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
-
-  // Vraag AI om eigenschappen te updaten op basis van ALLE categorieën
-  var allCatText='';
-  OWN_CATS.forEach(c=>{
-    var cData=d.categories[c.id]||{};
-    c.prompts.forEach((p,i)=>{
-      var a=(cData['a'+i]||'').trim();
-      if(a)allCatText+=`${p.q}: ${a}\n`;
-    });
-  });
-
-  // Als er niks ingevuld is, sla gewoon op zonder AI
-  if(!allCatText.trim()){
-    S.pdata['OWN Sense']=d;
-    try{
-      await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-      showAutoSaveIndicator(catId,true);
-    }catch(e){
-      console.error('saveOwnCat',e);
-      toast('Kon niet opslaan. Controleer verbinding.');
-      showAutoSaveIndicator(catId,false);
-    }
-    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-    return;
-  }
-  if(!S.apiKey){
-    S.pdata['OWN Sense']=d;
-    try{
-      await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-      showAutoSaveIndicator(catId,true);
-      toast('Opgeslagen. Voeg een API key toe om eigenschappen ook automatisch te laten herberekenen.');
-    }catch(e){
-      console.error('saveOwnCat',e);
-      toast('Kon niet opslaan. Controleer verbinding.');
-      showAutoSaveIndicator(catId,false);
-    }
-    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-    return;
-  }
+  var btn=document.getElementById('oc-save-'+catId);
+  setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
   try{
-    var sys='Je bent DateSensei. Analyseer de OWN Sense profieltekst en bepaal de 9 eigenschapspercentages.'
-      +' Geef ENKEL geldig JSON (geen markdown, geen uitleg):'
-      +' {"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X,"stabiliteit":X,"vertrouwen":X,"communicatie":X,"onafhankelijkheid":X}'
-      +' Elk getal 0-100. stabiliteit=emotionele stabiliteit, vertrouwen=betrouwbaarheid, communicatie=openheid, onafhankelijkheid=zelfstandigheid.';
-    var raw=await callAPI(sys,[{role:'user',content:allCatText||'Geen data.'}],400);
-    var clean=raw.replace(/```json|```/g,'').trim();
-    var updates=JSON.parse(clean);
-    PK.forEach(k=>{
-      if(updates[k]!==undefined&&updates[k]!==null){
-        var v=Math.min(100,Math.max(0,parseInt(updates[k])));
-        if(!isNaN(v))d.props[k]=v;
+    // Verzamel antwoorden
+    var answers={};
+    var antwoordTeksten=[];
+    cat.prompts.forEach((p,i)=>{
+      var ta=document.getElementById('oc-'+catId+'-a'+i);
+      var val=(ta?.value||'').trim();
+      answers['a'+i]=val;
+      if(val)antwoordTeksten.push(`${p.q}: ${val}`);
+    });
+
+    // Sla antwoorden op in state en Supabase
+    var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
+    if(!d.categories)d.categories={};
+    d.meta=d.meta||{};
+    var prevProps={...d.props};
+    var prevCat={...(d.categories[catId]||{})};
+    d.categories[catId]=answers;
+    if(!d.meta.field_updates)d.meta.field_updates={};
+    if(!d.meta.field_updates.own)d.meta.field_updates.own={};
+    if(!d.meta.field_updates.own[catId])d.meta.field_updates.own[catId]={};
+    var nowIso=new Date().toISOString();
+    cat.prompts.forEach(function(_,i){
+      var aKey='a'+i;
+      if((prevCat[aKey]||'')!==(answers[aKey]||'')){
+        d.meta.field_updates.own[catId][aKey]=nowIso;
+        var fieldUpdEl=document.getElementById('oc-field-upd-'+catId+'-'+aKey);
+        if(fieldUpdEl)fieldUpdEl.textContent='· Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
       }
     });
-  }catch(x){
-    console.error('saveOwnCat AI error:',x.message,x);
-    // Sla toch op ook al mislukte AI
+    var catUpdEl=document.getElementById('oc-cat-upd-'+catId);
+    if(catUpdEl)catUpdEl.textContent='Laatst bijgewerkt: '+fmtPropUpdate(nowIso);
+
+    // Vraag AI om eigenschappen te updaten op basis van ALLE categorieën
+    var allCatText='';
+    OWN_CATS.forEach(c=>{
+      var cData=d.categories[c.id]||{};
+      c.prompts.forEach((p,i)=>{
+        var a=(cData['a'+i]||'').trim();
+        if(a)allCatText+=`${p.q}: ${a}\n`;
+      });
+    });
+
+    // Als er niks ingevuld is, sla gewoon op zonder AI
+    if(!allCatText.trim()){
+      S.pdata['OWN Sense']=d;
+      try{
+        await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+        showAutoSaveIndicator(catId,true);
+      }catch(e){
+        console.error('saveOwnCat',e);
+        toast('Kon niet opslaan. Controleer verbinding.');
+        showAutoSaveIndicator(catId,false);
+      }
+      return;
+    }
+    if(!S.apiKey){
+      S.pdata['OWN Sense']=d;
+      try{
+        await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+        showAutoSaveIndicator(catId,true);
+        toast('Opgeslagen. Voeg een API key toe om eigenschappen ook automatisch te laten herberekenen.');
+      }catch(e){
+        console.error('saveOwnCat',e);
+        toast('Kon niet opslaan. Controleer verbinding.');
+        showAutoSaveIndicator(catId,false);
+      }
+      return;
+    }
+    try{
+      var sys='Je bent DateSensei. Analyseer de OWN Sense profieltekst en bepaal de 9 eigenschapspercentages.'
+        +' Geef ENKEL geldig JSON (geen markdown, geen uitleg):'
+        +' {"gevoeligheid":X,"openheid":X,"humor":X,"directheid":X,"avontuur":X,"stabiliteit":X,"vertrouwen":X,"communicatie":X,"onafhankelijkheid":X}'
+        +' Elk getal 0-100. stabiliteit=emotionele stabiliteit, vertrouwen=betrouwbaarheid, communicatie=openheid, onafhankelijkheid=zelfstandigheid.';
+      var raw=await callAPI(sys,[{role:'user',content:allCatText||'Geen data.'}],400);
+      var clean=raw.replace(/```json|```/g,'').trim();
+      var updates=JSON.parse(clean);
+      PK.forEach(k=>{
+        if(updates[k]!==undefined&&updates[k]!==null){
+          var v=Math.min(100,Math.max(0,parseInt(updates[k])));
+          if(!isNaN(v))d.props[k]=v;
+        }
+      });
+    }catch(x){
+      console.error('saveOwnCat AI error:',x.message,x);
+      S.pdata['OWN Sense']=d;
+      try{
+        await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+        showAutoSaveIndicator(catId,true);
+      }catch(e2){
+        console.error('saveOwnCat persist after AI fail',e2);
+        toast('Tekst niet opgeslagen. Controleer verbinding.');
+        showAutoSaveIndicator(catId,false);
+      }
+      return;
+    }
+
+    d.count=(d.count||0);
+    d.meta=touchPropUpdates(d.meta,prevProps,d.props);
     S.pdata['OWN Sense']=d;
     try{
       await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-      showAutoSaveIndicator(catId,true);
-    }catch(e2){
-      console.error('saveOwnCat persist after AI fail',e2);
-      toast('Tekst niet opgeslagen. Controleer verbinding.');
+    }catch(e){
+      console.error('saveOwnCat',e);
+      toast('Kon profiel niet opslaan. Controleer verbinding.');
       showAutoSaveIndicator(catId,false);
+      return;
     }
-    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-    return;
-  }
 
-  d.count=(d.count||0);
-  d.meta=touchPropUpdates(d.meta,prevProps,d.props);
-  S.pdata['OWN Sense']=d;
-  try{
-    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
-  }catch(e){
-    console.error('saveOwnCat',e);
-    toast('Kon profiel niet opslaan. Controleer verbinding.');
-    showAutoSaveIndicator(catId,false);
-    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-    return;
-  }
+    var savedEl=document.getElementById('oc-saved-'+catId);
+    if(savedEl){savedEl.style.display='block';setTimeout(()=>{if(savedEl)savedEl.style.display='none';},3000);}
 
-  if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> Opslaan & eigenschappen updaten';}
-  var savedEl=document.getElementById('oc-saved-'+catId);
-  if(savedEl){savedEl.style.display='block';setTimeout(()=>{if(savedEl)savedEl.style.display='none';},3000);}
+    var cat2=document.getElementById('oc-'+catId);
+    if(cat2){
+      var filled=Object.values(answers).filter(v=>v.trim().length>0).length;
+      var total=cat.prompts.length;
+      var progEl=cat2.querySelector('.own-cat-prog');
+      if(progEl){progEl.textContent=`${filled}/${total} vragen beantwoord${filled===total?' ✓':''}`;progEl.className='own-cat-prog'+(filled===total?' done':'');}
+      if(filled>0)cat2.classList.add('filled');
+    }
 
-  // Update progress teller in header
-  var cat2=document.getElementById('oc-'+catId);
-  if(cat2){
-    var filled=Object.values(answers).filter(v=>v.trim().length>0).length;
-    var total=cat.prompts.length;
-    var progEl=cat2.querySelector('.own-cat-prog');
-    if(progEl){progEl.textContent=`${filled}/${total} vragen beantwoord${filled===total?' ✓':''}`;progEl.className='own-cat-prog'+(filled===total?' done':'');}
-    if(filled>0)cat2.classList.add('filled');
-  }
-
-  // Toon indicator — NOOIT de pagina herladen (accordion blijft open)
-  showAutoSaveIndicator(catId,true);
-  // Update alleen de eigenschapsbalkjes in-place
-  var propsEl=document.getElementById('own-props-bars');
-  if(propsEl){
-    var ownData=S.pdata['OWN Sense']||{props:{...DP},meta:{}};
-    propsEl.innerHTML=renderProps(ownData.props||{...DP},true,{propUpdates:(ownData.meta&&ownData.meta.prop_updates)||{}});
+    showAutoSaveIndicator(catId,true);
+    var propsEl=document.getElementById('own-props-bars');
+    if(propsEl){
+      var ownData=S.pdata['OWN Sense']||{props:{...DP},meta:{}};
+      propsEl.innerHTML=renderProps(ownData.props||{...DP},true,{propUpdates:(ownData.meta&&ownData.meta.prop_updates)||{}});
+    }
+  }finally{
+    setButtonSaveBusy(btn,false);
   }
 }
 
@@ -7945,7 +8054,7 @@ function rPromptCenter(el){
     +'<div style="font-size:12px;color:'+(isCustom?'#A55B00':'#2E7D32')+';margin:-2px 0 10px">'+(isCustom?'Actieve versie: aangepast':'Actieve versie: standaard')+'</div>'
     +'<textarea id="promptCenterText" class="form-input" style="min-height:280px;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45">'+escA(txt)+'</textarea>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-    +'<button class="btn-r" style="max-width:180px;padding:9px 12px" onclick="savePromptCenterCurrent()">Opslaan</button>'
+    +'<button type="button" class="btn-r" id="btnPromptCenterSave" style="max-width:180px;padding:9px 12px" onclick="savePromptCenterCurrent()">Opslaan</button>'
     +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="resetPromptCenterCurrent()">Reset standaard</button>'
     +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="copyPromptCenterCurrent()">Kopieer prompt</button>'
     +'</div></div></div>';
@@ -7960,8 +8069,14 @@ function savePromptCenterCurrent(){
   if(!ta){toast('Prompt veld niet gevonden.');return;}
   var v=String(ta.value||'').trim();
   if(v.length<60){toast('Prompt is te kort.');return;}
-  setPromptText(_promptCenterKey,v);
-  toast('✅ Prompt opgeslagen');
+  var btn=document.getElementById('btnPromptCenterSave');
+  setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
+  try{
+    setPromptText(_promptCenterKey,v);
+    toast('✅ Prompt opgeslagen');
+  }finally{
+    setButtonSaveBusy(btn,false);
+  }
 }
 function resetPromptCenterCurrent(){
   if(!isAdminUser())return;
@@ -8041,7 +8156,7 @@ function rSettings(el){
     <span style="font-size:11px;color:#8a8f97;align-self:center;line-height:1.4">Alle andere contactdossiers gaan automatisch op on hold (OWN Sense blijft actief).</span>
   </div>
 </div>
-<button class="form-btn" onclick="saveSettings()">Opslaan instellingen</button>
+<button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>
 ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-radius:12px;font-size:15px;color:#2E7D32">✅ API key actief!</div>':''}
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
@@ -8126,34 +8241,40 @@ function settingsAction(action){
 }
 
 async function saveSettings(){
-  var kEl=document.getElementById('akField');
-  var k=kEl?kEl.value.trim():'';
-  var usageEl=document.getElementById('usageModeField');
-  var usage=usageEl?usageEl.value:'multi';
-  var boostPrefs={
-    region:(document.getElementById('focusBoostRegionField')||{}).value||'',
-    budget:(document.getElementById('focusBoostBudgetField')||{}).value||'',
-    style:(document.getElementById('focusBoostStyleField')||{}).value||'',
-    time:(document.getElementById('focusBoostTimeField')||{}).value||''
-  };
-  if(k){
-    S.apiKey=k;
-    localStorage.setItem('ds_ak',k);
+  var btn=document.getElementById('btnSaveSettings');
+  setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
+  try{
+    var kEl=document.getElementById('akField');
+    var k=kEl?kEl.value.trim():'';
+    var usageEl=document.getElementById('usageModeField');
+    var usage=usageEl?usageEl.value:'multi';
+    var boostPrefs={
+      region:(document.getElementById('focusBoostRegionField')||{}).value||'',
+      budget:(document.getElementById('focusBoostBudgetField')||{}).value||'',
+      style:(document.getElementById('focusBoostStyleField')||{}).value||'',
+      time:(document.getElementById('focusBoostTimeField')||{}).value||''
+    };
+    if(k){
+      S.apiKey=k;
+      localStorage.setItem('ds_ak',k);
+    }
+    S.adviceTone='eerlijk';
+    localStorage.removeItem('ds_advice_tone');
+    setUsageMode(usage);
+    if(usage!=='single')setFocusDossier('');
+    if(usage==='single'){
+      var fd=document.getElementById('focusDossierField');
+      var fName=fd?fd.value:'';
+      if(fName)setFocusDossier(fName);
+      setFocusRelationType(stageRelationTypeValue(getDossierStage(fName)));
+      setBoostPrefs(boostPrefs);
+      try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
+    }
+    toast('✅ Instellingen opgeslagen');
+    goScreen('home');
+  }finally{
+    setButtonSaveBusy(btn,false);
   }
-  S.adviceTone='eerlijk';
-  localStorage.removeItem('ds_advice_tone');
-  setUsageMode(usage);
-  if(usage!=='single')setFocusDossier('');
-  if(usage==='single'){
-    var fd=document.getElementById('focusDossierField');
-    var fName=fd?fd.value:'';
-    if(fName)setFocusDossier(fName);
-    setFocusRelationType(stageRelationTypeValue(getDossierStage(fName)));
-    setBoostPrefs(boostPrefs);
-    try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
-  }
-  toast('✅ Instellingen opgeslagen');
-  goScreen('home');
 }
 async function activateRelationshipFocusFromSettings(){
   var fd=document.getElementById('focusDossierField');
@@ -8436,19 +8557,7 @@ function ownSenseCellLabel(catId,ak){
 }
 
 function setAiImportSaveButtonBusy(busy){
-  var b=document.getElementById('aiImportSaveBtn');
-  if(!b)return;
-  b.disabled=!!busy;
-  b.style.opacity=busy?'0.72':'';
-  if(busy){
-    if(!b.getAttribute('data-orig-lbl'))b.setAttribute('data-orig-lbl',b.textContent);
-    b.textContent='Bezig met opslaan…';
-  }else{
-    var ol=b.getAttribute('data-orig-lbl');
-    if(ol){b.textContent=ol;b.removeAttribute('data-orig-lbl');}
-    b.disabled=false;
-    b.style.opacity='';
-  }
+  setButtonSaveBusy(document.getElementById('aiImportSaveBtn'),busy,{busyLabel:'Bezig met opslaan…'});
 }
 
 function runAiImportSaveClick(ev){
@@ -8955,6 +9064,7 @@ function buildProfileMetaPreviewRows(name,d){
   var age=calcAgeFromBirthdate(m.birthdate)||String(m.age||'').trim();
   if(String(m.birthdate||'').trim()||age)rows.push({k:'Geboortedatum / leeftijd',v:(String(m.birthdate||'').trim()||'')+(age?' (ca. '+age+' jaar)':'')});
   if(name==='OWN Sense'&&String(m.city||'').trim())rows.push({k:'Woonplaats',v:String(m.city).trim()});
+  if(String(m.country||'').trim())rows.push({k:'Land',v:String(m.country).trim()});
   if(String(m.intent||'').trim())rows.push({k:'Intentie',v:String(m.intent).trim()});
   if(String(m.photo_url||'').trim())rows.push({k:'Profielfoto',v:'ingesteld'});
   else rows.push({k:'Profielfoto',v:'nog niet toegevoegd'});
@@ -8973,7 +9083,7 @@ function buildProfileMetaAccordionHtml(name,d){
   html+='<div class="own-cat-icon">👤</div>';
   html+='<div class="own-cat-info">';
   html+='<div class="own-cat-title">Profielgegevens</div>';
-  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">Invulvragen · zelfde gegevens als dit tabblad</div>';
+  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">Geboorte, regio, land en intentie (foto apart via Foto-tab)</div>';
   html+='<div class="own-cat-prog '+(metaC.complete?'done':'')+'">'+metaC.filled+'/'+metaC.total+' basisvelden'+(metaC.complete?' ✓':'')+'</div>';
   html+='</div>';
   if(metaC.complete)html+='<span class="own-meta-check" title="Basisvelden ingevuld" aria-label="Compleet">✓</span>';
@@ -9002,7 +9112,8 @@ function buildProfielOwnHtml(d){
   }
   html+=buildInvulvragenStripHtml('OWN Sense');
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Jouw invulvakken</div>';
-  html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:10px;line-height:1.5">Werk je profiel verder af. Deze input stuurt je eigenschappen en advies.</div>';
+  html+='<div style="font-size:12px;color:#5c6470;margin-bottom:14px;line-height:1.45;padding:8px 10px;background:#f4f6f8;border-radius:10px;border:1px solid #e8eaed"><strong>Zo werkt het:</strong> <strong>Dikteer dit vak</strong> vult alleen het veld erboven. De rode knop onderaan <strong>Vrij vertellen</strong> opent de aparte Vertel-chat.</div>';
   OWN_CATS.forEach(function(cat){
     var catData=cats[cat.id]||{};
     var filled=cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
@@ -9073,7 +9184,8 @@ function buildProfielContactHtml(name,d){
   html+=buildProfileMetaAccordionHtml(name,d);
   html+=buildInvulvragenStripHtml(name);
   html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
-  html+='<div style="font-size:13px;color:var(--m);margin-bottom:12px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:10px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
+  html+='<div style="font-size:12px;color:#5c6470;margin-bottom:14px;line-height:1.45;padding:8px 10px;background:#f4f6f8;border-radius:10px;border:1px solid #e8eaed"><strong>Zo werkt het:</strong> <strong>Dikteer dit vak</strong> = dit veld. Onderaan <strong>Vrij vertellen</strong> = aparte Vertel-chat over dit dossier.</div>';
   var firstContactOpenSet=!metaCC.complete;
   CONTACT_CATS.forEach(function(cat){
     var prog=contactCatProgress(cat.id);
@@ -10031,7 +10143,7 @@ function startMic(){
   if(!_pttHeld){
     toast(_micTextTarget==='msgInput'
       ?'🎤 Luisteren… (klassieke modus: tik opnieuw op de micro om te stoppen)'
-      :'🎤 Luisteren… (tik opnieuw op Spreek om te stoppen)');
+      :'🎤 Luisteren… (tik opnieuw op «Dikteer dit vak» om te stoppen)');
   }
 }
 
@@ -10779,15 +10891,25 @@ async function opslaanInDossier(sid){
   if(!data)return;
   var dossier=data.dossier;
   if(!dossier){kiesAnderDossier(sid);return;}
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  try{
+    await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  }catch(e){
+    console.error('opslaanInDossier',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
 }
 
 async function opslaanInDossierSticky(sid){
   var data=window._saveData&&window._saveData[sid];
   if(!data||!data.dossier)return;
-  S.vertelSessionStickyDossier=data.dossier;
-  await opslaanInDossier(sid);
-  toast('Oké — in dit gesprek gaat alles automatisch naar '+dn(data.dossier)+'. Tik «Ander» om te wisselen.');
+  try{
+    await _doOpslaan(sid,data.tekst,data.dossier,data.sessionUserMsgId);
+    S.vertelSessionStickyDossier=data.dossier;
+    toast('Oké — in dit gesprek gaat alles automatisch naar '+dn(data.dossier)+'. Tik «Ander» om te wisselen.');
+  }catch(e){
+    console.error('opslaanInDossierSticky',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
 }
 
 function kiesAnderDossier(sid){
@@ -10806,7 +10928,12 @@ async function _opslaanKeuze(dossier){
   var sid=window._saveKiesSid;
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  try{
+    await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  }catch(e){
+    console.error('_opslaanKeuze',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
 }
 
 async function maakNieuwDossierEnOpslaan(sid,useSuggested){
@@ -10819,34 +10946,52 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
-  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  try{
+    await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+  }catch(e){
+    console.error('maakNieuwDossierEnOpslaan',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
 }
 
 async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
-  if(sid){
-    var bar=document.getElementById(sid);
-    if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+  var bar=sid?document.getElementById(sid):null;
+  if(bar){
+    bar.innerHTML='<span class="ds-save-busy-inner" style="font-size:13px;color:#555;justify-content:flex-start;width:100%"><span class="ds-inline-spin"></span><span>Bezig met opslaan…</span></span>';
+    bar.classList.remove('coach-save-bar-done');
   }
-  await ensureP(dossier);
-  var inserted=await saveMsg(dossier,'user',tekst);
-  if(sessionUserMsgId&&inserted&&inserted.id){
-    var map=getSessAssignMap();
-    map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
-    setSessAssignMap(map);
+  try{
+    await ensureP(dossier);
+    var inserted=await saveMsg(dossier,'user',tekst);
+    if(sessionUserMsgId&&inserted&&inserted.id){
+      var map=getSessAssignMap();
+      map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
+      setSessAssignMap(map);
+    }
+    var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
+    pd.count=(pd.count||0)+1;
+    S.pdata[dossier]=pd;
+    await saveP(dossier,pd.props,pd.count,pd.categories);
+    if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
+    else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+    rDrawer();
+    if(sid&&window._saveData)delete window._saveData[sid];
+    S.vertelGesprekDossier=dossier;
+    S.vertelFrom=dossier;
+    updateVertelGesprekBanner();
+    if(S.screen==='vertel')renderVertelInputCoachTip();
+    if(bar){
+      bar.className='coach-save-bar coach-save-bar-done';
+      bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+escHTML(dn(dossier))+'</strong></span>';
+    }
+    return inserted;
+  }catch(e){
+    if(bar){
+      bar.className='coach-save-bar';
+      bar.innerHTML='<span style="font-size:13px;color:#B42318">✗ Opslaan mislukt. Probeer opnieuw of controleer je verbinding.</span>';
+    }
+    throw e;
   }
-  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
-  pd.count=(pd.count||0)+1;
-  S.pdata[dossier]=pd;
-  await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  S.vertelGesprekDossier=dossier;
-  S.vertelFrom=dossier;
-  updateVertelGesprekBanner();
-  if(S.screen==='vertel')renderVertelInputCoachTip();
-  return inserted;
 }
 
 // ══ Init ══════════════════════════════════════════════════════════
