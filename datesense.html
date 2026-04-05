@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 17:26">
+<meta name="ds-build" content="05-04-2026 17:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -4499,17 +4499,17 @@ function buildCoachTasks(){
     var hasRealActivity=!!d.lastActive||((d.count||0)>0);
     var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
     if(hasRealActivity&&days>=4&&stage!=='geen_contact'){
-      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':(days>=7?'medium':'low')),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
+      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':(days>=7?'medium':'low')),dossier:p,msg:'Geen update over <strong>'+escHTML(person)+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+escHTML(person)+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
     }
     var lastAdviceBlock=((d.meta||{}).last_advice)||{};
     var lastAdviceAt=lastAdviceBlock.updated_at||'';
     var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
     if((d.count||0)>=1&&!hasAdviceBody){
-      tasks.push({id:'actie-eerste-advies-'+p,type:'a',prio:'high',dossier:p,msg:'Vraag een <strong>eerste advies</strong> voor '+person+' op basis van je berichten.',openMsg:'Nog openstaand: nog geen advies voor <strong>'+person+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-eerste-advies-'+p,type:'a',prio:'high',dossier:p,msg:'Vraag een <strong>eerste advies</strong> voor '+escHTML(person)+' op basis van je berichten.',openMsg:'Nog openstaand: nog geen advies voor <strong>'+escHTML(person)+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
     if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
-      tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+escHTML(person)+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+escHTML(person)+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     var m=d.meta||{};
     var hasPhotoUrl=!!(m&&m.photo_url);
@@ -4517,13 +4517,13 @@ function buildCoachTasks(){
     if((d.count||0)>=1&&!(m&&m.photo_analysis)){
       var pr=(d.count||0)>=6?'medium':'low';
       if(!hasPhotoUrl&&!hasAnPhotos){
-        tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+person+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+person+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
+        tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+escHTML(person)+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+escHTML(person)+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }else if((d.count||0)>=6){
-        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+person+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
+        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+escHTML(person)+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+escHTML(person)+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }
     }
     if(stage==='geen_contact'&&days<=30){
-      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
+      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+escHTML(person)+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+escHTML(person)+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
     }
     var autoPlanTask=plannerAutoTaskFor(p);
     if(autoPlanTask)tasks.push(autoPlanTask);
@@ -4542,25 +4542,25 @@ function buildCoachTasks(){
       Object.values((fd.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())focusFilled++;});
     });
     if((fRelType==='prille relatie'||fStage==='meerdere_dates'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusFilled<7){
-      tasks.push({id:'rel-focus-align-'+focusName,type:'c',prio:'high',dossier:focusName,msg:'Je zit met <strong>'+fPerson+'</strong> in een serieuzere fase. Check of verwachtingen, tempo en exclusiviteit al helder uitgesproken zijn.',openMsg:'Nog openstaand: bespreek verwachtingen en tempo met <strong>'+fPerson+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(focusName)+"')"});
+      tasks.push({id:'rel-focus-align-'+focusName,type:'c',prio:'high',dossier:focusName,msg:'Je zit met <strong>'+escHTML(fPerson)+'</strong> in een serieuzere fase. Check of verwachtingen, tempo en exclusiviteit al helder uitgesproken zijn.',openMsg:'Nog openstaand: bespreek verwachtingen en tempo met <strong>'+escHTML(fPerson)+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(focusName)+"')"});
     }
     if(fRelType==='vaste relatie'||fStage==='vaste relatie'){
-      tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(focusName)+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+escHTML(fPerson)+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+escHTML(fPerson)+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(focusName)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     if(focusHasRealActivity&&(fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
-      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+escJsStr(focusName)+"';S.vertelGesprekDossier='"+escJsStr(focusName)+"';goScreen('vertel')"});
+      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+escHTML(fPerson)+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+escHTML(fPerson)+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+escJsStr(focusName)+"';S.vertelGesprekDossier='"+escJsStr(focusName)+"';goScreen('vertel')"});
     }
     var focusBoost=buildRelationshipBoost(focusName);
     if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
       var boostIdea=focusBoost.ideas[0];
-      var boostMsg='<strong>'+boostIdea.title+'</strong> · '+boostIdea.tip;
+      var boostMsg='<strong>'+escHTML(boostIdea.title)+'</strong> · '+escHTML(boostIdea.tip);
       tasks.push({
         id:'boost-focus-'+focusName,
         type:'a',
         prio:'low',
         dossier:focusName,
         msg:boostMsg,
-        openMsg:'Nog openstaand: plan een klein verbindend moment met <strong>'+fPerson+'</strong>.',
+        openMsg:'Nog openstaand: plan een klein verbindend moment met <strong>'+escHTML(fPerson)+'</strong>.',
         link:'Naar advies →',
         action:"viewDossier('"+escJsStr(focusName)+"');setTimeout(function(){switchTab('advies');},120)"
       });
@@ -4870,7 +4870,7 @@ function rHome(el){
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div class="ncat">${n.type==='s'?'Sense':n.type==='a'?'Actie':'Check'}</div><div style="font-size:11px;color:${prCol};font-weight:700">${prTxt}</div></div>
         ${personMeta}
         <div class="ntext">${n.msg}</div>
-        <span class="nlink" onclick="${n.action}">${n.link}</span>
+        <span class="nlink" onclick="${n.action}">${escHTML(n.link)}</span>
         <div class="home-note-actions">
           <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${escJsStr(n.id)}',24)">Snooze 1d</button>
           <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${escJsStr(n.id)}',72)">Snooze 3d</button>
@@ -4892,7 +4892,7 @@ function rHome(el){
 <div class="home-shell">
 
   <div class="home-greeting">
-    ${firstName?'Hoi <strong style="color:var(--t)">'+firstName+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
+    ${firstName?'Hoi <strong style="color:var(--t)">'+escHTML(firstName)+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?'}
   </div>
   <div class="home-stack">
   ${onboardingHtml}
@@ -4906,7 +4906,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
           :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
@@ -4914,7 +4914,7 @@ function rHome(el){
     </div>
   </div>`:''}
   ${!showModeEditor&&usageMode==='single'
-    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?dn(focusName):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
+    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?escHTML(dn(focusName)):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
     :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>💬</span><span>Date modus actief</span></div><p class="ai-sec-text">Je kan met meerdere dossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
   }
   ${(function(){
@@ -5063,12 +5063,12 @@ function plannerCountryCode(country){
 }
 function plannerHomeCardCopy(name){
   var stage=String(getDossierStage(name)||'virtueel').toLowerCase();
-  if(stage==='eerste_date')return{title:'Eerste date plannen',text:'Werk een warm, haalbaar voorstel uit voor <strong>'+dn(name)+'</strong> dat licht en ontspannen aanvoelt.'};
-  if(stage==='meerdere_dates')return{title:'Plan iets nieuws samen',text:'Bedenk voor <strong>'+dn(name)+'</strong> een voorstel dat jullie contact verdiept en wat speelsheid toevoegt.'};
-  if(stage==='exclusief daten'||stage==='prille relatie')return{title:'Plan quality time',text:'Werk voor <strong>'+dn(name)+'</strong> een verbindend moment uit dat rust, aandacht en nabijheid geeft.'};
-  if(stage==='vaste relatie')return{title:'Plan een verbindend moment',text:'Laat DateSense iets uitwerken voor <strong>'+dn(name)+'</strong> dat jullie band versterkt en jullie ritme doorbreekt.'};
-  if(stage==='geen_contact')return{title:'Plan alleen als het klopt',text:'DateSense kan voor <strong>'+dn(name)+'</strong> een laagdrempelig voorstel maken, als hernieuwd contact nog passend voelt.'};
-  return{title:'Plan iets leuks',text:'Werk een leuk voorstel uit voor <strong>'+dn(name)+'</strong> met AI-vragen: één concreet plan, en je kan steeds opnieuw vragen voor een ander idee.'};
+  if(stage==='eerste_date')return{title:'Eerste date plannen',text:'Werk een warm, haalbaar voorstel uit voor <strong>'+escHTML(dn(name))+'</strong> dat licht en ontspannen aanvoelt.'};
+  if(stage==='meerdere_dates')return{title:'Plan iets nieuws samen',text:'Bedenk voor <strong>'+escHTML(dn(name))+'</strong> een voorstel dat jullie contact verdiept en wat speelsheid toevoegt.'};
+  if(stage==='exclusief daten'||stage==='prille relatie')return{title:'Plan quality time',text:'Werk voor <strong>'+escHTML(dn(name))+'</strong> een verbindend moment uit dat rust, aandacht en nabijheid geeft.'};
+  if(stage==='vaste relatie')return{title:'Plan een verbindend moment',text:'Laat DateSense iets uitwerken voor <strong>'+escHTML(dn(name))+'</strong> dat jullie band versterkt en jullie ritme doorbreekt.'};
+  if(stage==='geen_contact')return{title:'Plan alleen als het klopt',text:'DateSense kan voor <strong>'+escHTML(dn(name))+'</strong> een laagdrempelig voorstel maken, als hernieuwd contact nog passend voelt.'};
+  return{title:'Plan iets leuks',text:'Werk een leuk voorstel uit voor <strong>'+escHTML(dn(name))+'</strong> met AI-vragen: één concreet plan, en je kan steeds opnieuw vragen voor een ander idee.'};
 }
 function plannerHomeShortcutCopy(){
   var mode=getUsageMode();
@@ -5077,7 +5077,7 @@ function plannerHomeShortcutCopy(){
     return {
       name:focusName,
       title:'Plan iets leuks samen',
-      text:'Laat DateSense één concreet plan uitwerken voor <strong>'+dn(focusName)+'</strong>. Niet goed? Vraag in de planner gerust een ander voorstel.'
+      text:'Laat DateSense één concreet plan uitwerken voor <strong>'+escHTML(dn(focusName))+'</strong>. Niet goed? Vraag in de planner gerust een ander voorstel.'
     };
   }
   return {
@@ -5602,18 +5602,18 @@ function plannerAutoTaskFor(name){
   var ready=getRecentAutoPlannerEntry(name,72);
   if(!ready)return null;
   var person=dn(name).replace('Sense','');
-  var msg='Voor <strong>'+person+'</strong> staat een planvoorstel klaar als zetje.';
-  if(stage==='eerste_date')msg='Voor <strong>'+person+'</strong> staat een eerste-date voorstel klaar.';
-  else if(stage==='meerdere_dates')msg='Voor <strong>'+person+'</strong> staat een origineler datevoorstel klaar.';
-  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+person+'</strong> staat een quality-time plan klaar.';
-  else if(stage==='vaste relatie')msg='Voor <strong>'+person+'</strong> staat een verbindend plan klaar.';
-  else if(stage==='geen_contact')msg='Voor <strong>'+person+'</strong> staat een voorzichtig herstartplan klaar, als dat nog goed voelt.';
+  var msg='Voor <strong>'+escHTML(person)+'</strong> staat een planvoorstel klaar als zetje.';
+  if(stage==='eerste_date')msg='Voor <strong>'+escHTML(person)+'</strong> staat een eerste-date voorstel klaar.';
+  else if(stage==='meerdere_dates')msg='Voor <strong>'+escHTML(person)+'</strong> staat een origineler datevoorstel klaar.';
+  else if(stage==='exclusief daten'||stage==='prille relatie')msg='Voor <strong>'+escHTML(person)+'</strong> staat een quality-time plan klaar.';
+  else if(stage==='vaste relatie')msg='Voor <strong>'+escHTML(person)+'</strong> staat een verbindend plan klaar.';
+  else if(stage==='geen_contact')msg='Voor <strong>'+escHTML(person)+'</strong> staat een voorzichtig herstartplan klaar, als dat nog goed voelt.';
   return {
     id:'plan-auto-'+name,
     type:'a',
     prio:'low',
     msg:msg,
-    openMsg:'Nog openstaand: er staat nog steeds een planvoorstel klaar voor <strong>'+person+'</strong>.',
+    openMsg:'Nog openstaand: er staat nog steeds een planvoorstel klaar voor <strong>'+escHTML(person)+'</strong>.',
     link:'Open voorstel →',
     action:"openPlannerSuggestion('"+escJsStr(name)+"')"
   };
@@ -6227,11 +6227,11 @@ function rNotifications(el){
         <div style="font-size:11px;color:${prCol};font-weight:700">${prTxt} · ${n.status}</div>
       </div>
       <div class="ntext">${n.msg}</div>
-      <span class="nlink" onclick="${n.action}">${n.link}</span>
+      <span class="nlink" onclick="${n.action}">${escHTML(n.link)}</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',24);goScreen('notifications')">Snooze 1d</button>
-        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','done');goScreen('notifications')">✓ Done</button>
-        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','dismiss');goScreen('notifications')">Weg</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${escJsStr(n.id)}',24);goScreen('notifications')">Snooze 1d</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','done');goScreen('notifications')">✓ Done</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','dismiss');goScreen('notifications')">Weg</button>
       </div>
     </div>`;
   }).join(''):'<div style="font-size:13px;color:#8a8f97;padding:8px 2px">Geen meldingen in deze filter.</div>';
@@ -6240,7 +6240,7 @@ function rNotifications(el){
     return st&&st.until&&st.until>now&&(st.mode==='done'||st.mode==='snooze');
   }).slice(0,5).map(function(id){
     var st=state[id];
-    return '<div style="font-size:12px;color:#8a8f97;line-height:1.5">• '+humanTaskLabel(id)+' · '+(st.mode==='done'?'afgewerkt':'gesnoozed')+'</div>';
+    return '<div style="font-size:12px;color:#8a8f97;line-height:1.5">• '+escHTML(humanTaskLabel(id))+' · '+(st.mode==='done'?'afgewerkt':'gesnoozed')+'</div>';
   }).join('');
   var hist=recent?('<div style="margin-top:14px;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fafbfc"><div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Recent afgehandeld</div>'+recent+'</div>'):'';
   el.innerHTML=`<div style="padding:16px 16px 32px"><div class="sh">Mijn meldingen</div>${chips}${body}${hist}</div>`;
@@ -10871,4 +10871,63 @@ try{
   window.goScreen=goScreen;
   window.goBack=goBack;
   window.switchTab=switchTab;
-  wi
+  window.viewDossier=viewDossier;
+  window.openDossierProfiel=openDossierProfiel;
+  window.opslaanInDossierSticky=opslaanInDossierSticky;
+  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
+  window.safeSignOut=safeSignOut;
+  window.closeDrawer=closeDrawer;
+  window.openDrawer=openDrawer;
+  window.nieuwGesprek=nieuwGesprek;
+  window.setSensesSortFromUi=setSensesSortFromUi;
+  window.laadOudereSessieBerichten=laadOudereSessieBerichten;
+  window.openSidebar=openSidebar;
+  window.closeSidebar=closeSidebar;
+  window.selectDossierFromPick=selectDossierFromPick;
+  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
+  window.createNewDossierFromPick=createNewDossierFromPick;
+  window.koppelSessieMsg=koppelSessieMsg;
+  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
+  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
+  window.laadOudereTijdlijn=laadOudereTijdlijn;
+  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
+  window.exportVertelThreadTxt=exportVertelThreadTxt;
+  window.generatePlannerIdeas=generatePlannerIdeas;
+  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
+  window.pttMicPointerDown=pttMicPointerDown;
+  window.pttMicPointerUp=pttMicPointerUp;
+  window.openAiImportModal=openAiImportModal;
+  window.closeAiImportModal=closeAiImportModal;
+  window.switchAiImportTab=switchAiImportTab;
+  window.resetAiImportToUpload=resetAiImportToUpload;
+  window.handleAiImportFile=handleAiImportFile;
+  window.confirmAiImportSave=confirmAiImportSave;
+  window.runAiImportSaveClick=runAiImportSaveClick;
+}catch(e){console.warn('window exports:',e);}
+(function bindAiImportModalClicks(){
+  var modal=document.getElementById('aiImportModal');
+  if(!modal)return;
+  modal.addEventListener('click',function(e){
+    var btn=e.target&&e.target.closest&&e.target.closest('[data-ai-import]');
+    if(!btn||!modal.contains(btn))return;
+    var act=btn.getAttribute('data-ai-import');
+    if(act==='save'){
+      e.preventDefault();
+      if(window.runAiImportSaveClick)window.runAiImportSaveClick(e);
+    }else if(act==='back'){
+      e.preventDefault();
+      if(window.resetAiImportToUpload)window.resetAiImportToUpload();
+    }else if(act==='close'){
+      e.preventDefault();
+      if(window.closeAiImportModal)window.closeAiImportModal();
+    }
+  });
+})();
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
