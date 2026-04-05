@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 12:22">
+<meta name="ds-build" content="05-04-2026 15:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -999,33 +999,35 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 </div>
 
 <div class="save-modal-overlay" id="aiImportModal">
-  <div class="save-modal-bg" onclick="closeAiImportModal()"></div>
+  <div class="save-modal-bg" onclick="window.closeAiImportModal&&window.closeAiImportModal()"></div>
   <div class="save-modal-sheet" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
     <div class="save-modal-title">OWN Sense vullen via AI-export</div>
     <div class="save-modal-sub" style="margin-bottom:8px">Optioneel: alleen als jij je export hier wil gebruiken. Je ziet eerst een voorstel en past het aan voor het opslaan.</div>
     <div id="aiImportBody" style="overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch">
       <div id="aiImportStepUpload">
         <div class="ai-import-tabs" role="tablist">
-          <button type="button" class="ai-import-tab active" id="aiImportTabGpt" onclick="switchAiImportTab('chatgpt')">ChatGPT</button>
-          <button type="button" class="ai-import-tab" id="aiImportTabClaude" onclick="switchAiImportTab('claude')">Claude</button>
+          <button type="button" class="ai-import-tab active" id="aiImportTabGpt" onclick="window.switchAiImportTab&&window.switchAiImportTab('chatgpt')">ChatGPT</button>
+          <button type="button" class="ai-import-tab" id="aiImportTabClaude" onclick="window.switchAiImportTab&&window.switchAiImportTab('claude')">Claude</button>
         </div>
         <div id="aiImportPaneGpt" class="ai-import-steps">
-          <strong>ChatGPT-export (ZIP)</strong><br>
-          1. Open ChatGPT → <strong>Instellingen</strong><br>
-          2. <strong>Data controls</strong> → <strong>Gegevens exporteren</strong><br>
-          3. Je ontvangt een mail met een link; download het ZIP-bestand<br>
-          4. Upload dat ZIP-bestand hieronder
+          <strong>ChatGPT — ZIP-export</strong><br>
+          <span style="color:#8a1515;font-weight:700">Gebruik <strong>chatgpt.com in je browser</strong>, niet de app.</span><br>
+          1. Open <strong>Instellingen</strong> (tandwiel)<br>
+          2. Tab <strong>Gegevensbeheer</strong><br>
+          3. <strong>Gegevens exporteren</strong> → knop <strong>Exporteren</strong><br>
+          4. Je krijgt een mail met een link; download het <strong>ZIP</strong>-bestand en upload het hier
         </div>
         <div id="aiImportPaneClaude" class="ai-import-steps" style="display:none">
-          <strong>Claude-export (JSON)</strong><br>
-          1. Ga naar <strong>claude.ai</strong> → <strong>Account</strong><br>
-          2. <strong>Privacy</strong> → <strong>Gesprekken exporteren</strong><br>
-          3. Download het JSON-bestand<br>
-          4. Upload dat bestand hieronder
+          <strong>Claude — JSON-export</strong><br>
+          <span style="color:#8a1515;font-weight:700">Gebruik <strong>claude.ai in je browser</strong>, niet de app.</span><br>
+          1. Klik onderaan op je <strong>naam</strong> → <strong>Settings</strong><br>
+          2. Open het tabblad <strong>Privacy</strong><br>
+          3. Bij <strong>Export data</strong> op <strong>Export</strong> — je ontvangt meerdere JSON-bestanden<br>
+          4. Upload hier vooral <strong>conversations.json</strong> (de chats); andere bestanden bevatten meestal geen berichtgeschiedenis voor deze import
         </div>
-        <input type="file" id="aiImportFileInput" accept=".zip,application/zip,.json,application/json" style="display:none" onchange="handleAiImportFile(this)">
+        <input type="file" id="aiImportFileInput" accept=".zip,application/zip,.json,application/json" style="display:none" onchange="window.handleAiImportFile&&window.handleAiImportFile(this)">
         <button type="button" class="ai-import-fake-btn" onclick="document.getElementById('aiImportFileInput').click()">Bestand kiezen</button>
-        <p style="font-size:11px;color:#8a8f97;margin-top:10px;line-height:1.45">Er worden max. 300 van jouw eigen berichten gebruikt (geen AI-antwoorden). Zorg dat je API-sleutel in Instellingen staat.</p>
+        <p style="font-size:11px;color:#8a8f97;margin-top:10px;line-height:1.45">Max. 300 van <strong>jouw</strong> berichten (geen AI-antwoorden). API-sleutel staat in ⚙️ Instellingen. Claude: <strong>conversations.json</strong> werkt het best.</p>
       </div>
       <div id="aiImportStepLoading" style="display:none">
         <div class="ai-import-loading">
@@ -1037,14 +1039,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
       <div id="aiImportStepReview" style="display:none">
         <p style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">Pas de teksten aan en tik daarna op opslaan. Ze worden in je <strong>OWN Sense</strong>-velden gezet.</p>
         <div id="aiImportReviewFields"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-bottom:4px">
-          <button type="button" class="btn-r" style="flex:1;min-width:120px;padding:12px 10px" onclick="confirmAiImportSave()">Opslaan in OWN Sense</button>
-          <button type="button" class="btn-g" style="flex:1;min-width:100px;padding:12px 10px" onclick="resetAiImportToUpload()">Terug</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-bottom:4px;position:relative;z-index:5;touch-action:manipulation">
+          <button type="button" class="btn-r" data-ai-import="save" style="flex:1;min-width:120px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:1">Opslaan in OWN Sense</button>
+          <button type="button" class="btn-g" data-ai-import="back" style="flex:1;min-width:100px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:1">Terug</button>
         </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-shrink:0;padding-top:8px;border-top:1px solid var(--b)">
-      <button type="button" class="coach-save-other" style="flex:1" onclick="closeAiImportModal()">Sluiten</button>
+      <button type="button" class="coach-save-other" data-ai-import="close" style="flex:1">Sluiten</button>
     </div>
   </div>
 </div>
@@ -8527,6 +8529,48 @@ function extractClaudeUserMessages(root){
   rows.sort(function(a,b){return a.t-b.t;});
   return rows;
 }
+/** Claude web-export: meestal conversations.json met array of { conversations: [...] } en messages/chat_messages. */
+function extractClaudeConversationsExport(data){
+  var rows=[];
+  function pushUser(t,time){
+    t=String(t||'').replace(/\s+/g,' ').trim();
+    if(t.length<2)return;
+    var ts=parseFloat(time)||0;
+    rows.push({t:ts,text:t});
+  }
+  function textFromContent(c){
+    if(c==null)return'';
+    if(typeof c==='string')return c;
+    if(Array.isArray(c))
+      return c.map(function(part){
+        if(typeof part==='string')return part;
+        if(!part||typeof part!=='object')return'';
+        if(typeof part.text==='string')return part.text;
+        if(part.type==='text'&&part.text)return part.text;
+        return'';
+      }).join('');
+    return'';
+  }
+  function fromMsg(m){
+    if(!m)return;
+    var role=String(m.role||'').toLowerCase();
+    var sender=String(m.sender||'').toLowerCase();
+    var human=role==='user'||sender==='human'||String(m.type||'').toLowerCase()==='human';
+    if(!human)return;
+    var body=m.content!=null?m.content:(m.text!=null?m.text:null);
+    pushUser(textFromContent(body),m.created_at||m.timestamp||m.updated_at||m.createdAt||0);
+  }
+  var list=[];
+  if(Array.isArray(data))list=data;
+  else if(data&&Array.isArray(data.conversations))list=data.conversations;
+  else if(data&&Array.isArray(data.chats))list=data.chats;
+  list.forEach(function(conv){
+    var msgs=conv&&(conv.chat_messages||conv.messages||conv.message_list);
+    if(Array.isArray(msgs))msgs.forEach(fromMsg);
+  });
+  rows.sort(function(a,b){return a.t-b.t;});
+  return rows;
+}
 function mapImportProfileToOwnCategories(j){
   var z=function(s,max){
     s=String(s==null?'':s).trim();
@@ -8570,8 +8614,12 @@ function renderAiImportReview(p){
 async function runAiImportProfileAnalysis(bundle){
   return await callAPI(_AI_IMPORT_SYS,[{role:'user',content:'Berichten van de gebruiker (chronologisch, laatste stuk):\n\n'+bundle}],1800,90000);
 }
+var _aiImportSaving=false;
 async function confirmAiImportSave(){
+  if(_aiImportSaving)return;
   if(!S.user){toast('Niet ingelogd.');return;}
+  if(!sb){toast('Geen verbinding met opslag. Herlaad de pagina.');return;}
+  _aiImportSaving=true;
   var draft={};
   _AI_IMPORT_KEYS.forEach(function(k){
     var ta=document.getElementById('aiImportRev-'+k);
@@ -8580,7 +8628,7 @@ async function confirmAiImportSave(){
   var cats=mapImportProfileToOwnCategories(draft);
   try{
     await ensureP('OWN Sense');
-    var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
+    var d=S.pdata['OWN Sense']||{props:Object.assign({},DP),count:0,categories:{},meta:{}};
     d.categories=d.categories||{};
     d.meta=d.meta||{};
     d.meta.field_updates=d.meta.field_updates||{};
@@ -8602,6 +8650,8 @@ async function confirmAiImportSave(){
     if(S.screen==='own')goScreen('own');
   }catch(e){
     toast('Opslaan mislukt: '+(e&&e.message?e.message:String(e)));
+  }finally{
+    _aiImportSaving=false;
   }
 }
 async function handleAiImportFile(inp){
@@ -8620,8 +8670,10 @@ async function handleAiImportFile(inp){
       var data=JSON.parse(txt);
       if(Array.isArray(data)&&data.length&&data[0]&&data[0].mapping)
         rows=extractChatGptUserMessages(data);
-      else
-        rows=extractClaudeUserMessages(data);
+      else{
+        rows=extractClaudeConversationsExport(data);
+        if(!rows.length)rows=extractClaudeUserMessages(data);
+      }
     }
   }catch(e){
     toast('Bestand lezen mislukt: '+(e&&e.message?e.message:'onbekend'));
@@ -8662,7 +8714,7 @@ function renderAiImportHomeLanding(){
     +'<div class="ai-sec">'
     +'<div class="ai-sec-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
     +'<p class="ai-sec-text">Vul OWN Sense sneller aan: upload je export, wij gebruiken alleen jouw eigen berichten. Je ziet een voorstel en past het aan voor het opslaan.</p>'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 11px;font-weight:800;border-color:#F0C4C4;color:var(--r);background:#FFF5F5" onclick="openAiImportModal()">Start import</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 11px;font-weight:800;border-color:#F0C4C4;color:var(--r);background:#FFF5F5" onclick="window.openAiImportModal&&window.openAiImportModal()">Start import</button>'
     +'</div></div>';
 }
 
@@ -10625,70 +10677,4 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
   pd.count=(pd.count||0)+1;
   S.pdata[dossier]=pd;
   await saveP(dossier,pd.props,pd.count,pd.categories);
-  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
-  rDrawer();
-  if(sid&&window._saveData)delete window._saveData[sid];
-  S.vertelGesprekDossier=dossier;
-  S.vertelFrom=dossier;
-  updateVertelGesprekBanner();
-  if(S.screen==='vertel')renderVertelInputCoachTip();
-  return inserted;
-}
-
-// ══ Init ══════════════════════════════════════════════════════════
-// Event delegation: auto-save voor contact categorieën via data attributen
-document.addEventListener('input',function(e){
-  var ta=e.target;
-  if(!ta.classList.contains('own-ta'))return;
-  // Contact categorie textareas hebben id="cc-CATID-aN"
-  var m=ta.id.match(/^cc-(.+)-a\d+$/);
-  if(m){
-    var catId=m[1];
-    var dossierEl=ta.closest('[id^="cc-"]');
-    // Zoek dosName via parent data of via catId → huidige dossier
-    var dosName=S.viewDossier||'OWN Sense';
-    scheduleAutoSave('contact',dosName,catId);
-  }
-});
-
-setBuildTag();
-// Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
-try{
-  window.goScreen=goScreen;
-  window.goBack=goBack;
-  window.switchTab=switchTab;
-  window.viewDossier=viewDossier;
-  window.openDossierProfiel=openDossierProfiel;
-  window.opslaanInDossierSticky=opslaanInDossierSticky;
-  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
-  window.safeSignOut=safeSignOut;
-  window.closeDrawer=closeDrawer;
-  window.openDrawer=openDrawer;
-  window.nieuwGesprek=nieuwGesprek;
-  window.setSensesSortFromUi=setSensesSortFromUi;
-  window.laadOudereSessieBerichten=laadOudereSessieBerichten;
-  window.openSidebar=openSidebar;
-  window.closeSidebar=closeSidebar;
-  window.selectDossierFromPick=selectDossierFromPick;
-  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
-  window.createNewDossierFromPick=createNewDossierFromPick;
-  window.koppelSessieMsg=koppelSessieMsg;
-  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
-  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
-  window.laadOudereTijdlijn=laadOudereTijdlijn;
-  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
-  window.exportVertelThreadTxt=exportVertelThreadTxt;
-  window.generatePlannerIdeas=generatePlannerIdeas;
-  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
-  window.pttMicPointerDown=pttMicPointerDown;
-  window.pttMicPointerUp=pttMicPointerUp;
-}catch(e){console.warn('window exports:',e);}
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+  i
