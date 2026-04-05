@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 19:10">
+<meta name="ds-build" content="05-04-2026 21:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1040,13 +1040,13 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
         <p style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">Wat je hier goedkeurt, gaat naar OWN Sense. Waar je al tekst had, wordt dat <strong>automatisch samengevoegd</strong> met deze inhoud (zonder extra bevestigingsscherm). Lege vakken hier wijzigen niets. Even wachten na “opslaan” als er veel samen te voegen valt.</p>
         <div id="aiImportReviewFields"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-bottom:4px;position:relative;z-index:5;touch-action:manipulation">
-          <button type="button" class="btn-r" data-ai-import="save" style="flex:1;min-width:120px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:1">Opslaan in OWN Sense</button>
-          <button type="button" class="btn-g" data-ai-import="back" style="flex:1;min-width:100px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:1">Terug</button>
+          <button type="button" class="btn-r" id="aiImportSaveBtn" data-ai-import="save" style="flex:1;min-width:120px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:6;cursor:pointer;touch-action:manipulation" onclick="window.runAiImportSaveClick&&window.runAiImportSaveClick(event)">Opslaan in OWN Sense</button>
+          <button type="button" class="btn-g" data-ai-import="back" style="flex:1;min-width:100px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:6;cursor:pointer;touch-action:manipulation" onclick="event.preventDefault();event.stopPropagation();if(window.resetAiImportToUpload)window.resetAiImportToUpload();">Terug</button>
         </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-shrink:0;padding-top:8px;border-top:1px solid var(--b)">
-      <button type="button" class="coach-save-other" data-ai-import="close" style="flex:1">Sluiten</button>
+      <button type="button" class="coach-save-other" data-ai-import="close" style="flex:1;cursor:pointer;touch-action:manipulation;position:relative;z-index:6" onclick="event.preventDefault();event.stopPropagation();if(window.closeAiImportModal)window.closeAiImportModal();">Sluiten</button>
     </div>
   </div>
 </div>
@@ -6539,7 +6539,7 @@ async function rDossier(el){
   el.innerHTML=header+tabs+`<div id="tabContent" style="padding:16px 16px 32px"></div>`;
   await loadTab(name,S.viewTab,d);
 
-  // Herbereken alleen als count veranderd is tov vorige keer
+  // Eigenschappen herberekenen / auto-vul: niet parallel (dubbele loadMsgs + dubbele AI voelde traag).
   if(!isOwn&&S.apiKey){
     if(!S.herberekenCache)S.herberekenCache={};
     var lastCount=S.herberekenCache[name]||0;
@@ -6548,13 +6548,15 @@ async function rDossier(el){
       return Object.values(c||{}).some(function(v){return(v||'').trim().length>0;});
     });
     var needsRecalc=currentCount!==lastCount||(hasCatData&&!PK.some(function(k){return(d.props[k]||0)>0;}));
+    var needsAutoVul=currentCount>0&&!hasCatData;
+    var autoRan=false;
+    if(needsAutoVul){
+      try{autoRan=await autoVulCategoriesFromTimeline(name);}
+      catch(e){console.warn('autoVulCategoriesFromTimeline',e);autoRan=false;}
+    }
     if(needsRecalc){
       S.herberekenCache[name]=currentCount;
-      herbereken(name);
-    }
-    // Auto-vul invulvakjes als er timeline data is maar categories leeg zijn
-    if(currentCount>0&&!hasCatData){
-      autoVulCategoriesFromTimeline(name);
+      if(!(needsAutoVul&&autoRan))herbereken(name);
     }
   }
   updateDossierTabBadges();
@@ -6827,15 +6829,19 @@ async function loadTab(name,tab,d){
       var tlLimit=S.timelineLimitByDossier[name]||3;
       var fetchCap=Math.min(1000,tlLimit+1);
       var lastErr=null;
-      for(var att=1;att<=3;att++){
+      for(var att=1;att<=2;att++){
         try{
-          msgs=await loadMsgs(name,{limit:fetchCap,asc:false,throwOnError:true});
+          msgs=await withTimeout(
+            loadMsgs(name,{limit:fetchCap,asc:false,throwOnError:true}),
+            14000,
+            'timeout'
+          );
           lastErr=null;
           break;
         }catch(e2){
           lastErr=e2;
-          console.warn('loadTab tijdlijn poging '+att+'/3',e2&&e2.message?e2.message:e2);
-          if(att<3)await new Promise(function(r){setTimeout(r,600*att);});
+          console.warn('loadTab tijdlijn poging '+att+'/2',e2&&e2.message?e2.message:e2);
+          if(att<2)await new Promise(function(r){setTimeout(r,380*att);});
         }
       }
       if(lastErr)throw lastErr;
@@ -7107,7 +7113,7 @@ async function genAdvies(name,forced){
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{
-    msgs=await withTimeout(loadMsgs(name,{limit:50,asc:true}),8000,'Berichten laden duurde te lang.');
+    msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
   }catch(e){
     msgs=[];
   }
@@ -7137,7 +7143,7 @@ async function genAdvies(name,forced){
     if(boost.prefs&&boostPrefsSummary())userContent+='\nBoost voorkeuren: '+boostPrefsSummary();
   }
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],900,42000);
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,36000);
     if(reqId!==_adviesReqSeq)return;
     var nowTs=new Date();
     var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -7395,8 +7401,8 @@ async function herbereken(dosName,silent=true){
     Object.values(answers).forEach(v=>{if(v&&v.trim())manualText+=v.trim()+' ';});
   });
 
-  // Verzamel opgeslagen berichten
-  var msgs=await loadMsgs(dosName);
+  // Verzamel opgeslagen berichten (kleine limit: we gebruiken max. ~20 user-regels)
+  var msgs=await loadMsgs(dosName,{limit:28});
   var msgText=msgs.slice(-20).filter(m=>m.role==='user').map(m=>m.html.replace(/<[^>]*>/g,' ').trim()).join(' ');
 
   var combinedContext=(manualText+' '+msgText).trim();
@@ -8429,6 +8435,41 @@ function ownSenseCellLabel(catId,ak){
   return String(catId)+' '+String(ak);
 }
 
+function setAiImportSaveButtonBusy(busy){
+  var b=document.getElementById('aiImportSaveBtn');
+  if(!b)return;
+  b.disabled=!!busy;
+  b.style.opacity=busy?'0.72':'';
+  if(busy){
+    if(!b.getAttribute('data-orig-lbl'))b.setAttribute('data-orig-lbl',b.textContent);
+    b.textContent='Bezig met opslaan…';
+  }else{
+    var ol=b.getAttribute('data-orig-lbl');
+    if(ol){b.textContent=ol;b.removeAttribute('data-orig-lbl');}
+    b.disabled=false;
+    b.style.opacity='';
+  }
+}
+
+function runAiImportSaveClick(ev){
+  if(ev){ev.preventDefault();ev.stopPropagation();}
+  if(_aiImportSaving){
+    toast('Even geduld — opslaan loopt nog (kan even duren bij samenvoegen).');
+    return;
+  }
+  var fn=typeof window.confirmAiImportSave==='function'?window.confirmAiImportSave:null;
+  if(!fn){
+    toast('Pagina nog niet klaar — herlaad met Ctrl+F5.');
+    return;
+  }
+  void fn().catch(function(e){
+    console.error('confirmAiImportSave',e);
+    _aiImportSaving=false;
+    setAiImportSaveButtonBusy(false);
+    toast('Opslaan mislukt: '+((e&&e.message)?String(e.message):'onbekend'));
+  });
+}
+
 function openAiImportModal(){
   if(!S.user){toast('Log eerst in.');return;}
   resetAiImportToUpload();
@@ -8440,6 +8481,8 @@ function closeAiImportModal(){
   if(m)m.classList.remove('show');
 }
 function resetAiImportToUpload(){
+  _aiImportSaving=false;
+  setAiImportSaveButtonBusy(false);
   window._aiImportDraft=null;
   var u=document.getElementById('aiImportStepUpload');
   var l=document.getElementById('aiImportStepLoading');
@@ -8649,7 +8692,7 @@ async function runAiImportConsolidate(items){
   var payload=JSON.stringify({items:items.map(function(it){
     return {veld:it.id,vraag:it.label,bestaand:it.bestaand,nieuw:it.nieuw};
   })});
-  var raw=await callAPI(_AI_IMPORT_MERGE_SYS,[{role:'user',content:'Voeg per item bestaand + nieuw samen. Input JSON:\n\n'+payload}],8192,90000);
+  var raw=await callAPI(_AI_IMPORT_MERGE_SYS,[{role:'user',content:'Voeg per item bestaand + nieuw samen. Input JSON:\n\n'+payload}],8192,52000);
   var clean=String(raw||'').replace(/```json\s*/gi,'').replace(/```/g,'').trim();
   var o=JSON.parse(clean);
   var velden=(o&&o.velden&&typeof o.velden==='object')?o.velden:o;
@@ -8679,6 +8722,7 @@ async function confirmAiImportSave(){
   if(!S.user){toast('Niet ingelogd.');return;}
   if(!sb){toast('Geen verbinding met opslag. Herlaad de pagina.');return;}
   _aiImportSaving=true;
+  setAiImportSaveButtonBusy(true);
   var draft={};
   _AI_IMPORT_KEYS.forEach(function(k){
     var ta=document.getElementById('aiImportRev-'+k);
@@ -8688,12 +8732,7 @@ async function confirmAiImportSave(){
   var usedFallbackMerge=false;
   var didAiMerge=false;
   try{
-    var _hasIncoming=false;
-    Object.keys(cats).forEach(function(catId){
-      Object.keys(cats[catId]||{}).forEach(function(ak){
-        if(String(cats[catId][ak]==null?'':cats[catId][ak]).trim()!=='')_hasIncoming=true;
-      });
-    });
+    var _hasIncoming=_AI_IMPORT_KEYS.some(function(k){return!!draft[k];});
     if(!_hasIncoming){
       toast('Geen tekst om toe te voegen — vul minstens één veld in of pas de voorstellen aan.');
       return;
@@ -8725,8 +8764,13 @@ async function confirmAiImportSave(){
     });
     var consolidated={};
     if(toConsolidate.length){
+      toast('Samenvoegen met AI… even geduld.');
       try{
-        consolidated=await runAiImportConsolidate(toConsolidate);
+        consolidated=await withTimeout(
+          runAiImportConsolidate(toConsolidate),
+          50000,
+          'Samenvoegen duurde te lang'
+        );
         didAiMerge=true;
       }catch(me){
         console.warn('runAiImportConsolidate',me);
@@ -8767,6 +8811,7 @@ async function confirmAiImportSave(){
     toast('Opslaan mislukt: '+(e&&e.message?e.message:String(e)));
   }finally{
     _aiImportSaving=false;
+    setAiImportSaveButtonBusy(false);
   }
 }
 async function handleAiImportFile(inp){
@@ -9727,15 +9772,16 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
   S.busy=false;
 }
 
-// Auto-vul categories vanuit timeline als er nog niets ingevuld is
+// Auto-vul categories vanuit timeline als er nog niets ingevuld is. Retourneert true als er echt geüpdatet is (incl. herbereken in updateContactCategories).
 async function autoVulCategoriesFromTimeline(dosName){
-  if(!S.apiKey)return;
+  if(!S.apiKey)return false;
   var msgs=[];
-  try{msgs=await loadMsgs(dosName);}catch(e){return;}
+  try{msgs=await loadMsgs(dosName,{limit:40});}catch(e){return false;}
   var tekst=msgs.filter(function(m){return m.role==='user';})
     .map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim();}).join(' ');
-  if(!tekst.trim())return;
+  if(!tekst.trim())return false;
   await updateContactCategories(dosName,tekst);
+  return true;
 }
 
 // Auto-vul invulvakjes van contact-dossier op basis van Vertel tekst
@@ -10831,56 +10877,4 @@ try{
   window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
   window.safeSignOut=safeSignOut;
   window.closeDrawer=closeDrawer;
-  window.openDrawer=openDrawer;
-  window.nieuwGesprek=nieuwGesprek;
-  window.setSensesSortFromUi=setSensesSortFromUi;
-  window.laadOudereSessieBerichten=laadOudereSessieBerichten;
-  window.openSidebar=openSidebar;
-  window.closeSidebar=closeSidebar;
-  window.selectDossierFromPick=selectDossierFromPick;
-  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
-  window.createNewDossierFromPick=createNewDossierFromPick;
-  window.koppelSessieMsg=koppelSessieMsg;
-  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
-  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
-  window.laadOudereTijdlijn=laadOudereTijdlijn;
-  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
-  window.exportVertelThreadTxt=exportVertelThreadTxt;
-  window.generatePlannerIdeas=generatePlannerIdeas;
-  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
-  window.pttMicPointerDown=pttMicPointerDown;
-  window.pttMicPointerUp=pttMicPointerUp;
-  window.openAiImportModal=openAiImportModal;
-  window.closeAiImportModal=closeAiImportModal;
-  window.switchAiImportTab=switchAiImportTab;
-  window.resetAiImportToUpload=resetAiImportToUpload;
-  window.handleAiImportFile=handleAiImportFile;
-  window.confirmAiImportSave=confirmAiImportSave;
-}catch(e){console.warn('window exports:',e);}
-(function bindAiImportModalClicks(){
-  var modal=document.getElementById('aiImportModal');
-  if(!modal)return;
-  modal.addEventListener('click',function(e){
-    var btn=e.target&&e.target.closest&&e.target.closest('[data-ai-import]');
-    if(!btn||!modal.contains(btn))return;
-    var act=btn.getAttribute('data-ai-import');
-    if(act==='save'){
-      e.preventDefault();
-      if(window.confirmAiImportSave)window.confirmAiImportSave();
-    }else if(act==='back'){
-      e.preventDefault();
-      if(window.resetAiImportToUpload)window.resetAiImportToUpload();
-    }else if(act==='close'){
-      e.preventDefault();
-      if(window.closeAiImportModal)window.closeAiImportModal();
-    }
-  });
-})();
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+  window.openDrawe
