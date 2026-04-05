@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 20:40">
+<meta name="ds-build" content="03-04-2026 21:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -2186,11 +2186,10 @@ function isAdviceStaleForDossier(d){
 }
 function needsDossierProfielAttention(p){
   if(!p||getDossierLifecycle(p)!=='active')return false;
-  var d=S.pdata[p]||{count:0,categories:{},meta:{}};
   var cnt=getProfielProgressCounts(p);
   var metaOk=(getProfileMetaCompletion(p)||{}).complete;
+  // Alleen echte profielwerkzaamheden: vragenlijst + basisvelden (modal). Geen «stemming vandaag» — dat staat op Overzicht/Vertel.
   if((cnt.total>0&&cnt.filled<cnt.total)||!metaOk)return true;
-  if(p==='OWN Sense'&&!getOwnDailyMoodMeta(d.meta||{}))return true;
   return false;
 }
 function needsDossierFotoAttention(p){
@@ -2219,7 +2218,10 @@ function needsContactAttention(p){
   return needsDossierProfielAttention(p)||needsDossierFotoAttention(p)||needsDossierAdviesAttention(p);
 }
 function needsOwnTabAttention(){
-  return S.user&&needsContactAttention('OWN Sense');
+  if(!S.user)return false;
+  if(needsContactAttention('OWN Sense'))return true;
+  var d=S.pdata['OWN Sense']||{meta:{}};
+  return !getOwnDailyMoodMeta(d.meta||{});
 }
 function needsSensesTabAttention(){
   if(!S.user)return false;
