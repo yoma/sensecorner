@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 21:05">
+<meta name="ds-build" content="05-04-2026 17:26">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1465,7 +1465,7 @@ function getOnboardingChecklist(){
   return [
     {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openProfileModal('OWN Sense')"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste dossier aan',action:'newSenseFromDrawer()'},
-    {id:'relation-ready',done:contacts.length>0,label:'Kies pas daarna een relatiestatus',action:contacts.length?("viewDossier('"+contacts[0]+"')"):'newSenseFromDrawer()'},
+    {id:'relation-ready',done:contacts.length>0,label:'Kies pas daarna een relatiestatus',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
   ];
 }
@@ -4682,7 +4682,7 @@ function renderActiesHtml(name,acties){
       +'<div class="actie-sub">'+sub+'</div>'
       +(plannerHint?'<div style="font-size:12px;color:#8a8f97;line-height:1.45;margin-top:6px">'+plannerHint+'</div>':'')
       +'<div class="actie-btn-row">'
-      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+name+'\',\''+encodeURIComponent(aKey)+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button>'
+      +'<button class="actie-done-btn" onclick="toggleAdviesActie(\''+escJsStr(name)+'\',\''+encodeURIComponent(aKey)+'\','+idx+')">'+(done?'✓ Afgewerkt':'Markeer als afgewerkt')+'</button>'
       +(plannerMeta?'<button class="actie-link-btn" onclick="'+plannerMeta.action+'">'+plannerMeta.label+'</button>':'')
       +'</div></div>'
       +'</div>';
@@ -6118,8 +6118,8 @@ function rPlanner(el){
           +'<div><div style="font-size:14px;font-weight:700;color:#333">'+escHTML(item.title||'Planvoorstel')+'</div>'
           +'<div style="font-size:11px;color:#8a8f97;margin-top:3px">'+new Date(item.created_at).toLocaleString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+(mini?(' · '+escHTML(mini)):'')+'</div></div>'
           +'<div style="display:flex;gap:6px;align-items:center">'
-          +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="restorePlannerHistory(\''+name+'\',\''+item.id+'\')">Open</button>'
-          +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;color:#8D2C2C;border-color:#F1CACA;background:#FFF8F8" onclick="deleteSavedPlannerResult(\''+name+'\',\''+item.id+'\')">Verwijder</button>'
+          +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="restorePlannerHistory(\''+escJsStr(name)+'\',\''+escJsStr(item.id)+'\')">Open</button>'
+          +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;color:#8D2C2C;border-color:#F1CACA;background:#FFF8F8" onclick="deleteSavedPlannerResult(\''+escJsStr(name)+'\',\''+escJsStr(item.id)+'\')">Verwijder</button>'
           +'</div>'
           +'</div>'
           +'</div>';
@@ -6148,7 +6148,7 @@ function rPlanner(el){
     +'</div>'
     +'<div class="planner-actions">'
     +'<button class="btn-r" style="max-width:220px" onclick="generatePlannerIdeas()">'+plannerGenBtnLabel+'</button>'
-    +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+name+'\')">Terug naar dossier</button>':'')
+    +(name?'<button class="btn-g" style="max-width:220px" onclick="viewDossier(\''+escJsStr(name)+'\')">Terug naar dossier</button>':'')
     +'</div>'
     +resultHtml
     +historyHtml
@@ -6187,7 +6187,7 @@ function rNotifications(el){
       status:(st.mode==='snooze'?'snoozed':'done'),
       msg:'Afgehandelde melding',
       link:'Open dossier →',
-      action:person?("viewDossier('"+person+"')"):"goScreen('home')",
+      action:person?("viewDossier('"+escJsStr(person)+"')"):"goScreen('home')",
       person:person
     };
   });
@@ -6308,21 +6308,21 @@ function rSenses(el){
       var rowFootMatch=getSensesCardMatchHtml(p,{stripTopRule:true,profielOnly:true});
       var matchInline=getSensesMatchInlineHtml(p);
       var disp=escHTML(dn(p));
-      h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+p+'\')"')+`>
+      h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+escJsStr(p)+'\')"')+`>
         <div class="srow-dossier-main">
         <div class="srow-dossier-top">
-        `+(S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+p+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:4px">':'')+`
+        `+(S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+escJsStr(p)+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:4px">':'')+`
         `+((d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';flex-shrink:0;margin-top:6px"></div>')+`
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title">`+disp+`</div>
-          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+p+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span></div>
+          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span></div>
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
-          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${p}')">🎯 Focus</button>
-          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
-          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${p}')">On hold</button>
-          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${p}')">Sluit af</button>
+          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${escJsStr(p)}')">🎯 Focus</button>
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${escJsStr(p)}')">On hold</button>
+          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${escJsStr(p)}')">Sluit af</button>
         </div>
         </div>
         <div class="srow-dossier-match">`+rowFootMatch+`</div>
@@ -6341,7 +6341,7 @@ function rSenses(el){
       var archFootMatch=getSensesCardMatchHtml(p,{stripTopRule:true,profielOnly:true});
       var matchInlineA=getSensesMatchInlineHtml(p);
       var dispA=escHTML(dn(p));
-      h+=`<div class="srow srow-dossier" onclick="viewDossier('${p}')">
+      h+=`<div class="srow srow-dossier" onclick="viewDossier('${escJsStr(p)}')">
         <div class="srow-dossier-main">
         <div class="srow-dossier-top">
         ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65;flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';opacity:.55;flex-shrink:0;margin-top:6px"></div>'}
@@ -6351,9 +6351,9 @@ function rSenses(el){
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
-          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="toggleDossierNotifications('${p}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
-          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="reopenDossier('${p}')">Heropen</button>
-          <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="delSense('${p}')">Verwijder definitief</button>
+          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" style="font-size:11px;padding:5px 7px" onclick="reopenDossier('${escJsStr(p)}')">Heropen</button>
+          <button class="coach-save-other" title="Definitief verwijderen" style="font-size:11px;padding:5px 7px;color:#B00020;border-color:#F5C2CC;background:#FFF5F7" onclick="delSense('${escJsStr(p)}')">Verwijder definitief</button>
         </div>
         </div>
         <div class="srow-dossier-match">`+archFootMatch+`</div>
@@ -6945,7 +6945,7 @@ async function loadTab(name,tab,d){
     if(!analysisPhotos.length&&!hasFallbackProfile){
       html+='<div style="background:var(--g);border:1px solid var(--b);border-radius:12px;padding:14px 16px;color:var(--m);font-size:14px;line-height:1.6">'
         +'Nog geen foto beschikbaar. Voeg een analysefoto toe of zet eerst een profielfoto.'
-        +'<div style="margin-top:10px"><button class="btn-g" style="max-width:210px" onclick="openProfileModal(\''+name+'\')">Profielgegevens openen</button></div>'
+        +'<div style="margin-top:10px"><button class="btn-g" style="max-width:210px" onclick="openProfileModal(\''+escJsStr(name)+'\')">Profielgegevens openen</button></div>'
         +'</div>';
       cont.innerHTML=html;
       updateDossierTabBadges();
@@ -6959,7 +6959,7 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:12px;color:var(--m)">'+(pa&&meta.photo_analysis_updated_at?('Laatst geanalyseerd: '+timeAgo(meta.photo_analysis_updated_at)):'Nog niet geanalyseerd')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97;margin-top:2px">Deze knop analyseert alle foto\'s uit het analysevak.</div>'
       +'</div>'
-      +'<button class="btn-r" style="max-width:170px;padding:10px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+name+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Analyseer foto\'s')+'</button>'
+      +'<button class="btn-r" style="max-width:170px;padding:10px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+escJsStr(name)+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Analyseer foto\'s')+'</button>'
       +'</div>';
     if(pa){
       function meter(label,val){
@@ -6982,7 +6982,7 @@ async function loadTab(name,tab,d){
       html+='<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:13px">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
         +'<div><strong>⚠️ Nog geen fotoanalyse</strong><div style="font-size:12px;color:#965252;margin-top:2px">Analyse helpt je om match-uitleg en visuele context te verfijnen.</div></div>'
-        +'<button class="btn-r" style="max-width:170px;padding:8px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+name+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Nu analyseren')+'</button>'
+        +'<button class="btn-r" style="max-width:170px;padding:8px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+escJsStr(name)+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Nu analyseren')+'</button>'
         +'</div>'
         +'</div>';
     }
@@ -7042,7 +7042,7 @@ async function loadTab(name,tab,d){
     // Body
     advHtml+='<div style="background:#fff;padding:18px 16px">';
     if(name!=='OWN Sense'){
-      advHtml+='<div style="margin-bottom:14px"><button type="button" class="coach-save-other" style="padding:10px 14px;border-color:#FFE0BF;background:#FFF7F0;color:#A55B00;font-weight:700" onclick="openPlanner(\''+name+'\')">📅 Plan iets leuks</button></div>';
+      advHtml+='<div style="margin-bottom:14px"><button type="button" class="coach-save-other" style="padding:10px 14px;border-color:#FFE0BF;background:#FFF7F0;color:#A55B00;font-weight:700" onclick="openPlanner(\''+escJsStr(name)+'\')">📅 Plan iets leuks</button></div>';
     }
     if(cache){
       advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px">'
@@ -8306,9 +8306,9 @@ function rCompare(el){
       +'</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
       +'<button class="aa r" onclick="cmpAdviesCurrent()">AI Analyse met waarom</button>'
-      +'<button class="aa g" onclick="viewDossier(\''+names[0]+'\')">Open '+dn(names[0])+'</button>'
-      +(names[1]?'<button class="aa g" onclick="viewDossier(\''+names[1]+'\')">Open '+dn(names[1])+'</button>':'')
-      +(names[2]?'<button class="aa g" onclick="viewDossier(\''+names[2]+'\')">Open '+dn(names[2])+'</button>':'')
+      +'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[0])+'\')">Open '+dn(names[0])+'</button>'
+      +(names[1]?'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[1])+'\')">Open '+dn(names[1])+'</button>':'')
+      +(names[2]?'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[2])+'\')">Open '+dn(names[2])+'</button>':'')
       +'</div>'
     +'</div>'
   +'</div>';
@@ -8980,7 +8980,7 @@ function buildProfileMetaAccordionHtml(name,d){
   html+='<div class="own-cat-arrow" aria-hidden="true">›</div></div>';
   html+='<div class="own-cat-body own-cat-body--profile">';
   html+=buildProfileMetaPreviewRows(name,d);
-  html+='<div class="pm-meta-actions"><button type="button" class="pm-meta-edit-btn" onclick="openProfileModal(\''+name+'\')">'+(metaC.complete?'Bewerken':'Aanvullen')+'</button></div>';
+  html+='<div class="pm-meta-actions"><button type="button" class="pm-meta-edit-btn" onclick="openProfileModal(\''+escJsStr(name)+'\')">'+(metaC.complete?'Bewerken':'Aanvullen')+'</button></div>';
   html+='</div></div>';
   return html;
 }
@@ -10871,10 +10871,4 @@ try{
   window.goScreen=goScreen;
   window.goBack=goBack;
   window.switchTab=switchTab;
-  window.viewDossier=viewDossier;
-  window.openDossierProfiel=openDossierProfiel;
-  window.opslaanInDossierSticky=opslaanInDossierSticky;
-  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
-  window.safeSignOut=safeSignOut;
-  window.closeDrawer=closeDrawer;
-  window.openDrawe
+  wi
