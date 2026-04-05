@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 15:05">
+<meta name="ds-build" content="05-04-2026 16:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1075,6 +1075,16 @@ function escHTML(s){
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+}
+/** Voor inline onclick met enkel aanhalingstekens rond strings — apostrof in dossiernaam sneed HTML anders af. */
+function escJsStr(s){
+  return String(s==null?'':s)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/\r/g,' ')
+    .replace(/\n/g,' ')
+    .replace(/\u2028/g,' ')
+    .replace(/\u2029/g,' ');
 }
 function showFatalUi(msg){
   try{
@@ -3351,7 +3361,9 @@ function goScreen(sc){
   mc.scrollTop=0;
   renderOwnAvatar();
   renderBrandTag();
-  if(S.user)rDrawer();
+  if(S.user){
+    try{rDrawer();}catch(e){console.error('rDrawer na scherm',e);}
+  }
 
   // Hide bottom-nav actions when not logged in
   ['tab-senses','tab-own','tab-vertel'].forEach(function(id){
@@ -3383,7 +3395,7 @@ function rDrawer(){
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0};
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="drow" onclick="viewDossier('${p}')">${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${p}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${p}')">${d.count}</div></div>`;
+      h+=`<div class="drow" onclick="viewDossier('${escJsStr(p)}')">${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${p}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${escJsStr(p)}')">${d.count}</div></div>`;
     });
   }
   h+=`<div class="dlbl">Acties</div>
@@ -4487,17 +4499,17 @@ function buildCoachTasks(){
     var hasRealActivity=!!d.lastActive||((d.count||0)>0);
     var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
     if(hasRealActivity&&days>=4&&stage!=='geen_contact'){
-      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':(days>=7?'medium':'low')),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+      tasks.push({id:'check-stale-'+p,type:'c',prio:(days>=14?'high':(days>=7?'medium':'low')),dossier:p,msg:'Geen update over <strong>'+person+'</strong> sinds '+days+' dagen. Alles ok?',openMsg:'Nog openstaand: er is nog steeds geen recente update over <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
     }
     var lastAdviceBlock=((d.meta||{}).last_advice)||{};
     var lastAdviceAt=lastAdviceBlock.updated_at||'';
     var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
     if((d.count||0)>=1&&!hasAdviceBody){
-      tasks.push({id:'actie-eerste-advies-'+p,type:'a',prio:'high',dossier:p,msg:'Vraag een <strong>eerste advies</strong> voor '+person+' op basis van je berichten.',openMsg:'Nog openstaand: nog geen advies voor <strong>'+person+'</strong>.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-eerste-advies-'+p,type:'a',prio:'high',dossier:p,msg:'Vraag een <strong>eerste advies</strong> voor '+person+' op basis van je berichten.',openMsg:'Nog openstaand: nog geen advies voor <strong>'+person+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
     if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
-      tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+person+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+person+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     var m=d.meta||{};
     var hasPhotoUrl=!!(m&&m.photo_url);
@@ -4505,13 +4517,13 @@ function buildCoachTasks(){
     if((d.count||0)>=1&&!(m&&m.photo_analysis)){
       var pr=(d.count||0)>=6?'medium':'low';
       if(!hasPhotoUrl&&!hasAnPhotos){
-        tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+person+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+person+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+        tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+person+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+person+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }else if((d.count||0)>=6){
-        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+person+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+p+"');setTimeout(function(){switchTab('foto');},120)"});
+        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+person+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+person+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }
     }
     if(stage==='geen_contact'&&days<=30){
-      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+p+"')"});
+      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+person+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+person+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
     }
     var autoPlanTask=plannerAutoTaskFor(p);
     if(autoPlanTask)tasks.push(autoPlanTask);
@@ -4530,13 +4542,13 @@ function buildCoachTasks(){
       Object.values((fd.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())focusFilled++;});
     });
     if((fRelType==='prille relatie'||fStage==='meerdere_dates'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusFilled<7){
-      tasks.push({id:'rel-focus-align-'+focusName,type:'c',prio:'high',dossier:focusName,msg:'Je zit met <strong>'+fPerson+'</strong> in een serieuzere fase. Check of verwachtingen, tempo en exclusiviteit al helder uitgesproken zijn.',openMsg:'Nog openstaand: bespreek verwachtingen en tempo met <strong>'+fPerson+'</strong>.',link:'Open dossier →',action:"viewDossier('"+focusName+"')"});
+      tasks.push({id:'rel-focus-align-'+focusName,type:'c',prio:'high',dossier:focusName,msg:'Je zit met <strong>'+fPerson+'</strong> in een serieuzere fase. Check of verwachtingen, tempo en exclusiviteit al helder uitgesproken zijn.',openMsg:'Nog openstaand: bespreek verwachtingen en tempo met <strong>'+fPerson+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(focusName)+"')"});
     }
     if(fRelType==='vaste relatie'||fStage==='vaste relatie'){
-      tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"});
+      tasks.push({id:'rel-focus-grow-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Met <strong>'+fPerson+'</strong> zit je in vaste relatie-modus. Check bewust hoe jullie communiceren, herstellen na spanning en blijven investeren.',openMsg:'Nog openstaand: plan een relatie-check-in met <strong>'+fPerson+'</strong>.',link:'Naar advies →',action:"viewDossier('"+escJsStr(focusName)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
     if(focusHasRealActivity&&(fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
-      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+focusName+"';S.vertelGesprekDossier='"+focusName+"';goScreen('vertel')"});
+      tasks.push({id:'rel-focus-update-'+focusName,type:'a',prio:'medium',dossier:focusName,msg:'Er is al even geen update over <strong>'+fPerson+'</strong> in je relatie-focus. Voeg iets toe zodat je coach de evolutie juist kan volgen.',openMsg:'Nog openstaand: voeg recente context toe over <strong>'+fPerson+'</strong>.',link:'Open Vertel →',action:"S.vertelFrom='"+escJsStr(focusName)+"';S.vertelGesprekDossier='"+escJsStr(focusName)+"';goScreen('vertel')"});
     }
     var focusBoost=buildRelationshipBoost(focusName);
     if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
@@ -4550,7 +4562,7 @@ function buildCoachTasks(){
         msg:boostMsg,
         openMsg:'Nog openstaand: plan een klein verbindend moment met <strong>'+fPerson+'</strong>.',
         link:'Naar advies →',
-        action:"viewDossier('"+focusName+"');setTimeout(function(){switchTab('advies');},120)"
+        action:"viewDossier('"+escJsStr(focusName)+"');setTimeout(function(){switchTab('advies');},120)"
       });
     }
   }
@@ -4860,10 +4872,10 @@ function rHome(el){
         <div class="ntext">${n.msg}</div>
         <span class="nlink" onclick="${n.action}">${n.link}</span>
         <div class="home-note-actions">
-          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',24)">Snooze 1d</button>
-          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${n.id}',72)">Snooze 3d</button>
-          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','done')">✓ Klaar</button>
-          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${n.id}','dismiss')">Weg</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${escJsStr(n.id)}',24)">Snooze 1d</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskSnooze('${escJsStr(n.id)}',72)">Snooze 3d</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','done')">✓ Klaar</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','dismiss')">Weg</button>
         </div>
       </div>`;
     });
@@ -4909,7 +4921,7 @@ function rHome(el){
       var shortcut=plannerHomeShortcutCopy();
       var plannerName=shortcut.name||(cs&&cs[0])||'';
       if(!plannerName)return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>👥</span><span>Eerste dossier</span></div><p class="ai-sec-text">Maak eerst een contactdossier aan voor je plannen, vergelijking en relatie-status.</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
-      return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+plannerName+'\')">Plan iets leuks</button></div></div>';
+      return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+escJsStr(plannerName)+'\')">Plan iets leuks</button></div></div>';
     })()}
   <!-- Grote microfoon knop -->
   <button class="mic-btn" onclick="goScreen('vertel')" style="margin:14px auto 18px">
@@ -5603,7 +5615,7 @@ function plannerAutoTaskFor(name){
     msg:msg,
     openMsg:'Nog openstaand: er staat nog steeds een planvoorstel klaar voor <strong>'+person+'</strong>.',
     link:'Open voorstel →',
-    action:"openPlannerSuggestion('"+name+"')"
+    action:"openPlannerSuggestion('"+escJsStr(name)+"')"
   };
 }
 async function requestPlannerIdeas(name,answers,opt){
@@ -10677,4 +10689,95 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
   pd.count=(pd.count||0)+1;
   S.pdata[dossier]=pd;
   await saveP(dossier,pd.props,pd.count,pd.categories);
-  i
+  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
+  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+  rDrawer();
+  if(sid&&window._saveData)delete window._saveData[sid];
+  S.vertelGesprekDossier=dossier;
+  S.vertelFrom=dossier;
+  updateVertelGesprekBanner();
+  if(S.screen==='vertel')renderVertelInputCoachTip();
+  return inserted;
+}
+
+// ══ Init ══════════════════════════════════════════════════════════
+// Event delegation: auto-save voor contact categorieën via data attributen
+document.addEventListener('input',function(e){
+  var ta=e.target;
+  if(!ta.classList.contains('own-ta'))return;
+  // Contact categorie textareas hebben id="cc-CATID-aN"
+  var m=ta.id.match(/^cc-(.+)-a\d+$/);
+  if(m){
+    var catId=m[1];
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+// Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
+try{
+  window.goScreen=goScreen;
+  window.goBack=goBack;
+  window.switchTab=switchTab;
+  window.viewDossier=viewDossier;
+  window.openDossierProfiel=openDossierProfiel;
+  window.opslaanInDossierSticky=opslaanInDossierSticky;
+  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
+  window.safeSignOut=safeSignOut;
+  window.closeDrawer=closeDrawer;
+  window.openDrawer=openDrawer;
+  window.nieuwGesprek=nieuwGesprek;
+  window.setSensesSortFromUi=setSensesSortFromUi;
+  window.laadOudereSessieBerichten=laadOudereSessieBerichten;
+  window.openSidebar=openSidebar;
+  window.closeSidebar=closeSidebar;
+  window.selectDossierFromPick=selectDossierFromPick;
+  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
+  window.createNewDossierFromPick=createNewDossierFromPick;
+  window.koppelSessieMsg=koppelSessieMsg;
+  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
+  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
+  window.laadOudereTijdlijn=laadOudereTijdlijn;
+  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
+  window.exportVertelThreadTxt=exportVertelThreadTxt;
+  window.generatePlannerIdeas=generatePlannerIdeas;
+  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
+  window.pttMicPointerDown=pttMicPointerDown;
+  window.pttMicPointerUp=pttMicPointerUp;
+  window.openAiImportModal=openAiImportModal;
+  window.closeAiImportModal=closeAiImportModal;
+  window.switchAiImportTab=switchAiImportTab;
+  window.resetAiImportToUpload=resetAiImportToUpload;
+  window.handleAiImportFile=handleAiImportFile;
+  window.confirmAiImportSave=confirmAiImportSave;
+}catch(e){console.warn('window exports:',e);}
+(function bindAiImportModalClicks(){
+  var modal=document.getElementById('aiImportModal');
+  if(!modal)return;
+  modal.addEventListener('click',function(e){
+    var btn=e.target&&e.target.closest&&e.target.closest('[data-ai-import]');
+    if(!btn||!modal.contains(btn))return;
+    var act=btn.getAttribute('data-ai-import');
+    if(act==='save'){
+      e.preventDefault();
+      if(window.confirmAiImportSave)window.confirmAiImportSave();
+    }else if(act==='back'){
+      e.preventDefault();
+      if(window.resetAiImportToUpload)window.resetAiImportToUpload();
+    }else if(act==='close'){
+      e.preventDefault();
+      if(window.closeAiImportModal)window.closeAiImportModal();
+    }
+  });
+})();
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
