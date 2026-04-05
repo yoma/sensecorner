@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 19:12">
+<meta name="ds-build" content="03-04-2026 20:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -3396,7 +3396,20 @@ function goBack(){
 }
 
 function goScreen(sc){
-  if(S.user)flushPendingAutosaves();
+  var runGoScreen=function(){
+    _goScreenBody(sc);
+  };
+  if(S.user){
+    flushPendingAutosavesAsync().then(runGoScreen,function(err){
+      console.warn('goScreen autosave flush',err);
+      runGoScreen();
+    });
+  }else{
+    runGoScreen();
+  }
+}
+
+function _goScreenBody(sc){
   var prevScreen=S.screen;
   var shadeEl=document.getElementById('helpTourShade');
   var cardEl=document.getElementById('helpTourCard');
@@ -6682,6 +6695,9 @@ async function switchTab(tab){
   if(tab==='tijdlijn'&&S.viewDossier&&!S.timelineLimitByDossier[S.viewDossier]){
     S.timelineLimitByDossier[S.viewDossier]=3;
   }
+  if(S.user){
+    try{await flushPendingAutosavesAsync();}catch(e){console.warn('switchTab autosave flush',e);}
+  }
   document.querySelectorAll('.dtab').forEach(t=>{
     var dt=t.getAttribute('data-dtab');
     if(dt)t.classList.toggle('active',dt===tab);
@@ -7383,17 +7399,23 @@ function parseAutoSaveKey(key){
   if(i<0||j<0)return null;
   return{type:key.substring(0,i),dosName:key.substring(i+1,j),catId:key.substring(j+1)};
 }
-function flushPendingAutosaves(){
+/** Wacht tot alle uitgestelde autosaves klaar zijn (DOM moet nog bestaan). */
+function flushPendingAutosavesAsync(){
   var keys=Object.keys(_autoSaveTimers);
-  if(!keys.length)return;
+  if(!keys.length)return Promise.resolve();
+  var saves=[];
   keys.forEach(function(key){
     clearTimeout(_autoSaveTimers[key]);
     delete _autoSaveTimers[key];
     var p=parseAutoSaveKey(key);
     if(!p)return;
-    if(p.type==='own')void saveOwnCat(p.catId,true);
-    else void saveContactCat(p.dosName,p.catId,true);
+    if(p.type==='own')saves.push(saveOwnCat(p.catId,true));
+    else saves.push(saveContactCat(p.dosName,p.catId,true));
   });
+  return saves.length?Promise.all(saves):Promise.resolve();
+}
+function flushPendingAutosaves(){
+  void flushPendingAutosavesAsync();
 }
 
 function scheduleAutoSave(type,dosName,catId,fieldIdx){
@@ -7443,18 +7465,14 @@ async function saveContactCat(dosName,catId,silent){
   if(!d.categories)d.categories={};
   d.meta=d.meta||{};
   var prevCat={...(d.categories[catId]||{})};
-  var CONTACT_CATS_IDS=['karakter_contact','patronen_contact','gevoel_contact'];
-  // Verzamel antwoorden voor dit catId
   var answers={};
-  var foundFields=0;
-  var ta0=document.getElementById('cc-'+catId+'-a0');
-  var ta1=document.getElementById('cc-'+catId+'-a1');
-  var ta2=document.getElementById('cc-'+catId+'-a2');
-  if(ta0){answers['a0']=ta0.value.trim();foundFields++;}
-  if(ta1){answers['a1']=ta1.value.trim();foundFields++;}
-  if(ta2){answers['a2']=ta2.value.trim();foundFields++;}
-  // Als de tab net hertekend is en velden even niet bestaan: nooit bestaande data overschrijven met leeg.
-  if(foundFields===0)return;
+  var anyDom=false;
+  ['a0','a1','a2'].forEach(function(aKey){
+    var ta=document.getElementById('cc-'+catId+'-'+aKey);
+    if(ta){anyDom=true;answers[aKey]=String(ta.value||'').trim();}
+    else{answers[aKey]=String(prevCat[aKey]||'').trim();}
+  });
+  if(!anyDom&&!Object.values(answers).some(function(v){return String(v||'').trim().length>0;}))return;
   d.categories[catId]=answers;
   if(!d.meta.field_updates)d.meta.field_updates={};
   if(!d.meta.field_updates.contact)d.meta.field_updates.contact={};
@@ -7786,22 +7804,20 @@ async function saveOwnCat(catId,silent){
   var btn=document.getElementById('oc-save-'+catId);
   setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
   try{
-    // Verzamel antwoorden
+    var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
+    if(!d.categories)d.categories={};
+    d.meta=d.meta||{};
+    var prevCat={...(d.categories[catId]||{})};
     var answers={};
     var antwoordTeksten=[];
     cat.prompts.forEach((p,i)=>{
       var ta=document.getElementById('oc-'+catId+'-a'+i);
-      var val=(ta?.value||'').trim();
+      var val=ta!=null?String(ta.value||'').trim():String(prevCat['a'+i]||'').trim();
       answers['a'+i]=val;
       if(val)antwoordTeksten.push(`${p.q}: ${val}`);
     });
 
-    // Sla antwoorden op in state en Supabase
-    var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
-    if(!d.categories)d.categories={};
-    d.meta=d.meta||{};
     var prevProps={...d.props};
-    var prevCat={...(d.categories[catId]||{})};
     d.categories[catId]=answers;
     if(!d.meta.field_updates)d.meta.field_updates={};
     if(!d.meta.field_updates.own)d.meta.field_updates.own={};
