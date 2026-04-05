@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 11:25">
+<meta name="ds-build" content="05-04-2026 12:08">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1066,6 +1066,14 @@ try{
 }catch(e){
   console.warn('Supabase client init:',e);
 }
+function escHTML(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
 function showFatalUi(msg){
   try{
     var mc=document.getElementById('mainContent');
@@ -1077,7 +1085,9 @@ function showFatalUi(msg){
       +'</div>'
       +'<div style="font-size:12px;color:#7f8790;margin-top:8px">Tip: doe Ctrl+F5. Blijft dit, stuur deze melding door.</div>'
       +'</div>';
-  }catch(_e){}
+  }catch(_e){
+    console.error('showFatalUi',_e);
+  }
 }
 window.addEventListener('error',function(ev){
   var m=(ev&&ev.message?ev.message:'Scriptfout')
@@ -1757,14 +1767,6 @@ function renderTextareaVoiceRow(id,placeholder,value,oninput){
     +'</div>';
 }
 
-function escHTML(s){
-  return String(s==null?'':s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
-}
 function formatAiRichText(txt){
   var raw=String(txt==null?'':txt).replace(/\\n/g,'\n').trim();
   if(!raw)return'';
@@ -2864,6 +2866,10 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
+  var mcBoot=document.getElementById('mainContent');
+  if(mcBoot&&!String(mcBoot.textContent||'').replace(/\s+/g,'').trim()){
+    mcBoot.innerHTML='<div style="padding:32px 20px;text-align:center;color:#666;font-size:14px;line-height:1.6">Bezig met laden…</div>';
+  }
   if(!sb){
     goScreen('home');
     var mc=document.getElementById('mainContent');
@@ -10239,4 +10245,447 @@ async function nieuwGesprek(){
 
 var SESS_HISTORY_PAGE=20;
 
-async function fetchSenseSessionMsgBatch(sessionId,b
+async function fetchSenseSessionMsgBatch(sessionId,beforeCreatedAt){
+  var fetchN=Math.min(501,SESS_HISTORY_PAGE+1);
+  var q=sb.from('sense_session_msgs')
+    .select('*')
+    .eq('session_id',sessionId)
+    .eq('user_id',S.user.id);
+  if(beforeCreatedAt)q=q.lt('created_at',beforeCreatedAt);
+  q=q.order('created_at',{ascending:false}).limit(fetchN);
+  var res=await q;
+  var data=res.data;
+  if(res.error){
+    q=sb.from('sense_session_msgs').select('*').eq('session_id',sessionId);
+    if(beforeCreatedAt)q=q.lt('created_at',beforeCreatedAt);
+    q=q.order('created_at',{ascending:false}).limit(fetchN);
+    res=await q;
+    data=res.data;
+  }
+  if(res.error)throw res.error;
+  data=data||[];
+  var hasMore=data.length>SESS_HISTORY_PAGE;
+  var slice=data.slice(0,SESS_HISTORY_PAGE);
+  var chron=slice.slice().reverse();
+  chron.forEach(function(m){
+    if(m&&!m.created_at&&(m.inserted_at||m.updated_at)){
+      m.created_at=m.inserted_at||m.updated_at;
+    }
+  });
+  return{chron:chron,hasMore:hasMore};
+}
+
+async function applyVertelSessionTitleFromDb(sessionId,fallbackRows){
+  var t=document.getElementById('sessieTitle');
+  if(!t)return;
+  try{
+    var r=await sb.from('sense_sessions').select('preview').eq('id',sessionId).eq('user_id',S.user.id).limit(1);
+    var row=(r&&r.data&&r.data[0])?r.data[0]:null;
+    if(row&&String(row.preview||'').trim()){
+      t.textContent=String(row.preview).trim();
+      return;
+    }
+  }catch(e){}
+  var rows=fallbackRows||[];
+  var fu=rows.find(function(x){return x.role==='user';});
+  t.textContent=fu?buildSessionPreview(fu.content||''):'Gesprek';
+}
+
+/** Laatste gekoppelde dossier in deze sessie → Vertel-opslagvoorstel (zelfde als «Gekoppeld aan …» in Geschiedenis). */
+function syncVertelGesprekFocusFromRows(rows){
+  if(!rows||!rows.length){
+    S.vertelGesprekDossier=null;
+    S.vertelFrom=null;
+    updateVertelGesprekBanner();
+    if(S.screen==='vertel')renderVertelInputCoachTip();
+    return;
+  }
+  var assignMap=getSessAssignMap();
+  var lastLinked=null;
+  rows.forEach(function(m){
+    if(m.role==='user'){
+      var a=assignMap[m.id]||{};
+      if(a.dossier)lastLinked=a.dossier;
+    }
+  });
+  if(lastLinked){
+    S.vertelGesprekDossier=lastLinked;
+    S.vertelFrom=lastLinked;
+  }else{
+    S.vertelGesprekDossier=null;
+    S.vertelFrom=null;
+  }
+  updateVertelGesprekBanner();
+  if(S.screen==='vertel')renderVertelInputCoachTip();
+}
+
+function renderVertelSessionFromRows(rows){
+  var ca=document.getElementById('chatArea');
+  if(!ca)return;
+  var pager=S.sessionHistoryPager;
+  var hasOlder=pager&&pager.hasOlder;
+  ca.innerHTML='';
+  if(hasOlder){
+    var top=document.createElement('div');
+    top.style.cssText='text-align:center;padding:10px 12px;border-bottom:1px solid var(--b);background:#fafbfc';
+    top.innerHTML='<button type="button" class="btn-g" style="max-width:300px" onclick="laadOudereSessieBerichten()">Laad '+SESS_HISTORY_PAGE+' eerdere berichten</button>';
+    ca.appendChild(top);
+  }
+  function escSess(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  var assignMap=getSessAssignMap();
+  S.vertelMsgs=[];
+  window._sessieKoppelData=[];
+  rows.forEach(function(m,idx){
+    S.vertelMsgs.push({role:m.role,html:m.content||''});
+    if(m.role==='user'){
+      var nextAi='';
+      for(var j=idx+1;j<rows.length;j++){
+        if(rows[j].role==='ai'){nextAi=rows[j].content||'';break;}
+        if(rows[j].role==='user')break;
+      }
+      var kIdx=window._sessieKoppelData.length;
+      var a=assignMap[m.id]||{};
+      window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
+      var userWrap=document.createElement('div');
+      userWrap.className='msg-user';
+      userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
+        +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
+        +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
+        +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
+        +'</div></div>';
+      ca.appendChild(userWrap);
+    }else{
+      var aiWrap=document.createElement('div');
+      aiWrap.className='msg-ai';
+      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
+      ca.appendChild(aiWrap);
+    }
+  });
+  syncVertelGesprekFocusFromRows(rows);
+}
+
+async function laadOudereSessieBerichten(){
+  var sid=S.currentSessionId;
+  var pager=S.sessionHistoryPager;
+  if(!sid||!pager||pager.sessionId!==sid||!pager.rows||!pager.rows.length||!pager.hasOlder)return;
+  var ca=document.getElementById('chatArea');
+  var beforeTs=pager.rows[0].created_at;
+  if(!beforeTs)return;
+  var oldH=ca?ca.scrollHeight:0;
+  var oldTop=ca?ca.scrollTop:0;
+  try{
+    var batch=await fetchSenseSessionMsgBatch(sid,beforeTs);
+    if(!batch.chron.length){
+      pager.hasOlder=false;
+      renderVertelSessionFromRows(pager.rows);
+      updateSessBulkBar();
+      return;
+    }
+    pager.rows=batch.chron.concat(pager.rows);
+    pager.hasOlder=!!batch.hasMore;
+    renderVertelSessionFromRows(pager.rows);
+    updateSessBulkBar();
+    if(ca){
+      ca.scrollTop=oldTop+(ca.scrollHeight-oldH);
+    }
+  }catch(e){
+    console.warn('laadOudereSessieBerichten',e);
+    toast('Kon oudere berichten niet laden');
+  }
+}
+
+async function laadSessie(sessionId,opt){
+  opt=opt||{};
+  if(!opt.skipCloseSidebar)closeSidebar();
+  if(!S.user)return;
+  S.currentSessionId=sessionId;
+  S.vertelMsgs=[];
+  S.sessionHistoryPager=null;
+  var ca=document.getElementById('chatArea');
+  if(ca)ca.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Gesprek laden...</div>';
+  try{
+    var batch=await fetchSenseSessionMsgBatch(sessionId,null);
+    var data=batch.chron;
+    if(!data||!data.length){if(ca)ca.innerHTML='';S.sessionHistoryPager=null;return;}
+    S.sessionHistoryPager={sessionId:sessionId,rows:data.slice(),hasOlder:!!batch.hasMore};
+    await applyVertelSessionTitleFromDb(sessionId,S.sessionHistoryPager.rows);
+    renderVertelSessionFromRows(S.sessionHistoryPager.rows);
+    if(ca)ca.scrollTop=ca.scrollHeight;
+    updateSessBulkBar();
+  }catch(e){
+    console.warn('laadSessie error:',e);
+    if(ca)ca.innerHTML='';
+    S.sessionHistoryPager=null;
+    if(!opt.silent)toast('Gesprek laden mislukt');
+  }
+}
+
+function updateSessBulkBar(){
+  var bar=document.getElementById('sessBulkBar');
+  if(!bar)return;
+  var arr=window._sessieKoppelData||[];
+  var unc=arr.filter(function(x){return !x.dossier;}).length;
+  if(!arr.length){bar.style.display='none';bar.innerHTML='';return;}
+  bar.style.display='block';
+  bar.innerHTML='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666;flex:1">'+unc+' ongekoppeld van '+arr.length+' user-berichten</span>'
+    +'<button class="coach-save-other" onclick="koppelAlleOngekoppeld()">Koppel alle ongekoppelde</button></div>';
+}
+
+function openGekoppeldDossierFromSess(idx){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!item.dossier)return;
+  viewDossier(item.dossier);
+}
+
+async function koppelAlleOngekoppeld(){
+  var arr=window._sessieKoppelData||[];
+  var targets=arr.map(function(x,i){return {item:x,idx:i};}).filter(function(x){return !x.item.dossier;});
+  if(!targets.length){toast('Alles is al gekoppeld');return;}
+  openDossierPickModal(
+    'Koppel alle ongekoppelde',
+    'Kies 1 dossier voor alle '+targets.length+' ongekoppelde berichten.',
+    'bulk',
+    targets.map(function(t){return t.idx;})
+  );
+}
+
+async function koppelAlleOngekoppeldNaar(dossier,targetIdxs){
+  var idxs=targetIdxs||[];
+  for(var i=0;i<idxs.length;i++){
+    await koppelSessieMsgNaar(idxs[i],dossier,true);
+  }
+  toast('✅ '+idxs.length+' berichten gekoppeld aan '+dn(dossier));
+  await laadSessie(S.currentSessionId);
+}
+
+async function koppelSessieMsg(idx){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!S.user)return;
+  openDossierPickModal(
+    'Kies dossier',
+    'Aan welk dossier wil je dit sessiebericht koppelen?',
+    'single',
+    idx
+  );
+}
+
+async function koppelSessieMsgNaar(idx,dossier,silent){
+  var arr=window._sessieKoppelData||[];
+  var item=arr[idx];
+  if(!item||!S.user)return;
+  try{
+    var map=getSessAssignMap();
+    var m=map[item.sessionMsgId]||{};
+    if(m.senseMsgId){
+      await sb.from('sense_messages').update({profile_name:dossier}).eq('id',m.senseMsgId).eq('user_id',S.user.id);
+    }else{
+      var payload=(item.text||'')+((item.aiText||'')?('\n'+item.aiText):'');
+      var inserted=await _doOpslaan(null,payload,dossier,item.sessionMsgId);
+      if(inserted&&inserted.id)m.senseMsgId=inserted.id;
+    }
+    m.dossier=dossier;
+    map[item.sessionMsgId]=m;
+    setSessAssignMap(map);
+    item.dossier=dossier;
+    item.senseMsgId=m.senseMsgId||null;
+    var lbl=document.getElementById('sessAssignLbl-'+idx);
+    if(lbl)lbl.textContent='📌 Gekoppeld aan '+dn(dossier);
+    if(!silent){
+      toast('✅ Gekoppeld aan '+dn(dossier));
+      await laadSessie(S.currentSessionId);
+    }else{
+      updateSessBulkBar();
+    }
+  }catch(e){
+    console.warn('koppelSessieMsg error:',e);
+    if(!silent)toast('Koppelen mislukt'+(e&&e.message?(': '+e.message):''));
+  }
+}
+
+async function saveSessionMsg(sessionId,role,content){
+  if(!S.user||!sessionId)return null;
+  try{
+    var res=await sb.from('sense_session_msgs').insert({
+      session_id:sessionId,user_id:S.user.id,
+      role:role,content:content,
+      created_at:new Date().toISOString()
+    }).select('id').single();
+    if(res&&res.error)console.warn('saveSessionMsg insert:',res.error);
+    return res&&res.data&&res.data.id?res.data.id:null;
+  }catch(e){console.warn('saveSessionMsg:',e);return null;}
+}
+
+async function ensureActiveSessionForMessage(previewText){
+  if(!S.user)return null;
+  if(S.currentSessionId)return S.currentSessionId;
+  try{
+    var preview=buildSessionPreview(previewText||'Nieuw gesprek');
+    var {data,error}=await sb.from('sense_sessions')
+      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString()})
+      .select().single();
+    if(error)throw error;
+    if(data&&data.id){
+      S.currentSessionId=data.id;
+      laadSessies();
+      return data.id;
+    }
+  }catch(e){
+    console.warn('ensureActiveSessionForMessage error:',e);
+  }
+  return null;
+}
+
+async function updateSessiePreview(sessionId,tekst){
+  if(!S.user||!sessionId)return;
+  var preview=buildSessionPreview(tekst);
+  var t=document.getElementById('sessieTitle');
+  if(t)t.textContent=preview;
+  try{
+    await sb.from('sense_sessions').update({
+      preview:preview,updated_at:new Date().toISOString()
+    }).eq('id',sessionId).eq('user_id',S.user.id);
+  }catch(e){console.warn('updateSessiePreview:',e);}
+}
+
+async function initSessie(){
+  // Geen automatisch actieve sessie-id meer: eerste bericht maakt een nieuwe rij; geschiedenis laad je via het zijpaneel.
+  return;
+}
+
+// ══ Coach opslaan functies ════════════════════════════════════════
+
+async function opslaanInDossier(sid){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  var dossier=data.dossier;
+  if(!dossier){kiesAnderDossier(sid);return;}
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+}
+
+async function opslaanInDossierSticky(sid){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data||!data.dossier)return;
+  S.vertelSessionStickyDossier=data.dossier;
+  await opslaanInDossier(sid);
+  toast('Oké — in dit gesprek gaat alles automatisch naar '+dn(data.dossier)+'. Tik «Ander» om te wisselen.');
+}
+
+function kiesAnderDossier(sid){
+  S.vertelSessionStickyDossier=null;
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  openDossierPickModal(
+    'Opslaan bij dossier',
+    'Kies een bestaand dossier of maak een nieuw dossier.',
+    'save',
+    {sid:sid,text:data.tekst,suggestedName:data.suggestedName||'',sessionUserMsgId:data.sessionUserMsgId}
+  );
+}
+
+async function _opslaanKeuze(dossier){
+  var sid=window._saveKiesSid;
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+}
+
+async function maakNieuwDossierEnOpslaan(sid,useSuggested){
+  S.vertelSessionStickyDossier=null;
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  var suggested=data.suggestedName||'';
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  if(inputName===null)return;
+  var base=String(inputName||'').trim();
+  if(!base){toast('Naam is leeg');return;}
+  var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+}
+
+async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
+  if(sid){
+    var bar=document.getElementById(sid);
+    if(bar)bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+dn(dossier)+'</strong></span>';
+  }
+  await ensureP(dossier);
+  var inserted=await saveMsg(dossier,'user',tekst);
+  if(sessionUserMsgId&&inserted&&inserted.id){
+    var map=getSessAssignMap();
+    map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
+    setSessAssignMap(map);
+  }
+  var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
+  pd.count=(pd.count||0)+1;
+  S.pdata[dossier]=pd;
+  await saveP(dossier,pd.props,pd.count,pd.categories);
+  if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
+  else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+  rDrawer();
+  if(sid&&window._saveData)delete window._saveData[sid];
+  S.vertelGesprekDossier=dossier;
+  S.vertelFrom=dossier;
+  updateVertelGesprekBanner();
+  if(S.screen==='vertel')renderVertelInputCoachTip();
+  return inserted;
+}
+
+// ══ Init ══════════════════════════════════════════════════════════
+// Event delegation: auto-save voor contact categorieën via data attributen
+document.addEventListener('input',function(e){
+  var ta=e.target;
+  if(!ta.classList.contains('own-ta'))return;
+  // Contact categorie textareas hebben id="cc-CATID-aN"
+  var m=ta.id.match(/^cc-(.+)-a\d+$/);
+  if(m){
+    var catId=m[1];
+    var dossierEl=ta.closest('[id^="cc-"]');
+    // Zoek dosName via parent data of via catId → huidige dossier
+    var dosName=S.viewDossier||'OWN Sense';
+    scheduleAutoSave('contact',dosName,catId);
+  }
+});
+
+setBuildTag();
+// Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
+try{
+  window.goScreen=goScreen;
+  window.goBack=goBack;
+  window.switchTab=switchTab;
+  window.viewDossier=viewDossier;
+  window.openDossierProfiel=openDossierProfiel;
+  window.opslaanInDossierSticky=opslaanInDossierSticky;
+  window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
+  window.safeSignOut=safeSignOut;
+  window.closeDrawer=closeDrawer;
+  window.openDrawer=openDrawer;
+  window.nieuwGesprek=nieuwGesprek;
+  window.setSensesSortFromUi=setSensesSortFromUi;
+  window.laadOudereSessieBerichten=laadOudereSessieBerichten;
+  window.openSidebar=openSidebar;
+  window.closeSidebar=closeSidebar;
+  window.selectDossierFromPick=selectDossierFromPick;
+  window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
+  window.createNewDossierFromPick=createNewDossierFromPick;
+  window.koppelSessieMsg=koppelSessieMsg;
+  window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
+  window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
+  window.laadOudereTijdlijn=laadOudereTijdlijn;
+  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
+  window.exportVertelThreadTxt=exportVertelThreadTxt;
+  window.generatePlannerIdeas=generatePlannerIdeas;
+  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
+  window.pttMicPointerDown=pttMicPointerDown;
+  window.pttMicPointerUp=pttMicPointerUp;
+}catch(e){console.warn('window exports:',e);}
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
