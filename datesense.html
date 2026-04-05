@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="05-04-2026 16:40">
+<meta name="ds-build" content="05-04-2026 19:10">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -1002,7 +1002,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   <div class="save-modal-bg" onclick="window.closeAiImportModal&&window.closeAiImportModal()"></div>
   <div class="save-modal-sheet" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
     <div class="save-modal-title">OWN Sense vullen via AI-export</div>
-    <div class="save-modal-sub" style="margin-bottom:8px">Optioneel: alleen als jij je export hier wil gebruiken. Je ziet eerst een voorstel en past het aan voor het opslaan.</div>
+    <div class="save-modal-sub" style="margin-bottom:8px">Optioneel: OWN Sense <strong>aanvullen</strong> vanuit je export. Je krijgt <strong>één reviewstap</strong> (hieronder aanpassen en opslaan) — bewust geen tweede voor/na-scherm, om het simpel te houden. Bij opslaan vouwt de AI dubbele formuleringen samen met wat je al had.</div>
     <div id="aiImportBody" style="overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch">
       <div id="aiImportStepUpload">
         <div class="ai-import-tabs" role="tablist">
@@ -1037,7 +1037,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
         </div>
       </div>
       <div id="aiImportStepReview" style="display:none">
-        <p style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">Pas de teksten aan en tik daarna op opslaan. Ze worden in je <strong>OWN Sense</strong>-velden gezet.</p>
+        <p style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">Wat je hier goedkeurt, gaat naar OWN Sense. Waar je al tekst had, wordt dat <strong>automatisch samengevoegd</strong> met deze inhoud (zonder extra bevestigingsscherm). Lege vakken hier wijzigen niets. Even wachten na “opslaan” als er veel samen te voegen valt.</p>
         <div id="aiImportReviewFields"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-bottom:4px;position:relative;z-index:5;touch-action:manipulation">
           <button type="button" class="btn-r" data-ai-import="save" style="flex:1;min-width:120px;padding:12px 10px;-webkit-tap-highlight-color:transparent;position:relative;z-index:1">Opslaan in OWN Sense</button>
@@ -8411,6 +8411,23 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
 var _AI_IMPORT_SYS='Je bent een persoonlijkheidsanalist. Analyseer de volgende berichten van een gebruiker en destilleer daaruit een persoonlijk profiel. Focus op: waarden, persoonlijkheid, communicatiestijl, wat ze zoeken in een partner, hoe ze omgaan met emoties, hun levensstijl. Geef het resultaat terug als JSON met de velden: waarden, persoonlijkheid, communicatiestijl, zoektInPartner, emotioneleStijl, levensstijl, overige. Elk veld is een korte beschrijvende tekst.';
 var _AI_IMPORT_KEYS=['waarden','persoonlijkheid','communicatiestijl','zoektInPartner','emotioneleStijl','levensstijl','overige'];
 var _AI_IMPORT_LABELS={waarden:'Waarden',persoonlijkheid:'Persoonlijkheid',communicatiestijl:'Communicatiestijl',zoektInPartner:'Zoekt in partner',emotioneleStijl:'Emotionele stijl',levensstijl:'Levensstijl',overige:'Overige'};
+var _AI_IMPORT_MERGE_SYS='Je bent DateSensei. De gebruiker voegt OWN Sense-tekst toe vanuit een chat-export. Per item krijg je BESTAAND (al in het profiel) en NIEUW (uit de import).\n\n'
+  +'Schrijf per veld één vloeiende Nederlandse tekst die:\n'
+  +'- alle unieke feiten en nuances behoudt;\n'
+  +'- herhalingen en nagenoeg dezelfde zinnen samenvoegt tot één duidelijke formulering;\n'
+  +'- niets verzint of toevoegt;\n'
+  +'- leesbaar en compact blijft (richting max. ~600 tekens per veld, tenzij echt nodig).\n\n'
+  +'Antwoord ALLEEN met geldig JSON, exact dit formaat:\n'
+  +'{"velden":{"karakter.a0":"…","interesses.a1":"…"}}\n'
+  +'Gebruik precies dezelfde veld-keys als in de input (vorm categorie.a0 t/m a3). Geen markdown, geen uitleg eromheen.';
+
+function ownSenseCellLabel(catId,ak){
+  var cat=OWN_CATS.find(function(c){return c.id===catId;});
+  var idx=parseInt(String(ak||'').replace(/^a/,''),10);
+  if(cat&&!isNaN(idx)&&cat.prompts&&cat.prompts[idx])
+    return cat.title+' — '+cat.prompts[idx].q;
+  return String(catId)+' '+String(ak);
+}
 
 function openAiImportModal(){
   if(!S.user){toast('Log eerst in.');return;}
@@ -8599,11 +8616,12 @@ function mapImportProfileToOwnCategories(j){
     overig:z(j.overige)
   };
   var o1=z(p.overig,500),o2=z(p.overig.substring(500),500),o3=z(p.overig.substring(1000),500),o4=z(p.overig.substring(1500),500);
+  var gevoelsA1=p.zoekt?z('Wat ik zoek bij een partner (samenvatting import): '+p.zoekt,520):'';
   return{
     karakter:{a0:p.persoonlijkheid,a1:p.waarden,a2:p.communicatiestijl,a3:o1},
     interesses:{a0:p.lev,a1:o2,a2:o3,a3:o4},
     relatie:{a0:p.zoekt,a1:'',a2:'',a3:''},
-    gevoels:{a0:'',a1:z('Wat ik zoek bij een partner (samenvatting import): '+p.zoekt,520),a2:p.emoties,a3:z(p.communicatiestijl,420)}
+    gevoels:{a0:'',a1:gevoelsA1,a2:p.emoties,a3:z(p.communicatiestijl,420)}
   };
 }
 function parseImportProfileJson(raw){
@@ -8626,7 +8644,36 @@ function renderAiImportReview(p){
 async function runAiImportProfileAnalysis(bundle){
   return await callAPI(_AI_IMPORT_SYS,[{role:'user',content:'Berichten van de gebruiker (chronologisch, laatste stuk):\n\n'+bundle}],1800,90000);
 }
+async function runAiImportConsolidate(items){
+  if(!items||!items.length)return{};
+  var payload=JSON.stringify({items:items.map(function(it){
+    return {veld:it.id,vraag:it.label,bestaand:it.bestaand,nieuw:it.nieuw};
+  })});
+  var raw=await callAPI(_AI_IMPORT_MERGE_SYS,[{role:'user',content:'Voeg per item bestaand + nieuw samen. Input JSON:\n\n'+payload}],8192,90000);
+  var clean=String(raw||'').replace(/```json\s*/gi,'').replace(/```/g,'').trim();
+  var o=JSON.parse(clean);
+  var velden=(o&&o.velden&&typeof o.velden==='object')?o.velden:o;
+  var out={};
+  items.forEach(function(it){
+    var v=velden[it.id];
+    if((v==null||String(v).trim()==='')&&velden&&typeof velden==='object'){
+      var alt=it.id.replace(/\./g,'_');
+      if(velden[alt]!=null)v=velden[alt];
+    }
+    out[it.id]=String(v==null?'':v).trim();
+  });
+  return out;
+}
 var _aiImportSaving=false;
+/** Fallback als AI-samenvoegen faalt: eenvoudig achter elkaar plakken. */
+function mergeOwnSenseImportField(prevVal,newVal){
+  var nv=String(newVal==null?'':newVal).trim();
+  if(nv==='')return null;
+  var ov=String(prevVal==null?'':prevVal).trim();
+  if(ov==='')return nv;
+  if(ov.indexOf(nv)>=0)return ov;
+  return ov+'\n\n— Aanvulling (import)\n'+nv;
+}
 async function confirmAiImportSave(){
   if(_aiImportSaving)return;
   if(!S.user){toast('Niet ingelogd.');return;}
@@ -8638,7 +8685,19 @@ async function confirmAiImportSave(){
     draft[k]=ta?(ta.value||'').trim():'';
   });
   var cats=mapImportProfileToOwnCategories(draft);
+  var usedFallbackMerge=false;
+  var didAiMerge=false;
   try{
+    var _hasIncoming=false;
+    Object.keys(cats).forEach(function(catId){
+      Object.keys(cats[catId]||{}).forEach(function(ak){
+        if(String(cats[catId][ak]==null?'':cats[catId][ak]).trim()!=='')_hasIncoming=true;
+      });
+    });
+    if(!_hasIncoming){
+      toast('Geen tekst om toe te voegen — vul minstens één veld in of pas de voorstellen aan.');
+      return;
+    }
     await ensureP('OWN Sense');
     var d=S.pdata['OWN Sense']||{props:Object.assign({},DP),count:0,categories:{},meta:{}};
     d.categories=d.categories||{};
@@ -8646,18 +8705,62 @@ async function confirmAiImportSave(){
     d.meta.field_updates=d.meta.field_updates||{};
     d.meta.field_updates.own=d.meta.field_updates.own||{};
     var nowIso=new Date().toISOString();
+    var mergedCats=JSON.parse(JSON.stringify(d.categories||{}));
+    ['karakter','interesses','relatie','gevoels'].forEach(function(cid){
+      if(!mergedCats[cid])mergedCats[cid]={};
+    });
+    var toConsolidate=[];
+    var trivial=[];
     Object.keys(cats).forEach(function(catId){
       var patch=cats[catId];
-      d.categories[catId]=Object.assign({},d.categories[catId]||{},patch);
-      if(!d.meta.field_updates.own[catId])d.meta.field_updates.own[catId]={};
-      Object.keys(patch).forEach(function(ak){
-        if(String(patch[ak]||'').trim())d.meta.field_updates.own[catId][ak]=nowIso;
+      var prev=d.categories[catId]||{};
+      Object.keys(patch||{}).forEach(function(ak){
+        var nv=String(patch[ak]==null?'':patch[ak]).trim();
+        if(nv==='')return;
+        var ov=String(prev[ak]==null?'':prev[ak]).trim();
+        var id=catId+'.'+ak;
+        if(ov==='')trivial.push({catId:catId,ak:ak,val:nv});
+        else toConsolidate.push({id:id,label:ownSenseCellLabel(catId,ak),bestaand:ov,nieuw:nv});
       });
+    });
+    var consolidated={};
+    if(toConsolidate.length){
+      try{
+        consolidated=await runAiImportConsolidate(toConsolidate);
+        didAiMerge=true;
+      }catch(me){
+        console.warn('runAiImportConsolidate',me);
+        usedFallbackMerge=true;
+        toConsolidate.forEach(function(it){
+          consolidated[it.id]=mergeOwnSenseImportField(it.bestaand,it.nieuw);
+        });
+      }
+    }
+    toConsolidate.forEach(function(it){
+      var dot=it.id.indexOf('.');
+      var catId=it.id.slice(0,dot);
+      var ak=it.id.slice(dot+1);
+      var txt=String(consolidated[it.id]==null?'':consolidated[it.id]).trim();
+      if(txt==='')txt=String(mergeOwnSenseImportField(it.bestaand,it.nieuw)||'').trim();
+      mergedCats[catId][ak]=txt;
+      if(!d.meta.field_updates.own[catId])d.meta.field_updates.own[catId]={};
+      d.meta.field_updates.own[catId][ak]=nowIso;
+    });
+    trivial.forEach(function(tc){
+      mergedCats[tc.catId][tc.ak]=tc.val;
+      if(!d.meta.field_updates.own[tc.catId])d.meta.field_updates.own[tc.catId]={};
+      d.meta.field_updates.own[tc.catId][tc.ak]=nowIso;
+    });
+    Object.keys(mergedCats).forEach(function(cid){
+      d.categories[cid]=mergedCats[cid];
     });
     S.pdata['OWN Sense']=d;
     await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
     herbereken('OWN Sense').catch(function(e){console.warn('herbereken OWN na import',e);});
-    toast('OWN Sense bijgewerkt.');
+    if(usedFallbackMerge)toast('OWN Sense opgeslagen (samenvoegen mislukte; tekst gecombineerd).');
+    else if(didAiMerge)toast('OWN Sense opgeslagen; dubbele of overlappende zinnen zijn samengevoegd.');
+    else if(trivial.length)toast('OWN Sense aangevuld.');
+    else toast('OWN Sense opgeslagen.');
     closeAiImportModal();
     if(S.screen==='own')goScreen('own');
   }catch(e){
@@ -8725,7 +8828,7 @@ function renderAiImportHomeLanding(){
   return'<div class="ai-rich-card home-mini-card" style="margin:-8px 0 10px;border:1px solid #F0D4D4;background:linear-gradient(180deg,#FFFBFB 0%,#FFF 100%)">'
     +'<div class="ai-sec">'
     +'<div class="ai-sec-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
-    +'<p class="ai-sec-text">Vul OWN Sense sneller aan: upload je export, wij gebruiken alleen jouw eigen berichten. Je ziet een voorstel en past het aan voor het opslaan.</p>'
+    +'<p class="ai-sec-text">Import uit je chats: DateSensei vouwt nieuwe info <strong>samen</strong> met wat je al in OWN Sense had — minder herhaling, één leesbare tekst per vak.</p>'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 11px;font-weight:800;border-color:#F0C4C4;color:var(--r);background:#FFF5F5" onclick="window.openAiImportModal&&window.openAiImportModal()">Start import</button>'
     +'</div></div>';
 }
