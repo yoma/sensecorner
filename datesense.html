@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 18:05">
+<meta name="ds-build" content="03-04-2026 19:12">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -10031,18 +10031,37 @@ var _recognition=null;
 var _micActive=false;
 var _micStopping=false;
 var _micTextTarget='msgInput';
-var _micBaseText='';
+/** Tekst vóór de huidige SpeechRecognition-sessie (vast tijdens deze sessie). */
+var _micPrefix='';
 var _pttHeld=false;
+
+/** Programmatische value-wijziging triggert geen oninput — autosave (profiel) luistert wel op input. */
+function syncMicTextareaInput(inp){
+  if(!inp)return;
+  try{
+    inp.dispatchEvent(new Event('input',{bubbles:true,cancelable:true}));
+  }catch(_e){
+    try{
+      var ev=document.createEvent('Event');
+      ev.initEvent('input',true,true);
+      inp.dispatchEvent(ev);
+    }catch(_e2){}
+  }
+}
 
 function wireRecognitionHandlers(recognition,inp){
   recognition.onresult=function(e){
+    var finals='';
     var interim='';
-    for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){_micBaseText+=e.results[i][0].transcript+' ';}
-      else interim+=e.results[i][0].transcript;
+    for(var i=0;i<e.results.length;i++){
+      var seg=e.results[i];
+      var t=seg[0].transcript;
+      if(seg.isFinal)finals+=t;
+      else interim+=t;
     }
-    inp.value=_micBaseText+interim;
+    inp.value=_micPrefix+finals+interim;
     autoResize(inp);
+    syncMicTextareaInput(inp);
   };
   recognition.onerror=function(){stopMic(true);};
   recognition.onend=function(){
@@ -10061,13 +10080,23 @@ function micRestartAfterPttSegment(){
   if(!inp){stopMic(true);return;}
   var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SRClass){stopMic(true);return;}
+  var old=_recognition;
+  _recognition=null;
+  if(old){
+    try{
+      old.onresult=null;
+      old.onerror=null;
+      old.onend=null;
+      old.stop();
+    }catch(_e){}
+  }
+  _micPrefix=String(inp.value||'');
   _micStopping=false;
   try{
     _recognition=new SRClass();
     _recognition.lang='nl-NL';
     _recognition.continuous=true;
     _recognition.interimResults=true;
-    _micBaseText=String(inp.value||'');
     wireRecognitionHandlers(_recognition,inp);
     _recognition.start();
   }catch(_e){
@@ -10126,11 +10155,20 @@ function startMic(){
   var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
   var inp=document.getElementById(_micTextTarget||'msgInput');
   if(!inp)return;
+  if(_recognition){
+    try{
+      _recognition.onresult=null;
+      _recognition.onerror=null;
+      _recognition.onend=null;
+      _recognition.stop();
+    }catch(_e){}
+    _recognition=null;
+  }
+  _micPrefix=inp.value?String(inp.value):'';
   _recognition=new SRClass();
   _recognition.lang='nl-NL';
   _recognition.continuous=true;
   _recognition.interimResults=true;
-  _micBaseText=inp.value?String(inp.value):'';
   _micStopping=false;
   wireRecognitionHandlers(_recognition,inp);
   _recognition.start();
@@ -10158,8 +10196,8 @@ function stopMic(preserveText){
   if(inp){
     var committed=String(inp.value||'').trim();
     inp.value=committed;
-    _micBaseText=committed;
     autoResize(inp);
+    syncMicTextareaInput(inp);
     try{inp.focus();}catch(_e){}
   }
   _micActive=false;
