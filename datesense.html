@@ -2609,7 +2609,7 @@ function verplaatsEntry(msgId, huidigDossier){
     +'<span style="flex:1">🗑️ Verwijderen</span></button>';
   optsHtml+='</div>';
 
-  document.getElementById('segModalQuote').innerHTML='<span style="font-size:13px;color:var(--m)">Huidig dossier: <strong>'+dn(huidigDossier)+'</strong></span>';
+  document.getElementById('segModalQuote').innerHTML='<span style="font-size:13px;color:var(--m)">Huidig dossier: <strong>'+escHTML(dn(huidigDossier))+'</strong></span>';
   document.getElementById('segModalOpts').innerHTML='<div class="seg-modal-subtitle">Verplaatsen naar:</div>'+optsHtml;
   document.getElementById('segModal').classList.add('show');
 }
@@ -5039,7 +5039,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
           :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
@@ -6217,8 +6217,8 @@ function rPlanner(el){
     return '<button class="planner-chip'+(active?' active':'')+'" onclick="setPlannerIdea(\''+v+'\')">'+v.charAt(0).toUpperCase()+v.slice(1)+'</button>';
   }).join('');
   var contacts=(S.profiles||[]).filter(function(v){return v!=='OWN Sense'&&getDossierLifecycle(v)==='active';});
-  var dossierSelect='<select id="plannerDossier" class="form-input" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';S.planner.historySelection=\'\';goScreen(\'planner\')">'
-    +contacts.map(function(v){return'<option value="'+v+'" '+((name||'')===v?'selected':'')+'>'+dn(v)+'</option>';}).join('')
+  var dossierSelect='<select id="plannerDossier" class="form-input" aria-label="Dossier voor dateplanner" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';S.planner.historySelection=\'\';goScreen(\'planner\')">'
+    +contacts.map(function(v){return'<option value="'+escHTML(v)+'" '+((name||'')===v?'selected':'')+'>'+escHTML(dn(v))+'</option>';}).join('')
     +'</select>';
   var resultHtml='';
   if(p.loading){
@@ -6618,7 +6618,7 @@ async function rDossier(el){
   }
   if(!isOwn){
     var stageNow=getDossierStage(name);
-    header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" onchange="updateDossierStageFromUI(\''+name+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
+    header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" aria-label="Relatiestatus" onchange="updateDossierStageFromUI(\''+escJsStr(name)+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
       +'<option value="virtueel" '+(stageNow==='virtueel'?'selected':'')+'>Virtueel</option>'
       +'<option value="eerste_date" '+(stageNow==='eerste_date'?'selected':'')+'>Eerste date</option>'
       +'<option value="meerdere_dates" '+(stageNow==='meerdere_dates'?'selected':'')+'>Meerdere dates</option>'
@@ -11095,4 +11095,45 @@ try{
   window.koppelSessieMsg=koppelSessieMsg;
   window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
   window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
-  window.laadOudereTijdlijn=laadOudere
+  window.laadOudereTijdlijn=laadOudereTijdlijn;
+  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
+  window.exportVertelThreadTxt=exportVertelThreadTxt;
+  window.generatePlannerIdeas=generatePlannerIdeas;
+  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
+  window.pttMicPointerDown=pttMicPointerDown;
+  window.pttMicPointerUp=pttMicPointerUp;
+  window.openAiImportModal=openAiImportModal;
+  window.closeAiImportModal=closeAiImportModal;
+  window.switchAiImportTab=switchAiImportTab;
+  window.resetAiImportToUpload=resetAiImportToUpload;
+  window.handleAiImportFile=handleAiImportFile;
+  window.confirmAiImportSave=confirmAiImportSave;
+  window.runAiImportSaveClick=runAiImportSaveClick;
+}catch(e){console.warn('window exports:',e);}
+(function bindAiImportModalClicks(){
+  var modal=document.getElementById('aiImportModal');
+  if(!modal)return;
+  modal.addEventListener('click',function(e){
+    var btn=e.target&&e.target.closest&&e.target.closest('[data-ai-import]');
+    if(!btn||!modal.contains(btn))return;
+    var act=btn.getAttribute('data-ai-import');
+    if(act==='save'){
+      e.preventDefault();
+      if(window.runAiImportSaveClick)window.runAiImportSaveClick(e);
+    }else if(act==='back'){
+      e.preventDefault();
+      if(window.resetAiImportToUpload)window.resetAiImportToUpload();
+    }else if(act==='close'){
+      e.preventDefault();
+      if(window.closeAiImportModal)window.closeAiImportModal();
+    }
+  });
+})();
+try{
+  init();
+}catch(e){
+  showFatalUi((e&&e.message)||'Initialisatie-fout');
+}
+</script>
+</body>
+</html>
