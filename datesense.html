@@ -7929,6 +7929,7 @@ async function saveOwnCat(catId,silent){
       if(filled>0)cat2.classList.add('filled');
     }
 
+    mirrorOwnSenseCatsToLocalStorage();
     showAutoSaveIndicator(catId,true);
     var propsEl=document.getElementById('own-props-bars');
     if(propsEl){
@@ -10423,6 +10424,84 @@ async function updateDossierSummary(dosName){
 
 // ══ Coach Context ════════════════════════════════════════════════
 
+/* ── OWN Sense localStorage-mirror (datesense.html → alle apps) ──
+   Schrijft de OWN Sense categorietekst naar ownsense_datesense_v1
+   zodat toekomstige SenseCorner-apps (SelfSense, CareerSense...) het
+   profiel ook kunnen lezen zonder Supabase-toegang.                       */
+function mirrorOwnSenseCatsToLocalStorage(){
+  try{
+    var d=S.pdata&&S.pdata['OWN Sense'];
+    if(!d||!d.categories)return;
+    var entries=[];
+    OWN_CATS.forEach(function(cat){
+      var cData=d.categories[cat.id]||{};
+      cat.prompts.forEach(function(p,i){
+        var v=(cData['a'+i]||'').trim();
+        if(v)entries.push({label:p.q,value:v});
+      });
+    });
+    if(!entries.length)return;
+    localStorage.setItem('ownsense_datesense_v1',JSON.stringify({
+      updatedAt:new Date().toISOString(),
+      entries:entries,
+      source:'datesense'
+    }));
+  }catch(_){}
+}
+
+/* ── OWN Sense onboarding-brug (ownsense.html → datesense.html) ──
+   Leest ownsense_profile_v1 uit localStorage (ingevuld via ownsense.html)
+   en brengt de antwoorden mee als extra context voor de AI-coach.         */
+function getOwnSenseOnboardingBlock(){
+  var sections=[];
+
+  /* Bron 1: ownsense.html standalone onboarding */
+  try{
+    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    if(raw){
+      var p=JSON.parse(raw);
+      if(p&&Array.isArray(p.answers)&&p.answers.some(function(a){return a&&String(a).trim().length>10;})){
+        var labels=['Kernidentiteit','Wanneer echt levend','Relatiestijl',
+          'Dieptepatroon','Energiepatroon','Schaduwkant',
+          'Zelfsabotage','Masker vs. innerlijk','Diepst verlangen'];
+        var lines=['Verdieping uit OWN Sense onboarding:'];
+        p.answers.forEach(function(ans,i){
+          if(ans&&String(ans).trim().length>5&&labels[i])
+            lines.push('- '+labels[i]+': '+String(ans).trim().substring(0,220));
+        });
+        if(p.traits&&p.traits.length>0)
+          lines.push('Herkende eigenschappen: '+p.traits.slice(0,8).join(', ')+'.');
+        if(lines.length>1)sections.push(lines.join('\n'));
+      }
+    }
+  }catch(_){}
+
+  /* Bron 2: ownsense_datesense_v1 — gespiegelde DateSense OWN Sense categorieën
+     (alleen toevoegen als S.pdata['OWN Sense'] leeg/incompleet is, om dubbeling te vermijden) */
+  try{
+    var ownInApp=S&&S.pdata&&S.pdata['OWN Sense']&&S.pdata['OWN Sense'].categories;
+    var appHasContent=ownInApp&&Object.values(ownInApp).some(function(c){
+      return c&&Object.values(c).some(function(v){return String(v||'').trim().length>5;});
+    });
+    if(!appHasContent){
+      var raw2=localStorage.getItem('ownsense_datesense_v1')||'';
+      if(raw2){
+        var d2=JSON.parse(raw2);
+        if(d2&&Array.isArray(d2.entries)&&d2.entries.length){
+          var dlines=['OWN Sense (eerder ingevuld in DateSense):'];
+          d2.entries.forEach(function(e){
+            if(e.label&&e.value&&String(e.value).trim().length>5)
+              dlines.push('- '+e.label+': '+String(e.value).trim().substring(0,220));
+          });
+          if(dlines.length>1)sections.push(dlines.join('\n'));
+        }
+      }
+    }
+  }catch(_){}
+
+  return sections.join('\n\n');
+}
+
 function buildCoachContext(){
   var lines=[];
   /* Contacten eerst: bij afkappen op max. lengte verdwijnen ze anders vaak (OWN-blok is lang). */
@@ -10466,6 +10545,9 @@ function buildCoachContext(){
   if(dm&&dm.label)lines.push('Stemming vandaag: '+dm.label+' (gekozen door gebruiker)');
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
   if(ownCat.trim())lines.push('Over jou: '+ownCat.trim().substring(0,200));
+  /* Brug: antwoorden uit standalone ownsense.html onboarding meenemen als verdieping */
+  var onboardingBlock=getOwnSenseOnboardingBlock();
+  if(onboardingBlock){lines.push('');lines.push(onboardingBlock);}
   return lines.join('\n');
 }
 

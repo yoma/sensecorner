@@ -119,6 +119,29 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sy
 /* ── Skip screen ── */
 .skip-icon{font-size:36px;text-align:center;margin-bottom:12px}
 
+/* ── Foto upload ── */
+.photo-upload-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:20px}
+.photo-upload-btn{background:none;border:none;cursor:pointer;padding:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.photo-preview{width:76px;height:76px;border-radius:50%;background:#F0F2F5;border:2px dashed #D1D5DB;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;position:relative;transition:border-color .2s,background .2s}
+.photo-preview:hover{border-color:var(--r);background:#FFF3F3}
+.photo-preview svg{width:26px;height:26px;color:var(--s)}
+.photo-preview img.photo-img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.photo-add-label{font-size:10px;color:var(--s);font-weight:600;margin-top:3px}
+.photo-preview.photo-has-img .photo-add-label{display:none}
+.photo-preview.photo-has-img svg{display:none}
+.photo-caption{font-size:11px;color:var(--s);text-align:center;transition:color .3s}
+.photo-caption.done{color:var(--green);font-weight:600}
+
+/* ── Spraak (mic) knop ── */
+.mic-row{display:flex;align-items:center;gap:10px;margin-top:10px;padding:0 2px}
+.mic-btn-ptt{display:inline-flex;align-items:center;gap:6px;background:#ECEFF3;border:1.5px solid #D0D8E0;border-radius:10px;padding:8px 13px;font:inherit;font-size:13px;font-weight:600;color:#555;cursor:pointer;transition:all .18s;touch-action:none;-webkit-user-select:none;user-select:none;flex-shrink:0;line-height:1}
+.mic-btn-ptt svg{width:14px;height:14px;stroke:#555;transition:stroke .18s;flex-shrink:0}
+.mic-btn-ptt:hover{border-color:#B0BAC5;background:#E2E8EE}
+.mic-btn-ptt.mic-on{background:var(--r);border-color:var(--r);color:#fff;box-shadow:0 4px 12px rgba(174,0,0,.28);animation:micPulse 1.2s ease infinite}
+.mic-btn-ptt.mic-on svg{stroke:#fff}
+@keyframes micPulse{0%,100%{box-shadow:0 4px 12px rgba(174,0,0,.28)}50%{box-shadow:0 4px 20px rgba(174,0,0,.50)}}
+.mic-hint-text{font-size:11px;color:var(--s);line-height:1.4}
+
 /* ── Footer ── */
 .page-footer{padding:20px 18px 0;text-align:center;font-size:12px;color:var(--s)}
 
@@ -157,15 +180,27 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sy
         <div class="welcome-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
         </div>
-        <div class="time-badge" aria-label="Duurt ongeveer 5 minuten">
+        <!-- Profielfoto -->
+        <div class="photo-upload-wrap" id="photoUploadWrap">
+          <button class="photo-upload-btn" id="photoUploadBtn" type="button" aria-label="Profielfoto toevoegen of wijzigen">
+            <div class="photo-preview" id="photoPreview">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span class="photo-add-label">Foto toevoegen</span>
+            </div>
+          </button>
+          <span class="photo-caption" id="photoCaption">Optioneel — blijft lokaal op je apparaat</span>
+          <input type="file" id="photoInput" accept="image/*" style="display:none" aria-hidden="true">
+        </div>
+
+        <div class="time-badge" aria-label="Duurt ongeveer 10 minuten">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Duurt ongeveer 5 minuten
+          Duurt ongeveer 10–15 minuten
         </div>
         <h1 class="welcome-title">Wie ben jij, los van alles wat er is?</h1>
-        <p class="welcome-sub">OWN Sense is geen formulier — het is een gesprek met jezelf. Jouw antwoorden worden je persoonlijk profiel, de basis voor alle coaching in SenseCorner.</p>
+        <p class="welcome-sub">OWN Sense is geen formulier — het is een gesprek dat diep gaat. Jouw antwoorden vormen het persoonlijke profiel dat alle SenseCorner-apps gebruikt om je echt te begeleiden.</p>
         <ul class="welcome-points" aria-label="Wat je kunt verwachten">
-          <li>5 open vragen, één voor één</li>
-          <li>Geen goed of fout antwoord</li>
+          <li>9 indringende vragen over wie jij werkelijk bent</li>
+          <li>Je kan typen én inspreken — geen goed of fout antwoord</li>
           <li>Alles blijft lokaal op jouw apparaat</li>
         </ul>
         <div class="btn-row">
@@ -197,8 +232,22 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sy
           <p class="q-text" id="qText"></p>
           <p class="q-hint" id="qHint"></p>
           <textarea class="q-textarea" id="qAnswer" rows="5" placeholder="Typ je antwoord in je eigen woorden..." aria-label="Jouw antwoord"></textarea>
+          <div class="mic-row">
+            <button class="mic-btn-ptt" id="qMicBtn" type="button"
+              onpointerdown="pttMicPointerDown(event,'qAnswer')"
+              onpointerup="pttMicPointerUp(event)"
+              onpointercancel="pttMicPointerUp(event)"
+              onlostpointercapture="pttMicPointerUp(event)"
+              title="Houd ingedrukt om te spreken · loslaten = stoppen · rood = luistert"
+              aria-label="Spraak invoeren — houd ingedrukt"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+              Inspreken
+            </button>
+            <span class="mic-hint-text">Houd ingedrukt tijdens praten · loslaten = stoppen</span>
+          </div>
           <div class="q-meta">
-            <span id="qCounter">Vraag 1/5</span>
+            <span id="qCounter">Vraag 1/9</span>
             <span class="char-hint" id="charHint">Minimaal een paar woorden</span>
           </div>
           <div class="q-nav">
@@ -284,26 +333,74 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sy
    ════════════════════════════════════ */
 
 var QUESTIONS=[
-  {q:"Wat bracht je hier vandaag?",hint:"Geen goed of fout antwoord — vertel gewoon wat er speelt.",key:"motivatie"},
-  {q:"Hoe zou jij jezelf beschrijven in drie woorden?",hint:"Denk aan eigenschappen die anderen ook in jou herkennen.",key:"zelfomschrijving"},
-  {q:"Wat geeft je energie — en wat vreet energie?",hint:"Mensen, situaties, activiteiten — alles telt.",key:"energie"},
-  {q:"Wat heb je de laatste tijd over jezelf geleerd?",hint:"Een klein inzicht is al genoeg.",key:"zelfinzicht"},
-  {q:"Wat zoek je in relaties, in jezelf, of in het leven?",hint:"Dit mag ruim zijn — er is geen verkeerd antwoord.",key:"verlangen"}
+  {
+    q:"Beschrijf jezelf alsof niemand je kent — geen functies, geen rollen, geen labels. Wie ben je als je alleen bent?",
+    hint:"Denk niet aan wat je doet, maar aan wie je bent als er niemand kijkt. Er is geen juist antwoord.",
+    key:"kernidentiteit"
+  },
+  {
+    q:"Wanneer voel je je echt levend, en wanneer het meest jezelf? Beschrijf een concreet moment dat je bijhoudt.",
+    hint:"Het hoeft niet spectaculair te zijn — soms is het een klein, gewoon ogenblik. Wat maakte het zo?",
+    key:"vitaliteit"
+  },
+  {
+    q:"Hoe ben jij in relaties — romantisch, vriendschappelijk of professioneel? Wat breng jij mee, en wat maakt het soms ook lastig?",
+    hint:"Denk aan terugkerende patronen — wat anderen regelmatig zeggen of wat jij zelf opmerkt in hoe je verbindt.",
+    key:"relatiestijl"
+  },
+  {
+    q:"Wat is iets dat je al lang met je meedraagt — een overtuiging, een angst of een oud patroon — waarvan je weet dat het jou beïnvloedt?",
+    hint:"Dit kan je beschermen én belemmeren tegelijk. Je hoeft het niet te verklaren, beschrijf gewoon wat er is.",
+    key:"dieptepatroon"
+  },
+  {
+    q:"Wat geeft jou echt energie, en wat kost het je? Wees concreet: mensen, situaties, omgevingen.",
+    hint:"Niet 'mensen' maar 'diepe gesprekken' — niet 'drukte' maar 'open kantoren'. Hoe specifieker, hoe rijker je profiel.",
+    key:"energiepatroon"
+  },
+  {
+    q:"Welk gedrag of welke eigenschap vind je moeilijk om in jezelf te zien of toe te geven?",
+    hint:"Dit is de vraag die het meeste moed vraagt. Je hoeft het niet te rechtvaardigen — noem gewoon wat er opkomt.",
+    key:"schaduwkant"
+  },
+  {
+    q:"Op welke manier sta je jezelf soms in de weg? Hoe ziet jouw innerlijke criticus eruit en wat zegt die dan?",
+    hint:"Denk aan het moment vlak voor je jezelf terughoudt, twijfelt of kleiner maakt dan je bent.",
+    key:"zelfsabotage"
+  },
+  {
+    q:"Wat denken mensen van jou — en hoe voel je je van binnen écht? Zit daar een kloof tussen?",
+    hint:"Het 'buitenmasker' tegenover het innerlijke ervaren. Je hoeft het niet te verklaren, beschrijf gewoon wat je merkt.",
+    key:"maskerkloof"
+  },
+  {
+    q:"Waar wil je écht naartoe — niet wat je 'zou moeten' willen, maar wat je diep vanbinnen begeert voor jouw leven?",
+    hint:"Dit mag groot zijn, klein zijn, vaag zijn. Schrijf of spreek gewoon wat er opkomt, zonder filter.",
+    key:"diepverlangen"
+  }
 ];
 
 var TRAITS_MAP=[
-  {words:['rustig','kalmte','stilte','geduldig','bedaard'],label:'Rustig'},
-  {words:['sociaal','mensen','contact','praten','samen'],label:'Sociaal'},
-  {words:['creatief','creativiteit','kunst','schrijven','muziek','beelden'],label:'Creatief'},
-  {words:['ambitieus','doelen','groeien','presteren','succes','carrière'],label:'Ambitieus'},
-  {words:['gevoelig','empathie','emoties','voelen','diepgang'],label:'Gevoelig'},
-  {words:['analytisch','nadenken','logisch','begrijpen','onderzoeken'],label:'Analytisch'},
-  {words:['avontuurlijk','ontdekken','reizen','nieuw','spontaan'],label:'Avontuurlijk'},
-  {words:['loyaal','trouw','eerlijk','vertrouwen','oprecht'],label:'Loyaal'},
-  {words:['zelfstandig','alleen','eigen','vrijheid','onafhankelijk'],label:'Zelfstandig'},
-  {words:['zorg','helpen','anderen','geven','steun','warmte'],label:'Zorgzaam'},
-  {words:['structuur','orde','planning','overzicht','duidelijk'],label:'Gestructureerd'},
-  {words:['verbinding','relatie','hechting','nabijheid','diep'],label:'Verbindingsgericht'}
+  {words:['rustig','kalmte','stilte','geduldig','bedaard','rust','adem'],label:'Rustig'},
+  {words:['sociaal','mensen','contact','praten','samen','gezelschap','anderen'],label:'Sociaal'},
+  {words:['creatief','creativiteit','kunst','schrijven','muziek','beelden','ontwerpen','maken'],label:'Creatief'},
+  {words:['ambitieus','doelen','groeien','presteren','succes','carrière','groei','resultaat'],label:'Ambitieus'},
+  {words:['gevoelig','empathie','emoties','voelen','diepgang','gevoel','intens'],label:'Gevoelig'},
+  {words:['analytisch','nadenken','logisch','begrijpen','onderzoeken','analyseren','denken'],label:'Analytisch'},
+  {words:['avontuurlijk','ontdekken','reizen','nieuw','spontaan','avontuur','verandering'],label:'Avontuurlijk'},
+  {words:['loyaal','trouw','eerlijk','vertrouwen','oprecht','betrouwbaar','standvastig'],label:'Loyaal'},
+  {words:['zelfstandig','alleen','eigen','vrijheid','onafhankelijk','autonoom','ruimte'],label:'Zelfstandig'},
+  {words:['zorg','helpen','anderen','geven','steun','warmte','verzorgen','ondersteunen'],label:'Zorgzaam'},
+  {words:['structuur','orde','planning','overzicht','duidelijk','plan','georganiseerd'],label:'Gestructureerd'},
+  {words:['verbinding','relatie','hechting','nabijheid','diep','intiem','verbonden'],label:'Verbindingsgericht'},
+  {words:['angst','bang','onzeker','twijfel','piekeren','zorgen','schrik'],label:'Zoekt zekerheid'},
+  {words:['masker','rol','aanpassen','facade','buitenkant','verwachting'],label:'Authenticiteitsvraag'},
+  {words:['controle','controle houden','loslaten','grip','vasthouden','beheersen'],label:'Beheersing'},
+  {words:['perfectionisme','perfect','fout','mislukken','falen','kritisch'],label:'Perfectionistisch'},
+  {words:['grenzen','nee zeggen','ik zeg altijd ja','overbelast','te veel'],label:'Grensproblemen'},
+  {words:['zelfkritiek','streng voor mezelf','nooit goed genoeg','veeleisend'],label:'Zelfkritisch'},
+  {words:['trauma','pijn','verdriet','verlies','wond','oud','jeugd'],label:'Draagt oud verdriet'},
+  {words:['intuïtie','gevoel','buikgevoel','innerlijk','zingeving','zin','betekenis'],label:'Intuïtief'}
 ];
 
 var state={
@@ -421,12 +518,26 @@ function buildSummary(){
   insightList.innerHTML='';
   var icons=[
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96A16 16 0 0 0 16 17.04l.95-.96a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.364 5.636a9 9 0 1 1-12.728 0"/><polyline points="12 2 12 12"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c0 0-8-4-8-10a8 8 0 0 1 16 0c0 6-8 10-8 10z"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>'
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 15s1.5-2 4-2 4 2 4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
   ];
-  var labels=['Wat je hier bracht','Wie jij bent','Jouw energie','Jouw zelfinzicht','Wat je zoekt'];
+  var labels=[
+    'Jouw kernidentiteit',
+    'Wanneer je echt leeft',
+    'Hoe jij bent in relaties',
+    'Wat je meedraagt',
+    'Jouw energiepatroon',
+    'Jouw schaduwkant',
+    'Hoe je jezelf remt',
+    'Masker vs. innerlijk',
+    'Jouw diepste verlangen'
+  ];
 
   QUESTIONS.forEach(function(q,i){
     var ans=state.answers[i]&&state.answers[i].trim();
@@ -468,12 +579,13 @@ function persistProfile(status){
   var allText=state.answers.join(' ').toLowerCase();
   var traits=TRAITS_MAP.filter(function(t){
     return t.words.some(function(w){return allText.indexOf(w)>-1;});
-  }).map(function(t){return t.label;}).slice(0,6);
+  }).map(function(t){return t.label;}).slice(0,8);
 
   localStorage.setItem('ownsense_profile_v1',JSON.stringify({
     status:status,
     completedAt:new Date().toISOString(),
     answers:state.answers.slice(),
+    photo:_profilePhoto||'',
     totalQ:QUESTIONS.length,
     completionPct:pct,
     traits:traits
@@ -585,6 +697,157 @@ document.addEventListener('keydown',function(e){
   }
 });
 
+/* ════════════════════════════════════
+   Foto upload
+   ════════════════════════════════════ */
+var _profilePhoto='';
+
+document.getElementById('photoUploadBtn').addEventListener('click',function(){
+  document.getElementById('photoInput').click();
+});
+
+document.getElementById('photoInput').addEventListener('change',function(e){
+  var file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    _profilePhoto=String(ev.target.result||'');
+    setPhotoPreview(_profilePhoto);
+  };
+  reader.readAsDataURL(file);
+});
+
+function setPhotoPreview(src){
+  var preview=document.getElementById('photoPreview');
+  var caption=document.getElementById('photoCaption');
+  if(!src){
+    preview.classList.remove('photo-has-img');
+    var oldImg=preview.querySelector('img.photo-img');
+    if(oldImg)oldImg.remove();
+    caption.textContent='Optioneel — blijft lokaal op je apparaat';
+    caption.classList.remove('done');
+    return;
+  }
+  var img=preview.querySelector('img.photo-img');
+  if(!img){img=document.createElement('img');img.className='photo-img';preview.appendChild(img);}
+  img.src=src;
+  preview.classList.add('photo-has-img');
+  caption.textContent='Foto toegevoegd \u2713';
+  caption.classList.add('done');
+}
+
+/* ════════════════════════════════════
+   Spraak (mic) — push-to-talk
+   ════════════════════════════════════ */
+var _recognition=null;
+var _micActive=false;
+var _micStopping=false;
+var _micPrefix='';
+var _pttHeld=false;
+var _micFieldId='qAnswer';
+
+function wireRecognitionHandlers(rec,inp){
+  rec.onresult=function(e){
+    var finals='',interim='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      var t=e.results[i][0].transcript;
+      if(e.results[i].isFinal)finals+=t;else interim+=t;
+    }
+    inp.value=_micPrefix+finals+interim;
+    inp.style.height='auto';
+    inp.style.height=Math.max(130,inp.scrollHeight)+'px';
+    updateCharHint(inp.value.trim().length);
+  };
+  rec.onerror=function(){stopMic(true);};
+  rec.onend=function(){
+    if(_micStopping)return;
+    if(_pttHeld){setTimeout(micRestartAfterPttSegment,0);}
+  };
+}
+
+function micRestartAfterPttSegment(){
+  if(!_pttHeld||!_micActive)return;
+  var inp=document.getElementById(_micFieldId);
+  if(!inp){stopMic(true);return;}
+  var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SRClass){stopMic(true);return;}
+  var old=_recognition;_recognition=null;
+  if(old){try{old.onresult=null;old.onerror=null;old.onend=null;old.stop();}catch(_e){}}
+  _micPrefix=String(inp.value||'');
+  _micStopping=false;
+  try{
+    _recognition=new SRClass();
+    _recognition.lang='nl-NL';
+    _recognition.continuous=true;
+    _recognition.interimResults=true;
+    wireRecognitionHandlers(_recognition,inp);
+    _recognition.start();
+  }catch(_e){stopMic(true);}
+}
+
+function pttMicPointerDown(e,fieldId){
+  if(!e)return;
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
+    alert('Spraakherkenning is niet beschikbaar in deze browser.\nProbeer Chrome of Edge.');return;
+  }
+  var fid=String(fieldId||'qAnswer');
+  e.preventDefault();
+  try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}
+  if(_micActive)stopMic(true);
+  _micFieldId=fid;
+  _pttHeld=true;
+  startMic();
+}
+
+function pttMicPointerUp(e){
+  _pttHeld=false;
+  if(e&&e.currentTarget&&typeof e.pointerId==='number'){
+    try{e.currentTarget.releasePointerCapture(e.pointerId);}catch(_){}
+  }
+  if(_micActive)stopMic(true);
+}
+
+function startMic(){
+  var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var inp=document.getElementById(_micFieldId||'qAnswer');
+  if(!inp)return;
+  if(_recognition){
+    try{_recognition.onresult=null;_recognition.onerror=null;_recognition.onend=null;_recognition.stop();}catch(_e){}
+    _recognition=null;
+  }
+  _micPrefix=inp.value?String(inp.value):'';
+  _recognition=new SRClass();
+  _recognition.lang='nl-NL';
+  _recognition.continuous=true;
+  _recognition.interimResults=true;
+  wireRecognitionHandlers(_recognition,inp);
+  _recognition.start();
+  _micActive=true;
+  var btn=document.getElementById('qMicBtn');
+  if(btn){btn.classList.add('mic-on');btn.setAttribute('aria-pressed','true');}
+}
+
+function stopMic(preserveText){
+  _pttHeld=false;
+  _micStopping=true;
+  var inp=document.getElementById(_micFieldId||'qAnswer');
+  if(_recognition){try{_recognition.stop();}catch(_e){}}
+  if(inp){
+    var committed=String(inp.value||'').trim();
+    inp.value=committed;
+    inp.style.height='auto';
+    inp.style.height=Math.max(130,inp.scrollHeight)+'px';
+    updateCharHint(committed.length);
+    try{inp.focus();}catch(_e){}
+  }
+  _micActive=false;
+  _recognition=null;
+  _micStopping=false;
+  var btn=document.getElementById('qMicBtn');
+  if(btn){btn.classList.remove('mic-on');btn.setAttribute('aria-pressed','false');}
+}
+
 /* ── Initialisatie ── */
 (function init(){
   // Eventueel bestaand profiel inladen
@@ -595,6 +858,10 @@ document.addEventListener('keydown',function(e){
       if(p.answers&&Array.isArray(p.answers)){
         state.answers=p.answers.slice(0,QUESTIONS.length);
         while(state.answers.length<QUESTIONS.length)state.answers.push('');
+      }
+      if(p.photo&&typeof p.photo==='string'&&p.photo.length>0){
+        _profilePhoto=p.photo;
+        setPhotoPreview(_profilePhoto);
       }
     }catch(_e){}
   }
