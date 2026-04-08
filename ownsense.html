@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OWN Sense — Onboarding</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#f7f8fa;color:#1e1f23}
+.app{max-width:760px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:20px 16px 28px}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand{font-size:14px;font-weight:800;color:#7f0d0d;letter-spacing:.02em}
+.step{font-size:12px;color:#6d7480}
+.card{background:#fff;border:1px solid #e8eaef;border-radius:16px;padding:18px;box-shadow:0 8px 28px rgba(0,0,0,.04)}
+.title{font-size:24px;font-weight:800;line-height:1.2;margin-bottom:8px}
+.sub{font-size:14px;color:#5f6672;line-height:1.6;margin-bottom:16px}
+.q{font-size:18px;font-weight:750;line-height:1.4;margin-bottom:10px}
+textarea{width:100%;min-height:150px;border:1.5px solid #d8dce3;border-radius:12px;padding:12px 13px;font:inherit;font-size:15px;line-height:1.5;outline:none;resize:vertical}
+textarea:focus{border-color:#ae0000}
+.meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#838b97}
+.actions{display:flex;gap:10px;margin-top:16px}
+button{border:none;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;cursor:pointer}
+.btn{background:#eceff3;color:#2b3038}
+.btn-primary{background:#ae0000;color:#fff}
+.btn-link{background:transparent;color:#717985;padding:0}
+.summary-list{margin:10px 0 0;padding-left:18px;color:#353a43;line-height:1.7;font-size:14px}
+.tag{display:inline-block;background:#fff4f4;border:1px solid #ffd7d7;color:#7f0d0d;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:700;margin-bottom:10px}
+.footer{margin-top:18px;font-size:12px;color:#8b909a;text-align:center}
+.hidden{display:none}
+a.link{color:#7f0d0d;text-decoration:none;font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">SenseCorner · OWN Sense</div>
+    <div class="step" id="stepLabel">Stap 1/4</div>
+  </div>
+
+  <div class="card" id="screenWelcome">
+    <div class="tag">5 minuten onboarding</div>
+    <div class="title">Voordat we starten: wie ben jij?</div>
+    <p class="sub">OWN Sense is geen formulier, maar een kort gesprek met jezelf. Dit wordt je persoonlijke basis voor coaching in alle Sense-apps.</p>
+    <div class="actions">
+      <button class="btn-primary" id="btnStart">Ik ben klaar</button>
+      <button class="btn" id="btnSkip">Sla over voor nu</button>
+    </div>
+    <div class="actions">
+      <a class="link" href="sensecorner.html">Naar SenseCorner hub</a>
+      <a class="link" href="datesense.html">Naar DateSense</a>
+    </div>
+  </div>
+
+  <div class="card hidden" id="screenQuestion">
+    <div class="q" id="qText"></div>
+    <textarea id="qAnswer" placeholder="Typ je antwoord in je eigen woorden..."></textarea>
+    <div class="meta">
+      <span id="qCounter">0/5</span>
+      <span id="charCounter">0 tekens</span>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnBack">Vorige</button>
+      <button class="btn-primary" id="btnNext">Volgende</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="screenSummary">
+    <div class="tag">OWN Sense samenvatting</div>
+    <div class="title">Dit begrijp ik tot nu toe over jou</div>
+    <p class="sub" id="summaryIntro"></p>
+    <ul class="summary-list" id="summaryBullets"></ul>
+    <div class="actions">
+      <button class="btn" id="btnEdit">Antwoorden aanpassen</button>
+      <button class="btn-primary" id="btnConfirm">Bevestig & opslaan</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="screenDone">
+    <div class="tag">Klaar</div>
+    <div class="title">Je OWN Sense profiel is actief.</div>
+    <p class="sub">Perfect. Deze basis kan nu gebruikt worden door DateSense en straks ook door de andere SenseCorner apps.</p>
+    <p class="sub">Volgende stap: open je hub en kies waar je vandaag aan wil werken.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="sensecorner.html">Ga naar SenseCorner hub</a>
+      <a class="btn" href="datesense.html">Open DateSense</a>
+    </div>
+  </div>
+
+  <div class="footer">Prototype · lokaal opgeslagen in je browser</div>
+</div>
+
+<script>
+const QUESTIONS=[
+  "Wat bracht je hier vandaag?",
+  "Hoe zou jij jezelf beschrijven in drie woorden?",
+  "Wat geeft je energie, en wat kost je energie?",
+  "Wat heb je recent over jezelf geleerd?",
+  "Wat zoek je in relaties, in jezelf, of in het leven?"
+];
+
+const state={
+  step:0,
+  qIndex:0,
+  answers:new Array(QUESTIONS.length).fill("")
+};
+
+const screens={
+  welcome:document.getElementById("screenWelcome"),
+  question:document.getElementById("screenQuestion"),
+  summary:document.getElementById("screenSummary"),
+  done:document.getElementById("screenDone")
+};
+
+const stepLabel=document.getElementById("stepLabel");
+const qText=document.getElementById("qText");
+const qAnswer=document.getElementById("qAnswer");
+const qCounter=document.getElementById("qCounter");
+const charCounter=document.getElementById("charCounter");
+
+function show(screenName){
+  Object.values(screens).forEach(el=>el.classList.add("hidden"));
+  screens[screenName].classList.remove("hidden");
+}
+
+function renderStepLabel(){
+  const map={0:"Stap 1/4",1:"Stap 2/4",2:"Stap 3/4",3:"Stap 4/4"};
+  stepLabel.textContent=map[state.step]||"Stap";
+}
+
+function renderQuestion(){
+  qText.textContent=QUESTIONS[state.qIndex];
+  qAnswer.value=state.answers[state.qIndex]||"";
+  qCounter.textContent=(state.qIndex+1)+"/"+QUESTIONS.length;
+  charCounter.textContent=qAnswer.value.trim().length+" tekens";
+}
+
+function saveCurrentAnswer(){
+  state.answers[state.qIndex]=qAnswer.value.trim();
+}
+
+function buildSummary(){
+  const nonEmpty=state.answers.filter(Boolean);
+  const intro=nonEmpty.length
+    ?"Je beschrijft jezelf als iemand die bewust wil groeien. Onderstaande punten zijn een eerste profielschets."
+    :"Je hebt nog weinig ingevuld. Vul gerust eerst je antwoorden aan voor een sterkere profielschets.";
+  document.getElementById("summaryIntro").textContent=intro;
+
+  const bullets=document.getElementById("summaryBullets");
+  bullets.innerHTML="";
+  const lines=state.answers.map((a,i)=>a?`${QUESTIONS[i]} — ${a}`:"").filter(Boolean);
+  if(!lines.length){
+    const li=document.createElement("li");
+    li.textContent="Nog geen inhoud om samen te vatten.";
+    bullets.appendChild(li);
+    return;
+  }
+  lines.slice(0,5).forEach(function(line){
+    const li=document.createElement("li");
+    li.textContent=line.length>180?line.substring(0,180)+"...":line;
+    bullets.appendChild(li);
+  });
+}
+
+function persistProfile(status){
+  const payload={
+    status:status,
+    completedAt:new Date().toISOString(),
+    answers:state.answers.slice()
+  };
+  localStorage.setItem("ownsense_profile_v1",JSON.stringify(payload));
+}
+
+document.getElementById("btnStart").onclick=function(){
+  state.step=1;
+  state.qIndex=0;
+  renderStepLabel();
+  renderQuestion();
+  show("question");
+};
+
+document.getElementById("btnSkip").onclick=function(){
+  persistProfile("skipped");
+  state.step=3;
+  renderStepLabel();
+  show("done");
+};
+
+qAnswer.addEventListener("input",function(){
+  charCounter.textContent=qAnswer.value.trim().length+" tekens";
+});
+
+document.getElementById("btnNext").onclick=function(){
+  saveCurrentAnswer();
+  if(state.qIndex<QUESTIONS.length-1){
+    state.qIndex++;
+    renderQuestion();
+    return;
+  }
+  state.step=2;
+  renderStepLabel();
+  buildSummary();
+  show("summary");
+};
+
+document.getElementById("btnBack").onclick=function(){
+  saveCurrentAnswer();
+  if(state.qIndex>0){
+    state.qIndex--;
+    renderQuestion();
+    return;
+  }
+  state.step=0;
+  renderStepLabel();
+  show("welcome");
+};
+
+document.getElementById("btnEdit").onclick=function(){
+  state.step=1;
+  renderStepLabel();
+  state.qIndex=0;
+  renderQuestion();
+  show("question");
+};
+
+document.getElementById("btnConfirm").onclick=function(){
+  persistProfile("completed");
+  state.step=3;
+  renderStepLabel();
+  show("done");
+};
+
+renderStepLabel();
+show("welcome");
+</script>
+</body>
+</html>
