@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-04-2026 21:05">
+<meta name="ds-build" content="08-04-2026 14:23">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -804,6 +804,8 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 </style>
 </head>
 <body>
+<!-- Schermlezer aankondigingen voor toasts/alerts -->
+<div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <div class="app" id="app">
   <!-- Drawer overlay -->
   <div class="overlay" id="ovl" onclick="closeDrawer()"></div>
@@ -836,14 +838,14 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   </div>
 
   <div class="sync-bar" id="syncBar"></div>
-  <div class="main" id="mainContent"></div>
+  <main class="main" id="mainContent" aria-label="Hoofdinhoud"></main>
 
   <!-- Input bar (alleen Vertel scherm) -->
   <div id="inputBar" style="display:none">
     <div class="input-bar">
       <div id="vertelHelpMount" class="vertel-help-mount"></div>
       <div class="input-stack-vertel">
-        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ hier je verhaal — ik sorteer naar het juiste dossier." rows="3" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ hier je verhaal — ik sorteer naar het juiste dossier." rows="3" aria-label="Vertel je verhaal" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
         <div class="input-toolbar-vertel input-toolbar-vertel--compact">
           <button type="button" class="rnd gr rnd--vertel" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -933,18 +935,18 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 </div>
 
 <!-- Verborgen file inputs -->
-<input type="file" id="fileInputTxt" accept=".txt" style="display:none" onchange="handleTxtFile(this)">
-<input type="file" id="fileInputImg" accept="image/*" style="display:none" onchange="handleImgFile(this)">
-<input type="file" id="profilePhotoInput" accept="image/*" style="display:none" onchange="handleProfilePhotoInput(this)">
-<input type="file" id="analysisPhotoInput" accept="image/*" style="display:none" onchange="handleAnalysisPhotoInput(this)">
+<input type="file" id="fileInputTxt" accept=".txt" style="display:none" aria-label="Importeer tekstbestand" onchange="handleTxtFile(this)">
+<input type="file" id="fileInputImg" accept="image/*" style="display:none" aria-label="Importeer afbeelding" onchange="handleImgFile(this)">
+<input type="file" id="profilePhotoInput" accept="image/*" style="display:none" aria-label="Profielfoto uploaden" onchange="handleProfilePhotoInput(this)">
+<input type="file" id="analysisPhotoInput" accept="image/*" style="display:none" aria-label="Foto uploaden voor analyse" onchange="handleAnalysisPhotoInput(this)">
 
 <!-- ══ SEGMENT MODAL ══ -->
-<div class="seg-modal-overlay" id="segModal">
+<div class="seg-modal-overlay" id="segModal" role="dialog" aria-modal="true" aria-labelledby="segModalTitle">
   <div class="seg-modal-bg" onclick="closeSegModal()"></div>
   <div class="seg-modal-sheet">
     <div class="seg-modal-handle"></div>
     <div class="seg-modal-header">
-      <div class="seg-modal-title">Segment toewijzen</div>
+      <div class="seg-modal-title" id="segModalTitle">Segment toewijzen</div>
       <div class="seg-modal-quote" id="segModalQuote"></div>
     </div>
     <div class="seg-modal-body">
@@ -955,17 +957,17 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 </div>
 
 <!-- ══ VERTEL OPSLAGMODUS MODAL ══ -->
-<div class="save-modal-overlay" id="saveModeModal">
+<div class="save-modal-overlay" id="saveModeModal" role="dialog" aria-modal="true" aria-labelledby="saveModeModalTitle">
   <div class="save-modal-bg" onclick="closeSaveModeModal()"></div>
   <div class="save-modal-sheet">
-    <div class="save-modal-title">Opslagmodus kiezen</div>
+    <div class="save-modal-title" id="saveModeModalTitle">Opslagmodus kiezen</div>
     <div class="save-modal-sub">Kies hoe Vertel nieuwe berichten aan dossiers koppelt.</div>
     <div id="saveModeModalOpts"></div>
   </div>
 </div>
 
 <!-- ══ DOSSIER KEUZE MODAL (voor sessie-koppeling) ══ -->
-<div class="save-modal-overlay" id="dossierPickModal">
+<div class="save-modal-overlay" id="dossierPickModal" role="dialog" aria-modal="true" aria-labelledby="dossierPickTitle">
   <div class="save-modal-bg" onclick="closeDossierPickModal()"></div>
   <div class="save-modal-sheet">
     <div class="save-modal-title" id="dossierPickTitle">Kies dossier</div>
@@ -975,7 +977,7 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
 </div>
 
 <!-- ══ PROFIELGEGEVENS MODAL ══ -->
-<div class="profile-modal-overlay" id="profileModal">
+<div class="profile-modal-overlay" id="profileModal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
   <div class="profile-modal-bg" onclick="closeProfileModal()"></div>
   <div class="profile-modal-sheet">
     <div class="save-modal-title" id="profileModalTitle">Profielgegevens</div>
@@ -998,19 +1000,19 @@ html,body{height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFo
   </div>
 </div>
 
-<div class="save-modal-overlay" id="stageFocusModal">
+<div class="save-modal-overlay" id="stageFocusModal" role="dialog" aria-modal="true" aria-labelledby="stageFocusModalTitle">
   <div class="save-modal-bg" onclick="closeStageFocusModal()"></div>
   <div class="save-modal-sheet">
-    <div class="save-modal-title">Relatie-focus voorstellen</div>
+    <div class="save-modal-title" id="stageFocusModalTitle">Relatie-focus voorstellen</div>
     <div class="save-modal-sub" id="stageFocusModalSub">Deze fase past vaak beter bij relatie-focus.</div>
     <div id="stageFocusModalOpts"></div>
   </div>
 </div>
 
-<div class="save-modal-overlay" id="aiImportModal">
+<div class="save-modal-overlay" id="aiImportModal" role="dialog" aria-modal="true" aria-labelledby="aiImportModalTitle">
   <div class="save-modal-bg" onclick="window.closeAiImportModal&&window.closeAiImportModal()"></div>
   <div class="save-modal-sheet" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
-    <div class="save-modal-title">OWN Sense vullen via AI-export</div>
+    <div class="save-modal-title" id="aiImportModalTitle">OWN Sense vullen via AI-export</div>
     <div class="save-modal-sub" style="margin-bottom:8px">Optioneel: OWN Sense <strong>aanvullen</strong> vanuit je export. Je krijgt <strong>één reviewstap</strong> (hieronder aanpassen en opslaan) — bewust geen tweede voor/na-scherm, om het simpel te houden. Bij opslaan vouwt de AI dubbele formuleringen samen met wat je al had.</div>
     <div id="aiImportBody" style="overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch">
       <div id="aiImportStepUpload">
@@ -1250,6 +1252,7 @@ var S={
 };
 
 var _profileModalFor='OWN Sense';
+var _goScreenReqId=0;
 var _profileUploadBusy=false;
 var _photoAnalysisBusy={};
 var _analysisPhotoFor='OWN Sense';
@@ -1346,7 +1349,7 @@ function sync(s){
   }
 }
 
-function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
+function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);var ann=document.getElementById('a11y-announce');if(ann){ann.textContent='';setTimeout(()=>{ann.textContent=m;},50);}setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
 
 function autoResize(el){
   if(!el)return;
@@ -2153,7 +2156,7 @@ function renderOwnAvatar(){
   if(!wrap)return;
   var ownMeta=getMetaFor('OWN Sense');
   if(ownMeta.photo_url){
-    wrap.innerHTML='<img src="'+ownMeta.photo_url+'" alt="OWN foto" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+    wrap.innerHTML='<img src="'+escHTML(ownMeta.photo_url)+'" alt="OWN foto" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
   }else{
     wrap.innerHTML='<svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg>';
   }
@@ -3398,7 +3401,9 @@ function goBack(){
 }
 
 function goScreen(sc){
+  var reqId=++_goScreenReqId;
   var runGoScreen=function(){
+    if(reqId!==_goScreenReqId)return;
     _goScreenBody(sc);
   };
   if(S.user){
@@ -3501,7 +3506,7 @@ function rDrawer(){
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
 <div class="dlbl">Persoonlijk</div>
 <div class="drow" onclick="goScreen('own')">
-  ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
+  ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense</div>
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
 </div>`;
@@ -3510,7 +3515,7 @@ function rDrawer(){
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0};
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="drow" onclick="viewDossier('${escJsStr(p)}')">${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${p}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${escJsStr(p)}')">${d.count}</div></div>`;
+      h+=`<div class="drow" onclick="viewDossier('${escJsStr(p)}')">${(d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${escHTML(p)}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${escJsStr(p)}')">${d.count}</div></div>`;
     });
   }
   h+=`<div class="dlbl">Acties</div>
@@ -4488,7 +4493,7 @@ function openStageFocusModal(name,stage){
   var opts=document.getElementById('stageFocusModalOpts');
   if(!modal||!sub||!opts)return;
   _stageFocusPromptCtx={name:name,stage:stage};
-  sub.innerHTML='Je zette <strong>'+dn(name)+'</strong> op <strong>'+stageLabel(stage)+'</strong>. Wil je overschakelen naar relatie-focus? Andere actieve dossiers kan je dan automatisch op on hold zetten.';
+  sub.innerHTML='Je zette <strong>'+escHTML(dn(name))+'</strong> op <strong>'+escHTML(stageLabel(stage))+'</strong>. Wil je overschakelen naar relatie-focus? Andere actieve dossiers kan je dan automatisch op on hold zetten.';
   opts.innerHTML=''
     +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'activate\')"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Ja, activeer relatie-focus</strong><br><span style="font-size:12px;color:#666">Je kiest dit dossier als focus en kan andere actieve dossiers automatisch pauzeren.</span></span></button>'
     +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nee, nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in date modus en krijgt later opnieuw een voorstel.</span></span></button>';
@@ -6396,7 +6401,7 @@ function rSenses(el){
 <div class="srow srow-own-card" onclick="goScreen('own')">
   <div class="srow-dossier-main">
   <div class="srow-dossier-top">
-  ${(own.meta&&own.meta.photo_url)?'<img src="'+own.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
+  ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
   <div class="srow-dossier-titleblock">
   <div class="srow-dossier-title">OWN Sense</div>
   <div class="srow-dossier-meta">Persoonlijk profiel · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count} berichten</span></div>
@@ -6442,7 +6447,7 @@ function rSenses(el){
         <div class="srow-dossier-main">
         <div class="srow-dossier-top">
         `+(S.compareMode?'<input type="checkbox" '+(picked?'checked':'')+' onclick="event.stopPropagation();toggleCompareSelect(\''+escJsStr(p)+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:4px">':'')+`
-        `+((d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';flex-shrink:0;margin-top:6px"></div>')+`
+        `+((d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';flex-shrink:0;margin-top:6px"></div>')+`
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title">`+disp+`</div>
           <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span></div>
@@ -6474,7 +6479,7 @@ function rSenses(el){
       h+=`<div class="srow srow-dossier" onclick="viewDossier('${escJsStr(p)}')">
         <div class="srow-dossier-main">
         <div class="srow-dossier-top">
-        ${(d.meta&&d.meta.photo_url)?'<img src="'+d.meta.photo_url+'" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65;flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';opacity:.55;flex-shrink:0;margin-top:6px"></div>'}
+        ${(d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65;flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';opacity:.55;flex-shrink:0;margin-top:6px"></div>'}
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title" style="color:#666">`+dispA+`</div>
           <div class="srow-dossier-meta"><span style="color:#999">`+escHTML(stLbl)+`</span> · <span style="color:#999;font-weight:600">`+(d.count||0)+` berichten</span> · `+matchInlineA+`</div>
@@ -6592,7 +6597,7 @@ async function rDossier(el){
   if(!isOwn){
     var pMeta=d.meta||{};
     if(pMeta.photo_url){
-      header+='<img src="'+pMeta.photo_url+'" alt="'+personName2+'" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
+      header+='<img src="'+escHTML(pMeta.photo_url)+'" alt="'+escHTML(personName2)+'" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
     }else{
       var initial=personName2.charAt(0).toUpperCase();
       var ci2=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
@@ -8138,31 +8143,31 @@ function rSettings(el){
   el.innerHTML=`<div style="padding:32px 20px">
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
-<form class="ds-settings-api-form" onsubmit="event.preventDefault();return false;" autocomplete="off"><input class="form-input" id="akField" name="apikey" type="password" autocomplete="off" placeholder="sk-ant-api..." value="${S.apiKey||''}"/></form>
+<form class="ds-settings-api-form" onsubmit="event.preventDefault();return false;" autocomplete="off"><input class="form-input" id="akField" name="apikey" type="password" autocomplete="off" placeholder="sk-ant-api..." aria-label="Anthropic API Key" value="${S.apiKey||''}"/></form>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:16px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
 <div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
-<select class="form-input" id="usageModeField">
+<select class="form-input" id="usageModeField" aria-label="Gebruiksmode">
   <option value="multi" ${usageMode==='multi'?'selected':''}>Meerdere dossiers opvolgen</option>
   <option value="single" ${usageMode==='single'?'selected':''}>Relatie-focus (1 dossier)</option>
 </select>
 <div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
   <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
-  <select class="form-input" id="focusDossierField">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
-  <input class="form-input" id="focusBoostRegionField" type="text" placeholder="Regio / afstand" value="${escHTML(boostPrefs.region||'')}"/>
-  <select class="form-input" id="focusBoostBudgetField">
+  <select class="form-input" id="focusDossierField" aria-label="Focus dossier">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
+  <input class="form-input" id="focusBoostRegionField" type="text" placeholder="Regio / afstand" aria-label="Regio of afstand" value="${escHTML(boostPrefs.region||'')}"/>
+  <select class="form-input" id="focusBoostBudgetField" aria-label="Budget">
     <option value="" ${!boostPrefs.budget?'selected':''}>Budget kiezen</option>
     <option value="betaalbaar" ${boostPrefs.budget==='betaalbaar'?'selected':''}>Betaalbaar</option>
     <option value="gemiddeld" ${boostPrefs.budget==='gemiddeld'?'selected':''}>Gemiddeld</option>
     <option value="bijzonder" ${boostPrefs.budget==='bijzonder'?'selected':''}>Bijzonder</option>
   </select>
-  <select class="form-input" id="focusBoostStyleField">
+  <select class="form-input" id="focusBoostStyleField" aria-label="Sfeer en stijl">
     <option value="" ${!boostPrefs.style?'selected':''}>Sfeer / stijl</option>
     <option value="rustig" ${boostPrefs.style==='rustig'?'selected':''}>Rustig</option>
     <option value="romantisch" ${boostPrefs.style==='romantisch'?'selected':''}>Romantisch</option>
     <option value="actief" ${boostPrefs.style==='actief'?'selected':''}>Actief</option>
     <option value="casual" ${boostPrefs.style==='casual'?'selected':''}>Casual</option>
   </select>
-  <select class="form-input" id="focusBoostTimeField">
+  <select class="form-input" id="focusBoostTimeField" aria-label="Beschikbare tijd">
     <option value="" ${!boostPrefs.time?'selected':''}>Beschikbare tijd</option>
     <option value="avond" ${boostPrefs.time==='avond'?'selected':''}>Avond</option>
     <option value="halve dag" ${boostPrefs.time==='halve dag'?'selected':''}>Halve dag</option>
@@ -9814,7 +9819,7 @@ function askNewPersonWA(){
   if(!btn)return;
   var container=btn.parentNode;
   container.innerHTML='<div style="display:flex;gap:8px;align-items:center">'
-    +'<input id="waNewName" type="text" placeholder="Naam van de persoon..." '
+    +'<input id="waNewName" type="text" placeholder="Naam van de persoon..." aria-label="Naam van de persoon" '
     +'style="flex:1;padding:10px 14px;border:1.5px solid var(--r);border-radius:10px;font-size:15px;font-family:inherit;outline:none" '
     +'onkeydown="if(event.keyCode===13)confirmNewPersonWA()">' 
     +'<button class="aa r" onclick="confirmNewPersonWA()">OK</button>'
@@ -10743,7 +10748,7 @@ function renderVertelSessionFromRows(rows){
     }else{
       var aiWrap=document.createElement('div');
       aiWrap.className='msg-ai';
-      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.content||'').replace(/\n/g,'<br>')+'</div>';
+      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+escSess(String(m.content||'')).replace(/\n/g,'<br>')+'</div>';
       ca.appendChild(aiWrap);
     }
   });
@@ -11090,45 +11095,4 @@ try{
   window.koppelSessieMsg=koppelSessieMsg;
   window.koppelAlleOngekoppeld=koppelAlleOngekoppeld;
   window.openVertelSaveNaarAnderDossier=openVertelSaveNaarAnderDossier;
-  window.laadOudereTijdlijn=laadOudereTijdlijn;
-  window.exportDossierTimelineTxt=exportDossierTimelineTxt;
-  window.exportVertelThreadTxt=exportVertelThreadTxt;
-  window.generatePlannerIdeas=generatePlannerIdeas;
-  window.generatePlannerIdeasAlternate=generatePlannerIdeasAlternate;
-  window.pttMicPointerDown=pttMicPointerDown;
-  window.pttMicPointerUp=pttMicPointerUp;
-  window.openAiImportModal=openAiImportModal;
-  window.closeAiImportModal=closeAiImportModal;
-  window.switchAiImportTab=switchAiImportTab;
-  window.resetAiImportToUpload=resetAiImportToUpload;
-  window.handleAiImportFile=handleAiImportFile;
-  window.confirmAiImportSave=confirmAiImportSave;
-  window.runAiImportSaveClick=runAiImportSaveClick;
-}catch(e){console.warn('window exports:',e);}
-(function bindAiImportModalClicks(){
-  var modal=document.getElementById('aiImportModal');
-  if(!modal)return;
-  modal.addEventListener('click',function(e){
-    var btn=e.target&&e.target.closest&&e.target.closest('[data-ai-import]');
-    if(!btn||!modal.contains(btn))return;
-    var act=btn.getAttribute('data-ai-import');
-    if(act==='save'){
-      e.preventDefault();
-      if(window.runAiImportSaveClick)window.runAiImportSaveClick(e);
-    }else if(act==='back'){
-      e.preventDefault();
-      if(window.resetAiImportToUpload)window.resetAiImportToUpload();
-    }else if(act==='close'){
-      e.preventDefault();
-      if(window.closeAiImportModal)window.closeAiImportModal();
-    }
-  });
-})();
-try{
-  init();
-}catch(e){
-  showFatalUi((e&&e.message)||'Initialisatie-fout');
-}
-</script>
-</body>
-</html>
+  window.laadOudereTijdlijn=laadOudere
