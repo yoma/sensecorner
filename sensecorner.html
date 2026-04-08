@@ -64,13 +64,15 @@ a{text-decoration:none;color:inherit}
 
 /* App grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.app-card{background:var(--card);border:1.5px solid var(--b);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px;transition:var(--transition);cursor:default;opacity:0;transform:translateY(10px)}
-.app-card.visible{opacity:1;transform:translateY(0)}
+/* Altijd zichtbaar: geen afhankelijkheid van JS (anders blijven kaarten onzichtbaar bij scriptfout). */
+.app-card{background:var(--card);border:1.5px solid var(--b);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px;transition:var(--transition);cursor:default;opacity:1;transform:translateY(0)}
+.app-card.enter{animation:cardEnter .45s ease both}
+@keyframes cardEnter{from{opacity:.35;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .app-card.clickable{cursor:pointer}
 .app-card.clickable:hover{border-color:#D0D5DD;box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-2px)}
 .app-card.clickable:active{transform:translateY(0)}
 .app-card.dimmed{opacity:.55}
-.app-card.dimmed.visible{opacity:.65}
+.app-card.dimmed.enter{animation:none}
 .app-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .app-icon svg{width:20px;height:20px}
 .app-head{display:flex;align-items:center;gap:10px}
@@ -115,9 +117,7 @@ a{text-decoration:none;color:inherit}
   .hero-sub{margin-bottom:8px}
   .own-status-row{margin-bottom:8px}
   .section-label{margin:6px 0 6px 2px}
-  .grid{grid-template-columns:1fr 1fr}
-}
-@media(max-width:360px){
+  /* Eén kolom op mobiel: alle apps (incl. DateSense) duidelijk onder elkaar */
   .grid{grid-template-columns:1fr}
 }
 </style>
@@ -169,6 +169,10 @@ a{text-decoration:none;color:inherit}
           <a class="btn btn-primary" href="ownsense.html" id="btnMain">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             Start OWN Sense
+          </a>
+          <a class="btn btn-soft" href="datesense.html" id="btnDateSense">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            DateSense
           </a>
         </div>
       </div>
@@ -287,56 +291,53 @@ a{text-decoration:none;color:inherit}
     miniBar.style.width=pct+'%';
   }
 
-  if(!profile){
-    setRing(0);
-    dot.className='own-status-dot';
-    statusText.textContent='Nog niet gestart';
-    statusPct.textContent='';
-  } else if(profile.status==='completed'){
-    var pct=profile.completionPct||100;
-    setTimeout(function(){setRing(pct);},200);
-    dot.className='own-status-dot done';
-    statusText.textContent='Profiel actief';
-    statusPct.textContent=pct+'% compleet';
-    ringFg.style.stroke='#1E7E34';
-    ringIcon.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E7E34" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
-    btnMain.textContent='Profiel bekijken';
-    btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
-    ownBadge.textContent='Actief';
-    ownBadge.className='badge badge-live';
-  } else if(profile.status==='skipped'){
-    setTimeout(function(){setRing(10);},200);
-    dot.className='own-status-dot';
-    statusText.textContent='Overgeslagen — kan later';
-    statusPct.textContent='';
-    btnMain.querySelector('svg').remove();
-    btnMain.prepend(Object.assign(document.createElementNS('http://www.w3.org/2000/svg','svg'),{viewBox:'0 0 24 24',innerHTML:'<path d="M5 12h14M12 5l7 7-7 7"',setAttribute:function(){}}));
-    btnMain.childNodes[0].setAttribute&&(function(){
-      var s=document.createElementNS('http://www.w3.org/2000/svg','svg');
-      s.setAttribute('width','14');s.setAttribute('height','14');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('fill','none');s.setAttribute('stroke','currentColor');s.setAttribute('stroke-width','2.5');s.setAttribute('stroke-linecap','round');
-      s.innerHTML='<path d="M5 12h14M12 5l7 7-7 7"/>';
-      btnMain.textContent='Toch invullen';
-      btnMain.prepend(s);
-    })();
-  } else {
-    /* in progress */
-    var filled=0;
-    if(profile.answers){filled=profile.answers.filter(function(a){return a&&a.trim();}).length;}
-    var pct=Math.round((filled/(profile.totalQ||5))*80);
-    setTimeout(function(){setRing(pct);},200);
-    dot.className='own-status-dot active';
-    statusText.textContent='Bezig ('+(filled||0)+'/'+(profile.totalQ||5)+' vragen)';
-    statusPct.textContent=pct+'%';
-    btnMain.textContent='Verder gaan';
-    btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>');
-    ownBadge.textContent='In opbouw';
-    ownBadge.style.background='#FFF3F3';ownBadge.style.color='#AE0000';
+  try{
+    if(!profile){
+      setRing(0);
+      dot.className='own-status-dot';
+      statusText.textContent='Nog niet gestart';
+      statusPct.textContent='';
+    } else if(profile.status==='completed'){
+      var pct=profile.completionPct||100;
+      setTimeout(function(){setRing(pct);},200);
+      dot.className='own-status-dot done';
+      statusText.textContent='Profiel actief';
+      statusPct.textContent=pct+'% compleet';
+      ringFg.style.stroke='#1E7E34';
+      ringIcon.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E7E34" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      btnMain.textContent='Profiel bekijken';
+      btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
+      ownBadge.textContent='Actief';
+      ownBadge.className='badge badge-live';
+    } else if(profile.status==='skipped'){
+      setTimeout(function(){setRing(10);},200);
+      dot.className='own-status-dot';
+      statusText.textContent='Overgeslagen — kan later';
+      statusPct.textContent='';
+      btnMain.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Toch invullen';
+      ownBadge.textContent='Later';
+      ownBadge.className='badge badge-soon';
+    } else {
+      var filled=0;
+      if(profile.answers){filled=profile.answers.filter(function(a){return a&&a.trim();}).length;}
+      var totalQ=profile.totalQ||5;
+      var pct=Math.round((filled/totalQ)*80);
+      setTimeout(function(){setRing(pct);},200);
+      dot.className='own-status-dot active';
+      statusText.textContent='Bezig ('+(filled||0)+'/'+totalQ+' vragen)';
+      statusPct.textContent=pct+'%';
+      btnMain.textContent='Verder gaan';
+      btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>');
+      ownBadge.textContent='In opbouw';
+      ownBadge.style.background='#FFF3F3';ownBadge.style.color='#AE0000';
+    }
+  }catch(e){
+    console.warn('sensecorner OWN status',e);
   }
 
-  /* ── Kaarten animeren bij laden ── */
   var cards=document.querySelectorAll('.app-card');
   cards.forEach(function(c,i){
-    setTimeout(function(){c.classList.add('visible');}, 80 + i*60);
+    setTimeout(function(){c.classList.add('enter');}, 80 + i*60);
   });
 })();
 </script>
