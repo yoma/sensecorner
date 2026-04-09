@@ -3,248 +3,338 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#AE0000">
-<title>FamilySense — Prototype</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" href="data:,">
+<title>FamilySense — Jouw persoonlijke gezinscoach</title>
+<meta name="fs-build" content="09-04-2026 12:00">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root{--r:#AE0000;--t:#1A1A1A;--m:#6F7480;--b:#E5E7EB;--bg:#FAFAF9;--card:#fff}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradient(180deg,#FFF5F5 0%,#FAFAF9 140px,#FAFAF9 100%);color:var(--t)}
-.app{max-width:860px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
-.topbar{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(250,250,249,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.07);position:sticky;top:0;z-index:10}
-.ico{width:36px;height:36px;border:none;border-radius:999px;background:none;cursor:pointer}
-.title{flex:1;text-align:center;font-family:'Lora',serif;font-size:24px;font-weight:700}
-.main{padding:14px 14px 90px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#FAFAF9;font-family:'DM Sans',sans-serif;overflow:hidden}
+:root{
+  --r:#AE0000;--rl:#FFF5F5;--g:#F8F9FA;--b:#E5E5E5;--m:#6F7480;--t:#1A1A1A;
+  --sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px);
+  --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);
+  --fs-xs:12px;--fs-sm:14px;--fs-md:16px;--fs-xl:22px;
+  --rad-sm:10px;--rad-md:14px;--rad-lg:18px;
+}
+
+.app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,#FFF5F5 0%,#FAFAF9 140px,#FAFAF9 100%);position:relative;overflow:hidden}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(250,250,249,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 1px 0 rgba(0,0,0,.07)}
+.tb-title{flex:1;font-size:var(--fs-md);font-weight:700;text-align:center;color:var(--t);font-family:'Lora',serif}
+.ico{width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none;border-radius:19px;color:var(--t);transition:background .18s ease}
+.ico:active{background:var(--g)}
+
+/* Main scroll area */
+.main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.main-inner{padding:14px 14px 20px}
+
+/* Nav */
+.nav{background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease;font-family:inherit}
+.tab.active{color:var(--r)}
+.tab.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:22px;height:3px;background:var(--r);border-radius:0 0 4px 4px}
+.tab svg{width:23px;height:23px}
+.tab span{font-size:var(--fs-xs);font-weight:600}
+
+/* Buttons */
+.btn-r{width:100%;padding:16px 8px;border-radius:var(--rad-md);border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--r);color:#fff;box-shadow:0 4px 10px rgba(174,0,0,.16);transition:transform .1s ease,box-shadow .16s ease;letter-spacing:.01em}
+.btn-r:active{transform:translateY(1px);box-shadow:0 2px 6px rgba(174,0,0,.14)}
+.btn-g{width:100%;padding:16px 8px;border-radius:var(--rad-md);border:1px solid rgba(0,0,0,.1);font-size:var(--fs-sm);font-weight:600;cursor:pointer;font-family:inherit;background:#F4F4F2;color:#374151;transition:transform .12s ease,background .2s ease}
+.btn-g:active{transform:translateY(1px);background:#ECEAE8}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+
+/* Screens */
 .screen{display:none}
 .screen.active{display:block}
-.hero{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.07);margin-bottom:12px}
-.hero h1{font-family:'Lora',serif;font-size:26px;line-height:1.15;margin-bottom:8px}
-.hero p{font-size:14px;color:var(--m);line-height:1.6}
+
+/* Hero */
+.hero{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:var(--rad-lg);padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.07);margin-bottom:12px}
+.hero h1{font-family:'Lora',serif;font-size:24px;line-height:1.15;margin-bottom:8px;color:var(--t)}
+.hero p{font-size:var(--fs-sm);color:var(--m);line-height:1.6}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:14px;padding:12px}
-.card h3{font-size:13px;font-weight:800;margin-bottom:4px}
+.card{background:var(--rl);border:1px solid rgba(174,0,0,.1);border-radius:var(--rad-md);padding:12px}
+.card h3{font-size:13px;font-weight:800;margin-bottom:4px;color:var(--t)}
 .card p{font-size:12px;color:var(--m);line-height:1.45}
+
+/* Section title */
 .sec-title{font-size:11px;color:#8f95a1;letter-spacing:.08em;font-weight:700;text-transform:uppercase;margin:14px 2px 8px}
-.row{display:flex;gap:8px;align-items:center}
-.dot{width:9px;height:9px;border-radius:50%;background:#2E7D32}
-.dossier{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-.dossier.clickable{cursor:pointer;transition:transform .12s ease,box-shadow .2s ease,border-color .2s ease}
-.dossier.clickable:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.08)}
-.dossier.active{border-color:rgba(174,0,0,.35);box-shadow:0 0 0 3px rgba(174,0,0,.08),0 4px 14px rgba(0,0,0,.08)}
-.dossier .name{font-size:15px;font-weight:800}
-.dossier .meta{font-size:12px;color:var(--m);margin-top:3px}
-.chip{font-size:11px;font-weight:700;line-height:1;padding:5px 8px;border-radius:999px;background:#F4F4F2;border:1px solid rgba(0,0,0,.08);color:#4B5563}
+
+/* Home cards */
+.home-stack{display:grid;gap:10px}
+.home-card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:var(--rad-md);padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.home-card h3{font-size:var(--fs-sm);font-weight:800;margin-bottom:8px;color:var(--t)}
+.note-item{font-size:var(--fs-xs);color:#4B5563;line-height:1.5;padding:8px 9px;background:#F8FAFC;border:1px solid #E7ECF2;border-radius:var(--rad-sm);margin-top:6px}
+
+/* Dossier srow-cards */
+.srow{display:flex;align-items:center;gap:12px;padding:15px 14px;border:1px solid var(--b);border-radius:var(--rad-md);cursor:pointer;margin-bottom:12px;background:#fff;box-shadow:0 2px 8px rgba(20,20,20,.04);transition:transform .12s ease,box-shadow .18s ease}
+.srow:active{transform:translateY(1px)}
+.srow.srow-dossier{flex-direction:column;align-items:stretch;gap:0;padding:13px 14px;margin-bottom:10px}
+.srow.srow-dossier.active-d{border-color:rgba(174,0,0,.35);box-shadow:0 0 0 3px rgba(174,0,0,.08),0 4px 14px rgba(0,0,0,.08)}
+.srow-dossier-top{display:flex;align-items:flex-start;gap:8px;width:100%;min-width:0;margin-bottom:6px}
+.srow-dossier-titleblock{flex:1;min-width:0}
+.srow-dossier-title{font-size:15px;font-weight:700;line-height:1.3;color:var(--t)}
+.srow-dossier-meta{font-size:12px;color:var(--m);margin-top:3px;line-height:1.35}
+.srow-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;justify-content:space-between}
+
+/* Chips */
+.chip{font-size:11px;font-weight:700;line-height:1;padding:4px 8px;border-radius:999px;background:#F4F4F2;border:1px solid rgba(0,0,0,.08);color:#4B5563;white-space:nowrap;flex-shrink:0}
 .chip.warn{background:#FFF4E5;border-color:#F7D7A8;color:#8A4B00}
-.prog{height:6px;background:#EFECEA;border-radius:999px;overflow:hidden;margin-top:8px}
-.prog > div{height:100%;background:#AE0000;opacity:.9}
-.editor{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;margin-top:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.chip.type-chip{background:var(--rl);border-color:rgba(174,0,0,.15);color:#8A2D2D}
+
+/* Progress bar */
+.prog{height:6px;background:#EFECEA;border-radius:999px;overflow:hidden;margin-top:2px}
+.prog>div{height:100%;background:var(--r);opacity:.9;transition:width .4s ease}
+
+/* Editor / forms */
+.editor{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:var(--rad-md);padding:14px;margin-top:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
 .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.field{display:flex;flex-direction:column;gap:5px}
+.field{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.field:first-child{margin-top:0}
 .field.full{grid-column:1/-1}
 .label{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#8f95a1}
-.in,.ta,.sel{width:100%;border:1px solid #E5E7EB;border-radius:11px;padding:10px 11px;font:inherit;font-size:14px;outline:none;background:#fff}
+.in,.ta,.sel{width:100%;border:1px solid var(--b);border-radius:var(--rad-sm);padding:10px 11px;font:inherit;font-size:var(--fs-sm);outline:none;background:#fff;color:var(--t)}
 .ta{min-height:88px;resize:vertical}
-.in:focus,.ta:focus,.sel:focus{border-color:#AE0000;box-shadow:0 0 0 3px rgba(174,0,0,.08)}
-.hint{font-size:12px;color:var(--m);margin-top:6px}
-.editor-title{font-size:15px;font-weight:800;margin-bottom:8px}
-.advice{margin-top:10px;padding:10px 11px;border-radius:11px;background:#FFF7F7;border:1px solid #F3D6D6;font-size:13px;line-height:1.55;color:#5B2A2A}
+.in:focus,.ta:focus,.sel:focus{border-color:var(--r);box-shadow:0 0 0 3px rgba(174,0,0,.08)}
+.hint{font-size:12px;color:var(--m);margin-top:6px;line-height:1.45}
+.editor-title{font-size:15px;font-weight:800;margin-bottom:10px;color:var(--t)}
+
+/* Advice box */
+.advice{margin-top:10px;padding:12px 13px;border-radius:var(--rad-sm);background:var(--rl);border:1px solid #F3D6D6;font-size:var(--fs-sm);line-height:1.55;color:#5B2A2A}
+
+/* Prompt chips */
 .prompt-wrap{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
-.prompt-chip{padding:7px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.1);background:#fff;font-size:12px;cursor:pointer;color:#374151}
-.prompt-chip:hover{background:#FAF5F5;border-color:#E8CACA}
-.plan{margin-top:10px;border-radius:11px;border:1px solid rgba(0,0,0,.08);background:#fff;padding:10px 12px}
+.prompt-chip{padding:7px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.1);background:#fff;font-size:12px;cursor:pointer;color:#374151;font-family:inherit;transition:background .14s ease,border-color .14s ease}
+.prompt-chip:active{background:#FAF5F5;border-color:#E8CACA}
+
+/* Plan / vertellijst */
+.plan{margin-top:10px;border-radius:var(--rad-sm);border:1px solid rgba(0,0,0,.08);background:#fff;padding:12px 13px}
 .plan h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8f95a1;margin-bottom:6px}
 .plan ul{padding-left:18px}
-.plan li{font-size:13px;line-height:1.6;color:#374151;margin:2px 0}
-.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mini-grid .field.full{grid-column:1/-1}
-.subhint{font-size:11px;color:#8f95a1;margin-top:6px;line-height:1.4}
-.btn{width:100%;padding:14px 10px;border-radius:13px;border:none;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}
-.btn-r{background:var(--r);color:#fff}
-.btn-g{background:#F4F4F2;color:#374151;border:1px solid rgba(0,0,0,.1)}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%) translateY(8px);background:#1F2937;color:#fff;padding:10px 12px;border-radius:10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:60}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;max-width:860px;margin:0 auto;z-index:30}
-.tab{flex:1;padding:7px 4px 12px;text-align:center;font-size:12px;color:#7b818e;text-decoration:none;position:relative;cursor:pointer}
-.tab.active{color:var(--r);font-weight:700}
-.tab.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:22px;height:3px;background:var(--r);border-radius:0 0 4px 4px}
-.home-stack{display:grid;gap:10px}
-.home-card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:14px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-.home-card h3{font-size:13px;font-weight:800;margin-bottom:6px}
-.note-item{font-size:12px;color:#4B5563;line-height:1.5;padding:8px 9px;background:#F8FAFC;border:1px solid #E7ECF2;border-radius:10px;margin-top:6px}
-.chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding-right:2px}
-.msg{padding:10px 11px;border-radius:12px;font-size:13px;line-height:1.5;border:1px solid rgba(0,0,0,.07);background:#fff}
-.msg.me{background:#FFF7F7;border-color:#F3D6D6}
+.plan li{font-size:var(--fs-sm);line-height:1.6;color:#374151;margin:2px 0}
+
+/* Chat / vertel */
+.chat{display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow:auto;padding-right:2px;margin:8px 0}
+.msg{padding:10px 11px;border-radius:12px;font-size:var(--fs-sm);line-height:1.5;border:1px solid rgba(0,0,0,.07);background:#fff}
+.msg.me{background:var(--rl);border-color:#F3D6D6}
 .msg .ts{display:block;font-size:11px;color:#8f95a1;margin-bottom:4px}
-.chat-advice{margin-top:8px;padding:10px 11px;border-radius:11px;background:#FFF7F7;border:1px solid #F3D6D6;font-size:13px;line-height:1.55;color:#5B2A2A}
-@media(max-width:520px){.title{font-size:20px}.main{padding:12px 12px 92px}.hero{padding:14px}.hero h1{font-size:22px}.home-card,.editor{padding:11px}.btn{padding:13px 12px}.tab{font-size:11px;padding:8px 2px 12px}.grid,.btns,.editor-grid,.mini-grid{grid-template-columns:1fr}}
+.chat-advice{margin-top:10px;padding:12px 13px;border-radius:var(--rad-sm);background:var(--rl);border:1px solid #F3D6D6;font-size:var(--fs-sm);line-height:1.55;color:#5B2A2A}
+
+/* Del btn */
+.del-btn{background:#FFF0F0;border:1px solid #ffd9d9;color:var(--r);font-size:var(--fs-xs);font-weight:700;padding:5px 10px;border-radius:var(--rad-sm);cursor:pointer;font-family:inherit;flex-shrink:0}
+
+/* Toast */
+.toast{position:fixed;left:50%;bottom:calc(56px + var(--sb) + 12px);transform:translateX(-50%) translateY(8px);background:#1F2937;color:#fff;padding:10px 14px;border-radius:var(--rad-sm);font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:60;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Keyboard focus */
+button:focus-visible,.tab:focus-visible,.ico:focus-visible,.btn-r:focus-visible,.btn-g:focus-visible,.srow:focus-visible,.prompt-chip:focus-visible,.del-btn:focus-visible{outline:3px solid rgba(174,0,0,.30);outline-offset:2px}
+
+/* Responsive */
+@media(max-width:520px){
+  .hero h1{font-size:20px}
+  .grid,.btns,.editor-grid{grid-template-columns:1fr}
+  .btn-r,.btn-g{padding:14px 8px}
+  .main-inner{padding:12px 12px 16px}
+}
 </style>
 </head>
 <body>
 <div class="app">
+
   <div class="topbar">
-    <button class="ico" onclick="location.href='sensecorner.html'" aria-label="Terug">←</button>
-    <div class="title">FamilySense</div>
-    <button class="ico" onclick="location.href='datesense.html'" aria-label="DateSense">♡</button>
+    <button class="ico" onclick="location.href='sensecorner.html'" aria-label="Terug naar SenseCorner">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="tb-title">FamilySense</div>
+    <button class="ico" onclick="location.href='datesense.html'" aria-label="Naar DateSense">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    </button>
   </div>
 
   <div class="main">
-    <section class="screen active" id="homeScreen">
-    <section class="hero">
-      <h1>Gezin, rust en verbinding.</h1>
-      <p>FamilySense werkt vanuit OWN Sense. Jij bepaalt je rol per dossier en vertelt vrij wat er vandaag speelt.</p>
-      <div class="grid">
-        <div class="card"><h3>Dossier-gedreven</h3><p>Per kind/familielid krijg je een eigen profielbasis en vertelgeschiedenis.</p></div>
-        <div class="card"><h3>Advies op maat</h3><p>Vertel vrij en krijg direct coachadvies per type relatie.</p></div>
-      </div>
-    </section>
-    <div class="home-stack">
-      <section class="home-card">
-        <h3>Meldingen</h3>
-        <div class="note-item">Vandaag nog geen nieuw vertel-moment opgeslagen. Een korte update helpt voor beter advies.</div>
-        <div class="note-item">Tip: kies eerst je OWN Sense rol in een dossier zodat adviezen beter aansluiten.</div>
-      </section>
-      <section class="home-card">
-        <h3>Snelle Vertel</h3>
-        <label class="field">
-          <span class="label">Voor welk dossier?</span>
-          <select id="homeDossierPick" class="sel"></select>
-        </label>
-        <label class="field">
-          <span class="label">Wat speelt er vandaag?</span>
-          <textarea id="homeVertel" class="ta" placeholder="Vertel kort wat er nu leeft tussen jou en je kind / familielid..."></textarea>
-        </label>
-        <div class="btns">
-          <button class="btn btn-g" type="button" id="homeMicBtn" onclick="toggleHomeMic()">🎤 Spreek</button>
-          <button class="btn btn-r" type="button" onclick="saveHomeVertel()">Opslaan in dossier</button>
-        </div>
-      </section>
-    </div>
-    </section>
+    <div class="main-inner">
 
-    <section class="screen" id="sensesScreen">
-
-    <div class="sec-title">Mijn dossiers</div>
-    <div id="dossierList"></div>
-    <section class="editor">
-      <div class="sec-title" style="margin-top:0">Nieuw dossier</div>
-      <div class="editor-grid">
-        <label class="field">
-          <span class="label">Type</span>
-          <select id="newType" class="sel">
-            <option value="kind">Kind</option>
-            <option value="ouder">Ouder</option>
-            <option value="broer_zus">Broer / Zus</option>
-            <option value="partner">Partner</option>
-            <option value="gezin">Gezin algemeen</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="label">Naam</span>
-          <input id="newName" class="in" placeholder="Bv. Dochter Emma">
-        </label>
-        <label class="field full">
-          <span class="label">Context</span>
-          <textarea id="newContext" class="ta" placeholder="Korte context: leeftijd, fase, spanningen, wat je wil verbeteren..."></textarea>
-        </label>
-      </div>
-      <div class="hint">Per dossier starten we met profielbasis + vrij vertellen.</div>
-    </section>
-    <div class="btns">
-      <button class="btn btn-r" onclick="addDossier()">+ Dossier toevoegen</button>
-      <button class="btn btn-g" onclick="showScreen('home')">Naar Home</button>
-    </div>
-    </section>
-
-    <section class="screen" id="vertelScreen">
-      <section class="editor">
-        <div class="editor-title">Vertel</div>
-        <label class="field">
-          <span class="label">Dossier</span>
-          <select id="vertelDossierPick" class="sel"></select>
-        </label>
-        <div class="chat" id="vertelChat"></div>
-        <label class="field">
-          <span class="label">Wat wil je nu vertellen?</span>
-          <textarea id="vertelInput" class="ta" placeholder="Vertel vrij wat er nu speelt..."></textarea>
-        </label>
-        <div class="hint">Snelle startzinnen:</div>
-        <div class="prompt-wrap" id="vertelPromptChips"></div>
-        <div class="btns">
-          <button class="btn btn-g" type="button" id="vertelMicBtn" onclick="toggleVertelMic()">🎤 Spreek</button>
-          <button class="btn btn-r" type="button" onclick="saveVertelFromTab()">Opslaan</button>
-          <button class="btn btn-g" type="button" onclick="askVertelAdvice()">Vraag advies over dit moment</button>
-        </div>
-        <div id="vertelAdviceBox" class="chat-advice" style="display:none"></div>
-      </section>
-    </section>
-
-    <section class="screen" id="detailScreen">
-      <section class="editor" id="detailEditor">
-        <div class="editor-title" id="detailTitle">Dossier details</div>
-        <div class="editor-grid">
-          <label class="field">
-            <span class="label">Leeftijd</span>
-            <input id="fldAge" class="in" placeholder="Bv. 14">
-          </label>
-          <label class="field">
-            <span class="label">Geslacht</span>
-            <select id="fldGender" class="sel">
-              <option value="">Onbekend / niet ingevuld</option>
-              <option value="vrouw">Vrouw</option>
-              <option value="man">Man</option>
-              <option value="non-binair">Non-binair</option>
-              <option value="anders">Anders</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">School/werk (optioneel)</span>
-            <input id="fldSchoolWork" class="in" placeholder="Bv. 2e middelbaar / student / werkend">
-          </label>
-          <label class="field">
-            <span class="label">Woonsituatie (optioneel)</span>
-            <input id="fldLiving" class="in" placeholder="Bv. co-ouderschap, thuiswonend, kot">
-          </label>
-          <label class="field">
-            <span class="label">OWN Sense rol</span>
-            <select id="fldOwnRole" class="sel">
-              <option value="">Kies jouw rol</option>
-              <option value="moeder">Ik ben moeder</option>
-              <option value="vader">Ik ben vader</option>
-              <option value="zus">Ik ben zus</option>
-              <option value="broer">Ik ben broer</option>
-              <option value="partner">Ik ben partner</option>
-              <option value="voogd">Ik ben voogd</option>
-              <option value="anders">Anders</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Specifieke relatie (optioneel)</span>
-            <input id="fldOwnRoleCustom" class="in" placeholder="Bv. plusmama, tante, oudere zus">
-          </label>
-        </div>
-        <div class="hint">Invoer gebeurt nu in de Vertel-tab. Hier beheer je profielbasis en context.</div>
-        <div class="advice" id="detailAdvice"></div>
-        <section class="plan">
-          <h4>Recente Vertelmomenten</h4>
-          <ul id="vertelList"></ul>
+      <!-- HOME -->
+      <section class="screen active" id="homeScreen">
+        <section class="hero">
+          <h1>Gezin, rust en verbinding.</h1>
+          <p>FamilySense werkt vanuit OWN Sense. Jij bepaalt je rol per dossier en vertelt vrij wat er vandaag speelt.</p>
+          <div class="grid">
+            <div class="card"><h3>Dossier-gedreven</h3><p>Per kind of familielid een eigen profielbasis en vertelgeschiedenis.</p></div>
+            <div class="card"><h3>Advies op maat</h3><p>Vertel vrij en krijg direct coachadvies per type relatie.</p></div>
+          </div>
         </section>
-        <div class="btns" style="margin-top:12px">
-          <button class="btn btn-r" onclick="saveSelected()">Profiel opslaan</button>
-          <button class="btn btn-g" onclick="showScreen('vertel')">Open Vertel-tab</button>
-          <button class="btn btn-g" onclick="generateAdvice()">Vernieuw advies</button>
-          <button class="btn btn-g" onclick="goOverview()">Terug naar dossiers</button>
+        <div class="home-stack">
+          <section class="home-card">
+            <h3>Meldingen</h3>
+            <div class="note-item">Vandaag nog geen nieuw vertel-moment opgeslagen. Een korte update helpt voor beter advies.</div>
+            <div class="note-item">Tip: kies eerst je OWN Sense rol in een dossier zodat adviezen beter aansluiten.</div>
+          </section>
+          <section class="home-card">
+            <h3>Snelle Vertel</h3>
+            <label class="field">
+              <span class="label">Voor welk dossier?</span>
+              <select id="homeDossierPick" class="sel"></select>
+            </label>
+            <label class="field">
+              <span class="label">Wat speelt er vandaag?</span>
+              <textarea id="homeVertel" class="ta" placeholder="Vertel kort wat er nu leeft tussen jou en je kind / familielid..."></textarea>
+            </label>
+            <div class="btns">
+              <button class="btn-g" type="button" id="homeMicBtn" onclick="toggleHomeMic()">🎤 Spreek</button>
+              <button class="btn-r" type="button" onclick="saveHomeVertel()">Opslaan in dossier</button>
+            </div>
+          </section>
         </div>
       </section>
-    </section>
+
+      <!-- DOSSIERS -->
+      <section class="screen" id="sensesScreen">
+        <div class="sec-title">Mijn dossiers</div>
+        <div id="dossierList"></div>
+        <section class="editor">
+          <div class="sec-title" style="margin-top:0">Nieuw dossier</div>
+          <div class="editor-grid">
+            <label class="field">
+              <span class="label">Type</span>
+              <select id="newType" class="sel">
+                <option value="kind">Kind</option>
+                <option value="ouder">Ouder</option>
+                <option value="broer_zus">Broer / Zus</option>
+                <option value="partner">Partner</option>
+                <option value="gezin">Gezin algemeen</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Naam</span>
+              <input id="newName" class="in" placeholder="Bv. Dochter Emma">
+            </label>
+            <label class="field full">
+              <span class="label">Context</span>
+              <textarea id="newContext" class="ta" placeholder="Korte context: leeftijd, fase, spanningen, wat je wil verbeteren..."></textarea>
+            </label>
+          </div>
+          <div class="hint">Per dossier starten we met profielbasis + vrij vertellen.</div>
+        </section>
+        <div class="btns">
+          <button class="btn-r" onclick="addDossier()">+ Dossier toevoegen</button>
+          <button class="btn-g" onclick="showScreen('home')">Naar Home</button>
+        </div>
+      </section>
+
+      <!-- VERTEL -->
+      <section class="screen" id="vertelScreen">
+        <section class="editor">
+          <div class="editor-title">Vertel</div>
+          <label class="field" style="margin-top:0">
+            <span class="label">Dossier</span>
+            <select id="vertelDossierPick" class="sel"></select>
+          </label>
+          <div class="chat" id="vertelChat"></div>
+          <label class="field">
+            <span class="label">Wat wil je nu vertellen?</span>
+            <textarea id="vertelInput" class="ta" placeholder="Vertel vrij wat er nu speelt..."></textarea>
+          </label>
+          <div class="hint">Snelle startzinnen:</div>
+          <div class="prompt-wrap" id="vertelPromptChips"></div>
+          <div class="btns">
+            <button class="btn-g" type="button" id="vertelMicBtn" onclick="toggleVertelMic()">🎤 Spreek</button>
+            <button class="btn-r" type="button" onclick="saveVertelFromTab()">Opslaan</button>
+          </div>
+          <button class="btn-g" style="margin-top:8px" type="button" onclick="askVertelAdvice()">Vraag advies over dit moment</button>
+          <div id="vertelAdviceBox" class="chat-advice" style="display:none"></div>
+        </section>
+      </section>
+
+      <!-- DETAIL -->
+      <section class="screen" id="detailScreen">
+        <section class="editor" id="detailEditor">
+          <div class="editor-title" id="detailTitle">Dossier details</div>
+          <div class="editor-grid">
+            <label class="field">
+              <span class="label">Leeftijd</span>
+              <input id="fldAge" class="in" placeholder="Bv. 14">
+            </label>
+            <label class="field">
+              <span class="label">Geslacht</span>
+              <select id="fldGender" class="sel">
+                <option value="">Onbekend / niet ingevuld</option>
+                <option value="vrouw">Vrouw</option>
+                <option value="man">Man</option>
+                <option value="non-binair">Non-binair</option>
+                <option value="anders">Anders</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">School / werk (optioneel)</span>
+              <input id="fldSchoolWork" class="in" placeholder="Bv. 2e middelbaar / student / werkend">
+            </label>
+            <label class="field">
+              <span class="label">Woonsituatie (optioneel)</span>
+              <input id="fldLiving" class="in" placeholder="Bv. co-ouderschap, thuiswonend, kot">
+            </label>
+            <label class="field">
+              <span class="label">OWN Sense rol</span>
+              <select id="fldOwnRole" class="sel">
+                <option value="">Kies jouw rol</option>
+                <option value="moeder">Ik ben moeder</option>
+                <option value="vader">Ik ben vader</option>
+                <option value="zus">Ik ben zus</option>
+                <option value="broer">Ik ben broer</option>
+                <option value="partner">Ik ben partner</option>
+                <option value="voogd">Ik ben voogd</option>
+                <option value="anders">Anders</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Specifieke relatie (optioneel)</span>
+              <input id="fldOwnRoleCustom" class="in" placeholder="Bv. plusmama, tante, oudere zus">
+            </label>
+          </div>
+          <div class="hint">Invoer gebeurt in de Vertel-tab. Hier beheer je profielbasis en context.</div>
+          <div class="advice" id="detailAdvice" style="display:none"></div>
+          <section class="plan">
+            <h4>Recente Vertelmomenten</h4>
+            <ul id="vertelList"></ul>
+          </section>
+          <div class="btns" style="margin-top:12px">
+            <button class="btn-r" onclick="saveSelected()">Profiel opslaan</button>
+            <button class="btn-g" onclick="showScreen('vertel')">Open Vertel-tab</button>
+          </div>
+          <div class="btns" style="margin-top:8px">
+            <button class="btn-g" onclick="generateAdvice()">Vernieuw advies</button>
+            <button class="btn-g" onclick="goOverview()">Terug naar dossiers</button>
+          </div>
+        </section>
+      </section>
+
+    </div>
   </div>
 
-  <div class="nav">
-    <a class="tab active" id="tabHome" onclick="showScreen('home')">Home</a>
-    <a class="tab" id="tabSenses" onclick="showScreen('senses')">Dossiers</a>
-    <a class="tab" id="tabVertel" onclick="showScreen('vertel')">Vertel</a>
-    <a class="tab" id="tabMenu" onclick="location.href='sensecorner.html'">Menu</a>
-  </div>
+  <nav class="nav">
+    <button class="tab active" id="tabHome" onclick="showScreen('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="tab" id="tabSenses" onclick="showScreen('senses')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Dossiers</span>
+    </button>
+    <button class="tab" id="tabVertel" onclick="showScreen('vertel')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>Vertel</span>
+    </button>
+    <button class="tab" id="tabMenu" onclick="location.href='sensecorner.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <span>Menu</span>
+    </button>
+  </nav>
+
 </div>
 <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 
@@ -302,9 +392,9 @@ function emptyFields(contextText){
   };
 }
 var defaultDossiers=[
-  {id:idNow(),name:'Dochter Emma',type:'kind',fields:emptyFields('Tiener · school / grenzen / sfeer')},
-  {id:idNow(),name:'Dochter Noor',type:'kind',fields:emptyFields('Tiener · emoties / vertrouwen / afspraken')},
-  {id:idNow(),name:'Gezin algemeen',type:'gezin',fields:emptyFields('Sfeer thuis · regels · routines')}
+  {id:idNow(),name:'Dochter Emma',type:'kind',fields:emptyFields('Tiener \u00b7 school / grenzen / sfeer')},
+  {id:idNow(),name:'Dochter Noor',type:'kind',fields:emptyFields('Tiener \u00b7 emoties / vertrouwen / afspraken')},
+  {id:idNow(),name:'Gezin algemeen',type:'gezin',fields:emptyFields('Sfeer thuis \u00b7 regels / routines')}
 ];
 function idNow(){
   return 'd_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36);
@@ -378,6 +468,8 @@ function getAdvice(type,text){
   if(/schreeuw|boos|ruzie|conflict|escal/.test(t))base+=' Start het gesprek op een rustig moment, niet in de piek van emotie.';
   if(/afstand|stil|geen contact|negeer|terugtrek/.test(t))base+=' Kies een zachte opening: "Ik mis verbinding, mogen we 10 minuten praten?"';
   if(/grens|respect|over mijn grens|onveilig/.test(t))base+=' Formuleer je grens in gedrag: wat wel/niet ok is, en welke stap jij neemt.';
+  if(/puber|tiener|koppig|fase|hormoon/.test(t))base+=' Pubergedrag heeft structuur en voorspelbaarheid nodig. Kies je gevechten bewust.';
+  if(/rouw|verlies|dement|zorg|oud/.test(t))base+=' Bij oudere ouders helpt het verwachtingen te bespreken voordat een crisis toeslaat.';
   return base;
 }
 function countAttentionPoints(d){
@@ -386,9 +478,9 @@ function countAttentionPoints(d){
   var last=notes.length?String(notes[notes.length-1].text||''):'';
   var txt=last.toLowerCase();
   var terms=[
-    'escal', 'ruzie', 'conflict', 'boos', 'agress', 'geschreeuw',
-    'geen contact', 'stilte', 'neger', 'paniek', 'uitput', 'overprikkel',
-    'grensoverschrijd', 'onveilig', 'angst', 'druk', 'controle'
+    'escal','ruzie','conflict','boos','agress','geschreeuw',
+    'geen contact','stilte','neger','paniek','uitput','overprikkel',
+    'grensoverschrijd','onveilig','angst','druk','controle'
   ];
   var hits=0;
   for(var i=0;i<terms.length;i++){
@@ -406,7 +498,10 @@ function showScreen(name){
   document.getElementById('tabSenses').classList.toggle('active',name==='senses'||name==='detail');
   document.getElementById('tabVertel').classList.toggle('active',name==='vertel');
   document.getElementById('tabMenu').classList.toggle('active',false);
-  document.querySelector('.title').textContent=name==='detail'?'FamilySense Dossier':'FamilySense';
+  document.querySelector('.tb-title').textContent=name==='detail'?'FamilySense Dossier':'FamilySense';
+  /* scroll top bij schermwissel */
+  var main=document.querySelector('.main');
+  if(main)main.scrollTop=0;
   if(name==='home')renderHomePick();
   if(name==='vertel'){ renderVertelPick(); renderVertelChat(); focusVertelInputSoon(); }
 }
@@ -416,11 +511,21 @@ function render(){
   mount.innerHTML=list.map(function(d){
     var c=completion(d);
     var ap=countAttentionPoints(d);
-    return '<div class="dossier clickable'+(d.id===selectedId?' active':'')+'" onclick="openDossier(\''+escAttr(d.id)+'\')">'+
-      '<div class="row"><span class="dot"></span><div class="name">'+esc(d.name)+'</div><span class="chip">'+esc(TYPE_LABELS[d.type])+'</span>'+(ap?'<span class="chip warn">'+ap+' Aandachtspunt'+(ap>1?'en':'')+'</span>':'')+'</div>'+
-      '<div class="meta">'+esc((d.fields.age?('Leeftijd '+d.fields.age+' · '):'')+(d.fields.gender?d.fields.gender+' · ':'')+(Array.isArray(d.fields.notes)&&d.fields.notes.length?'laatste vertel-moment opgeslagen':'nog geen vertel-moment'))+'</div>'+
-      '<div class="meta">'+c.done+'/'+c.total+' velden ingevuld ('+c.pct+'%)</div>'+
+    var metaTxt=(d.fields.age?('Leeftijd '+d.fields.age+' \u00b7 '):'')+(d.fields.gender?d.fields.gender+' \u00b7 ':'')+(Array.isArray(d.fields.notes)&&d.fields.notes.length?'laatste vertel-moment opgeslagen':'nog geen vertel-moment');
+    return '<div class="srow srow-dossier'+(d.id===selectedId?' active-d':'')+'" onclick="openDossier(\''+escAttr(d.id)+'\')" tabindex="0" role="button" aria-label="Open dossier '+escAttr(d.name)+'">'+
+      '<div class="srow-dossier-top">'+
+        '<div class="srow-dossier-titleblock">'+
+          '<div class="srow-dossier-title">'+esc(d.name)+'</div>'+
+          '<div class="srow-dossier-meta">'+esc(metaTxt)+'</div>'+
+        '</div>'+
+        '<span class="chip type-chip">'+esc(TYPE_LABELS[d.type])+'</span>'+
+        (ap?'<span class="chip warn">'+ap+'\u26a0</span>':'')+
+      '</div>'+
       '<div class="prog"><div style="width:'+c.pct+'%"></div></div>'+
+      '<div class="srow-actions">'+
+        '<span style="font-size:11px;color:var(--m);font-weight:600">'+c.done+'/'+c.total+' ingevuld ('+c.pct+'%)</span>'+
+        '<button type="button" class="del-btn" onclick="event.stopPropagation();deleteDossier(\''+escAttr(d.id)+'\')">Verwijder</button>'+
+      '</div>'+
     '</div>';
   }).join('');
   if(selectedId && ACTIVE_SCREEN==='detail')syncDetailEditor();
@@ -449,7 +554,10 @@ function syncDetailEditor(){
   document.getElementById('fldLiving').value=d.fields.living||'';
   document.getElementById('fldOwnRole').value=d.fields.own_role||'';
   document.getElementById('fldOwnRoleCustom').value=d.fields.own_role_custom||'';
-  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(d.type,(d.fields.notes||[]).length?(d.fields.notes[d.fields.notes.length-1].text||''):'');
+  var adviceEl=document.getElementById('detailAdvice');
+  var adviceText=getAdvice(d.type,(d.fields.notes||[]).length?(d.fields.notes[d.fields.notes.length-1].text||''):'');
+  adviceEl.textContent=adviceText;
+  adviceEl.style.display='block';
   renderVertelList(d);
 }
 function renderPromptChips(type){
@@ -479,8 +587,8 @@ function renderVertelList(d){
   var notes=Array.isArray((d&&d.fields&&d.fields.notes)||[])?d.fields.notes.slice().reverse():[];
   document.getElementById('vertelList').innerHTML=notes.length?notes.slice(0,8).map(function(n){
     var dt=n.ts?new Date(n.ts):new Date();
-    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-    return '<li><strong>'+esc(stamp)+'</strong> · '+esc(String(n.text||'').slice(0,220))+'</li>';
+    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return '<li><strong>'+esc(stamp)+'</strong> \u00b7 '+esc(String(n.text||'').slice(0,220))+'</li>';
   }).join(''):'<li>Nog geen vertel-momenten.</li>';
 }
 function saveSelected(){
@@ -495,7 +603,9 @@ function saveSelected(){
   list[idx].fields.living=(document.getElementById('fldLiving').value||'').trim();
   writeDossiers(list);
   var last=(Array.isArray(list[idx].fields.notes)&&list[idx].fields.notes.length)?list[idx].fields.notes[list[idx].fields.notes.length-1].text:'';
-  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(list[idx].type,last||'');
+  var adviceEl=document.getElementById('detailAdvice');
+  adviceEl.textContent=getAdvice(list[idx].type,last||'');
+  adviceEl.style.display='block';
   renderVertelList(list[idx]);
   showToast('Profiel opgeslagen.');
   render();
@@ -507,26 +617,18 @@ function generateAdvice(){
   var inp=document.getElementById('vertelInput');
   var txt=(inp&&inp.value?inp.value:'').trim();
   var useTxt=txt||(Array.isArray(d.fields.notes)&&d.fields.notes.length?d.fields.notes[d.fields.notes.length-1].text:'');
-  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(d.type,useTxt);
+  var adviceEl=document.getElementById('detailAdvice');
+  adviceEl.textContent=getAdvice(d.type,useTxt);
+  adviceEl.style.display='block';
   showToast('Advies bijgewerkt.');
 }
-function copyText(txt,okMsg){
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(function(){ showToast(okMsg); }).catch(function(){ fallbackCopy(txt,okMsg); });
-    return;
-  }
-  fallbackCopy(txt,okMsg);
-}
-function fallbackCopy(txt,okMsg){
-  var ta=document.createElement('textarea');
-  ta.value=txt;
-  ta.setAttribute('readonly','readonly');
-  ta.style.position='absolute';
-  ta.style.left='-9999px';
-  document.body.appendChild(ta);
-  ta.select();
-  try{ document.execCommand('copy'); showToast(okMsg); }catch(_e){ showToast('Kopieren lukte niet automatisch.'); }
-  document.body.removeChild(ta);
+function deleteDossier(id){
+  if(!confirm('Dossier verwijderen?'))return;
+  var list=readDossiers().filter(function(d){ return d.id!==id; });
+  writeDossiers(list);
+  if(selectedId===id)selectedId='';
+  render();
+  showToast('Dossier verwijderd.');
 }
 function showToast(msg){
   var el=document.getElementById('toast');
@@ -567,7 +669,7 @@ function renderVertelChat(){
   var notes=Array.isArray(d&&d.fields&&d.fields.notes)?d.fields.notes.slice(-20):[];
   box.innerHTML=notes.length?notes.map(function(n){
     var dt=n.ts?new Date(n.ts):new Date();
-    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     return '<div class="msg me"><span class="ts">'+esc(stamp)+'</span>'+esc(String(n.text||''))+'</div>';
   }).join(''):'<div class="msg"><span class="ts">Nu</span>Nog geen vertel-momenten in dit dossier.</div>';
   box.scrollTop=box.scrollHeight;
@@ -632,42 +734,39 @@ function askVertelAdvice(){
   var advice=getAdvice(d.type,basis);
   var role=d.fields.own_role_custom||d.fields.own_role||'betrokken familielid';
   box.style.display='block';
-  box.innerHTML='<strong>Advies voor nu</strong><br>'+esc(advice)+'<br><br><strong>Concreet voorstel</strong><br>Start met: "Ik wil dit rustig bespreken vanuit mijn rol als '+esc(role)+'. Mag ik eerst delen wat ik merk?"';
+  box.innerHTML='<strong>Advies voor nu</strong><br>'+esc(advice)+'<br><br><strong>Concreet voorstel</strong><br>Start met: \u201cIk wil dit rustig bespreken vanuit mijn rol als '+esc(role)+'. Mag ik eerst delen wat ik merk?\u201d';
   showToast('Advies klaar.');
 }
 function toggleHomeMic(){
   var ta=document.getElementById('homeVertel');
   var btn=document.getElementById('homeMicBtn');
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!ta||!btn){ return; }
-  if(!_homeRec && SR){
+  if(!ta||!btn)return;
+  if(!_homeRec&&SR){
     _homeRec=new SR();
     _homeRec.lang='nl-BE';
     _homeRec.continuous=false;
     _homeRec.interimResults=true;
   }
   if(!_homeRec){ showToast('Microfoon niet ondersteund in deze browser.'); return; }
-  if(btn.dataset.rec==='1'){
-    _homeRec.stop();
-    return;
-  }
+  if(btn.dataset.rec==='1'){ _homeRec.stop(); return; }
   var startText=ta.value||'';
   _homeRec.onresult=function(e){
     var text='';
     for(var i=e.resultIndex;i<e.results.length;i++){ text+=e.results[i][0].transcript; }
     ta.value=(startText+' '+text).trim();
   };
-  _homeRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='🎤 Spreek'; };
+  _homeRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='\uD83C\uDF99 Spreek'; };
   btn.dataset.rec='1';
-  btn.textContent='■ Stop';
+  btn.textContent='\u25a0 Stop';
   _homeRec.start();
 }
 function toggleVertelMic(){
   var ta=document.getElementById('vertelInput');
   var btn=document.getElementById('vertelMicBtn');
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!ta||!btn){ return; }
-  if(!_vertelRec && SR){
+  if(!ta||!btn)return;
+  if(!_vertelRec&&SR){
     _vertelRec=new SR();
     _vertelRec.lang='nl-BE';
     _vertelRec.continuous=false;
@@ -681,9 +780,9 @@ function toggleVertelMic(){
     for(var i=e.resultIndex;i<e.results.length;i++){ text+=e.results[i][0].transcript; }
     ta.value=(startText+' '+text).trim();
   };
-  _vertelRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='🎤 Spreek'; };
+  _vertelRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='\uD83C\uDF99 Spreek'; };
   btn.dataset.rec='1';
-  btn.textContent='■ Stop';
+  btn.textContent='\u25a0 Stop';
   _vertelRec.start();
 }
 function addDossier(){
@@ -694,7 +793,7 @@ function addDossier(){
   var name=(nameEl.value||'').trim();
   var context=(contextEl.value||'').trim();
   if(!name){
-    alert('Geef eerst een naam voor het dossier.');
+    showToast('Geef eerst een naam voor het dossier.');
     nameEl.focus();
     return;
   }
@@ -710,6 +809,7 @@ function addDossier(){
   contextEl.value='';
   typeEl.value='kind';
   render();
+  showToast('Dossier \u201c'+name+'\u201d aangemaakt.');
 }
 function escAttr(s){
   return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
