@@ -883,6 +883,13 @@ function stopMic(preserveText){
   if(raw){
     try{
       var p=JSON.parse(raw);
+      var filled=Array.isArray(p.answers)?p.answers.filter(function(a){return a&&String(a).trim();}).length:0;
+      // Migratie: oude "completed" zonder inhoud mag niet als actief blijven staan.
+      if(p.status==='completed'&&filled===0){
+        p.status='empty';
+        p.completionPct=0;
+        localStorage.setItem('ownsense_profile_v1',JSON.stringify(p));
+      }
       if(p.answers&&Array.isArray(p.answers)){
         state.answers=p.answers.slice(0,QUESTIONS.length);
         while(state.answers.length<QUESTIONS.length)state.answers.push('');
