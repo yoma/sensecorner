@@ -70,6 +70,23 @@ html,body{height:100%;background:#FAFAF9;font-family:'DM Sans',sans-serif;overfl
 .home-card h3{font-size:var(--fs-sm);font-weight:800;margin-bottom:8px;color:var(--t)}
 .note-item{font-size:var(--fs-xs);color:#4B5563;line-height:1.5;padding:8px 9px;background:#F8FAFC;border:1px solid #E7ECF2;border-radius:var(--rad-sm);margin-top:6px}
 
+/* OWN Sense kaart */
+.own-card{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--rad-lg);border:1.5px solid #E8C97A;background:linear-gradient(135deg,#FFFBEE 0%,#FFF8E1 100%);cursor:pointer;margin-bottom:12px;box-shadow:0 2px 8px rgba(180,140,0,.08);transition:transform .12s ease,box-shadow .18s ease;text-decoration:none;width:100%;font-family:inherit;text-align:left}
+.own-card:active{transform:translateY(1px)}
+.own-card-ic{font-size:26px;line-height:1;flex-shrink:0}
+.own-card-mid{flex:1;min-width:0}
+.own-card-title{font-size:14px;font-weight:800;color:#5C3D00;line-height:1.2}
+.own-card-sub{font-size:12px;color:#8A6000;margin-top:2px;line-height:1.4}
+.own-card-ar{color:#C49A00;font-size:18px;flex-shrink:0}
+
+/* Recente dossiers op home */
+.home-recent-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--rad-sm);border:1px solid var(--b);background:#fff;cursor:pointer;margin-bottom:8px;transition:background .14s ease}
+.home-recent-item:active{background:var(--rl)}
+.home-recent-dot{width:8px;height:8px;border-radius:50%;background:var(--r);flex-shrink:0;opacity:.7}
+.home-recent-name{flex:1;font-size:var(--fs-sm);font-weight:700;color:var(--t)}
+.home-recent-chip{font-size:11px;font-weight:600;color:var(--m);background:var(--g);border-radius:999px;padding:3px 7px;border:1px solid var(--b);flex-shrink:0}
+.home-empty{font-size:var(--fs-sm);color:var(--m);padding:12px 0;text-align:center;line-height:1.55}
+
 /* Dossier srow-cards */
 .srow{display:flex;align-items:center;gap:12px;padding:15px 14px;border:1px solid var(--b);border-radius:var(--rad-md);cursor:pointer;margin-bottom:12px;background:#fff;box-shadow:0 2px 8px rgba(20,20,20,.04);transition:transform .12s ease,box-shadow .18s ease}
 .srow:active{transform:translateY(1px)}
@@ -163,32 +180,25 @@ button:focus-visible,.tab:focus-visible,.ico:focus-visible,.btn-r:focus-visible,
       <section class="screen active" id="homeScreen">
         <section class="hero">
           <h1>Gezin, rust en verbinding.</h1>
-          <p>FamilySense werkt vanuit OWN Sense. Jij bepaalt je rol per dossier en vertelt vrij wat er vandaag speelt.</p>
-          <div class="grid">
-            <div class="card"><h3>Dossier-gedreven</h3><p>Per kind of familielid een eigen profielbasis en vertelgeschiedenis.</p></div>
-            <div class="card"><h3>Advies op maat</h3><p>Vertel vrij en krijg direct coachadvies per type relatie.</p></div>
-          </div>
+          <p>Vertel vrij wat er vandaag speelt. FamilySense coacht je per familielid vanuit jouw eigen rol.</p>
         </section>
+
+        <!-- OWN Sense fundament -->
+        <button class="own-card" onclick="location.href='ownsense.html'" type="button">
+          <span class="own-card-ic">🧭</span>
+          <span class="own-card-mid">
+            <span class="own-card-title">OWN Sense — jouw fundament</span>
+            <span class="own-card-sub">Jouw profiel, waarden en communicatiestijl liggen hier aan de basis van elk advies.</span>
+          </span>
+          <span class="own-card-ar">›</span>
+        </button>
+
+        <!-- Recente dossiers -->
         <div class="home-stack">
           <section class="home-card">
-            <h3>Meldingen</h3>
-            <div class="note-item">Vandaag nog geen nieuw vertel-moment opgeslagen. Een korte update helpt voor beter advies.</div>
-            <div class="note-item">Tip: kies eerst je OWN Sense rol in een dossier zodat adviezen beter aansluiten.</div>
-          </section>
-          <section class="home-card">
-            <h3>Snelle Vertel</h3>
-            <label class="field">
-              <span class="label">Voor welk dossier?</span>
-              <select id="homeDossierPick" class="sel"></select>
-            </label>
-            <label class="field">
-              <span class="label">Wat speelt er vandaag?</span>
-              <textarea id="homeVertel" class="ta" placeholder="Vertel kort wat er nu leeft tussen jou en je kind / familielid..."></textarea>
-            </label>
-            <div class="btns">
-              <button class="btn-g" type="button" id="homeMicBtn" onclick="toggleHomeMic()">🎤 Spreek</button>
-              <button class="btn-r" type="button" onclick="saveHomeVertel()">Opslaan in dossier</button>
-            </div>
+            <h3>Mijn dossiers</h3>
+            <div id="homeRecentList"></div>
+            <button class="btn-g" style="margin-top:10px" onclick="showScreen('senses')">Alle dossiers bekijken</button>
           </section>
         </div>
       </section>
@@ -329,10 +339,6 @@ button:focus-visible,.tab:focus-visible,.ico:focus-visible,.btn-r:focus-visible,
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       <span>Vertel</span>
     </button>
-    <button class="tab" id="tabMenu" onclick="location.href='sensecorner.html'">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      <span>Menu</span>
-    </button>
   </nav>
 
 </div>
@@ -351,7 +357,6 @@ var TYPE_LABELS={
 var selectedId='';
 var ACTIVE_SCREEN='home';
 var _toastTimer=null;
-var _homeRec=null;
 var _vertelRec=null;
 var TYPE_PROMPTS={
   kind:[
@@ -497,12 +502,10 @@ function showScreen(name){
   document.getElementById('tabHome').classList.toggle('active',name==='home');
   document.getElementById('tabSenses').classList.toggle('active',name==='senses'||name==='detail');
   document.getElementById('tabVertel').classList.toggle('active',name==='vertel');
-  document.getElementById('tabMenu').classList.toggle('active',false);
   document.querySelector('.tb-title').textContent=name==='detail'?'FamilySense Dossier':'FamilySense';
-  /* scroll top bij schermwissel */
   var main=document.querySelector('.main');
   if(main)main.scrollTop=0;
-  if(name==='home')renderHomePick();
+  if(name==='home')renderHome();
   if(name==='vertel'){ renderVertelPick(); renderVertelChat(); focusVertelInputSoon(); }
 }
 function render(){
@@ -529,7 +532,7 @@ function render(){
     '</div>';
   }).join('');
   if(selectedId && ACTIVE_SCREEN==='detail')syncDetailEditor();
-  renderHomePick();
+  renderHome();
   renderVertelPick();
 }
 function openDossier(id){
@@ -609,7 +612,6 @@ function saveSelected(){
   renderVertelList(list[idx]);
   showToast('Profiel opgeslagen.');
   render();
-  renderHomePick();
 }
 function generateAdvice(){
   var d=getSelected();
@@ -638,13 +640,27 @@ function showToast(msg){
   if(_toastTimer)clearTimeout(_toastTimer);
   _toastTimer=setTimeout(function(){ el.classList.remove('show'); },1700);
 }
-function renderHomePick(){
-  var sel=document.getElementById('homeDossierPick');
-  if(!sel)return;
+function renderHome(){
+  var mount=document.getElementById('homeRecentList');
+  if(!mount)return;
   var list=readDossiers();
-  sel.innerHTML=list.map(function(d){
-    return '<option value="'+escAttr(d.id)+'">'+esc(d.name)+'</option>';
+  if(!list.length){
+    mount.innerHTML='<div class="home-empty">Nog geen dossiers.<br>Maak er een aan via het Dossiers-tabblad.</div>';
+    return;
+  }
+  mount.innerHTML=list.slice(0,4).map(function(d){
+    var ap=countAttentionPoints(d);
+    var lastNote=Array.isArray(d.fields.notes)&&d.fields.notes.length;
+    var sub=lastNote?'Vertel-moment aanwezig':'Nog geen vertel-moment';
+    return '<div class="home-recent-item" onclick="openDossier(\''+escAttr(d.id)+'\')" tabindex="0" role="button">'+
+      '<span class="home-recent-dot"></span>'+
+      '<span class="home-recent-name">'+esc(d.name)+'</span>'+
+      (ap?'<span class="home-recent-chip" style="background:#FFF4E5;border-color:#F7D7A8;color:#8A4B00">'+ap+'\u26a0</span>':'<span class="home-recent-chip">'+esc(TYPE_LABELS[d.type])+'</span>')+
+    '</div>';
   }).join('');
+  if(list.length>4){
+    mount.innerHTML+='<div style="font-size:11px;color:var(--m);text-align:center;padding:4px 0">+'+( list.length-4)+' meer in Dossiers</div>';
+  }
 }
 function renderVertelPick(){
   var sel=document.getElementById('vertelDossierPick');
@@ -680,24 +696,6 @@ function focusVertelInputSoon(){
   setTimeout(function(){
     try{ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); }catch(_e){}
   },60);
-}
-function saveHomeVertel(){
-  var sel=document.getElementById('homeDossierPick');
-  var ta=document.getElementById('homeVertel');
-  if(!sel||!ta)return;
-  var id=String(sel.value||'');
-  var txt=(ta.value||'').trim();
-  if(!id||!txt){ showToast('Kies dossier en vertel kort wat speelt.'); return; }
-  var list=readDossiers();
-  var idx=list.findIndex(function(d){ return d.id===id; });
-  if(idx<0){ showToast('Dossier niet gevonden.'); return; }
-  list[idx].fields.notes=list[idx].fields.notes||[];
-  list[idx].fields.notes.push({ts:new Date().toISOString(),text:txt});
-  writeDossiers(list);
-  ta.value='';
-  showToast('Vertel-moment opgeslagen in dossier.');
-  render();
-  renderVertelChat();
 }
 function saveVertelFromTab(){
   var sel=document.getElementById('vertelDossierPick');
@@ -736,30 +734,6 @@ function askVertelAdvice(){
   box.style.display='block';
   box.innerHTML='<strong>Advies voor nu</strong><br>'+esc(advice)+'<br><br><strong>Concreet voorstel</strong><br>Start met: \u201cIk wil dit rustig bespreken vanuit mijn rol als '+esc(role)+'. Mag ik eerst delen wat ik merk?\u201d';
   showToast('Advies klaar.');
-}
-function toggleHomeMic(){
-  var ta=document.getElementById('homeVertel');
-  var btn=document.getElementById('homeMicBtn');
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!ta||!btn)return;
-  if(!_homeRec&&SR){
-    _homeRec=new SR();
-    _homeRec.lang='nl-BE';
-    _homeRec.continuous=false;
-    _homeRec.interimResults=true;
-  }
-  if(!_homeRec){ showToast('Microfoon niet ondersteund in deze browser.'); return; }
-  if(btn.dataset.rec==='1'){ _homeRec.stop(); return; }
-  var startText=ta.value||'';
-  _homeRec.onresult=function(e){
-    var text='';
-    for(var i=e.resultIndex;i<e.results.length;i++){ text+=e.results[i][0].transcript; }
-    ta.value=(startText+' '+text).trim();
-  };
-  _homeRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='\uD83C\uDF99 Spreek'; };
-  btn.dataset.rec='1';
-  btn.textContent='\u25a0 Stop';
-  _homeRec.start();
 }
 function toggleVertelMic(){
   var ta=document.getElementById('vertelInput');
