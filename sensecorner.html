@@ -288,6 +288,17 @@ a{text-decoration:none;color:inherit}
   var btnMain=document.getElementById('btnMain');
   var ownBadge=document.getElementById('ownBadge');
   var ringIcon=document.getElementById('ringIcon');
+  var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
+  var filledAnswers=0;
+  if(profile&&Array.isArray(profile.answers)){
+    filledAnswers=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
+  }
+  // Migratie: oude data kon "completed" opslaan zonder inhoud -> behandel als onvolledig.
+  if(profile&&profile.status==='completed'&&filledAnswers===0){
+    profile.status='empty';
+    profile.completionPct=0;
+    try{localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));}catch(_e){}
+  }
 
   function setRing(pct){
     var offset=CIRCUMFERENCE*(1-pct/100);
@@ -301,8 +312,9 @@ a{text-decoration:none;color:inherit}
       dot.className='own-status-dot';
       statusText.textContent='Nog niet gestart';
       statusPct.textContent='';
-    } else if(profile.status==='completed'){
-      var pct=profile.completionPct||100;
+    } else if(profile.status==='completed'&&filledAnswers>0){
+      // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
+      var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
       setTimeout(function(){setRing(pct);},200);
       dot.className='own-status-dot done';
       statusText.textContent='Profiel actief';
@@ -322,9 +334,7 @@ a{text-decoration:none;color:inherit}
       ownBadge.textContent='Later';
       ownBadge.className='badge badge-soon';
     } else {
-      var filled=0;
-      if(profile.answers){filled=profile.answers.filter(function(a){return a&&a.trim();}).length;}
-      var totalQ=profile.totalQ||5;
+      var filled=filledAnswers;
       var pct=Math.round((filled/totalQ)*80);
       setTimeout(function(){setRing(pct);},200);
       dot.className='own-status-dot active';
