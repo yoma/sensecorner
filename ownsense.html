@@ -587,6 +587,8 @@ function buildSummary(){
 /* ── Profiel opslaan ── */
 function persistProfile(status){
   var filled=state.answers.filter(function(a){return a&&a.trim();}).length;
+  // Bescherm tegen "completed" zonder inhoud: dan blijft profiel expliciet onvolledig.
+  if(status==='completed'&&filled===0)status='empty';
   var pct=status==='completed'?Math.round(80+(filled/QUESTIONS.length)*20):Math.round((filled/QUESTIONS.length)*60);
   var allText=state.answers.join(' ').toLowerCase();
   var traits=TRAITS_MAP.filter(function(t){
@@ -605,12 +607,24 @@ function persistProfile(status){
 }
 
 /* ── Done screen vullen ── */
-function renderDone(){
+function renderDone(isActive){
+  var titleEl=document.querySelector('#screenDone .done-title');
+  var subEl=document.querySelector('#screenDone .done-sub');
   var appsUnlock=document.getElementById('appsUnlock');
-  appsUnlock.innerHTML=[
+  var cards=isActive?[
     {name:'DateSense',desc:'Jouw hechtingsstijl, triggers en wat je zoekt zijn nu bekend.'},
     {name:'OWN Sense',desc:'Je basisidentiteit is vastgelegd en groeit mee.'}
-  ].map(function(a){
+  ]:[
+    {name:'DateSense',desc:'Je kan al starten, maar advies wordt sterker zodra je minstens 1 vraag invult.'},
+    {name:'OWN Sense',desc:'Nog niet actief: je hebt nog geen antwoorden opgeslagen.'}
+  ];
+  if(titleEl)titleEl.textContent=isActive
+    ?'Je OWN Sense profiel is actief'
+    :'Je OWN Sense profiel is nog niet actief';
+  if(subEl)subEl.textContent=isActive
+    ?'Jouw basis is gelegd. Elke Sense-app kan dit profiel nu gebruiken als vertrekpunt voor gerichtere coaching.'
+    :'Je bent wel door de flow gegaan, maar zonder ingevulde antwoorden blijft je profiel onvolledig.';
+  appsUnlock.innerHTML=cards.map(function(a){
     return '<div class="app-row"><div class="app-dot" aria-hidden="true"></div>'
       +'<div><div class="app-row-name">'+escText(a.name)+'</div>'
       +'<div class="app-row-desc">'+escText(a.desc)+'</div></div></div>';
@@ -689,13 +703,15 @@ document.getElementById('btnEdit').onclick=function(){
 };
 
 document.getElementById('btnConfirm').onclick=function(){
-  persistProfile('completed');
+  var filled=state.answers.filter(function(a){return a&&a.trim();}).length;
+  var active=filled>0;
+  persistProfile(active?'completed':'empty');
   progressFill.style.width='100%';
   progressLabel.textContent='Klaar';
-  renderDone();
+  renderDone(active);
   skipBtn.style.display='none';
   showScreen('done','forward');
-  say('Profiel opgeslagen. Goed gedaan!');
+  say(active?'Profiel opgeslagen. Goed gedaan!':'Nog niets ingevuld. Profiel nog niet actief.');
 };
 
 /* ── Keyboard shortcut: Ctrl/Cmd+Enter → Volgende ── */
