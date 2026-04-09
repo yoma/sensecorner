@@ -64,10 +64,20 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
 .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%) translateY(8px);background:#1F2937;color:#fff;padding:10px 12px;border-radius:10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:60}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid rgba(0,0,0,.08);display:flex;max-width:860px;margin:0 auto}
-.tab{flex:1;padding:9px 4px 12px;text-align:center;font-size:12px;color:#7b818e;text-decoration:none}
+.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;max-width:860px;margin:0 auto;z-index:30}
+.tab{flex:1;padding:7px 4px 12px;text-align:center;font-size:12px;color:#7b818e;text-decoration:none;position:relative;cursor:pointer}
 .tab.active{color:var(--r);font-weight:700}
-@media(max-width:520px){.title{font-size:20px}.hero h1{font-size:22px}.grid,.btns,.editor-grid,.mini-grid{grid-template-columns:1fr}}
+.tab.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:22px;height:3px;background:var(--r);border-radius:0 0 4px 4px}
+.home-stack{display:grid;gap:10px}
+.home-card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:14px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.home-card h3{font-size:13px;font-weight:800;margin-bottom:6px}
+.note-item{font-size:12px;color:#4B5563;line-height:1.5;padding:8px 9px;background:#F8FAFC;border:1px solid #E7ECF2;border-radius:10px;margin-top:6px}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding-right:2px}
+.msg{padding:10px 11px;border-radius:12px;font-size:13px;line-height:1.5;border:1px solid rgba(0,0,0,.07);background:#fff}
+.msg.me{background:#FFF7F7;border-color:#F3D6D6}
+.msg .ts{display:block;font-size:11px;color:#8f95a1;margin-bottom:4px}
+.chat-advice{margin-top:8px;padding:10px 11px;border-radius:11px;background:#FFF7F7;border:1px solid #F3D6D6;font-size:13px;line-height:1.55;color:#5B2A2A}
+@media(max-width:520px){.title{font-size:20px}.main{padding:12px 12px 92px}.hero{padding:14px}.hero h1{font-size:22px}.home-card,.editor{padding:11px}.btn{padding:13px 12px}.tab{font-size:11px;padding:8px 2px 12px}.grid,.btns,.editor-grid,.mini-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -79,15 +89,40 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
   </div>
 
   <div class="main">
-    <section class="screen active" id="overviewScreen">
+    <section class="screen active" id="homeScreen">
     <section class="hero">
       <h1>Gezin, rust en verbinding.</h1>
-      <p>Een veilige plek om gezinsdynamiek op te volgen per dossier: dochters, partner, ouders, of “Gezin algemeen”.</p>
+      <p>FamilySense werkt vanuit OWN Sense. Jij bepaalt je rol per dossier en vertelt vrij wat er vandaag speelt.</p>
       <div class="grid">
-        <div class="card"><h3>Dagelijkse temperatuur</h3><p>Hou spanning, rust en verbinding bij met korte check-ins.</p></div>
-        <div class="card"><h3>Reflectie & advies</h3><p>Beschrijf situaties en krijg concrete opvoed- en communicatie-acties.</p></div>
+        <div class="card"><h3>Dossier-gedreven</h3><p>Per kind/familielid krijg je een eigen profielbasis en vertelgeschiedenis.</p></div>
+        <div class="card"><h3>Advies op maat</h3><p>Vertel vrij en krijg direct coachadvies per type relatie.</p></div>
       </div>
     </section>
+    <div class="home-stack">
+      <section class="home-card">
+        <h3>Meldingen</h3>
+        <div class="note-item">Vandaag nog geen nieuw vertel-moment opgeslagen. Een korte update helpt voor beter advies.</div>
+        <div class="note-item">Tip: kies eerst je OWN Sense rol in een dossier zodat adviezen beter aansluiten.</div>
+      </section>
+      <section class="home-card">
+        <h3>Snelle Vertel</h3>
+        <label class="field">
+          <span class="label">Voor welk dossier?</span>
+          <select id="homeDossierPick" class="sel"></select>
+        </label>
+        <label class="field">
+          <span class="label">Wat speelt er vandaag?</span>
+          <textarea id="homeVertel" class="ta" placeholder="Vertel kort wat er nu leeft tussen jou en je kind / familielid..."></textarea>
+        </label>
+        <div class="btns">
+          <button class="btn btn-g" type="button" id="homeMicBtn" onclick="toggleHomeMic()">🎤 Spreek</button>
+          <button class="btn btn-r" type="button" onclick="saveHomeVertel()">Opslaan in dossier</button>
+        </div>
+      </section>
+    </div>
+    </section>
+
+    <section class="screen" id="sensesScreen">
 
     <div class="sec-title">Mijn dossiers</div>
     <div id="dossierList"></div>
@@ -113,91 +148,91 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
           <textarea id="newContext" class="ta" placeholder="Korte context: leeftijd, fase, spanningen, wat je wil verbeteren..."></textarea>
         </label>
       </div>
-      <div class="hint">Per dossier bewaren we 4 kernvelden: context, communicatie, grenzen en doelen.</div>
+      <div class="hint">Per dossier starten we met profielbasis + vrij vertellen.</div>
     </section>
     <div class="btns">
       <button class="btn btn-r" onclick="addDossier()">+ Dossier toevoegen</button>
-      <button class="btn btn-g" onclick="location.href='sensecorner.html'">Naar SenseCorner</button>
+      <button class="btn btn-g" onclick="showScreen('home')">Naar Home</button>
     </div>
+    </section>
+
+    <section class="screen" id="vertelScreen">
+      <section class="editor">
+        <div class="editor-title">Vertel</div>
+        <label class="field">
+          <span class="label">Dossier</span>
+          <select id="vertelDossierPick" class="sel"></select>
+        </label>
+        <div class="chat" id="vertelChat"></div>
+        <label class="field">
+          <span class="label">Wat wil je nu vertellen?</span>
+          <textarea id="vertelInput" class="ta" placeholder="Vertel vrij wat er nu speelt..."></textarea>
+        </label>
+        <div class="hint">Snelle startzinnen:</div>
+        <div class="prompt-wrap" id="vertelPromptChips"></div>
+        <div class="btns">
+          <button class="btn btn-g" type="button" id="vertelMicBtn" onclick="toggleVertelMic()">🎤 Spreek</button>
+          <button class="btn btn-r" type="button" onclick="saveVertelFromTab()">Opslaan</button>
+          <button class="btn btn-g" type="button" onclick="askVertelAdvice()">Vraag advies over dit moment</button>
+        </div>
+        <div id="vertelAdviceBox" class="chat-advice" style="display:none"></div>
+      </section>
     </section>
 
     <section class="screen" id="detailScreen">
       <section class="editor" id="detailEditor">
         <div class="editor-title" id="detailTitle">Dossier details</div>
         <div class="editor-grid">
-          <label class="field full">
-            <span class="label">Context</span>
-            <textarea id="fldContext" class="ta" placeholder="Situatie, fase, achtergrond..."></textarea>
+          <label class="field">
+            <span class="label">Leeftijd</span>
+            <input id="fldAge" class="in" placeholder="Bv. 14">
           </label>
-          <label class="field full">
-            <span class="label">Communicatie</span>
-            <textarea id="fldCommunicatie" class="ta" placeholder="Wat loopt goed / stroef in gesprekken?"></textarea>
+          <label class="field">
+            <span class="label">Geslacht</span>
+            <select id="fldGender" class="sel">
+              <option value="">Onbekend / niet ingevuld</option>
+              <option value="vrouw">Vrouw</option>
+              <option value="man">Man</option>
+              <option value="non-binair">Non-binair</option>
+              <option value="anders">Anders</option>
+            </select>
           </label>
-          <label class="field full">
-            <span class="label">Grenzen & afspraken</span>
-            <textarea id="fldGrenzen" class="ta" placeholder="Welke grenzen zijn duidelijk of botsen net?"></textarea>
+          <label class="field">
+            <span class="label">School/werk (optioneel)</span>
+            <input id="fldSchoolWork" class="in" placeholder="Bv. 2e middelbaar / student / werkend">
           </label>
-          <label class="field full">
-            <span class="label">Doelen</span>
-            <textarea id="fldDoelen" class="ta" placeholder="Wat wil je de komende weken verbeteren?"></textarea>
+          <label class="field">
+            <span class="label">Woonsituatie (optioneel)</span>
+            <input id="fldLiving" class="in" placeholder="Bv. co-ouderschap, thuiswonend, kot">
+          </label>
+          <label class="field">
+            <span class="label">OWN Sense rol</span>
+            <select id="fldOwnRole" class="sel">
+              <option value="">Kies jouw rol</option>
+              <option value="moeder">Ik ben moeder</option>
+              <option value="vader">Ik ben vader</option>
+              <option value="zus">Ik ben zus</option>
+              <option value="broer">Ik ben broer</option>
+              <option value="partner">Ik ben partner</option>
+              <option value="voogd">Ik ben voogd</option>
+              <option value="anders">Anders</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">Specifieke relatie (optioneel)</span>
+            <input id="fldOwnRoleCustom" class="in" placeholder="Bv. plusmama, tante, oudere zus">
           </label>
         </div>
-        <div class="hint">Snelle prompts per type (tik om toe te voegen in het relevante veld):</div>
-        <div class="prompt-wrap" id="promptChips"></div>
+        <div class="hint">Invoer gebeurt nu in de Vertel-tab. Hier beheer je profielbasis en context.</div>
         <div class="advice" id="detailAdvice"></div>
-        <section class="plan" id="weekPlan">
-          <h4>Adviesplan Deze Week</h4>
-          <ul id="weekPlanList"></ul>
-          <div class="btns" style="margin-top:10px">
-            <button class="btn btn-g" type="button" onclick="copyWeekPlan()">Kopieer weekplan</button>
-            <button class="btn btn-g" type="button" onclick="copyConflictPlan()">Kopieer conflictkaart</button>
-          </div>
-        </section>
         <section class="plan">
-          <h4>Conflictkaart (4 stappen)</h4>
-          <div class="mini-grid">
-            <label class="field full">
-              <span class="label">1. Probleem benoemen</span>
-              <textarea id="cfIssue" class="ta" placeholder="Wat is exact het conflict, zonder verwijt?"></textarea>
-            </label>
-            <label class="field full">
-              <span class="label">2. Mogelijke oplossingen</span>
-              <textarea id="cfSolutions" class="ta" placeholder="Welke 2-3 opties zijn mogelijk?"></textarea>
-            </label>
-            <label class="field">
-              <span class="label">3. Gekozen oplossing</span>
-              <input id="cfChoice" class="in" placeholder="Welke optie testen we?">
-            </label>
-            <label class="field">
-              <span class="label">4. Evaluatiemoment</span>
-              <input id="cfReview" class="in" placeholder="Wanneer evalueren we?">
-            </label>
-          </div>
-          <div class="subhint" id="cfCoachLine"></div>
-        </section>
-        <section class="plan">
-          <h4>Weekritueel Planner</h4>
-          <div class="mini-grid">
-            <label class="field">
-              <span class="label">Check-in 1</span>
-              <input id="rtMoment1" class="in" placeholder="Bv. Woensdag 19:30">
-            </label>
-            <label class="field">
-              <span class="label">Check-in 2</span>
-              <input id="rtMoment2" class="in" placeholder="Bv. Zondag 18:00">
-            </label>
-            <label class="field full">
-              <span class="label">Weekfocus</span>
-              <input id="rtFocus" class="in" placeholder="Bv. Rustige toon tijdens afspraken">
-            </label>
-            <label class="field full">
-              <span class="label">Wat is gelukt?</span>
-              <textarea id="rtDone" class="ta" placeholder="Korte evaluatie op het einde van de week"></textarea>
-            </label>
-          </div>
+          <h4>Recente Vertelmomenten</h4>
+          <ul id="vertelList"></ul>
         </section>
         <div class="btns" style="margin-top:12px">
-          <button class="btn btn-r" onclick="saveSelected()">Opslaan</button>
+          <button class="btn btn-r" onclick="saveSelected()">Profiel opslaan</button>
+          <button class="btn btn-g" onclick="showScreen('vertel')">Open Vertel-tab</button>
+          <button class="btn btn-g" onclick="generateAdvice()">Vernieuw advies</button>
           <button class="btn btn-g" onclick="goOverview()">Terug naar dossiers</button>
         </div>
       </section>
@@ -205,9 +240,10 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
   </div>
 
   <div class="nav">
-    <a class="tab" href="sensecorner.html">Hub</a>
-    <a class="tab" href="datesense.html">DateSense</a>
-    <a class="tab active" href="familysense.html">FamilySense</a>
+    <a class="tab active" id="tabHome" onclick="showScreen('home')">Home</a>
+    <a class="tab" id="tabSenses" onclick="showScreen('senses')">Dossiers</a>
+    <a class="tab" id="tabVertel" onclick="showScreen('vertel')">Vertel</a>
+    <a class="tab" id="tabMenu" onclick="location.href='sensecorner.html'">Menu</a>
   </div>
 </div>
 <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
@@ -223,49 +259,46 @@ var TYPE_LABELS={
   gezin:'Gezin'
 };
 var selectedId='';
-var ACTIVE_SCREEN='overview';
+var ACTIVE_SCREEN='home';
 var _toastTimer=null;
+var _homeRec=null;
+var _vertelRec=null;
 var TYPE_PROMPTS={
   kind:[
-    {field:'communicatie',text:'Wat helpt om zonder strijd in gesprek te blijven?'},
-    {field:'grenzen',text:'Welke 2 regels moeten consequent blijven deze week?'},
-    {field:'doelen',text:'Wat is 1 haalbaar doel tegen zondag?'}
+    {text:'Vandaag liep het moeilijk toen...'},
+    {text:'Wat ik bij mijn kind zie is...'},
+    {text:'Wat ik nodig heb om rustiger te reageren is...'}
   ],
   ouder:[
-    {field:'communicatie',text:'Hoe wil ik respectvol mijn behoefte formuleren?'},
-    {field:'grenzen',text:'Welke grens bewaak ik zonder verwijt?'},
-    {field:'doelen',text:'Welke afspraak wil ik met ouder maken?'}
+    {text:'In contact met mijn ouder merk ik...'},
+    {text:'Wat ik wil uitspreken zonder verwijt is...'},
+    {text:'Mijn grens voor dit gesprek is...'}
   ],
   broer_zus:[
-    {field:'communicatie',text:'Welke verwachting moet ik expliciet uitspreken?'},
-    {field:'grenzen',text:'Waar eindigt mijn verantwoordelijkheid?'},
-    {field:'doelen',text:'Welke kleine herstelactie kan ik doen?'}
+    {text:'Tussen ons loopt het stroef rond...'},
+    {text:'Wat ik vaak inslik is...'},
+    {text:'Eerste kleine herstelstap kan zijn...'}
   ],
   partner:[
-    {field:'communicatie',text:'Welke ik-boodschap wil ik rustig brengen?'},
-    {field:'grenzen',text:'Welke grens beschermt rust in huis?'},
-    {field:'doelen',text:'Welk vast check-in moment plannen we?'}
+    {text:'Waar ik me vandaag in vastzet is...'},
+    {text:'Wat ik eigenlijk wil vragen is...'},
+    {text:'Wat ik nodig heb om verbinding te voelen is...'}
   ],
   gezin:[
-    {field:'communicatie',text:'Welke gezinscheck-in voeren we 2x uit?'},
-    {field:'grenzen',text:'Welke huisregel maakt iedereen rustiger?'},
-    {field:'doelen',text:'Wat is 1 gezamenlijk weekdoel?'}
+    {text:'In ons gezin speelt vandaag vooral...'},
+    {text:'Wat spanning geeft tussen ons is...'},
+    {text:'Wat ik morgen anders wil proberen is...'}
   ]
 };
 function emptyFields(contextText){
   return {
-    context:contextText||'',
-    communicatie:'',
-    grenzen:'',
-    doelen:'',
-    conflict_issue:'',
-    conflict_solutions:'',
-    conflict_choice:'',
-    conflict_review:'',
-    ritual_moment_1:'',
-    ritual_moment_2:'',
-    ritual_focus:'',
-    ritual_done:''
+    age:'',
+    gender:'',
+    school_work:'',
+    living:'',
+    own_role:'',
+    own_role_custom:'',
+    notes:contextText?[{ts:new Date().toISOString(),text:contextText}]:[]
   };
 }
 var defaultDossiers=[
@@ -294,18 +327,15 @@ function normalizeDossier(d){
     name:String(d&&d.name||'Nieuw dossier'),
     type:type,
     fields:{
-      context:String(fields.context||''),
-      communicatie:String(fields.communicatie||''),
-      grenzen:String(fields.grenzen||''),
-      doelen:String(fields.doelen||''),
-      conflict_issue:String(fields.conflict_issue||''),
-      conflict_solutions:String(fields.conflict_solutions||''),
-      conflict_choice:String(fields.conflict_choice||''),
-      conflict_review:String(fields.conflict_review||''),
-      ritual_moment_1:String(fields.ritual_moment_1||''),
-      ritual_moment_2:String(fields.ritual_moment_2||''),
-      ritual_focus:String(fields.ritual_focus||''),
-      ritual_done:String(fields.ritual_done||'')
+      age:String(fields.age||''),
+      gender:String(fields.gender||''),
+      school_work:String(fields.school_work||''),
+      living:String(fields.living||''),
+      own_role:String(fields.own_role||''),
+      own_role_custom:String(fields.own_role_custom||''),
+      notes:Array.isArray(fields.notes)?fields.notes.filter(function(n){return n&&typeof n==='object';}).map(function(n){
+        return {ts:String(n.ts||new Date().toISOString()),text:String(n.text||'')};
+      }):(String(fields.context||'').trim()?[{ts:new Date().toISOString(),text:String(fields.context).trim()}]:[])
     }
   };
 }
@@ -331,33 +361,30 @@ function writeDossiers(list){
 }
 function completion(d){
   var f=(d&&d.fields)||{};
-  var keys=['context','communicatie','grenzen','doelen'];
-  var done=keys.filter(function(k){ return String(f[k]||'').trim().length>0; }).length;
-  return {done:done,total:keys.length,pct:Math.round((done/keys.length)*100)};
+  var hasRole=String(f.own_role||'').trim().length>0?1:0;
+  var hasProfile=(String(f.age||'').trim().length>0||String(f.gender||'').trim().length>0)?1:0;
+  var notes=Array.isArray(f.notes)?f.notes.filter(function(n){return String(n.text||'').trim().length>0;}).length:0;
+  var done=hasRole+hasProfile+(notes>0?1:0);
+  return {done:done,total:3,pct:Math.round((done/3)*100)};
 }
-function getAdvice(type){
-  if(type==='kind')return 'Focus op verbinding voor correctie: eerst erkennen, dan begrenzen. Korte, duidelijke afspraken werken vaak beter dan lange discussies.';
-  if(type==='ouder')return 'Hou het respectvol en concreet. Benoem 1 behoefte tegelijk en vermijd oude discussies heropenen in hetzelfde gesprek.';
-  if(type==='broer_zus')return 'Check verwachtingen expliciet. Veel spanning bij broers/zussen ontstaat door onuitgesproken aannames over rollen en loyaliteit.';
-  if(type==='partner')return 'Gebruik ik-boodschappen en spreek een vast check-in moment af. Veiligheid in toon gaat voor snelheid van oplossing.';
-  return 'Kies 1 gezinsritueel voor de komende week (bv. 15 min check-in) en evalueer zonder schuldvraag: wat hielp, wat niet?';
-}
-function getWeekPlan(d){
-  var f=(d&&d.fields)||{};
-  var base=[
-    'Plan 2 korte check-ins van 10-15 minuten zonder afleiding.',
-    'Kies 1 concrete afspraak en noteer wat “gelukt” betekent.'
-  ];
-  if(!String(f.communicatie||'').trim())base.unshift('Start met 1 zin die verbinding opent, niet corrigeert.');
-  if(!String(f.grenzen||'').trim())base.push('Definieer 1 grens in positief gedrag: wat wil je wel zien?');
-  if(!String(f.doelen||'').trim())base.push('Formuleer 1 haalbaar doel voor deze week, meetbaar en klein.');
-  if(d&&d.type==='kind')base.push('Eerst reguleren, dan bespreken: kies een rustig moment, niet in conflict.');
-  if(d&&d.type==='gezin')base.push('Gebruik een gezamenlijk ritueel (zondagavond) om de week af te sluiten.');
-  return base.slice(0,4);
+function getAdvice(type,text){
+  var t=String(text||'').toLowerCase();
+  var base='Adviestonus: rustig, concreet en zonder schuld. Benoem eerst wat je ziet en voelt, stel dan 1 duidelijke vraag.';
+  if(type==='kind')base='Bij een kind werkt vaak: eerst erkenning, dan grens. Hou je boodschap kort en voorspelbaar.';
+  if(type==='ouder')base='Bij een ouder helpt respectvolle begrenzing: 1 behoefte tegelijk, zonder oude discussies te stapelen.';
+  if(type==='broer_zus')base='Bij broer/zus helpt helderheid over verwachtingen en wat jij wel/niet opneemt.';
+  if(type==='partner')base='Bij partnerconflict: vertraag, gebruik ik-boodschappen en vraag om 1 concreet herstelmoment.';
+  if(type==='gezin')base='In gezinsdynamiek werkt het best om 1 spanning tegelijk te benoemen en klein te handelen.';
+  if(/schreeuw|boos|ruzie|conflict|escal/.test(t))base+=' Start het gesprek op een rustig moment, niet in de piek van emotie.';
+  if(/afstand|stil|geen contact|negeer|terugtrek/.test(t))base+=' Kies een zachte opening: "Ik mis verbinding, mogen we 10 minuten praten?"';
+  if(/grens|respect|over mijn grens|onveilig/.test(t))base+=' Formuleer je grens in gedrag: wat wel/niet ok is, en welke stap jij neemt.';
+  return base;
 }
 function countAttentionPoints(d){
   var f=(d&&d.fields)||{};
-  var txt=[f.context,f.communicatie,f.grenzen,f.doelen].join(' ').toLowerCase();
+  var notes=Array.isArray(f.notes)?f.notes:[];
+  var last=notes.length?String(notes[notes.length-1].text||''):'';
+  var txt=last.toLowerCase();
   var terms=[
     'escal', 'ruzie', 'conflict', 'boos', 'agress', 'geschreeuw',
     'geen contact', 'stilte', 'neger', 'paniek', 'uitput', 'overprikkel',
@@ -371,9 +398,17 @@ function countAttentionPoints(d){
 }
 function showScreen(name){
   ACTIVE_SCREEN=name;
-  document.getElementById('overviewScreen').classList.toggle('active',name==='overview');
+  document.getElementById('homeScreen').classList.toggle('active',name==='home');
+  document.getElementById('sensesScreen').classList.toggle('active',name==='senses');
+  document.getElementById('vertelScreen').classList.toggle('active',name==='vertel');
   document.getElementById('detailScreen').classList.toggle('active',name==='detail');
+  document.getElementById('tabHome').classList.toggle('active',name==='home');
+  document.getElementById('tabSenses').classList.toggle('active',name==='senses'||name==='detail');
+  document.getElementById('tabVertel').classList.toggle('active',name==='vertel');
+  document.getElementById('tabMenu').classList.toggle('active',false);
   document.querySelector('.title').textContent=name==='detail'?'FamilySense Dossier':'FamilySense';
+  if(name==='home')renderHomePick();
+  if(name==='vertel'){ renderVertelPick(); renderVertelChat(); focusVertelInputSoon(); }
 }
 function render(){
   var list=readDossiers();
@@ -383,12 +418,14 @@ function render(){
     var ap=countAttentionPoints(d);
     return '<div class="dossier clickable'+(d.id===selectedId?' active':'')+'" onclick="openDossier(\''+escAttr(d.id)+'\')">'+
       '<div class="row"><span class="dot"></span><div class="name">'+esc(d.name)+'</div><span class="chip">'+esc(TYPE_LABELS[d.type])+'</span>'+(ap?'<span class="chip warn">'+ap+' Aandachtspunt'+(ap>1?'en':'')+'</span>':'')+'</div>'+
-      '<div class="meta">'+esc(d.fields.context||'Nog geen context ingevuld')+'</div>'+
+      '<div class="meta">'+esc((d.fields.age?('Leeftijd '+d.fields.age+' · '):'')+(d.fields.gender?d.fields.gender+' · ':'')+(Array.isArray(d.fields.notes)&&d.fields.notes.length?'laatste vertel-moment opgeslagen':'nog geen vertel-moment'))+'</div>'+
       '<div class="meta">'+c.done+'/'+c.total+' velden ingevuld ('+c.pct+'%)</div>'+
       '<div class="prog"><div style="width:'+c.pct+'%"></div></div>'+
     '</div>';
   }).join('');
   if(selectedId && ACTIVE_SCREEN==='detail')syncDetailEditor();
+  renderHomePick();
+  renderVertelPick();
 }
 function openDossier(id){
   selectedId=String(id||'');
@@ -396,7 +433,7 @@ function openDossier(id){
   render();
   syncDetailEditor();
 }
-function goOverview(){ showScreen('overview'); render(); }
+function goOverview(){ showScreen('senses'); render(); }
 function getSelected(list){
   var arr=list||readDossiers();
   return arr.find(function(d){ return d.id===selectedId; })||null;
@@ -406,119 +443,72 @@ function syncDetailEditor(){
   var d=getSelected(list);
   if(!d){ goOverview(); return; }
   document.getElementById('detailTitle').textContent='Dossier: '+d.name+' ('+TYPE_LABELS[d.type]+')';
-  document.getElementById('fldContext').value=d.fields.context||'';
-  document.getElementById('fldCommunicatie').value=d.fields.communicatie||'';
-  document.getElementById('fldGrenzen').value=d.fields.grenzen||'';
-  document.getElementById('fldDoelen').value=d.fields.doelen||'';
-  document.getElementById('cfIssue').value=d.fields.conflict_issue||'';
-  document.getElementById('cfSolutions').value=d.fields.conflict_solutions||'';
-  document.getElementById('cfChoice').value=d.fields.conflict_choice||'';
-  document.getElementById('cfReview').value=d.fields.conflict_review||'';
-  document.getElementById('rtMoment1').value=d.fields.ritual_moment_1||'';
-  document.getElementById('rtMoment2').value=d.fields.ritual_moment_2||'';
-  document.getElementById('rtFocus').value=d.fields.ritual_focus||'';
-  document.getElementById('rtDone').value=d.fields.ritual_done||'';
-  document.getElementById('detailAdvice').textContent='Adviesfocus: '+getAdvice(d.type);
-  renderPromptChips(d.type);
-  renderWeekPlan(d);
-  renderConflictCoachLine(d);
+  document.getElementById('fldAge').value=d.fields.age||'';
+  document.getElementById('fldGender').value=d.fields.gender||'';
+  document.getElementById('fldSchoolWork').value=d.fields.school_work||'';
+  document.getElementById('fldLiving').value=d.fields.living||'';
+  document.getElementById('fldOwnRole').value=d.fields.own_role||'';
+  document.getElementById('fldOwnRoleCustom').value=d.fields.own_role_custom||'';
+  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(d.type,(d.fields.notes||[]).length?(d.fields.notes[d.fields.notes.length-1].text||''):'');
+  renderVertelList(d);
 }
 function renderPromptChips(type){
-  var mount=document.getElementById('promptChips');
+  var mount=document.getElementById('vertelPromptChips');
   var prompts=TYPE_PROMPTS[type]||TYPE_PROMPTS.gezin;
+  if(!mount)return;
   mount.innerHTML=prompts.map(function(p,idx){
     return '<button type="button" class="prompt-chip" onclick="insertPrompt('+idx+')">'+esc(p.text)+'</button>';
   }).join('');
 }
 function insertPrompt(idx){
-  var d=getSelected();
+  var sel=document.getElementById('vertelDossierPick');
+  var list=readDossiers();
+  var d=sel?list.find(function(x){return x.id===sel.value;}):null;
+  if(!d&&selectedId)d=list.find(function(x){return x.id===selectedId;});
   if(!d)return;
   var prompts=TYPE_PROMPTS[d.type]||TYPE_PROMPTS.gezin;
   var p=prompts[idx];
   if(!p)return;
-  var map={
-    context:'fldContext',
-    communicatie:'fldCommunicatie',
-    grenzen:'fldGrenzen',
-    doelen:'fldDoelen'
-  };
-  var el=document.getElementById(map[p.field]);
+  var el=document.getElementById('vertelInput');
   if(!el)return;
   var prev=(el.value||'').trim();
   el.value=prev?(prev+'\n- '+p.text):('- '+p.text);
   el.focus();
 }
-function renderWeekPlan(d){
-  var items=getWeekPlan(d);
-  document.getElementById('weekPlanList').innerHTML=items.map(function(x){
-    return '<li>'+esc(x)+'</li>';
-  }).join('');
-}
-function renderConflictCoachLine(d){
-  var f=(d&&d.fields)||{};
-  var issue=String(f.conflict_issue||'').trim();
-  var choice=String(f.conflict_choice||'').trim();
-  var review=String(f.conflict_review||'').trim();
-  var line='Tip: hou het probleem observeerbaar (wie/wat/wanneer), niet karaktergericht.';
-  if(issue&&choice&&!review)line='Goed bezig. Zet nu nog een concreet evaluatiemoment zodat het geen losse intentie blijft.';
-  if(issue&&choice&&review)line='Sterk: je hebt een volledig 4-stappen conflictplan. Evalueer kort en pas 1 ding tegelijk aan.';
-  document.getElementById('cfCoachLine').textContent=line;
+function renderVertelList(d){
+  var notes=Array.isArray((d&&d.fields&&d.fields.notes)||[])?d.fields.notes.slice().reverse():[];
+  document.getElementById('vertelList').innerHTML=notes.length?notes.slice(0,8).map(function(n){
+    var dt=n.ts?new Date(n.ts):new Date();
+    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return '<li><strong>'+esc(stamp)+'</strong> · '+esc(String(n.text||'').slice(0,220))+'</li>';
+  }).join(''):'<li>Nog geen vertel-momenten.</li>';
 }
 function saveSelected(){
   var list=readDossiers();
   var idx=list.findIndex(function(d){ return d.id===selectedId; });
   if(idx<0)return;
-  list[idx].fields.context=(document.getElementById('fldContext').value||'').trim();
-  list[idx].fields.communicatie=(document.getElementById('fldCommunicatie').value||'').trim();
-  list[idx].fields.grenzen=(document.getElementById('fldGrenzen').value||'').trim();
-  list[idx].fields.doelen=(document.getElementById('fldDoelen').value||'').trim();
-  list[idx].fields.conflict_issue=(document.getElementById('cfIssue').value||'').trim();
-  list[idx].fields.conflict_solutions=(document.getElementById('cfSolutions').value||'').trim();
-  list[idx].fields.conflict_choice=(document.getElementById('cfChoice').value||'').trim();
-  list[idx].fields.conflict_review=(document.getElementById('cfReview').value||'').trim();
-  list[idx].fields.ritual_moment_1=(document.getElementById('rtMoment1').value||'').trim();
-  list[idx].fields.ritual_moment_2=(document.getElementById('rtMoment2').value||'').trim();
-  list[idx].fields.ritual_focus=(document.getElementById('rtFocus').value||'').trim();
-  list[idx].fields.ritual_done=(document.getElementById('rtDone').value||'').trim();
+  list[idx].fields.own_role=(document.getElementById('fldOwnRole').value||'').trim();
+  list[idx].fields.own_role_custom=(document.getElementById('fldOwnRoleCustom').value||'').trim();
+  list[idx].fields.age=(document.getElementById('fldAge').value||'').trim();
+  list[idx].fields.gender=(document.getElementById('fldGender').value||'').trim();
+  list[idx].fields.school_work=(document.getElementById('fldSchoolWork').value||'').trim();
+  list[idx].fields.living=(document.getElementById('fldLiving').value||'').trim();
   writeDossiers(list);
-  renderWeekPlan(list[idx]);
-  renderConflictCoachLine(list[idx]);
+  var last=(Array.isArray(list[idx].fields.notes)&&list[idx].fields.notes.length)?list[idx].fields.notes[list[idx].fields.notes.length-1].text:'';
+  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(list[idx].type,last||'');
+  renderVertelList(list[idx]);
+  showToast('Profiel opgeslagen.');
   render();
+  renderHomePick();
 }
-function copyWeekPlan(){
+function generateAdvice(){
   var d=getSelected();
   if(!d)return;
-  var f=d.fields||{};
-  var items=getWeekPlan(d);
-  var lines=[
-    'FamilySense weekplan - '+d.name,
-    '',
-    'Type: '+(TYPE_LABELS[d.type]||'Gezin'),
-    'Weekfocus: '+(f.ritual_focus||'(nog niet ingevuld)'),
-    'Check-in 1: '+(f.ritual_moment_1||'(nog niet ingevuld)'),
-    'Check-in 2: '+(f.ritual_moment_2||'(nog niet ingevuld)'),
-    '',
-    'Acties:'
-  ];
-  items.forEach(function(x){ lines.push('- '+x); });
-  lines.push('');
-  lines.push('Wat is gelukt: '+(f.ritual_done||'(nog niet ingevuld)'));
-  var txt=lines.join('\n');
-  copyText(txt,'Weekplan gekopieerd.');
-}
-function copyConflictPlan(){
-  var d=getSelected();
-  if(!d)return;
-  var f=d.fields||{};
-  var txt=[
-    'FamilySense conflictkaart - '+d.name,
-    '',
-    '1) Probleem: '+(f.conflict_issue||'(nog niet ingevuld)'),
-    '2) Mogelijke oplossingen: '+(f.conflict_solutions||'(nog niet ingevuld)'),
-    '3) Gekozen oplossing: '+(f.conflict_choice||'(nog niet ingevuld)'),
-    '4) Evaluatiemoment: '+(f.conflict_review||'(nog niet ingevuld)')
-  ].join('\n');
-  copyText(txt,'Conflictkaart gekopieerd.');
+  var inp=document.getElementById('vertelInput');
+  var txt=(inp&&inp.value?inp.value:'').trim();
+  var useTxt=txt||(Array.isArray(d.fields.notes)&&d.fields.notes.length?d.fields.notes[d.fields.notes.length-1].text:'');
+  document.getElementById('detailAdvice').textContent='Advies: '+getAdvice(d.type,useTxt);
+  showToast('Advies bijgewerkt.');
 }
 function copyText(txt,okMsg){
   if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -545,6 +535,156 @@ function showToast(msg){
   el.classList.add('show');
   if(_toastTimer)clearTimeout(_toastTimer);
   _toastTimer=setTimeout(function(){ el.classList.remove('show'); },1700);
+}
+function renderHomePick(){
+  var sel=document.getElementById('homeDossierPick');
+  if(!sel)return;
+  var list=readDossiers();
+  sel.innerHTML=list.map(function(d){
+    return '<option value="'+escAttr(d.id)+'">'+esc(d.name)+'</option>';
+  }).join('');
+}
+function renderVertelPick(){
+  var sel=document.getElementById('vertelDossierPick');
+  if(!sel)return;
+  var current=sel.value||selectedId;
+  var list=readDossiers();
+  sel.innerHTML=list.map(function(d){
+    return '<option value="'+escAttr(d.id)+'">'+esc(d.name)+'</option>';
+  }).join('');
+  if(current&&list.some(function(d){return d.id===current;}))sel.value=current;
+  if(sel.value)selectedId=sel.value;
+  sel.onchange=function(){ selectedId=sel.value; renderVertelChat(); };
+}
+function renderVertelChat(){
+  var sel=document.getElementById('vertelDossierPick');
+  var box=document.getElementById('vertelChat');
+  if(!sel||!box)return;
+  var id=String(sel.value||'');
+  var list=readDossiers();
+  var d=list.find(function(x){ return x.id===id; });
+  if(d)renderPromptChips(d.type);
+  var notes=Array.isArray(d&&d.fields&&d.fields.notes)?d.fields.notes.slice(-20):[];
+  box.innerHTML=notes.length?notes.map(function(n){
+    var dt=n.ts?new Date(n.ts):new Date();
+    var stamp=dt.toLocaleDateString()+' '+dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return '<div class="msg me"><span class="ts">'+esc(stamp)+'</span>'+esc(String(n.text||''))+'</div>';
+  }).join(''):'<div class="msg"><span class="ts">Nu</span>Nog geen vertel-momenten in dit dossier.</div>';
+  box.scrollTop=box.scrollHeight;
+}
+function focusVertelInputSoon(){
+  var ta=document.getElementById('vertelInput');
+  if(!ta)return;
+  setTimeout(function(){
+    try{ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); }catch(_e){}
+  },60);
+}
+function saveHomeVertel(){
+  var sel=document.getElementById('homeDossierPick');
+  var ta=document.getElementById('homeVertel');
+  if(!sel||!ta)return;
+  var id=String(sel.value||'');
+  var txt=(ta.value||'').trim();
+  if(!id||!txt){ showToast('Kies dossier en vertel kort wat speelt.'); return; }
+  var list=readDossiers();
+  var idx=list.findIndex(function(d){ return d.id===id; });
+  if(idx<0){ showToast('Dossier niet gevonden.'); return; }
+  list[idx].fields.notes=list[idx].fields.notes||[];
+  list[idx].fields.notes.push({ts:new Date().toISOString(),text:txt});
+  writeDossiers(list);
+  ta.value='';
+  showToast('Vertel-moment opgeslagen in dossier.');
+  render();
+  renderVertelChat();
+}
+function saveVertelFromTab(){
+  var sel=document.getElementById('vertelDossierPick');
+  var ta=document.getElementById('vertelInput');
+  if(!sel||!ta)return;
+  var id=String(sel.value||'');
+  var txt=(ta.value||'').trim();
+  if(!id||!txt){ showToast('Kies dossier en vertel kort wat speelt.'); return; }
+  var list=readDossiers();
+  var idx=list.findIndex(function(d){ return d.id===id; });
+  if(idx<0){ showToast('Dossier niet gevonden.'); return; }
+  list[idx].fields.notes=list[idx].fields.notes||[];
+  list[idx].fields.notes.push({ts:new Date().toISOString(),text:txt});
+  writeDossiers(list);
+  ta.value='';
+  showToast('Vertel-moment opgeslagen.');
+  render();
+  renderVertelChat();
+  focusVertelInputSoon();
+}
+function askVertelAdvice(){
+  var sel=document.getElementById('vertelDossierPick');
+  var ta=document.getElementById('vertelInput');
+  var box=document.getElementById('vertelAdviceBox');
+  if(!sel||!ta||!box)return;
+  var id=String(sel.value||'');
+  var list=readDossiers();
+  var d=list.find(function(x){ return x.id===id; });
+  if(!d){ showToast('Dossier niet gevonden.'); return; }
+  var live=(ta.value||'').trim();
+  var last=(Array.isArray(d.fields.notes)&&d.fields.notes.length)?String(d.fields.notes[d.fields.notes.length-1].text||'').trim():'';
+  var basis=live||last;
+  if(!basis){ showToast('Vertel eerst iets zodat ik advies kan geven.'); return; }
+  var advice=getAdvice(d.type,basis);
+  var role=d.fields.own_role_custom||d.fields.own_role||'betrokken familielid';
+  box.style.display='block';
+  box.innerHTML='<strong>Advies voor nu</strong><br>'+esc(advice)+'<br><br><strong>Concreet voorstel</strong><br>Start met: "Ik wil dit rustig bespreken vanuit mijn rol als '+esc(role)+'. Mag ik eerst delen wat ik merk?"';
+  showToast('Advies klaar.');
+}
+function toggleHomeMic(){
+  var ta=document.getElementById('homeVertel');
+  var btn=document.getElementById('homeMicBtn');
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!ta||!btn){ return; }
+  if(!_homeRec && SR){
+    _homeRec=new SR();
+    _homeRec.lang='nl-BE';
+    _homeRec.continuous=false;
+    _homeRec.interimResults=true;
+  }
+  if(!_homeRec){ showToast('Microfoon niet ondersteund in deze browser.'); return; }
+  if(btn.dataset.rec==='1'){
+    _homeRec.stop();
+    return;
+  }
+  var startText=ta.value||'';
+  _homeRec.onresult=function(e){
+    var text='';
+    for(var i=e.resultIndex;i<e.results.length;i++){ text+=e.results[i][0].transcript; }
+    ta.value=(startText+' '+text).trim();
+  };
+  _homeRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='🎤 Spreek'; };
+  btn.dataset.rec='1';
+  btn.textContent='■ Stop';
+  _homeRec.start();
+}
+function toggleVertelMic(){
+  var ta=document.getElementById('vertelInput');
+  var btn=document.getElementById('vertelMicBtn');
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!ta||!btn){ return; }
+  if(!_vertelRec && SR){
+    _vertelRec=new SR();
+    _vertelRec.lang='nl-BE';
+    _vertelRec.continuous=false;
+    _vertelRec.interimResults=true;
+  }
+  if(!_vertelRec){ showToast('Microfoon niet ondersteund in deze browser.'); return; }
+  if(btn.dataset.rec==='1'){ _vertelRec.stop(); return; }
+  var startText=ta.value||'';
+  _vertelRec.onresult=function(e){
+    var text='';
+    for(var i=e.resultIndex;i<e.results.length;i++){ text+=e.results[i][0].transcript; }
+    ta.value=(startText+' '+text).trim();
+  };
+  _vertelRec.onend=function(){ btn.dataset.rec='0'; btn.textContent='🎤 Spreek'; };
+  btn.dataset.rec='1';
+  btn.textContent='■ Stop';
+  _vertelRec.start();
 }
 function addDossier(){
   var typeEl=document.getElementById('newType');
@@ -578,7 +718,7 @@ function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 render();
-showScreen('overview');
+showScreen('home');
 </script>
 </body>
 </html>
