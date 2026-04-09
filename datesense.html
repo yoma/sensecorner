@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="09-04-2026 11:26">
+<meta name="ds-build" content="09-04-2026 11:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -6430,6 +6430,11 @@ function rSenses(el){
       var picked=S.compareDraft.indexOf(p)>=0;
       var rowFootMatch=getSensesCardMatchHtml(p,{stripTopRule:true,profielOnly:true});
       var matchInline=getSensesMatchInlineHtml(p);
+      var aandachtspunten=getDossierAandachtspunten(d.meta||{});
+      var aandachtStyle=aandachtspunten>=3
+        ?'color:#7A1A1A;background:#FDECEC;border-color:#E9B5B5'
+        :'color:#8A4B00;background:#FFF4E5;border-color:#F7D7A8';
+      var aandachtBadge=(aandachtspunten>=2)?(' <span class="senses-actief-badge" style="'+aandachtStyle+'">'+aandachtspunten+' aandachtspunt'+(aandachtspunten>1?'en':'')+'</span>'):'';
       var disp=escHTML(dn(p));
       h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+escJsStr(p)+'\')"')+`>
         <div class="srow-dossier-main">
@@ -6438,7 +6443,7 @@ function rSenses(el){
         `+((d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';flex-shrink:0;margin-top:6px"></div>')+`
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title">`+disp+`</div>
-          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span></div>
+          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span>`+aandachtBadge+`</div>
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
@@ -6879,7 +6884,7 @@ async function loadTab(name,tab,d){
       html+=buildOwnCategoryPreviewRows(d);
     }
 
-    // Contact: red flags (compact + uitklapbaar)
+    // Contact: aandachtspunten (compact + uitklapbaar)
     if(!isOwnDossier){
       var rf=((d.meta||{}).red_flags)||null;
       if(rf&&typeof rf.score==='number'){
@@ -6889,7 +6894,7 @@ async function loadTab(name,tab,d){
         html+='<div style="margin-bottom:14px">';
         html+='<button type="button" class="dossier-rf-row" aria-expanded="false" onclick="var w=document.getElementById(\'dossierRfAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
         html+='<span class="rf-dot" style="background:'+rv.dot+'"></span>';
-        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · red flags</span>';
+        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · aandachtspunten</span>';
         html+='<span class="rf-pct" style="color:'+rv.txt+'">'+rfs+'%</span>';
         html+='<span style="font-size:11px;color:#aaa;flex-shrink:0">▼</span>';
         html+='</button>';
@@ -6906,7 +6911,7 @@ async function loadTab(name,tab,d){
       }else{
         html+='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:14px;padding:14px 14px;margin:0 0 14px">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
-        html+='<div><div style="font-size:13px;font-weight:800;color:#7A5A00">🚩 Red Flags nog niet berekend</div><div style="font-size:12px;color:#806A1A;margin-top:2px">Laat Advies één keer draaien voor score + uitleg op basis van gedrag en context.</div></div>';
+        html+='<div><div style="font-size:13px;font-weight:800;color:#7A5A00">Aandachtspunten nog niet berekend</div><div style="font-size:12px;color:#806A1A;margin-top:2px">Laat Advies één keer draaien voor score + uitleg op basis van gedrag en context.</div></div>';
         html+='<button class="btn-g" style="max-width:170px;padding:8px 12px" onclick="switchTab(\'advies\')">Naar Advies</button>';
         html+='</div></div>';
       }
@@ -7307,7 +7312,7 @@ async function genAdvies(name,forced){
       var redReasons=(seg[1]||'').split('|').map(function(x){return x.trim();}).filter(Boolean).slice(0,3);
       var rc=redScore>=65?'#C62828':redScore>=35?'#E07800':'#2E7D32';
       redHtml='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:#333">Red flags score</span><span style="font-size:18px;font-weight:800;color:'+rc+'">'+redScore+'%</span></div>'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:#333">Aandachtspunten-score</span><span style="font-size:18px;font-weight:800;color:'+rc+'">'+redScore+'%</span></div>'
         +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+redScore+'%;background:'+rc+'"></div></div>'
         +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">0-34 laag · 35-64 aandacht · 65-100 hoog</div>'
         +(redReasons.length?'<div style="font-size:12px;color:#555;line-height:1.6;margin-top:8px"><strong>Waarom:</strong> '+redReasons.join(' · ')+'</div>':'')
@@ -9077,6 +9082,14 @@ function redFlagVisuals(score){
   if(s<=35)return{dot:'#2E7D32',lbl:'Lager risico',bar:'#2E7D32',txt:'#1B5E20'};
   if(s<=65)return{dot:'#E65100',lbl:'Matig risico',bar:'#E65100',txt:'#BF360C'};
   return{dot:'#C62828',lbl:'Hoger risico',bar:'#C62828',txt:'#B71C1C'};
+}
+function getDossierAandachtspunten(meta){
+  var rf=(meta||{}).red_flags||null;
+  var s=rf&&typeof rf.score==='number'?Math.max(0,Math.min(100,parseInt(rf.score,10)||0)):0;
+  if(s>=65)return 3;
+  if(s>=35)return 2;
+  if(s>=20)return 1;
+  return 0;
 }
 function buildProfileMetaPreviewRows(name,d){
   var m=(d&&d.meta)||{};

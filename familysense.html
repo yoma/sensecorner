@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#AE0000">
+<title>FamilySense — Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{--r:#AE0000;--t:#1A1A1A;--m:#6F7480;--b:#E5E7EB;--bg:#FAFAF9;--card:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradient(180deg,#FFF5F5 0%,#FAFAF9 140px,#FAFAF9 100%);color:var(--t)}
+.app{max-width:860px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(250,250,249,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.07);position:sticky;top:0;z-index:10}
+.ico{width:36px;height:36px;border:none;border-radius:999px;background:none;cursor:pointer}
+.title{flex:1;text-align:center;font-family:'Lora',serif;font-size:24px;font-weight:700}
+.main{padding:14px 14px 90px}
+.screen{display:none}
+.screen.active{display:block}
+.hero{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.07);margin-bottom:12px}
+.hero h1{font-family:'Lora',serif;font-size:26px;line-height:1.15;margin-bottom:8px}
+.hero p{font-size:14px;color:var(--m);line-height:1.6}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:14px;padding:12px}
+.card h3{font-size:13px;font-weight:800;margin-bottom:4px}
+.card p{font-size:12px;color:var(--m);line-height:1.45}
+.sec-title{font-size:11px;color:#8f95a1;letter-spacing:.08em;font-weight:700;text-transform:uppercase;margin:14px 2px 8px}
+.row{display:flex;gap:8px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:#2E7D32}
+.dossier{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.dossier.clickable{cursor:pointer;transition:transform .12s ease,box-shadow .2s ease,border-color .2s ease}
+.dossier.clickable:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.dossier.active{border-color:rgba(174,0,0,.35);box-shadow:0 0 0 3px rgba(174,0,0,.08),0 4px 14px rgba(0,0,0,.08)}
+.dossier .name{font-size:15px;font-weight:800}
+.dossier .meta{font-size:12px;color:var(--m);margin-top:3px}
+.chip{font-size:11px;font-weight:700;line-height:1;padding:5px 8px;border-radius:999px;background:#F4F4F2;border:1px solid rgba(0,0,0,.08);color:#4B5563}
+.chip.warn{background:#FFF4E5;border-color:#F7D7A8;color:#8A4B00}
+.prog{height:6px;background:#EFECEA;border-radius:999px;overflow:hidden;margin-top:8px}
+.prog > div{height:100%;background:#AE0000;opacity:.9}
+.editor{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;margin-top:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:1/-1}
+.label{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#8f95a1}
+.in,.ta,.sel{width:100%;border:1px solid #E5E7EB;border-radius:11px;padding:10px 11px;font:inherit;font-size:14px;outline:none;background:#fff}
+.ta{min-height:88px;resize:vertical}
+.in:focus,.ta:focus,.sel:focus{border-color:#AE0000;box-shadow:0 0 0 3px rgba(174,0,0,.08)}
+.hint{font-size:12px;color:var(--m);margin-top:6px}
+.editor-title{font-size:15px;font-weight:800;margin-bottom:8px}
+.advice{margin-top:10px;padding:10px 11px;border-radius:11px;background:#FFF7F7;border:1px solid #F3D6D6;font-size:13px;line-height:1.55;color:#5B2A2A}
+.prompt-wrap{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.prompt-chip{padding:7px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.1);background:#fff;font-size:12px;cursor:pointer;color:#374151}
+.prompt-chip:hover{background:#FAF5F5;border-color:#E8CACA}
+.plan{margin-top:10px;border-radius:11px;border:1px solid rgba(0,0,0,.08);background:#fff;padding:10px 12px}
+.plan h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8f95a1;margin-bottom:6px}
+.plan ul{padding-left:18px}
+.plan li{font-size:13px;line-height:1.6;color:#374151;margin:2px 0}
+.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini-grid .field.full{grid-column:1/-1}
+.subhint{font-size:11px;color:#8f95a1;margin-top:6px;line-height:1.4}
+.btn{width:100%;padding:14px 10px;border-radius:13px;border:none;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}
+.btn-r{background:var(--r);color:#fff}
+.btn-g{background:#F4F4F2;color:#374151;border:1px solid rgba(0,0,0,.1)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%) translateY(8px);background:#1F2937;color:#fff;padding:10px 12px;border-radius:10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:60}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid rgba(0,0,0,.08);display:flex;max-width:860px;margin:0 auto}
+.tab{flex:1;padding:9px 4px 12px;text-align:center;font-size:12px;color:#7b818e;text-decoration:none}
+.tab.active{color:var(--r);font-weight:700}
+@media(max-width:520px){.title{font-size:20px}.hero h1{font-size:22px}.grid,.btns,.editor-grid,.mini-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="ico" onclick="location.href='sensecorner.html'" aria-label="Terug">←</button>
+    <div class="title">FamilySense</div>
+    <button class="ico" onclick="location.href='datesense.html'" aria-label="DateSense">♡</button>
+  </div>
+
+  <div class="main">
+    <section class="screen active" id="overviewScreen">
+    <section class="hero">
+      <h1>Gezin, rust en verbinding.</h1>
+      <p>Een veilige plek om gezinsdynamiek op te volgen per dossier: dochters, partner, ouders, of “Gezin algemeen”.</p>
+      <div class="grid">
+        <div class="card"><h3>Dagelijkse temperatuur</h3><p>Hou spanning, rust en verbinding bij met korte check-ins.</p></div>
+        <div class="card"><h3>Reflectie & advies</h3><p>Beschrijf situaties en krijg concrete opvoed- en communicatie-acties.</p></div>
+      </div>
+    </section>
+
+    <div class="sec-title">Mijn dossiers</div>
+    <div id="dossierList"></div>
+    <section class="editor">
+      <div class="sec-title" style="margin-top:0">Nieuw dossier</div>
+      <div class="editor-grid">
+        <label class="field">
+          <span class="label">Type</span>
+          <select id="newType" class="sel">
+            <option value="kind">Kind</option>
+            <option value="ouder">Ouder</option>
+            <option value="broer_zus">Broer / Zus</option>
+            <option value="partner">Partner</option>
+            <option value="gezin">Gezin algemeen</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Naam</span>
+          <input id="newName" class="in" placeholder="Bv. Dochter Emma">
+        </label>
+        <label class="field full">
+          <span class="label">Context</span>
+          <textarea id="newContext" class="ta" placeholder="Korte context: leeftijd, fase, spanningen, wat je wil verbeteren..."></textarea>
+        </label>
+      </div>
+      <div class="hint">Per dossier bewaren we 4 kernvelden: context, communicatie, grenzen en doelen.</div>
+    </section>
+    <div class="btns">
+      <button class="btn btn-r" onclick="addDossier()">+ Dossier toevoegen</button>
+      <button class="btn btn-g" onclick="location.href='sensecorner.html'">Naar SenseCorner</button>
+    </div>
+    </section>
+
+    <section class="screen" id="detailScreen">
+      <section class="editor" id="detailEditor">
+        <div class="editor-title" id="detailTitle">Dossier details</div>
+        <div class="editor-grid">
+          <label class="field full">
+            <span class="label">Context</span>
+            <textarea id="fldContext" class="ta" placeholder="Situatie, fase, achtergrond..."></textarea>
+          </label>
+          <label class="field full">
+            <span class="label">Communicatie</span>
+            <textarea id="fldCommunicatie" class="ta" placeholder="Wat loopt goed / stroef in gesprekken?"></textarea>
+          </label>
+          <label class="field full">
+            <span class="label">Grenzen & afspraken</span>
+            <textarea id="fldGrenzen" class="ta" placeholder="Welke grenzen zijn duidelijk of botsen net?"></textarea>
+          </label>
+          <label class="field full">
+            <span class="label">Doelen</span>
+            <textarea id="fldDoelen" class="ta" placeholder="Wat wil je de komende weken verbeteren?"></textarea>
+          </label>
+        </div>
+        <div class="hint">Snelle prompts per type (tik om toe te voegen in het relevante veld):</div>
+        <div class="prompt-wrap" id="promptChips"></div>
+        <div class="advice" id="detailAdvice"></div>
+        <section class="plan" id="weekPlan">
+          <h4>Adviesplan Deze Week</h4>
+          <ul id="weekPlanList"></ul>
+          <div class="btns" style="margin-top:10px">
+            <button class="btn btn-g" type="button" onclick="copyWeekPlan()">Kopieer weekplan</button>
+            <button class="btn btn-g" type="button" onclick="copyConflictPlan()">Kopieer conflictkaart</button>
+          </div>
+        </section>
+        <section class="plan">
+          <h4>Conflictkaart (4 stappen)</h4>
+          <div class="mini-grid">
+            <label class="field full">
+              <span class="label">1. Probleem benoemen</span>
+              <textarea id="cfIssue" class="ta" placeholder="Wat is exact het conflict, zonder verwijt?"></textarea>
+            </label>
+            <label class="field full">
+              <span class="label">2. Mogelijke oplossingen</span>
+              <textarea id="cfSolutions" class="ta" placeholder="Welke 2-3 opties zijn mogelijk?"></textarea>
+            </label>
+            <label class="field">
+              <span class="label">3. Gekozen oplossing</span>
+              <input id="cfChoice" class="in" placeholder="Welke optie testen we?">
+            </label>
+            <label class="field">
+              <span class="label">4. Evaluatiemoment</span>
+              <input id="cfReview" class="in" placeholder="Wanneer evalueren we?">
+            </label>
+          </div>
+          <div class="subhint" id="cfCoachLine"></div>
+        </section>
+        <section class="plan">
+          <h4>Weekritueel Planner</h4>
+          <div class="mini-grid">
+            <label class="field">
+              <span class="label">Check-in 1</span>
+              <input id="rtMoment1" class="in" placeholder="Bv. Woensdag 19:30">
+            </label>
+            <label class="field">
+              <span class="label">Check-in 2</span>
+              <input id="rtMoment2" class="in" placeholder="Bv. Zondag 18:00">
+            </label>
+            <label class="field full">
+              <span class="label">Weekfocus</span>
+              <input id="rtFocus" class="in" placeholder="Bv. Rustige toon tijdens afspraken">
+            </label>
+            <label class="field full">
+              <span class="label">Wat is gelukt?</span>
+              <textarea id="rtDone" class="ta" placeholder="Korte evaluatie op het einde van de week"></textarea>
+            </label>
+          </div>
+        </section>
+        <div class="btns" style="margin-top:12px">
+          <button class="btn btn-r" onclick="saveSelected()">Opslaan</button>
+          <button class="btn btn-g" onclick="goOverview()">Terug naar dossiers</button>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <div class="nav">
+    <a class="tab" href="sensecorner.html">Hub</a>
+    <a class="tab" href="datesense.html">DateSense</a>
+    <a class="tab active" href="familysense.html">FamilySense</a>
+  </div>
+</div>
+<div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+var KEY='familysense_dossiers_v2';
+var LEGACY_KEY='familysense_dossiers_v1';
+var TYPE_LABELS={
+  kind:'Kind',
+  ouder:'Ouder',
+  broer_zus:'Broer/Zus',
+  partner:'Partner',
+  gezin:'Gezin'
+};
+var selectedId='';
+var ACTIVE_SCREEN='overview';
+var _toastTimer=null;
+var TYPE_PROMPTS={
+  kind:[
+    {field:'communicatie',text:'Wat helpt om zonder strijd in gesprek te blijven?'},
+    {field:'grenzen',text:'Welke 2 regels moeten consequent blijven deze week?'},
+    {field:'doelen',text:'Wat is 1 haalbaar doel tegen zondag?'}
+  ],
+  ouder:[
+    {field:'communicatie',text:'Hoe wil ik respectvol mijn behoefte formuleren?'},
+    {field:'grenzen',text:'Welke grens bewaak ik zonder verwijt?'},
+    {field:'doelen',text:'Welke afspraak wil ik met ouder maken?'}
+  ],
+  broer_zus:[
+    {field:'communicatie',text:'Welke verwachting moet ik expliciet uitspreken?'},
+    {field:'grenzen',text:'Waar eindigt mijn verantwoordelijkheid?'},
+    {field:'doelen',text:'Welke kleine herstelactie kan ik doen?'}
+  ],
+  partner:[
+    {field:'communicatie',text:'Welke ik-boodschap wil ik rustig brengen?'},
+    {field:'grenzen',text:'Welke grens beschermt rust in huis?'},
+    {field:'doelen',text:'Welk vast check-in moment plannen we?'}
+  ],
+  gezin:[
+    {field:'communicatie',text:'Welke gezinscheck-in voeren we 2x uit?'},
+    {field:'grenzen',text:'Welke huisregel maakt iedereen rustiger?'},
+    {field:'doelen',text:'Wat is 1 gezamenlijk weekdoel?'}
+  ]
+};
+function emptyFields(contextText){
+  return {
+    context:contextText||'',
+    communicatie:'',
+    grenzen:'',
+    doelen:'',
+    conflict_issue:'',
+    conflict_solutions:'',
+    conflict_choice:'',
+    conflict_review:'',
+    ritual_moment_1:'',
+    ritual_moment_2:'',
+    ritual_focus:'',
+    ritual_done:''
+  };
+}
+var defaultDossiers=[
+  {id:idNow(),name:'Dochter Emma',type:'kind',fields:emptyFields('Tiener · school / grenzen / sfeer')},
+  {id:idNow(),name:'Dochter Noor',type:'kind',fields:emptyFields('Tiener · emoties / vertrouwen / afspraken')},
+  {id:idNow(),name:'Gezin algemeen',type:'gezin',fields:emptyFields('Sfeer thuis · regels · routines')}
+];
+function idNow(){
+  return 'd_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36);
+}
+function migrateLegacy(legacy){
+  return legacy.map(function(d){
+    return {
+      id:idNow(),
+      name:String(d&&d.name||'Nieuw dossier'),
+      type:TYPE_LABELS[d&&d.type]?d.type:'gezin',
+      fields:emptyFields(String(d&&d.note||''))
+    };
+  });
+}
+function normalizeDossier(d){
+  var type=TYPE_LABELS[d&&d.type]?d.type:'gezin';
+  var fields=d&&d.fields&&typeof d.fields==='object'?d.fields:{};
+  return {
+    id:d&&d.id?String(d.id):idNow(),
+    name:String(d&&d.name||'Nieuw dossier'),
+    type:type,
+    fields:{
+      context:String(fields.context||''),
+      communicatie:String(fields.communicatie||''),
+      grenzen:String(fields.grenzen||''),
+      doelen:String(fields.doelen||''),
+      conflict_issue:String(fields.conflict_issue||''),
+      conflict_solutions:String(fields.conflict_solutions||''),
+      conflict_choice:String(fields.conflict_choice||''),
+      conflict_review:String(fields.conflict_review||''),
+      ritual_moment_1:String(fields.ritual_moment_1||''),
+      ritual_moment_2:String(fields.ritual_moment_2||''),
+      ritual_focus:String(fields.ritual_focus||''),
+      ritual_done:String(fields.ritual_done||'')
+    }
+  };
+}
+function readDossiers(){
+  try{
+    var raw=localStorage.getItem(KEY);
+    var list=raw?JSON.parse(raw):null;
+    if(Array.isArray(list)&&list.length)return list.map(normalizeDossier);
+  }catch(_e){}
+  try{
+    var oldRaw=localStorage.getItem(LEGACY_KEY);
+    var oldList=oldRaw?JSON.parse(oldRaw):null;
+    if(Array.isArray(oldList)&&oldList.length){
+      var migrated=migrateLegacy(oldList);
+      writeDossiers(migrated);
+      return migrated;
+    }
+  }catch(_e2){}
+  return defaultDossiers.slice();
+}
+function writeDossiers(list){
+  localStorage.setItem(KEY,JSON.stringify(list.map(normalizeDossier)));
+}
+function completion(d){
+  var f=(d&&d.fields)||{};
+  var keys=['context','communicatie','grenzen','doelen'];
+  var done=keys.filter(function(k){ return String(f[k]||'').trim().length>0; }).length;
+  return {done:done,total:keys.length,pct:Math.round((done/keys.length)*100)};
+}
+function getAdvice(type){
+  if(type==='kind')return 'Focus op verbinding voor correctie: eerst erkennen, dan begrenzen. Korte, duidelijke afspraken werken vaak beter dan lange discussies.';
+  if(type==='ouder')return 'Hou het respectvol en concreet. Benoem 1 behoefte tegelijk en vermijd oude discussies heropenen in hetzelfde gesprek.';
+  if(type==='broer_zus')return 'Check verwachtingen expliciet. Veel spanning bij broers/zussen ontstaat door onuitgesproken aannames over rollen en loyaliteit.';
+  if(type==='partner')return 'Gebruik ik-boodschappen en spreek een vast check-in moment af. Veiligheid in toon gaat voor snelheid van oplossing.';
+  return 'Kies 1 gezinsritueel voor de komende week (bv. 15 min check-in) en evalueer zonder schuldvraag: wat hielp, wat niet?';
+}
+function getWeekPlan(d){
+  var f=(d&&d.fields)||{};
+  var base=[
+    'Plan 2 korte check-ins van 10-15 minuten zonder afleiding.',
+    'Kies 1 concrete afspraak en noteer wat “gelukt” betekent.'
+  ];
+  if(!String(f.communicatie||'').trim())base.unshift('Start met 1 zin die verbinding opent, niet corrigeert.');
+  if(!String(f.grenzen||'').trim())base.push('Definieer 1 grens in positief gedrag: wat wil je wel zien?');
+  if(!String(f.doelen||'').trim())base.push('Formuleer 1 haalbaar doel voor deze week, meetbaar en klein.');
+  if(d&&d.type==='kind')base.push('Eerst reguleren, dan bespreken: kies een rustig moment, niet in conflict.');
+  if(d&&d.type==='gezin')base.push('Gebruik een gezamenlijk ritueel (zondagavond) om de week af te sluiten.');
+  return base.slice(0,4);
+}
+function countAttentionPoints(d){
+  var f=(d&&d.fields)||{};
+  var txt=[f.context,f.communicatie,f.grenzen,f.doelen].join(' ').toLowerCase();
+  var terms=[
+    'escal', 'ruzie', 'conflict', 'boos', 'agress', 'geschreeuw',
+    'geen contact', 'stilte', 'neger', 'paniek', 'uitput', 'overprikkel',
+    'grensoverschrijd', 'onveilig', 'angst', 'druk', 'controle'
+  ];
+  var hits=0;
+  for(var i=0;i<terms.length;i++){
+    if(txt.indexOf(terms[i])!==-1)hits++;
+  }
+  return Math.min(hits,3);
+}
+function showScreen(name){
+  ACTIVE_SCREEN=name;
+  document.getElementById('overviewScreen').classList.toggle('active',name==='overview');
+  document.getElementById('detailScreen').classList.toggle('active',name==='detail');
+  document.querySelector('.title').textContent=name==='detail'?'FamilySense Dossier':'FamilySense';
+}
+function render(){
+  var list=readDossiers();
+  var mount=document.getElementById('dossierList');
+  mount.innerHTML=list.map(function(d){
+    var c=completion(d);
+    var ap=countAttentionPoints(d);
+    return '<div class="dossier clickable'+(d.id===selectedId?' active':'')+'" onclick="openDossier(\''+escAttr(d.id)+'\')">'+
+      '<div class="row"><span class="dot"></span><div class="name">'+esc(d.name)+'</div><span class="chip">'+esc(TYPE_LABELS[d.type])+'</span>'+(ap?'<span class="chip warn">'+ap+' Aandachtspunt'+(ap>1?'en':'')+'</span>':'')+'</div>'+
+      '<div class="meta">'+esc(d.fields.context||'Nog geen context ingevuld')+'</div>'+
+      '<div class="meta">'+c.done+'/'+c.total+' velden ingevuld ('+c.pct+'%)</div>'+
+      '<div class="prog"><div style="width:'+c.pct+'%"></div></div>'+
+    '</div>';
+  }).join('');
+  if(selectedId && ACTIVE_SCREEN==='detail')syncDetailEditor();
+}
+function openDossier(id){
+  selectedId=String(id||'');
+  showScreen('detail');
+  render();
+  syncDetailEditor();
+}
+function goOverview(){ showScreen('overview'); render(); }
+function getSelected(list){
+  var arr=list||readDossiers();
+  return arr.find(function(d){ return d.id===selectedId; })||null;
+}
+function syncDetailEditor(){
+  var list=readDossiers();
+  var d=getSelected(list);
+  if(!d){ goOverview(); return; }
+  document.getElementById('detailTitle').textContent='Dossier: '+d.name+' ('+TYPE_LABELS[d.type]+')';
+  document.getElementById('fldContext').value=d.fields.context||'';
+  document.getElementById('fldCommunicatie').value=d.fields.communicatie||'';
+  document.getElementById('fldGrenzen').value=d.fields.grenzen||'';
+  document.getElementById('fldDoelen').value=d.fields.doelen||'';
+  document.getElementById('cfIssue').value=d.fields.conflict_issue||'';
+  document.getElementById('cfSolutions').value=d.fields.conflict_solutions||'';
+  document.getElementById('cfChoice').value=d.fields.conflict_choice||'';
+  document.getElementById('cfReview').value=d.fields.conflict_review||'';
+  document.getElementById('rtMoment1').value=d.fields.ritual_moment_1||'';
+  document.getElementById('rtMoment2').value=d.fields.ritual_moment_2||'';
+  document.getElementById('rtFocus').value=d.fields.ritual_focus||'';
+  document.getElementById('rtDone').value=d.fields.ritual_done||'';
+  document.getElementById('detailAdvice').textContent='Adviesfocus: '+getAdvice(d.type);
+  renderPromptChips(d.type);
+  renderWeekPlan(d);
+  renderConflictCoachLine(d);
+}
+function renderPromptChips(type){
+  var mount=document.getElementById('promptChips');
+  var prompts=TYPE_PROMPTS[type]||TYPE_PROMPTS.gezin;
+  mount.innerHTML=prompts.map(function(p,idx){
+    return '<button type="button" class="prompt-chip" onclick="insertPrompt('+idx+')">'+esc(p.text)+'</button>';
+  }).join('');
+}
+function insertPrompt(idx){
+  var d=getSelected();
+  if(!d)return;
+  var prompts=TYPE_PROMPTS[d.type]||TYPE_PROMPTS.gezin;
+  var p=prompts[idx];
+  if(!p)return;
+  var map={
+    context:'fldContext',
+    communicatie:'fldCommunicatie',
+    grenzen:'fldGrenzen',
+    doelen:'fldDoelen'
+  };
+  var el=document.getElementById(map[p.field]);
+  if(!el)return;
+  var prev=(el.value||'').trim();
+  el.value=prev?(prev+'\n- '+p.text):('- '+p.text);
+  el.focus();
+}
+function renderWeekPlan(d){
+  var items=getWeekPlan(d);
+  document.getElementById('weekPlanList').innerHTML=items.map(function(x){
+    return '<li>'+esc(x)+'</li>';
+  }).join('');
+}
+function renderConflictCoachLine(d){
+  var f=(d&&d.fields)||{};
+  var issue=String(f.conflict_issue||'').trim();
+  var choice=String(f.conflict_choice||'').trim();
+  var review=String(f.conflict_review||'').trim();
+  var line='Tip: hou het probleem observeerbaar (wie/wat/wanneer), niet karaktergericht.';
+  if(issue&&choice&&!review)line='Goed bezig. Zet nu nog een concreet evaluatiemoment zodat het geen losse intentie blijft.';
+  if(issue&&choice&&review)line='Sterk: je hebt een volledig 4-stappen conflictplan. Evalueer kort en pas 1 ding tegelijk aan.';
+  document.getElementById('cfCoachLine').textContent=line;
+}
+function saveSelected(){
+  var list=readDossiers();
+  var idx=list.findIndex(function(d){ return d.id===selectedId; });
+  if(idx<0)return;
+  list[idx].fields.context=(document.getElementById('fldContext').value||'').trim();
+  list[idx].fields.communicatie=(document.getElementById('fldCommunicatie').value||'').trim();
+  list[idx].fields.grenzen=(document.getElementById('fldGrenzen').value||'').trim();
+  list[idx].fields.doelen=(document.getElementById('fldDoelen').value||'').trim();
+  list[idx].fields.conflict_issue=(document.getElementById('cfIssue').value||'').trim();
+  list[idx].fields.conflict_solutions=(document.getElementById('cfSolutions').value||'').trim();
+  list[idx].fields.conflict_choice=(document.getElementById('cfChoice').value||'').trim();
+  list[idx].fields.conflict_review=(document.getElementById('cfReview').value||'').trim();
+  list[idx].fields.ritual_moment_1=(document.getElementById('rtMoment1').value||'').trim();
+  list[idx].fields.ritual_moment_2=(document.getElementById('rtMoment2').value||'').trim();
+  list[idx].fields.ritual_focus=(document.getElementById('rtFocus').value||'').trim();
+  list[idx].fields.ritual_done=(document.getElementById('rtDone').value||'').trim();
+  writeDossiers(list);
+  renderWeekPlan(list[idx]);
+  renderConflictCoachLine(list[idx]);
+  render();
+}
+function copyWeekPlan(){
+  var d=getSelected();
+  if(!d)return;
+  var f=d.fields||{};
+  var items=getWeekPlan(d);
+  var lines=[
+    'FamilySense weekplan - '+d.name,
+    '',
+    'Type: '+(TYPE_LABELS[d.type]||'Gezin'),
+    'Weekfocus: '+(f.ritual_focus||'(nog niet ingevuld)'),
+    'Check-in 1: '+(f.ritual_moment_1||'(nog niet ingevuld)'),
+    'Check-in 2: '+(f.ritual_moment_2||'(nog niet ingevuld)'),
+    '',
+    'Acties:'
+  ];
+  items.forEach(function(x){ lines.push('- '+x); });
+  lines.push('');
+  lines.push('Wat is gelukt: '+(f.ritual_done||'(nog niet ingevuld)'));
+  var txt=lines.join('\n');
+  copyText(txt,'Weekplan gekopieerd.');
+}
+function copyConflictPlan(){
+  var d=getSelected();
+  if(!d)return;
+  var f=d.fields||{};
+  var txt=[
+    'FamilySense conflictkaart - '+d.name,
+    '',
+    '1) Probleem: '+(f.conflict_issue||'(nog niet ingevuld)'),
+    '2) Mogelijke oplossingen: '+(f.conflict_solutions||'(nog niet ingevuld)'),
+    '3) Gekozen oplossing: '+(f.conflict_choice||'(nog niet ingevuld)'),
+    '4) Evaluatiemoment: '+(f.conflict_review||'(nog niet ingevuld)')
+  ].join('\n');
+  copyText(txt,'Conflictkaart gekopieerd.');
+}
+function copyText(txt,okMsg){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){ showToast(okMsg); }).catch(function(){ fallbackCopy(txt,okMsg); });
+    return;
+  }
+  fallbackCopy(txt,okMsg);
+}
+function fallbackCopy(txt,okMsg){
+  var ta=document.createElement('textarea');
+  ta.value=txt;
+  ta.setAttribute('readonly','readonly');
+  ta.style.position='absolute';
+  ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand('copy'); showToast(okMsg); }catch(_e){ showToast('Kopieren lukte niet automatisch.'); }
+  document.body.removeChild(ta);
+}
+function showToast(msg){
+  var el=document.getElementById('toast');
+  if(!el)return;
+  el.textContent=String(msg||'');
+  el.classList.add('show');
+  if(_toastTimer)clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(function(){ el.classList.remove('show'); },1700);
+}
+function addDossier(){
+  var typeEl=document.getElementById('newType');
+  var nameEl=document.getElementById('newName');
+  var contextEl=document.getElementById('newContext');
+  var type=typeEl.value;
+  var name=(nameEl.value||'').trim();
+  var context=(contextEl.value||'').trim();
+  if(!name){
+    alert('Geef eerst een naam voor het dossier.');
+    nameEl.focus();
+    return;
+  }
+  var list=readDossiers();
+  list.push({
+    id:idNow(),
+    name:name,
+    type:TYPE_LABELS[type]?type:'gezin',
+    fields:emptyFields(context)
+  });
+  writeDossiers(list);
+  nameEl.value='';
+  contextEl.value='';
+  typeEl.value='kind';
+  render();
+}
+function escAttr(s){
+  return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+render();
+showScreen('overview');
+</script>
+</body>
+</html>
