@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-04-2026 10:00">
+<meta name="fs-build" content="10-04-2026 16:00">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -1022,14 +1022,6 @@ a:focus-visible,
   </div>
 </div>
 
-<div class="save-modal-overlay" id="stageFocusModal" role="dialog" aria-modal="true" aria-labelledby="stageFocusModalTitle">
-  <div class="save-modal-bg" onclick="closeStageFocusModal()"></div>
-  <div class="save-modal-sheet">
-    <div class="save-modal-title" id="stageFocusModalTitle">Gezins-focus voorstellen</div>
-    <div class="save-modal-sub" id="stageFocusModalSub">Deze fase past vaak beter bij gezins-focus.</div>
-    <div id="stageFocusModalOpts"></div>
-  </div>
-</div>
 
 <div class="save-modal-overlay" id="aiImportModal" role="dialog" aria-modal="true" aria-labelledby="aiImportModalTitle">
   <div class="save-modal-bg" onclick="window.closeAiImportModal&&window.closeAiImportModal()"></div>
@@ -1630,7 +1622,7 @@ function getQuickHelpStepsForScreen(screen){
     return[
       {targetSel:'#tab-senses',title:'Mijn Senses',text:'Overzicht van je familiedossiers met status en acties.'},
       {targetSel:'.srow',title:'Dossierkaart',text:'Open een dossier, bekijk updates, of zet het op on hold.'},
-      {targetSel:'.btn-r[onclick*=\"toggleCompareMode\"]',title:'Vergelijken',text:'Vergelijk geselecteerde dossiers side-by-side voor scherpere keuzes.'}
+      
     ];
   }
   if(sc==='vertel'){
@@ -3348,7 +3340,7 @@ async function exportDossierTimelineTxt(dossierName){
       if(from>250000){more=false;lines.push('\n… export gestopt (veiligheidsgrens)');}
     }
     if(!lines.length){toast('Geen berichten in dit dossier.');return;}
-    var head='DateSense — tijdlijn '+dn(dossierName)+' ('+dossierName+')\nGeëxporteerd '+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n';
+    var head='FamilySense — tijdlijn '+dn(dossierName)+' ('+dossierName+')\nGeëxporteerd '+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n';
     downloadTextFileBase('DateSense-tijdlijn-'+safe+'.txt',head+lines.join('\n\n'));
     toast('✓ Tijdlijn geëxporteerd');
   }catch(e){
@@ -3368,7 +3360,7 @@ function exportVertelThreadTxt(){
   var tEl=document.getElementById('sessieTitle');
   var title=(tEl&&tEl.textContent)?String(tEl.textContent).trim().replace(/[^\w\u00C0-\u024f\- ]+/gi,'').substring(0,40):'gesprek';
   var safe=title.replace(/\s+/g,'-')||'gesprek';
-  downloadTextFileBase('DateSense-vertel-'+safe+'.txt','DateSense — Vertel\n'+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n'+lines.join('\n\n'));
+  downloadTextFileBase('FamilySense-vertel-'+safe+'.txt','FamilySense — Vertel\n'+new Date().toLocaleString('nl-BE')+'\n'+new Array(51).join('=')+'\n\n'+lines.join('\n\n'));
   toast('✓ Gesprek geëxporteerd');
 }
 
@@ -3428,7 +3420,7 @@ function _goScreenBody(sc){
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',compare:'Vergelijken',planner:'Plan samen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',promptcenter:'Prompt Center'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',planner:'Plan samen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',promptcenter:'Prompt Center'};
   var titleText=T[sc]||sc;
   if(sc==='dossier'&&S.viewDossier)titleText=dn(S.viewDossier);
   document.getElementById('pgTitle').textContent=titleText;
@@ -3545,7 +3537,7 @@ function computeDossierMatchSummary(name){
   if(isOwn){
     return{isOwn:true,matchPct:null,traitMatchPct:null,photoMatchPct:null,matchLabel:'',matchColor:'#888'};
   }
-  var hasData=PK.some(function(k){return(d.props[k]||0)>0;});
+  var hasData=false;
   var matchPct=null;
   var traitMatchPct=null;
   var photoMatchPct=null;
@@ -3663,8 +3655,8 @@ function getSensesMatchInlineHtml(name){
 
 var SENSES_SORT_VALUES=['match_desc','match_asc','newest','alpha','age_young','complete_desc'];
 function getSensesSortMode(){
-  var v=String(getScopedStorage('ds_senses_sort','match_desc')||'');
-  if(SENSES_SORT_VALUES.indexOf(v)===-1)return'match_desc';
+  var v=String(getScopedStorage('ds_senses_sort','newest')||'');
+  if(SENSES_SORT_VALUES.indexOf(v)===-1||v==='match_desc'||v==='match_asc')return'newest';
   return v;
 }
 function setSensesSortMode(v){
@@ -4106,8 +4098,7 @@ function getDossierLifecycle(name){
   return v;
 }
 function getUsageMode(){
-  var v=getScopedStorage('ds_usage_mode','multi')||'multi';
-  return v==='single'?'single':'multi';
+  return 'multi';
 }
 function setUsageMode(mode){
   var m=mode==='single'?'single':'multi';
@@ -4231,7 +4222,7 @@ function buildBoostInspirationCards(boost){
 }
 function buildUsageModeContextLine(){
   var mode=getUsageMode();
-  if(mode!=='single')return'Gebruiksmode: gezins-modus (meerdere dossiers mogelijk).';
+  if(mode!=='single')return'FamilySense actief (meerdere familiedossiers).'
   var fd=getFocusDossier();
   var rt=getFocusRelationType();
   var base='Gebruiksmode: gezins-focus actief';
@@ -5017,130 +5008,7 @@ function rHome(el){
   <div class="home-stack">
   ${onboardingHtml}
   ${renderAiImportHomeLanding()}
-  ${showModeEditor?`<div class="ai-rich-card" style="text-align:left;width:100%;margin:-8px 0 14px">
-    <div class="ai-sec">
-      <div class="ai-sec-title"><span>🧭</span><span>Gebruiksmode</span></div>
-      <p class="ai-sec-text">${hasContacts?'Kies hoe je FamilySense vandaag gebruikt.':'Maak eerst een familiedossier aan voor gezins-focus.'}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('multi')">Gezins-modus</button>
-        <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Gezins-focus</button>
-      </div>
-      ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer gezins-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
-        :(modeDraft==='single'&&!hasContacts
-          ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor gezins-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
-          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer gezins-modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan met meerdere familieleden tegelijk werken; eerdere dossiers kan je indien nodig heropenen.</div>')
-      }
-    </div>
-  </div>`:''}
-  ${!showModeEditor&&usageMode==='single'
-    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Gezins-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?escHTML(dn(focusName)):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
-    :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>💬</span><span>Gezins-modus actief</span></div><p class="ai-sec-text">Je kan met meerdere familiedossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
-  }
-  ${(function(){
-      var shortcut=plannerHomeShortcutCopy();
-      var plannerName=shortcut.name||(cs&&cs[0])||'';
-      if(!plannerName)return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>👥</span><span>Eerste dossier</span></div><p class="ai-sec-text">Maak eerst een familiedossier aan voor je plannen en vergelijking.</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
-      return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+escJsStr(plannerName)+'\')">Plan iets leuks</button></div></div>';
-    })()}
-  <!-- Grote microfoon knop -->
-  <button class="mic-btn" onclick="goScreen('vertel')" style="margin:14px auto 18px">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
-      <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-    </svg>
-  </button>
-
-  <p class="home-vertel-copy" style="font-size:14px;color:var(--m);line-height:1.65;margin-bottom:0">
-    Vertel me wat er speelt — over jezelf of een familielid.<br>
-    Ik sorteer het automatisch naar het juiste dossier.
-  </p>
-  ${notesHtml}
-  </div>
-
-</div>`;
-  setTimeout(function(){
-    warmAutoPlannerSuggestions();
-  },120);
-}
-
-function plannerField(id,label,html){
-  return '<div class="planner-field"><div class="planner-label">'+label+'</div>'+html+'</div>';
-}
-function renderAdviceLoadingCard(){
-  return '<div class="advice-loading">'
-    +'<div class="advice-loading-top"><div class="advice-loading-spinner"></div><div class="advice-loading-title">Advies wordt vernieuwd</div></div>'
-    +'<p class="advice-loading-text">DateSense bekijkt nu de nieuwste signalen uit dit dossier en zet die om naar een scherper, actueler advies.</p>'
-    +'<div class="advice-progress"><div class="advice-progress-bar"></div></div>'
-    +'<div class="advice-loading-steps">'
-    +'<div class="advice-loading-step">1. Ik lees je recente updates en ingevulde context opnieuw.</div>'
-    +'<div class="advice-loading-step">2. Ik weeg dynamiek, risico en kansen tegen elkaar af.</div>'
-    +'<div class="advice-loading-step">3. Ik zet dat om naar helder advies en bruikbare actiepunten.</div>'
-    +'</div>'
-    +'</div>';
-}
-function renderPhotoAnalysisLoadingCard(photoCount){
-  var count=Math.max(1,parseInt(photoCount||1,10)||1);
-  return '<div class="photo-loading">'
-    +'<div class="photo-loading-top"><div class="photo-loading-spinner"></div><div class="photo-loading-title">Fotoanalyse wordt uitgevoerd</div></div>'
-    +'<p class="photo-loading-text">DateSense bekijkt nu '+count+' foto'+(count>1?'\'s':'')+' en zet die om naar een rustige, leesbare samenvatting.</p>'
-    +'<div class="photo-loading-steps">'
-    +'<div class="photo-loading-step">1. Ik bereid de foto voor zodat ze vlot verwerkt kan worden.</div>'
-    +'<div class="photo-loading-step">2. Ik analyseer uitstraling, energie en algemene indruk.</div>'
-    +'<div class="photo-loading-step">3. Ik zet dat om naar je fotoanalyse en verbinding-uitleg.</div>'
-    +'</div>'
-    +'</div>';
-}
-function buildAdviceContextPayload(name,d,msgs){
-  var lines=[];
-  var meta=(d&&d.meta)||{};
-  var relType=String(meta.relationship_type||'').trim();
-  var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
-  var summary=String((d&&d.summary)||'').trim();
-  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,320));
-  var catSnips=[];
-  if(d&&d.categories){
-    Object.values(d.categories).forEach(function(cat){
-      Object.values(cat||{}).forEach(function(v){
-        var t=String(v||'').trim();
-        if(t)catSnips.push(t.replace(/\s+/g,' ').substring(0,180));
-      });
-    });
-  }
-  if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,6).join(' | ').substring(0,900));
-  var recentFacts=(msgs||[])
-    .filter(function(m){return m.role==='user';})
-    .map(function(m){return String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
-    .filter(Boolean)
-    .slice(-8)
-    .map(function(t){return '- '+t.substring(0,180);});
-  if(recentFacts.length)lines.push('Recente signalen:\n'+recentFacts.join('\n'));
-  var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
-  if(name!=='OWN Sense'){
-    if(stageNow)payload+='\nFamilierelatie: '+stageLabel(stageNow);
-    if(relType)payload+='\nRelatietype: '+relType;
-  }
-  if(lines.length)payload+='\n'+lines.join('\n');
-  return payload;
-}
-function dossierHasAdviceInput(name){
-  var d=S.pdata[name];
-  if(!d)return false;
-  if((d.count||0)>0)return true;
-  var sum=String(d.summary||'').trim();
-  if(sum)return true;
-  if(d.categories){
-    var cats=d.categories;
-    for(var ck in cats){
-      if(!cats.hasOwnProperty(ck))continue;
-      var cat=cats[ck]||{};
-      for(var fk in cat){
-        if(!cat.hasOwnProperty(fk))continue;
-        if(String(cat[fk]||'').trim())return true;
-      }
-    }
-  }
+  ${""}
   return false;
 }
 function renderAdviceEmptyState(name){
@@ -5154,7 +5022,7 @@ function renderAdviceEmptyState(name){
     +'<div style="font-size:34px;margin-bottom:10px">💬</div>'
     +'<div style="font-size:17px;font-weight:800;color:#333;margin-bottom:10px">Waarom je nog geen advies ziet</div>'
     +'<p style="font-size:14px;color:#555;line-height:1.55;margin:0 auto 14px;max-width:340px;text-align:left">FamilySensei bouwt advies op basis van <strong>jouw echte input</strong> over <strong>'+escHTML(label)+'</strong>: berichten in de tijdlijn (via Vertel), wat je op tab <strong>Profiel</strong> invult, en je profielgegevens. Zonder minimaal één bron is er niets om op te baseren — dan blijft dit bewust leeg.</p>'
-    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij date of wat je voelt, of vul je categorieën op tab Profiel in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op tab Profiel in.')+'</p>'
+    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij je voelt, of vul je categorieën op tab Profiel in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op tab Profiel in.')+'</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px;max-width:340px;margin:0 auto">'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';S.vertelGesprekDossier=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel, voeg een tijdlijnbericht toe</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'profiel\')">📋 Tab Profiel — invulvakjes &amp; eigenschappen</button>'
@@ -5325,7 +5193,7 @@ function plannerAutoAnswersFor(name){
     focus:''
   };
   if(stage==='eerste_date'){
-    base.idea='eerste date';
+    base.idea='eerste ontmoeting';
     base.mood='luchtig en ontspannen';
     base.duration=base.duration||'2 à 3 uur';
     base.focus='op gemak leren kennen';
@@ -5368,7 +5236,7 @@ function plannerAutoAnswersFor(name){
 function plannerIdeaGuidance(idea){
   var v=String(idea||'').toLowerCase();
   if(v.indexOf('restaurant')>=0||v.indexOf('eten')>=0||v.indexOf('diner')>=0||v.indexOf('tapas')>=0){
-    return 'Als het idee richting restaurant of eten gaat, schrijf dan als een echte date-concierge: gebruik volwassen, vloeiende zinnen en schets een avond die verzorgd, geloofwaardig en uitnodigend aanvoelt. Maak het voorstel verleidelijk en beeldend, alsof iemand meteen zin krijgt om te reserveren. Denk aan type plek, sfeer aan tafel, welk ritme goed werkt, wat je eventueel deelt en welk soort buurt of setting het best past.';
+    return 'Als het idee richting restaurant of eten gaat, schrijf dan als een echte event-planner: gebruik volwassen, vloeiende zinnen en schets een avond die verzorgd, geloofwaardig en uitnodigend aanvoelt. Maak het voorstel verleidelijk en beeldend, alsof iemand meteen zin krijgt om te reserveren. Denk aan type plek, sfeer aan tafel, welk ritme goed werkt, wat je eventueel deelt en welk soort buurt of setting het best past.';
   }
   if(v.indexOf('wandel')>=0||v.indexOf('hike')>=0){
     return 'Als het idee richting wandeling gaat, maak het routegericht maar sfeervol: gebruik geen droge checklist, wel vloeiende taal die het traject bijna voelbaar maakt. Laat het lezen als een klein vooruitzicht waar rust, uitzicht en timing samenkomen. Denk aan startpunt, lus of traject, duur, tempo, mooiste stuk van de route, waar je even stopt en wat er achteraf nog zacht kan aansluiten.';
@@ -5507,7 +5375,7 @@ function plannerFallbackProposals(name,answers,regionAnchors){
       {
         title:'Avond met een zachte verrassing in '+region,
         why:'Past bij '+person+' omdat dit voorstel niet zwaar of overdreven aanvoelt, maar wél het gevoel geeft dat er aandacht in zit. Het spanningsvolle zit hier niet in grote gestes, maar in de opbouw: eerst nieuwsgierigheid, daarna comfort, en pas dan een klein onverwacht detail.',
-        how:'Start in '+areaHints+' met een rustige eerste stop waar jullie kunnen landen zonder dat meteen alles duidelijk hoeft te zijn. Hou de toon licht en laat pas later op de avond het tweede deel zichtbaar worden, zodat het voelt alsof de date zich gaandeweg opent in plaats van op voorhand volledig vast te liggen.',
+        how:'Start in '+areaHints+' met een rustige eerste stop waar jullie kunnen landen zonder dat meteen alles duidelijk hoeft te zijn. Hou de toon licht en laat pas later op de avond het tweede deel zichtbaar worden, zodat het voelt alsof het bezoek zich gaandeweg ontvouwt in plaats van op voorhand volledig vast te liggen.',
         practical:'Reken op een avondvullend ritme zonder te veel verplaatsingen. Kies in '+areaHints+' één hoofdzône waar je makkelijk tussen twee korte delen kan schakelen, zodat het verrassingseffect blijft werken zonder logistieke stress.',
         bestMoment:'Begin iets vroeger dan klassiek, zodat er nog ruimte is voor opbouw en de avond niet meteen in een eindpunt schiet. Zo voelt het spannender, maar ook meer ontspannen.',
         prep:'Vertel net genoeg om vertrouwen te geven, maar hou één klein onderdeel voor jezelf. Bijvoorbeeld: zeg dat je een eerste plek in gedachten hebt en dat de rest vanzelf zal volgen als het goed voelt.',
@@ -5515,13 +5383,13 @@ function plannerFallbackProposals(name,answers,regionAnchors){
         warning:'Maak de verrassing niet te groot of te cryptisch. Het moet bijzonder voelen, niet onvoorspelbaar of controlerend.'
       },
       {
-        title:'Twee-delige date met spanningsboog in '+region,
+        title:'Twee-delige activiteit in '+region,
         why:'Geeft meer karakter dan één klassieke afspraak, omdat jullie eerst in een luchtige sfeer beginnen en daarna zacht opschuiven naar iets persoonlijkers. Dat past goed als je wil verbinden zonder dat het te zwaar of te voorspelbaar wordt.',
-        how:'Laat het eerste deel draaien rond beweging of een korte ontdekking in '+areaHints+', en laat het tweede deel rustiger en warmer aanvoelen. Net dat contrast maakt de date memorabel: eerst nieuwsgierigheid en energie, daarna vertraging en aandacht.',
+        how:'Laat het eerste deel draaien rond beweging of een korte ontdekking in '+areaHints+', en laat het tweede deel rustiger en warmer aanvoelen. Net dat contrast maakt het moment memorabel: eerst nieuwsgierigheid en energie, daarna vertraging en aandacht.',
         practical:'Houd beide delen dicht bij elkaar en kies één omgeving waar je makkelijk van sfeer kan wisselen. Je wil het gevoel van een mini-ervaring creëren, niet van een logistiek plan met te veel schakels.',
-        bestMoment:'Vroege avond werkt hier vaak het best, omdat je dan nog levendigheid hebt in de omgeving maar ook genoeg tijd om de date een tweede adem te geven.',
+        bestMoment:'Vroege avond werkt hier vaak het best, omdat je dan nog levendigheid hebt in de omgeving maar ook genoeg tijd om het moment een tweede adem te geven.',
         prep:'Denk vooraf na over het moment waarop je overschakelt van het eerste naar het tweede deel. Die overgang moet natuurlijk voelen, alsof het gewoon logisch is om nog even verder te gaan.',
-        extra:'Als het goed loopt, voelt dit voorstel bijna alsof jullie samen in een klein verhaal terechtkomen in plaats van in een standaard date. Net dat maakt het sterker dan een gewone tafel of wandeling alleen.',
+        extra:'Als het goed loopt, voelt dit voorstel bijna alsof jullie samen in een klein verhaal terechtkomen in plaats van een standaardafspraak. Net dat maakt het sterker dan een gewone tafel of wandeling alleen.',
         warning:'Forceer het tweede deel niet. De charme zit juist in het feit dat het als een uitnodigende mogelijkheid aanvoelt, niet als een vast script.'
       }
     ];
@@ -5530,7 +5398,7 @@ function plannerFallbackProposals(name,answers,regionAnchors){
     return [
       {
         title:'Rustige koffiebar in '+region,
-        why:'Past bij '+person+' omdat een korte koffiedate laagdrempelig is en toch ruimte geeft voor '+focus+'.',
+        why:'Past bij '+person+' omdat een korte koffieafspraak laagdrempelig is en toch ruimte geeft voor '+focus+'.',
         how:'Kies '+coffeeAnchors.first+'. Vraag een tafeltje binnen, liefst aan het raam of achteraan waar je rustig kan praten.',
         practical:'Spreek af voor '+duration+'. Mik in '+region+' op een plek met zachte sfeer, beperkte drukte en ruimte om nog iets te bestellen zonder haast. '+(setting==='binnen'?'Hou het binnen en knus.':'Kies een plek met binnenruimte en eventueel terrasoptie.')+' Tempo: '+pace+'.',
         bestMoment:'Late voormiddag of vroege namiddag werkt vaak het best voor een ontspannen eerste connectie.',
@@ -5581,7 +5449,7 @@ function plannerFallbackProposals(name,answers,regionAnchors){
       how:'Kies in '+areaHints+' een setting waar jullie eerst rustig kunnen landen en daarna vanzelf een klein stapje verder kunnen gaan. Denk aan een begin dat licht en toegankelijk is, gevolgd door een tweede laag waarin het gesprek of de sfeer net iets intenser wordt.',
       practical:'Werk binnen '+duration+' en hou alles in dezelfde zone. Kies een plek die goed bereikbaar is, waar je niet op de klok hoeft te kijken en waar nog een klein verlengstuk mogelijk is als de avond goed valt. Setting: '+setting+'. Budget: '+(answers.budget||'flexibel')+'.',
       bestMoment:'Kies een moment waarop er nog leven in de buurt zit, maar niet zoveel drukte dat het de sfeer overneemt. Zo voelt het levendig, zonder onrustig te worden.',
-      prep:'Denk vooraf één stap verder dan alleen de eerste plek. Net die kleine reserve-optie of dat kleine verlengstuk maakt het verschil tussen een gewone afspraak en een date die echt doordacht aanvoelt.',
+      prep:'Denk vooraf één stap verder dan alleen de eerste plek. Net die kleine reserve-optie of dat kleine verlengstuk maakt het verschil tussen een gewone afspraak en een ontmoeting die echt doordacht aanvoelt.',
       extra:'Het mooiste hier is dat het moment niet voelt als één blok, maar als een klein traject dat zich gaandeweg opent. Dat geeft vanzelf meer diepte en verbinding.',
       warning:'Probeer niet te veel te proppen in één avond. De kracht zit hier in ritme en dosering, niet in hoeveelheid.'
     },
@@ -6277,7 +6145,7 @@ function rPlanner(el){
     +'</div>';
 }
 
-function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
+function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('senses')">Advies / Actie</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
 
 function rNotifications(el){
   var q=(S.notificationsFilter||'all');
@@ -6405,23 +6273,15 @@ function rSenses(el){
     h+='<div class="sh">Familieleden</div>';
     h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
       +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
-      +'<option value="match_desc"'+(sortM==='match_desc'?' selected':'')+'>Hoogste match</option>'
-      +'<option value="match_asc"'+(sortM==='match_asc'?' selected':'')+'>Laagste match</option>'
+      
+      
       +'<option value="newest"'+(sortM==='newest'?' selected':'')+'>Nieuwste activiteit</option>'
       +'<option value="alpha"'+(sortM==='alpha'?' selected':'')+'>Alfabetisch</option>'
       +'<option value="age_young"'+(sortM==='age_young'?' selected':'')+'>Leeftijd · jongst eerst</option>'
       +'<option value="complete_desc"'+(sortM==='complete_desc'?' selected':'')+'>Meest volledig profiel</option>'
       +'</select></div>';
     h+='<div style="font-size:12px;color:#8a8f97;line-height:1.5;margin:-4px 0 10px">Acties: <strong>On hold</strong> = tijdelijk pauzeren, <strong>Sluit af</strong> = afronden en naar archief. <strong>Definitief verwijderen</strong> kan alleen in het archief.</div>';
-    if(allContacts.length>=2){
-      h+='<div style="margin:-2px 0 10px">'
-        +'<button class="'+(usageMode==='single'?'coach-save-other':'btn-r')+'" style="'+(usageMode==='single'?'':'max-width:240px;padding:9px 14px;font-size:13px;font-weight:800;box-shadow:0 6px 16px rgba(174,0,0,.22)')+'" onclick="toggleCompareMode()">'+(S.compareMode?'✕ Vergelijking sluiten':'⚖️ Vergelijk dossiers')+'</button>'
-        +'<div style="font-size:11px;color:#8a8f97;margin-top:6px">'+(usageMode==='single'
-          ?'Optioneel: gebruik vergelijken enkel wanneer je bewust tussen dossiers wil checken.'
-          :'Selecteer 2 tot 3 dossiers (max 3) om ze naast elkaar te vergelijken.')
-        +'</div>'
-        +'</div>';
-    }
+
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0,lastActive:null,meta:{}};
       var la=d.lastActive?timeAgo(d.lastActive):'Nog geen updates';
@@ -6442,12 +6302,11 @@ function rSenses(el){
         `+((d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';flex-shrink:0;margin-top:6px"></div>')+`
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title">`+disp+`</div>
-          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> · `+matchInline+` <span class="senses-actief-badge">Actief ✓</span>`+aandachtBadge+`</div>
+          <div class="srow-dossier-meta">`+escHTML(la)+` · <span style="color:var(--r);font-weight:700;cursor:pointer" onclick="event.stopPropagation();viewDossierTijdlijn('`+escJsStr(p)+`')">`+d.count+` berichten</span> <span class="senses-actief-badge">Actief ✓</span>`+aandachtBadge+`</div>
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
-          <button class="coach-save-other" title="Maak dit je focus-dossier" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="activateRelationshipFocus('${escJsStr(p)}')">🎯 Focus</button>
-          <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+                    <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
           <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${escJsStr(p)}')">On hold</button>
           <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${escJsStr(p)}')">Sluit af</button>
         </div>
@@ -6475,7 +6334,7 @@ Tip: typ een naam in Vertel en FamilySensei maakt automatisch een dossier aan!</
         ${(d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);opacity:.65;flex-shrink:0"/>':'<div class="sdot" style="background:'+col+';opacity:.55;flex-shrink:0;margin-top:6px"></div>'}
         <div class="srow-dossier-titleblock">
           <div class="srow-dossier-title" style="color:#666">`+dispA+`</div>
-          <div class="srow-dossier-meta"><span style="color:#999">`+escHTML(stLbl)+`</span> · <span style="color:#999;font-weight:600">`+(d.count||0)+` berichten</span> · `+matchInlineA+`</div>
+          <div class="srow-dossier-meta"><span style="color:#999">`+escHTML(stLbl)+`</span> · <span style="color:#999;font-weight:600">`+(d.count||0)+` berichten</span>`</div>
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
@@ -6488,12 +6347,7 @@ Tip: typ een naam in Vertel en FamilySensei maakt automatisch een dossier aan!</
       </div>`;
     });
   }
-  if(S.compareMode&&allContacts.length>=2){
-    h+='<div style="position:sticky;bottom:calc(74px + var(--sb));z-index:40;margin-top:10px;background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
-      +'<div style="font-size:12px;color:#666">'+S.compareDraft.length+'/3 geselecteerd (min. 2)</div>'
-      +'<button class="btn-r" style="max-width:240px;padding:9px 12px" onclick="startCompareFromSenses()" '+(S.compareDraft.length<2?'disabled':'')+'>Vergelijk geselecteerde dossiers</button>'
-      +'</div>';
-  }
+
   h+=`<div class="srow" style="justify-content:center;border:none" onclick="newSenseFromDrawer()">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   <span style="font-size:15px;font-weight:700;color:var(--r);margin-left:8px">Nieuw Sense aanmaken</span>
@@ -8043,7 +7897,6 @@ function rPromptCenter(el){
     {k:'tone_strict',title:'Tone streng',sub:'Toon instructie voor strenge adviesstijl'},
     {k:'planner_core',title:'Planner prompt',sub:'Primaire prompt voor planvoorstellen'},
     {k:'planner_fallback',title:'Planner fallback',sub:'Fallback als planner-call faalt'},
-    {k:'compare_core',title:'Vergelijk prompt',sub:'AI vergelijking tussen dossiers'},
     {k:'photo_analysis_core',title:'Fotoanalyse prompt',sub:'Prompt voor visuele foto-analyse'}
   ];
   var key=defs.some(function(x){return x.k===_promptCenterKey;})?_promptCenterKey:defs[0].k;
@@ -8144,42 +7997,13 @@ function rSettings(el){
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om FamilySensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
 <form class="ds-settings-api-form" onsubmit="event.preventDefault();return false;" autocomplete="off"><input class="form-input" id="akField" name="apikey" type="password" autocomplete="off" placeholder="sk-ant-api..." aria-label="Anthropic API Key" value="${S.apiKey||''}"/></form>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:16px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij hoge aandachtspunten.</div>
-<div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
-<select class="form-input" id="usageModeField" aria-label="Gebruiksmode">
-  <option value="multi" ${usageMode==='multi'?'selected':''}>Meerdere dossiers opvolgen</option>
-  <option value="single" ${usageMode==='single'?'selected':''}>Gezins-focus (1 dossier)</option>
-</select>
-<div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
-  <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
-  <select class="form-input" id="focusDossierField" aria-label="Focus dossier">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
-  <input class="form-input" id="focusBoostRegionField" type="text" placeholder="Regio / afstand" aria-label="Regio of afstand" value="${escHTML(boostPrefs.region||'')}"/>
-  <select class="form-input" id="focusBoostBudgetField" aria-label="Budget">
-    <option value="" ${!boostPrefs.budget?'selected':''}>Budget kiezen</option>
-    <option value="betaalbaar" ${boostPrefs.budget==='betaalbaar'?'selected':''}>Betaalbaar</option>
-    <option value="gemiddeld" ${boostPrefs.budget==='gemiddeld'?'selected':''}>Gemiddeld</option>
-    <option value="bijzonder" ${boostPrefs.budget==='bijzonder'?'selected':''}>Bijzonder</option>
-  </select>
-  <select class="form-input" id="focusBoostStyleField" aria-label="Sfeer en stijl">
-    <option value="" ${!boostPrefs.style?'selected':''}>Sfeer / stijl</option>
-    <option value="rustig" ${boostPrefs.style==='rustig'?'selected':''}>Rustig</option>
-    <option value="romantisch" ${boostPrefs.style==='romantisch'?'selected':''}>Romantisch</option>
-    <option value="actief" ${boostPrefs.style==='actief'?'selected':''}>Actief</option>
-    <option value="casual" ${boostPrefs.style==='casual'?'selected':''}>Casual</option>
-  </select>
-  <select class="form-input" id="focusBoostTimeField" aria-label="Beschikbare tijd">
-    <option value="" ${!boostPrefs.time?'selected':''}>Beschikbare tijd</option>
-    <option value="avond" ${boostPrefs.time==='avond'?'selected':''}>Avond</option>
-    <option value="halve dag" ${boostPrefs.time==='halve dag'?'selected':''}>Halve dag</option>
-    <option value="hele dag" ${boostPrefs.time==='hele dag'?'selected':''}>Hele dag</option>
-    <option value="weekend" ${boostPrefs.time==='weekend'?'selected':''}>Weekend</option>
-  </select>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-    <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings()">Gezins-focus activeren</button>
-    <span style="font-size:11px;color:#8a8f97;align-self:center;line-height:1.4">Alle andere familiedossiers gaan automatisch op on hold (OWN Sense blijft actief).</span>
-  </div>
-</div>
 <button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>
 ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-radius:12px;font-size:15px;color:#2E7D32">✅ API key actief!</div>':''}
+<div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
+  <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Dossiers</div>
+  <button type="button" class="form-btn" style="background:#B00020;border-color:#B00020;margin-bottom:8px" onclick="settingsAction('wipe-dossiers')">&#128465;&#65039; Wis alle dossiers</button>
+  <p style="font-size:13px;color:#888;margin:0 0 4px">Verwijder alle familiedossiers definitief. Dit kan niet ongedaan worden.</p>
+</div>
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
   <p style="font-size:15px;color:#666;margin-bottom:14px">Ingelogd als: <strong>${S.user?S.user.email:''}</strong></p>
@@ -8189,13 +8013,6 @@ ${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-r
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Extra's</div>
   <div class="g2">${extraHtml}</div>
 </div></div>`;
-  var usageEl=document.getElementById('usageModeField');
-  if(usageEl){
-    usageEl.onchange=function(){
-      var box=document.getElementById('focusConfigBox');
-      if(box)box.style.display=(usageEl.value==='single')?'':'none';
-    };
-  }
 }
 
 async function exportAllData(){
@@ -8214,7 +8031,7 @@ async function exportAllData(){
     var blob=new Blob([txt],{type:'application/json;charset=utf-8'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download='datesense_export_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    a.download='familysense_export_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -8279,36 +8096,7 @@ async function saveSettings(){
   try{
     var kEl=document.getElementById('akField');
     var k=kEl?kEl.value.trim():'';
-    var usageEl=document.getElementById('usageModeField');
-    var usage=usageEl?usageEl.value:'multi';
-    var boostPrefs={
-      region:(document.getElementById('focusBoostRegionField')||{}).value||'',
-      budget:(document.getElementById('focusBoostBudgetField')||{}).value||'',
-      style:(document.getElementById('focusBoostStyleField')||{}).value||'',
-      time:(document.getElementById('focusBoostTimeField')||{}).value||''
-    };
-    if(k){
-      S.apiKey=k;
-      localStorage.setItem('ds_ak',k);
-    }
-    S.adviceTone='eerlijk';
-    localStorage.removeItem('ds_advice_tone');
-    setUsageMode(usage);
-    if(usage!=='single')setFocusDossier('');
-    if(usage==='single'){
-      var fd=document.getElementById('focusDossierField');
-      var fName=fd?fd.value:'';
-      if(fName)setFocusDossier(fName);
-      setFocusRelationType(stageRelationTypeValue(getDossierStage(fName)));
-      setBoostPrefs(boostPrefs);
-      try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
-    }
-    toast('✅ Instellingen opgeslagen');
-    goScreen('home');
-  }finally{
-    setButtonSaveBusy(btn,false);
   }
-}
 async function activateRelationshipFocusFromSettings(){
   var fd=document.getElementById('focusDossierField');
   var name=fd?fd.value:'';
@@ -8399,130 +8187,9 @@ function cmpBestWorst(names){
   };
 }
 function rCompare(el){
-  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
-  if(cs.length<2){el.innerHTML='<div style="text-align:center;padding:80px 30px;color:var(--m)"><div style="font-size:48px;margin-bottom:16px">⚖️</div><p style="font-size:15px;line-height:1.6">Je hebt minimaal 2 familiedossiers nodig.<br><br><span style="color:var(--r);cursor:pointer;font-weight:600" onclick="newSenseFromDrawer()">+ Nieuw Sense aanmaken</span></p></div>';return;}
-  var picks=getCompareSelection().slice(0,3);
-  if(picks.length<2){
-    picks=[cs[0],cs[1]];
-    S.compareSelection=picks.slice();
-  }
-  var names=picks.filter(Boolean).slice(0,3);
-  var stats=names.map(compareDataStats);
-  var bestWorst=cmpBestWorst(names);
-  S.compareCurrent=names.slice();
-  function selHtml(idx){
-    var cur=names[idx]||'';
-    var opts='<option value="">—</option>'+cs.map(function(n){
-      return'<option value="'+n+'" '+(cur===n?'selected':'')+'>'+dn(n)+'</option>';
-    }).join('');
-    return '<select onchange="setComparePick('+idx+',this.value)" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;font-size:13px;font-family:inherit">'+opts+'</select>';
-  }
-  var headCells=names.map(function(n,i){
-    var st=stats[i];
-    return '<th style="padding:10px 8px;background:'+(i%2===0?'#FFF5F5':'#F5F5FF')+';border:1px solid var(--b);font-size:12px;text-align:center">'
-      +'<div style="font-weight:800;color:#333">'+dn(n)+'</div>'
-      +'<div style="font-size:11px;color:#7a7f88;margin-top:2px">'+st.msgCount+' berichten · '+st.catFilled+'/9 profiel</div>'
-      +'<div style="font-size:11px;margin-top:4px;color:'+(st.confidence>=70?'#1B5E20':st.confidence>=45?'#A55B00':'#9E9E9E')+'">Confidence '+st.confidence+'%</div>'
-      +(st.lowData?'<div style="font-size:10px;color:#B42318;margin-top:2px">Te weinig data</div>':'')
-      +'</th>';
-  }).join('');
-  var bodyRows=PK.map(function(k,i){
-    var vals=stats.map(function(st){return st.d.props[k]||0;});
-    var max=Math.max.apply(null,vals);
-    var cells=vals.map(function(v){
-      var star=(v>0&&v===max&&vals.filter(function(x){return x===max;}).length===1)?'⭐ ':'';
-      return '<td style="padding:9px 8px;border:1px solid var(--b);text-align:center;font-size:13px">'+star+cmpScoreVal(v)+'</td>';
-    }).join('');
-    return '<tr><td style="padding:9px 8px;border:1px solid var(--b);background:#FAFAFA;font-size:12px;color:#555;font-weight:700">'+PL[i]+'</td>'+cells+'</tr>';
-  }).join('');
-  var summaryRows=[
-    {label:'Profielvelden ingevuld',values:stats.map(function(st){return st.catFilled+'/9';})},
-    {label:'Eigenschappen met data',values:stats.map(function(st){return st.propsKnown+'/9';})},
-    {label:'Confidence',values:stats.map(function(st){return st.confidence+'%';})}
-  ].map(function(r){
-    return '<tr><td style="padding:8px;border:1px solid var(--b);background:#FAFAFA;font-size:12px;color:#666">'+r.label+'</td>'
-      +r.values.map(function(v){return'<td style="padding:8px;border:1px solid var(--b);text-align:center;font-size:12px;color:#555">'+v+'</td>';}).join('')
-      +'</tr>';
-  }).join('');
-  var warnings=stats.filter(function(st){return st.lowData;}).map(function(st,idx){
-    return '⚠️ '+dn(names[idx])+': beperkte data, conclusie minder betrouwbaar.';
-  }).join('<br>');
-  el.innerHTML='<div style="padding:16px 16px 32px">'
-    +'<div style="font-size:14px;font-weight:800;color:#333;margin-bottom:10px">Vergelijk dossiers naast elkaar</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+selHtml(0)+selHtml(1)+selHtml(2)+'</div>'
-    +'<div style="overflow:auto;border:1px solid var(--b);border-radius:12px;background:#fff">'
-      +'<table style="width:100%;border-collapse:collapse;min-width:'+(names.length===3?'760px':'620px')+'">'
-      +'<thead><tr><th style="padding:10px 8px;border:1px solid var(--b);background:#fafafa;font-size:12px;color:#666;text-align:left">KPI</th>'+headCells+'</tr></thead>'
-      +'<tbody>'+bodyRows+summaryRows+'</tbody></table>'
-    +'</div>'
-    +'<div id="cmpBox" style="background:var(--rl);border:1.5px solid #FFD5D5;border-radius:14px;padding:16px;margin-top:14px">'
-      +'<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:8px;letter-spacing:.5px">AI CONCLUSIE</div>'
-      +'<div style="font-size:14px;color:#444;line-height:1.6">Beste overlap: <strong>'+bestWorst.best+'</strong><br>Grootste afstand: <strong>'+bestWorst.worst+'</strong>'
-      +(warnings?('<div style="margin-top:8px;color:#B42318;font-size:12px">'+warnings+'</div>'):'')
-      +'</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
-      +'<button class="aa r" onclick="cmpAdviesCurrent()">AI Analyse met waarom</button>'
-      +'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[0])+'\')">Open '+dn(names[0])+'</button>'
-      +(names[1]?'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[1])+'\')">Open '+dn(names[1])+'</button>':'')
-      +(names[2]?'<button class="aa g" onclick="viewDossier(\''+escJsStr(names[2])+'\')">Open '+dn(names[2])+'</button>':'')
-      +'</div>'
-    +'</div>'
-  +'</div>';
+  el.innerHTML='<div style="text-align:center;padding:80px 30px;color:var(--m)"><div style="font-size:48px;margin-bottom:16px">&#x2139;&#xFE0F;</div><p style="font-size:15px;line-height:1.6">Vergelijken is niet beschikbaar in FamilySense.</p></div>';
 }
 
-async function cmpAdviesCurrent(){
-  var names=(S.compareCurrent||[]).filter(Boolean).slice(0,3);
-  if(names.length<2){toast('Kies minimaal 2 dossiers');return;}
-  if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
-  var box=document.getElementById('cmpBox');
-  if(box)box.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
-  try{
-    var payload=await Promise.all(names.map(async function(n){
-      var st=compareDataStats(n);
-      var d=st.d||{};
-      var catSnips=[];
-      Object.values(d.categories||{}).forEach(function(cat){
-        Object.values(cat||{}).forEach(function(v){
-          var t=String(v||'').trim();
-          if(t)catSnips.push(t);
-        });
-      });
-      var msgs=[];
-      try{msgs=await loadMsgs(n,{limit:30});}catch(_e){}
-      var recentFacts=msgs.filter(function(m){return m.role==='user';})
-        .slice(-10)
-        .map(function(m){return String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
-        .filter(Boolean)
-        .slice(-4);
-      return {
-        naam:dn(n),
-        props:d.props||{},
-        berichten:st.msgCount,
-        profielvelden:st.catFilled,
-        confidence:st.confidence,
-        low_data:st.lowData,
-        relatie_type:((d.meta||{}).relationship_type)||'',
-        context_input:catSnips.join(' | ').substring(0,1100),
-        recent_events:recentFacts
-      };
-    }));
-    var sys=getPromptText('compare_core');
-    var usageLine=buildUsageModeContextLine();
-    if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
-    var user='Data:\n'+JSON.stringify(payload);
-    var t=await callAPI(sys,[{role:'user',content:user}],700);
-    t=cleanCompareAiText(t);
-    if(box){
-      box.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--r);margin-bottom:10px;letter-spacing:.5px">AI CONCLUSIE MET WAAROM</div>'
-        +'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(t)+'</div>'
-        +'<div style="font-size:11px;color:#8a8f97;margin-top:10px">Confidence per dossier en data-waarschuwingen zie je in de tabel hierboven.</div>';
-    }
-  }catch(x){
-    if(box)box.innerHTML='<div style="color:#c00">Fout: '+x.message+'</div>';
-  }
-}
-
-// ══ API call ══════════════════════════════════════════════════════
 function getEffectiveAnthropicKey(){
   return String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
 }
@@ -9052,7 +8719,7 @@ function hideT(){var t=document.getElementById('typ');if(t)t.remove();}
 
 function quickFill(){
   var ex=[
-    'Had een toffe date met Elise gisteren. Ze was heel open maar ook wat afstandelijk aan het einde. Ik voel me zelf ook wat onzeker de laatste tijd.',
+    'Hadden een leuk familiebezoek bij Elise gisteren. Ze was heel open maar ook wat afstandelijk aan het einde. Ik voel me zelf ook wat onzeker de laatste tijd.',
     'Tom heeft al 3 dagen niet gereageerd op mijn berichtje. Ik weet niet of ik nog iets moet sturen of wachten.',
     'Ik merkte vandaag dat ik veel directer ben geworden in gesprekken. Katrien vroeg ook of we nog eens kunnen afspreken.'
   ];
