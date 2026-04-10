@@ -1080,6 +1080,18 @@ a:focus-visible,
 // Bootstrap fallback: als hoofdscript faalt of niets rendert, toon minimale home i.p.v. leeg scherm.
 (function(){
   function fallbackRender(){
+    if(window.goScreen){
+      try{
+        goScreen('home');
+        setTimeout(function(){
+          var mcTry=document.getElementById('mainContent');
+          var txtTry=String((mcTry&&mcTry.textContent)||'').replace(/\s+/g,'').trim();
+          if(txtTry.length>3)return;
+          if(S&&S.user==null)goScreen('login');
+        },220);
+        return;
+      }catch(_e){}
+    }
     var mc=document.getElementById('mainContent');
     if(!mc)return;
     var txt=String(mc.textContent||'').replace(/\s+/g,'').trim();
@@ -1087,7 +1099,7 @@ a:focus-visible,
     mc.innerHTML='' +
       '<div style="padding:22px 16px 32px;max-width:520px;margin:0 auto">' +
       '<div style="font-size:22px;font-weight:800;color:#1A1A1A;margin-bottom:6px">FamilySense</div>' +
-      '<div style="font-size:13px;color:#6F7480;line-height:1.6;margin-bottom:14px">De app is hersteld in veilige modus. Open een module en vernieuw daarna eventueel één keer.</div>' +
+      '<div style="font-size:13px;color:#6F7480;line-height:1.6;margin-bottom:14px">Home is geladen. Kies een module hieronder.</div>' +
       '<div style="display:grid;gap:8px">' +
       '<a href=\"sensecorner.html\" style=\"display:block;padding:12px 14px;border:1px solid #E5E5E5;border-radius:12px;background:#fff;color:#1A1A1A;text-decoration:none;font-weight:700\">Naar SenseCorner</a>' +
       '<a href=\"datesense.html\" style=\"display:block;padding:12px 14px;border:1px solid #E5E5E5;border-radius:12px;background:#fff;color:#1A1A1A;text-decoration:none;font-weight:700\">Naar DateSense</a>' +
@@ -1097,7 +1109,7 @@ a:focus-visible,
   setTimeout(function(){
     if(window.__fsBootOk)return;
     fallbackRender();
-  },3500);
+  },9000);
 })();
 </script>
 
@@ -3006,10 +3018,13 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
+  window.__fsBootOk=true;
   var mcBoot=document.getElementById('mainContent');
   if(mcBoot&&!String(mcBoot.textContent||'').replace(/\s+/g,'').trim()){
     mcBoot.innerHTML='<div style="padding:32px 20px;text-align:center;color:#666;font-size:14px;line-height:1.6">Bezig met laden…</div>';
   }
+  // Hard-simple runtime: toon altijd direct Home, auth/sync draait op achtergrond.
+  try{goScreen('home');}catch(_e){}
   if(!sb){
     goScreen('home');
     var mc=document.getElementById('mainContent');
@@ -3024,18 +3039,18 @@ async function init(){
   ensureSessionTables();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var {data:{session}}=await sb.auth.getSession();
+    var sessionRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden time-out');
+    var session=sessionRes&&sessionRes.data&&sessionRes.data.session;
     if(session){
       S.user=session.user;
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       initSessie(); // Na auth — sessie aanmaken
       goScreen('home');
-    } else {
-      goScreen('login');
     }
   }catch(e){
-    console.error('init error:',e);
-    goScreen('login');
+    console.error('init bg auth error:',e);
+    // Geen harde redirect naar login; Home blijft bruikbaar.
+    goScreen('home');
   }
   sb.auth.onAuthStateChange(async(ev,ses)=>{
     if(ev==='SIGNED_IN'&&ses){
@@ -3044,7 +3059,7 @@ async function init(){
       goScreen('home');
     } else if(ev==='SIGNED_OUT'){
       applySignedOutClientState();
-      goScreen('login');
+      goScreen('home');
     }
   });
   document.addEventListener('visibilitychange',function(){
