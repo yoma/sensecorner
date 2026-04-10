@@ -1229,7 +1229,7 @@ const OWN_CATS=[
       {q:'Hoe ben jij in contact met mensen? Hoe bouw jij vertrouwen op, en wat maakt verbinding soms lastig?',ph:'Bv: ik ben warm maar heb tijd nodig, of ik ben snel close maar trek me ook snel terug...'},
       {q:'Wat heb jij nodig van mensen die dicht bij jou staan, en wat doet het met jou als je dat niet krijgt?',ph:'Bv: ik heb erkenning nodig, of rust, of gewoon aanwezigheid en betrokkenheid...'},
       {q:'Zijn er patronen uit je jeugd of verleden die je nog terugziet in hoe je vandaag reageert op mensen?',ph:'Bv: ik ben snel bang verlaten te worden, of ik heb moeite om hulp te vragen...'},
-      {q:'Wat zijn voor jou absolute dealbreakers in elke vorm van relatie of vriendschap?',ph:'Bv: liegen, gebrek aan respect, mensen die nooit initiatief nemen of zich nooit kwetsbaar tonen...'}
+      {q:'Wat zijn voor jou absolute dealbreakers in elke familierelatie of vriendschap?',ph:'Bv: liegen, gebrek aan respect, mensen die nooit initiatief nemen of zich nooit kwetsbaar tonen...'}
     ]
   },
   {
@@ -1644,7 +1644,7 @@ function getQuickHelpStepsForScreen(screen){
     var own=S.viewDossier==='OWN Sense';
     return[
       {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Foto, Profiel en Advies.'},
-      {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
+      {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere verbinding.':'Hier zie je alle analyse en acties voor dit familielid.'},
       {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan: Vrij vertellen (Vertel-tab) en Advies. Dat is iets anders dan «Dikteer dit vak» bij een invulveld.'}
     ];
   }
@@ -2148,7 +2148,7 @@ function renderOwnAvatar(){
 function getProfileMetaCompletion(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
-  // Zelfde kernvelden voor OWN en contact: geboorte, regio, land, intentie. Foto = apart (foto-tab), niet verplicht voor dit vinkje.
+  // Zelfde kernvelden voor OWN en familielid: geboorte, regio, land, relatie t.o.v. OwnSense. Foto = apart (foto-tab), niet verplicht voor dit vinkje.
   var keys=['birthdate','city','country','intent'];
   var filled=keys.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
   return{filled:filled,total:keys.length,complete:filled===keys.length};
@@ -2343,7 +2343,7 @@ function detectNieuweNaam(tekst){
     });
   });
   var own=getOwnNameTokens();
-  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die','date','datesense']);
+  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die']);
 
   function isNewNameCandidate(w){
     if(!w)return false;
@@ -2567,7 +2567,7 @@ async function createNewDossierFromPick(useSuggested){
   var ctx=window._dossierPickCtx||{};
   if(ctx.type!=='save')return;
   var suggested=ctx.payload&&ctx.payload.suggestedName?ctx.payload.suggestedName:'';
-  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van het familielid (bv. Emma):',suggested||'');
   if(inputName===null)return;
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
@@ -3362,7 +3362,7 @@ function exportVertelThreadTxt(){
   if(!arr.length){toast('Geen berichten om te exporteren.');return;}
   var lines=[];
   arr.forEach(function(m){
-    var who=m.role==='user'?'Jij':'DATESENSE';
+    var who=m.role==='user'?'Jij':'FAMILYSENSE';
     lines.push(who+': '+stripTagsPlainExport(m.html));
   });
   var tEl=document.getElementById('sessieTitle');
@@ -3497,7 +3497,7 @@ function rDrawer(){
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
 </div>`;
   if(cs.length){
-    h+='<div class="dlbl">Contacten</div>';
+    h+='<div class="dlbl">Familieleden</div>';
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0};
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
@@ -3586,7 +3586,7 @@ function computeDossierMatchSummary(name){
   var col=SEG_DOT_COLORS[(ci+1)%SEG_DOT_COLORS.length];
   var matchLabel='',matchColor='#888';
   if(matchPct>=0){
-    matchLabel=matchPct>=80?'Sterke match':matchPct>=60?'Goede match':matchPct>=40?'Gemiddelde match':'Weinig overlap';
+    matchLabel=matchPct>=80?'Sterke verbinding':matchPct>=60?'Goede verbinding':matchPct>=40?'Gemiddelde verbinding':'Weinig overlap';
     matchColor=matchPct>=80?'#2E7D32':matchPct>=60?'#E07800':matchPct>=40?col:'#888';
   }
   return{isOwn:false,matchPct:matchPct,traitMatchPct:traitMatchPct,photoMatchPct:photoMatchPct,matchLabel:matchLabel,matchColor:matchColor};
@@ -3637,7 +3637,7 @@ function getSensesCardMatchHtml(name,opts){
   }else if(ms.matchPct===-1){
     line1='<span style="font-size:12px;color:#666;line-height:1.4">Match na invullen van <strong>OWN Sense</strong></span>';
   }else{
-    line1='<span style="font-size:12px;color:#666;line-height:1.4">Meer profielinfo voor betere match</span>';
+    line1='<span style="font-size:12px;color:#666;line-height:1.4">Meer profielinfo voor betere verbinding</span>';
   }
   var line2=incomplete
     ?'<div style="font-size:10px;color:#B00020;font-weight:600;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
@@ -4051,7 +4051,7 @@ async function saveProfileMetaForm(){
 
 async function newSenseFromDrawer(){
   closeDrawer();
-  var n=prompt('Naam van je eerste of nieuwe dossier (bv. "Lisa"):');
+  var n=prompt('Naam van het familielid (bv. "Emma"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
   await ensureP(nm);
@@ -4231,7 +4231,7 @@ function buildBoostInspirationCards(boost){
 }
 function buildUsageModeContextLine(){
   var mode=getUsageMode();
-  if(mode!=='single')return'Gebruiksmode: date modus (meerdere dossiers mogelijk).';
+  if(mode!=='single')return'Gebruiksmode: gezins-modus (meerdere dossiers mogelijk).';
   var fd=getFocusDossier();
   var rt=getFocusRelationType();
   var base='Gebruiksmode: gezins-focus actief';
@@ -4481,7 +4481,7 @@ function openStageFocusModal(name,stage){
   sub.innerHTML='Je zette <strong>'+escHTML(dn(name))+'</strong> op <strong>'+escHTML(stageLabel(stage))+'</strong>. Wil je overschakelen naar gezins-focus? Andere actieve dossiers kan je dan automatisch op on hold zetten.';
   opts.innerHTML=''
     +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'activate\')"><span class="save-modal-dot" style="background:#AE0000"></span><span style="flex:1"><strong>Ja, activeer gezins-focus</strong><br><span style="font-size:12px;color:#666">Je kiest dit dossier als focus en kan andere actieve dossiers automatisch pauzeren.</span></span></button>'
-    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nee, nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in date modus en krijgt later opnieuw een voorstel.</span></span></button>';
+    +'<button class="save-modal-opt" onclick="handleStageFocusChoice(\'later\')"><span class="save-modal-dot" style="background:#888"></span><span style="flex:1"><strong>Nee, nog niet</strong><br><span style="font-size:12px;color:#666">Je blijft in gezins-modus en krijgt later opnieuw een voorstel.</span></span></button>';
   modal.classList.add('show');
 }
 function closeStageFocusModal(){
@@ -4637,11 +4637,11 @@ function buildCoachTasks(){
       if(!hasPhotoUrl&&!hasAnPhotos){
         tasks.push({id:'sense-foto-'+p,type:'s',prio:pr,dossier:p,msg:'Voeg een <strong>foto</strong> toe voor '+escHTML(person)+' (profiel of analyse) — betere visuele context.',openMsg:'Nog openstaand: nog geen foto voor <strong>'+escHTML(person)+'</strong>.',link:'Tab Foto →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }else if((d.count||0)>=6){
-        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+escHTML(person)+' — verfijnt je match-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+escHTML(person)+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
+        tasks.push({id:'sense-foto-analyse-'+p,type:'s',prio:'low',dossier:p,msg:'Laat een <strong>fotoanalyse</strong> lopen voor '+escHTML(person)+' — verfijnt je verbinding-uitleg.',openMsg:'Nog openstaand: fotoanalyse voor <strong>'+escHTML(person)+'</strong>.',link:'Fotoanalyse →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('foto');},120)"});
       }
     }
     if(false/*family:n/a*/){
-      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+escHTML(person)+'</strong> staat op "geen contact". Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+escHTML(person)+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
+      tasks.push({id:'check-reopen-'+p,type:'c',prio:'low',dossier:p,msg:'<strong>'+escHTML(person)+'</strong> is inactief. Wil je dit dossier op on hold/gesloten zetten?',openMsg:'Nog openstaand: kies een finale status voor <strong>'+escHTML(person)+'</strong>.',link:'Open dossier →',action:"viewDossier('"+escJsStr(p)+"')"});
     }
     var autoPlanTask=plannerAutoTaskFor(p);
     if(autoPlanTask)tasks.push(autoPlanTask);
@@ -5029,7 +5029,7 @@ function rHome(el){
         ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer gezins-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor gezins-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
-          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
+          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer gezins-modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
       }
     </div>
   </div>`:''}
@@ -5053,7 +5053,7 @@ function rHome(el){
   </button>
 
   <p class="home-vertel-copy" style="font-size:14px;color:var(--m);line-height:1.65;margin-bottom:0">
-    Vertel me wat je voelt of over je contacten.<br>
+    Vertel me wat er speelt — over jezelf of een familielid.<br>
     Ik sorteer het automatisch naar het juiste dossier.
   </p>
   ${notesHtml}
@@ -5088,7 +5088,7 @@ function renderPhotoAnalysisLoadingCard(photoCount){
     +'<div class="photo-loading-steps">'
     +'<div class="photo-loading-step">1. Ik bereid de foto voor zodat ze vlot verwerkt kan worden.</div>'
     +'<div class="photo-loading-step">2. Ik analyseer uitstraling, energie en algemene indruk.</div>'
-    +'<div class="photo-loading-step">3. Ik zet dat om naar je fotoanalyse en match-uitleg.</div>'
+    +'<div class="photo-loading-step">3. Ik zet dat om naar je fotoanalyse en verbinding-uitleg.</div>'
     +'</div>'
     +'</div>';
 }
@@ -6402,7 +6402,7 @@ function rSenses(el){
     h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Gezins-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. FamilySensei volgt nu je gezinsrelatie met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
   }
   if(cs.length){
-    h+='<div class="sh">Contacten</div>';
+    h+='<div class="sh">Familieleden</div>';
     h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
       +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
       +'<option value="match_desc"'+(sortM==='match_desc'?' selected':'')+'>Hoogste match</option>'
@@ -6456,7 +6456,8 @@ function rSenses(el){
       </div>`;
     });
   } else {
-    h+=`<div class="sh">Contacten</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">Nog geen contacten.<br>Typ iets in Vertel en ik maak automatisch een dossier aan!</p></div>`;
+    h+=`<div class="sh">Familieleden</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">Nog geen familieleden.
+Tip: typ een naam in Vertel en FamilySensei maakt automatisch een dossier aan!</p></div>`;
   }
   if(archived.length){
     h+='<div class="sh">On hold / Afgesloten</div>';
@@ -6610,7 +6611,7 @@ async function rDossier(el){
   }
   if(!isOwn){
     var stageNow=getDossierStage(name);
-    header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" aria-label="Relatiestatus" onchange="updateDossierStageFromUI(\''+escJsStr(name)+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
+    header+='<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><select id="dosStageSel" aria-label="Familierelatie t.o.v. OwnSense" onchange="updateDossierStageFromUI(\''+escJsStr(name)+'\')" style="font-size:11px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:#fff;color:#555;font-family:inherit">'
       +'<option value="kind" '+(stageNow==='kind'?'selected':'')+'>Kind</option>'
       +'<option value="zus" '+(stageNow==='zus'?'selected':'')+'>Zus</option>'
       +'<option value="broer" '+(stageNow==='broer'?'selected':'')+'>Broer</option>'
@@ -7112,7 +7113,7 @@ async function loadTab(name,tab,d){
     } else {
       html+='<div style="background:#FFF5F5;border:1px solid #FFD6D6;border-radius:12px;padding:12px 14px;color:#7A2A2A;font-size:13px">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
-        +'<div><strong>⚠️ Nog geen fotoanalyse</strong><div style="font-size:12px;color:#965252;margin-top:2px">Analyse helpt je om match-uitleg en visuele context te verfijnen.</div></div>'
+        +'<div><strong>⚠️ Nog geen fotoanalyse</strong><div style="font-size:12px;color:#965252;margin-top:2px">Analyse helpt je om verbinding-uitleg en visuele context te verfijnen.</div></div>'
         +'<button class="btn-r" style="max-width:170px;padding:8px 12px;'+(_photoAnalysisBusy[name]?'opacity:.7;pointer-events:none;':'')+'" onclick="analyseerFotoVoorDossier(\''+escJsStr(name)+'\')">'+(_photoAnalysisBusy[name]?'Bezig met analyseren...':'Nu analyseren')+'</button>'
         +'</div>'
         +'</div>';
@@ -7599,7 +7600,7 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
         if(diffs.length>=1){
           var pct=Math.round(diffs.reduce(function(a,b){return a+b;},0)/diffs.length);
           pct=Math.min(98,Math.max(10,pct));
-          var lbl=pct>=80?'Sterke match':pct>=60?'Goede match':pct>=40?'Gemiddelde match':'Weinig overlap';
+          var lbl=pct>=80?'Sterke verbinding':pct>=60?'Goede verbinding':pct>=40?'Gemiddelde verbinding':'Weinig overlap';
           var col2=pct>=80?'#2E7D32':pct>=60?'#E07800':'#888';
           var goed2=[],slecht2=[];
           PK.forEach(function(k,i){
@@ -7981,7 +7982,7 @@ async function rVertel(el){
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
     var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.</div>`;
+    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">FAMILYSENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.</div>`;
     ca.appendChild(welcome);
 
     if(!S.apiKey){
@@ -8004,7 +8005,7 @@ async function rVertel(el){
       d.className=m.role==='user'?'msg-user':'msg-ai';
       d.innerHTML=m.role==='user'
         ?`<div class="bbl-user">${escRestore(m.html)}</div>`
-        :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${m.html}</div>`;
+        :`<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div>${m.html}</div>`;
       ca.appendChild(d);
     });
 
@@ -8234,7 +8235,7 @@ function settingsAction(action){
     var aboutMsg=[
       'Over DateSense',
       '',
-      'DateSense helpt je inzichten krijgen in jezelf en je contacten op basis van profielinput, context en advies.',
+      'DateSense helpt je inzichten krijgen in jezelf en je familieleden op basis van profielinput, context en advies.',
       '',
       'Versie: '+getAppBuildDisplay()
     ].join('\n');
@@ -9022,7 +9023,7 @@ function addMsg(role,html){
       .replace(/'/g,'&#39;');
   }
   // Escape alleen user's raw input; AI output mag (voor nu) wel HTML bevatten.
-  d.innerHTML=role==='user'?`<div class="bbl-user">${esc(html)}</div>`:`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}</div>`;
+  d.innerHTML=role==='user'?`<div class="bbl-user">${esc(html)}</div>`:`<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div>${html}</div>`;
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
   // Bewaar in sessie zodat de chat bewaard blijft bij navigeren weg/terug
   if(!S.vertelMsgs)S.vertelMsgs=[];
@@ -9210,7 +9211,7 @@ function buildProfielContactHtml(name,d){
   }else if(ms.matchPct===-1){
     html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Vul eerst <strong>OWN Sense</strong> in om een matchscore te zien.</div>';
   }else{
-    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen) geeft een betere match.</div>';
+    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen) geeft een betere verbinding.</div>';
   }
   if(profielIncomplete){
     html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 12px">Profiel nog niet volledig ingevuld</div>';
@@ -9330,7 +9331,7 @@ function normalizeSegmentDossier(suggested){
 async function fetchVertelSegmentation(userText){
   if(!S.apiKey)return null;
   var dossiers=['OWN Sense'].concat(S.profiles.filter(function(p){return p!=='OWN Sense';}));
-  var sys='Je bent een classificatie-assistent voor DateSense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; contactnamen = dossiers zoals in de lijst). '
+  var sys='Je bent een classificatie-assistent voor FamilySense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; contactnamen = dossiers zoals in de lijst). '
     +'Regels: (1) elk fragment is letterlijke tekst uit het bericht (geen parafrase). (2) Alle fragmenten samen dekken het volledige bericht zonder overlap. '
     +'(3) Minimaal 2 fragmenten als er inhoud voor meerdere onderdelen is; anders 1 fragment. '
     +'(4) dossier moet exact één van deze waarden zijn: '+JSON.stringify(dossiers)+'. '
@@ -9539,7 +9540,7 @@ async function sendMsg(){
   if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
   var coachCtxFinal=(usageLine?usageLine+'\n':'')+(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent FamilySensei, de persoonlijke gezinscoach van de gebruiker.'
-    +' Je kent de gebruiker en al zijn contacten via hun dossiers.'
+    +' Je kent de gebruiker en al zijn familieleden via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier — zeg nooit dat je die persoon niet in de dossiers hebt.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
@@ -9749,7 +9750,7 @@ async function bevestigNieuwe(dosName,toevoegen){
 function toonHoeWerktDit(){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var d=document.createElement('div');d.className='msg-ai';
-  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>De gekleurde stukjes tonen over wie elk deel van je bericht gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Bevestig &amp; opslaan</strong>.</div>';
+  d.innerHTML='<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div>De gekleurde stukjes tonen over wie elk deel van je bericht gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Bevestig &amp; opslaan</strong>.</div>';
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
 }
 
@@ -9786,7 +9787,7 @@ function clearChat(){
   if(!ca)return;
   ca.innerHTML='';
   var d=document.createElement('div');d.className='msg-ai';
-  d.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>Je start een nieuw Vertel-gesprek. Wat wil je kwijt?</div>';
+  d.innerHTML='<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div>Je start een nieuw Vertel-gesprek. Wat wil je kwijt?</div>';
   ca.appendChild(d);
   // Welkomstbericht ook in S.vertelMsgs zetten
   S.vertelMsgs.push({role:'ai',html:'Je start een nieuw Vertel-gesprek. Wat wil je kwijt?'});
@@ -9880,7 +9881,7 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
   var ca=document.getElementById('chatArea');
   if(ca){
     var progDiv=document.createElement('div');progDiv.className='msg-ai';progDiv.id='wa-progress';
-    progDiv.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div><span id="wa-prog-txt">Deel 1/'+chunks.length+' verwerken...</span></div>';
+    progDiv.innerHTML='<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div><span id="wa-prog-txt">Deel 1/'+chunks.length+' verwerken...</span></div>';
     ca.appendChild(progDiv);ca.scrollTop=ca.scrollHeight;
   }
 
@@ -9917,7 +9918,7 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
 
   var progEl=document.getElementById('wa-progress');
   if(progEl){
-    progEl.querySelector('.bbl-ai').innerHTML='<div class="sndr">DATESENSE</div>'
+    progEl.querySelector('.bbl-ai').innerHTML='<div class="sndr">FAMILYSENSE</div>'
       +'✅ <strong>Klaar!</strong> '+chunks.length+' delen van het gesprek opgeslagen in <strong>'+dn(dosName)+'</strong>.<br>'
       +'De eigenschappen en invulvakjes worden nu bijgewerkt.';
   }
@@ -10864,7 +10865,7 @@ function renderVertelSessionFromRows(rows){
     }else{
       var aiWrap=document.createElement('div');
       aiWrap.className='msg-ai';
-      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+escSess(String(m.content||'')).replace(/\n/g,'<br>')+'</div>';
+      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">FAMILYSENSE</div>'+escSess(String(m.content||'')).replace(/\n/g,'<br>')+'</div>';
       ca.appendChild(aiWrap);
     }
   });
@@ -11118,7 +11119,7 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
   var suggested=data.suggestedName||'';
-  var inputName=useSuggested&&suggested?suggested:prompt('Naam van nieuw dossier (bv. Katrien):',suggested||'');
+  var inputName=useSuggested&&suggested?suggested:prompt('Naam van het familielid (bv. Emma):',suggested||'');
   if(inputName===null)return;
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
