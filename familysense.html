@@ -899,20 +899,20 @@ a:focus-visible,
 
   <!-- Bottom nav -->
   <div class="nav">
-    <button class="tab active" id="tab-home" onclick="goScreen('home')">
+    <button class="tab active" id="tab-home" onclick="if(window.goScreen){goScreen('home')}else{location.href='familysense.html'}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg><span>Home</span>
     </button>
-    <button class="tab" id="tab-senses" onclick="goScreen('senses')" title="Mijn Senses">
+    <button class="tab" id="tab-senses" onclick="if(window.goScreen){goScreen('senses')}else{location.href='familysense.html'}" title="Mijn Senses">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
       <span>Senses</span>
     </button>
-    <button class="tab" id="tab-own" onclick="goScreen('own')" title="OWN Sense">
+    <button class="tab" id="tab-own" onclick="if(window.goScreen){goScreen('own')}else{location.href='ownsense.html'}" title="OWN Sense">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
       <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
       <span>OwnSense</span>
     </button>
-    <button class="tab" id="tab-vertel" onclick="goScreen('vertel')">
+    <button class="tab" id="tab-vertel" onclick="if(window.goScreen){goScreen('vertel')}else{location.href='familysense.html'}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg><span>Vertel</span>
     </button>
 
@@ -1075,6 +1075,31 @@ a:focus-visible,
     </div>
   </div>
 </div>
+
+<script>
+// Bootstrap fallback: als hoofdscript faalt of niets rendert, toon minimale home i.p.v. leeg scherm.
+(function(){
+  function fallbackRender(){
+    var mc=document.getElementById('mainContent');
+    if(!mc)return;
+    var txt=String(mc.textContent||'').replace(/\s+/g,'').trim();
+    if(txt.length>3)return;
+    mc.innerHTML='' +
+      '<div style="padding:22px 16px 32px;max-width:520px;margin:0 auto">' +
+      '<div style="font-size:22px;font-weight:800;color:#1A1A1A;margin-bottom:6px">FamilySense</div>' +
+      '<div style="font-size:13px;color:#6F7480;line-height:1.6;margin-bottom:14px">De app is hersteld in veilige modus. Open een module en vernieuw daarna eventueel één keer.</div>' +
+      '<div style="display:grid;gap:8px">' +
+      '<a href=\"sensecorner.html\" style=\"display:block;padding:12px 14px;border:1px solid #E5E5E5;border-radius:12px;background:#fff;color:#1A1A1A;text-decoration:none;font-weight:700\">Naar SenseCorner</a>' +
+      '<a href=\"datesense.html\" style=\"display:block;padding:12px 14px;border:1px solid #E5E5E5;border-radius:12px;background:#fff;color:#1A1A1A;text-decoration:none;font-weight:700\">Naar DateSense</a>' +
+      '<a href=\"ownsense.html\" style=\"display:block;padding:12px 14px;border:1px solid #E5E5E5;border-radius:12px;background:#fff;color:#1A1A1A;text-decoration:none;font-weight:700\">Naar OWNSense</a>' +
+      '</div></div>';
+  }
+  setTimeout(function(){
+    if(window.__fsBootOk)return;
+    fallbackRender();
+  },3500);
+})();
+</script>
 
 <script>
 // ══ Config ══════════════════════════════════════════════════════
@@ -3026,6 +3051,7 @@ async function init(){
     if(document.visibilityState==='hidden')flushPendingAutosaves();
   });
   window.addEventListener('pagehide',function(){flushPendingAutosaves();});
+  window.__fsBootOk=true;
   setTimeout(function(){ensureRenderHealthy('init');},120);
 }
 
