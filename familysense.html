@@ -839,6 +839,32 @@ a:focus-visible,
   probe.id='fsBootProbe';
   probe.style.cssText='position:fixed;top:calc(32px + var(--st));right:10px;z-index:121;background:#fff7d6;border:1px solid #f0d27a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700;color:#7a5a00';
   probe.textContent='FamilySense laadt...';
+  function showBootError(msg){
+    try{
+      probe.textContent='Scriptfout gedetecteerd';
+      probe.style.background='#fff1f1';
+      probe.style.borderColor='#efb1b1';
+      probe.style.color='#8f1f1f';
+      var box=document.getElementById('fsBootErrorBox');
+      if(!box){
+        box=document.createElement('div');
+        box.id='fsBootErrorBox';
+        box.style.cssText='position:fixed;top:calc(56px + var(--st));right:10px;max-width:min(92vw,640px);z-index:122;background:#fff6f6;border:1px solid #efb1b1;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.45;color:#7a1f1f;white-space:pre-wrap;box-shadow:0 4px 14px rgba(0,0,0,.08)';
+        document.body.appendChild(box);
+      }
+      box.textContent='FamilySense runtime fout:\n'+String(msg||'Onbekend');
+    }catch(_e){}
+  }
+  window.addEventListener('error',function(ev){
+    var m=(ev&&ev.message?ev.message:'Script error')
+      +(ev&&ev.filename?('\nBestand: '+ev.filename):'')
+      +(ev&&ev.lineno?('\nLijn: '+ev.lineno+(ev.colno?(':'+ev.colno):'')):'');
+    showBootError(m);
+  });
+  window.addEventListener('unhandledrejection',function(ev){
+    var reason=ev&&ev.reason;
+    showBootError('Promise rejection: '+(reason&&reason.message?reason.message:String(reason||'onbekend')));
+  });
   document.addEventListener('DOMContentLoaded',function(){
     document.body.appendChild(probe);
     setTimeout(function(){
