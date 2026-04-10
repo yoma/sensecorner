@@ -3293,7 +3293,16 @@ async function loadMsgs(pn,opt){
     .eq('profile_name',pn)
     .order('created_at',{ascending:asc})
     .limit(limit);
-  var {data,error}=await q;
+  var res;
+  try{
+    res=await withTimeout(q,12000,'Berichten laden timeout');
+  }catch(te){
+    console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+    if(o.throwOnError)throw te;
+    return [];
+  }
+  var data=res&&res.data;
+  var error=res&&res.error;
   if(error){
     console.warn('loadMsgs failed for',pn,error.message||error);
     if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
@@ -9570,16 +9579,16 @@ async function sendMsg(){
     }
     hideT();
 
-    // Sla sessie-bericht op in Supabase (stil als geen sessie)
+    // Sla sessie-bericht op in Supabase (stil als geen sessie) — met korte timeout zodat UI niet blokkeert.
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
     try{
-      var sid=await ensureActiveSessionForMessage(txt);
+      var sid=await withTimeout(ensureActiveSessionForMessage(txt),5000,'sessie-timeout');
       if(sid){
-        userSessionMsgId=await saveSessionMsg(sid,'user',txt);
-        aiSessionMsgId=await saveSessionMsg(sid,'ai',raw);
+        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),5000,'sessie-msg-timeout');
+        aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),5000,'sessie-msg-timeout');
       }
-    }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
+    }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
     try{
       var sidLive=S.currentSessionId;
       if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){
@@ -9592,8 +9601,11 @@ async function sendMsg(){
 
     if(forcedDossier){
       window._pendingSegmenten=null;
-      await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
       addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
+      _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId).catch(function(e){
+        console.warn('auto-opslaan gefaald',e);
+        toast('Opslaan liep vast, probeer opnieuw via dossier.');
+      });
     }else if(segData&&segData.length>=2){
       window._pendingSegmenten=segData;
       addMsg('ai',formatAiCard(raw)+buildSegmentReviewCardHtml());
@@ -9607,8 +9619,11 @@ async function sendMsg(){
         if(voorgesteldSticky&&voorgesteldSticky!==sticky){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
-        await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
         addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
+        _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId).catch(function(e){
+          console.warn('sticky opslaan gefaald',e);
+          toast('Opslaan liep vast, probeer opnieuw via dossier.');
+        });
         didSticky=true;
       }
       if(!didSticky){
@@ -9640,6 +9655,10 @@ async function sendMsg(){
     addMsg('ai','Er ging iets mis: '+x.message);
   }finally{
     S.busy=false;
+    try{
+      var _inp=document.getElementById('msgInput');
+      if(_inp&&S.screen==='vertel')_inp.focus();
+    }catch(_e){}
   }
 }
 

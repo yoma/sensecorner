@@ -1512,6 +1512,26 @@ function ensureRenderHealthy(source){
   }
 }
 
+function forceUiRecovery(){
+  try{
+    closeDrawer();
+  }catch(_e){}
+  try{
+    closeSidebar();
+  }catch(_e2){}
+  var ov=document.getElementById('ovl');
+  if(ov)ov.classList.remove('show');
+  var sOv=document.getElementById('sidebarOverlay');
+  if(sOv)sOv.classList.remove('show');
+  var mc=document.getElementById('mainContent');
+  if(!mc)return;
+  var txt=String(mc.textContent||'').replace(/\s+/g,'').trim();
+  var hasChild=!!(mc.children&&mc.children.length);
+  if(!hasChild||txt.length<=1){
+    goScreen(S.user?'home':'login');
+  }
+}
+
 function getMetaFor(name){
   var d=S.pdata[name]||{};
   return d.meta||{};
@@ -10910,6 +10930,7 @@ try{
   window.handleAiImportFile=handleAiImportFile;
   window.confirmAiImportSave=confirmAiImportSave;
   window.runAiImportSaveClick=runAiImportSaveClick;
+  window.forceUiRecovery=forceUiRecovery;
 }catch(e){console.warn('window exports:',e);}
 (function bindAiImportModalClicks(){
   var modal=document.getElementById('aiImportModal');
@@ -10935,6 +10956,26 @@ try{
 }catch(e){
   showFatalUi((e&&e.message)||'Initialisatie-fout');
 }
+
+// Extra robuustheid voor mobiele taps/lege render:
+// - nav buttons krijgen expliciete listeners
+// - herstel leeg scherm als main content onverwacht leeg blijft
+setTimeout(function(){
+  try{
+    [
+      ['tab-home','home'],
+      ['tab-senses','senses'],
+      ['tab-own','own'],
+      ['tab-vertel','vertel']
+    ].forEach(function(pair){
+      var el=document.getElementById(pair[0]);
+      if(!el)return;
+      el.addEventListener('click',function(){ goScreen(pair[1]); },{passive:true});
+      el.addEventListener('touchend',function(){ goScreen(pair[1]); },{passive:true});
+    });
+    forceUiRecovery();
+  }catch(_e){}
+},120);
 </script>
 </body>
 </html>
