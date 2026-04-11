@@ -907,7 +907,7 @@ a:focus-visible,
       <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
       <span>Senses</span>
     </button>
-    <button class="tab" id="tab-own" onclick="window.location.href='ownsense.html'" title="OWN Sense">
+    <button class="tab" id="tab-own" onclick="openOwnSenseEntryPoint()" title="OWN Sense">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
       <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
       <span>OwnSense</span>
@@ -3216,6 +3216,8 @@ async function loadAll(){
   scrubCrossAccountRuntimeState();
   updateNavTabIndicators();
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
+  try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
+  try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
 }
 
 async function ensureP(name){
@@ -3260,6 +3262,9 @@ async function saveP(name,props,count,categories,summary,meta){
       sync('ok');
       renderOwnAvatar();
       updateNavTabIndicators();
+      if(name==='OWN Sense'){
+        try{mirrorOwnSenseCatsToLocalStorage();}catch(_m){}
+      }
       return;
     }catch(e){
       lastErr=e;
@@ -3278,6 +3283,9 @@ async function saveMsg(pn,role,html){
   var {data,error}=await sb.from('sense_messages').insert({user_id:S.user.id,profile_name:pn,role,html}).select('id').single();
   if(error)throw new Error(error.message);
   sync('ok');
+  if(String(pn)==='OWN Sense'){
+    try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
+  }
   return data||null;
 }
 
@@ -3495,7 +3503,7 @@ function rDrawer(){
   var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Mijn Senses</div>
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
 <div class="dlbl">Persoonlijk</div>
-<div class="drow" onclick="window.location.href='ownsense.html'">
+<div class="drow" onclick="openOwnSenseEntryPoint()">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense</div>
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
@@ -3542,6 +3550,17 @@ function getProfielProgressCounts(dossierName){
     });
   }
   return{filled:filled,total:total,pct:total?Math.round(filled/total*100):0};
+}
+function ownSenseShowAsInAppDossier(){
+  var d=S.pdata&&S.pdata['OWN Sense'];
+  if(!d)return false;
+  var metaOk=(getProfileMetaCompletion('OWN Sense')||{}).complete;
+  var prog=getProfielProgressCounts('OWN Sense');
+  return !!(metaOk&&prog.total>0&&prog.filled===prog.total);
+}
+function openOwnSenseEntryPoint(){
+  if(ownSenseShowAsInAppDossier()){viewDossier('OWN Sense');return;}
+  window.location.href='ownsense.html';
 }
 function computeDossierMatchSummary(name){
   var d=S.pdata[name]||{props:{...DP},count:0,categories:{}};
@@ -3617,12 +3636,15 @@ function getSensesCardMatchHtml(name,opts){
   var metaOk=(getProfileMetaCompletion(name)||{}).complete;
   var incomplete=(total>0&&filled<total)||!metaOk;
   if(name==='OWN Sense'){
+    var dossierHint=ownSenseShowAsInAppDossier()
+      ?'<div style="font-size:10px;color:#1B5E20;margin-top:6px;line-height:1.35">Compleet — tik opent je <strong>dossier</strong> (tijdlijn, foto, profiel, advies). Voor de hub met 11 diepte-vragen: knop bovenaan het <strong>Profiel</strong>-tabblad.</div>'
+      :'<div style="font-size:10px;color:#8a8f97;margin-top:6px;line-height:1.35">Nog niet compleet — tik opent de <strong>OWN Sense-hub</strong> om verder te gaan.</div>';
     return'<div class="senses-match-inner" style="'+top+'">'
       +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Profiel</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
       +'<span style="font-size:13px;font-weight:700;color:#333">'+filled+'/'+total+' ingevuld</span>'
       +(incomplete?'<span style="font-size:10px;font-weight:600;color:#B00020">Nog niet volledig</span>':'<span style="font-size:10px;color:#1B5E20">Klaar ✓</span>')
-      +'</div></div>';
+      +'</div>'+dossierHint+'</div>';
   }
   if(opts.profielOnly){
     var topF='width:100%';
@@ -4045,7 +4067,7 @@ async function saveProfileMetaForm(){
     await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
     closeProfileModal();
     if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
-    else if(S.screen==='own'&&_profileModalFor==='OWN Sense')goScreen('own');
+    else if(S.screen==='own'&&_profileModalFor==='OWN Sense')window.location.href='ownsense.html';
     else renderOwnAvatar();
     updateNavTabIndicators();
     toast('✅ Profielgegevens opgeslagen');
@@ -6286,7 +6308,7 @@ function rPlanner(el){
     +'</div>';
 }
 
-function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="window.location.href='ownsense.html'">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
+function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="openOwnSenseEntryPoint()">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
 
 function rNotifications(el){
   var q=(S.notificationsFilter||'all');
@@ -6394,7 +6416,7 @@ function rSenses(el){
   var _sensesStrip={stripTopRule:true};
   var ownCardMatchHtml=getSensesCardMatchHtml('OWN Sense',_sensesStrip);
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
-<div class="srow srow-own-card" onclick="window.location.href='ownsense.html'">
+<div class="srow srow-own-card" onclick="openOwnSenseEntryPoint()">
   <div class="srow-dossier-main">
   <div class="srow-dossier-top">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
@@ -7852,7 +7874,6 @@ async function saveOwnCat(catId,silent){
       if(filled>0)cat2.classList.add('filled');
     }
 
-    mirrorOwnSenseCatsToLocalStorage();
     showAutoSaveIndicator(catId,true);
     var propsEl=document.getElementById('own-props-bars');
     if(propsEl){
@@ -8864,7 +8885,7 @@ async function confirmAiImportSave(){
     else if(trivial.length)toast('OWN Sense aangevuld.');
     else toast('OWN Sense opgeslagen.');
     closeAiImportModal();
-    if(S.screen==='own')goScreen('own');
+    if(S.screen==='own')window.location.href='ownsense.html';
   }catch(e){
     toast('Opslaan mislukt: '+(e&&e.message?e.message:String(e)));
   }finally{
@@ -9061,7 +9082,11 @@ function buildProfielOwnHtml(d){
   var metaC=getProfileMetaCompletion('OWN Sense');
   var html='';
   html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
-  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Vragenlijst en gegevens voor <strong>OWN Sense</strong>.</div>';
+  html+='<div style="margin:0 0 16px;padding:14px 16px;background:linear-gradient(145deg,#FFF8F8 0%,#F4F7FB 100%);border:1px solid #F0E0E0;border-radius:14px">'
+    +'<div style="font-size:14px;font-weight:800;color:var(--r);margin-bottom:8px">Volledige OWN Sense (hub + 11 diepte-vragen)</div>'
+    +'<p style="font-size:13px;color:#3d4450;line-height:1.6;margin:0 0 12px">De <strong>uitgebreide</strong> ervaring — welkomst, diepgaand gesprek, samenvatting, foto en centraal overzicht — zit in de aparte <strong>OWN Sense</strong>-pagina. Hieronder vul je de <strong>coach-categorieën</strong> aan (zelfde data; wordt meegenomen in advies en kan lokaal worden verrijkt met je hub-profiel).</p>'
+    +'<button type="button" class="btn-r" style="width:100%;padding:12px 14px;font-size:14px;font-weight:700;border-radius:11px;border:none;cursor:pointer;font-family:inherit" onclick="window.location.href=\'ownsense.html\'">Open OWN Sense-hub →</button></div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45"><strong>In dit dossier:</strong> profielgegevens + onderstaande thema’s. Gebruik beide plekken: hub voor overzicht en reflectie, hier voor snelle aanvulling tijdens DateSense.</div>';
   html+=buildProfileMetaAccordionHtml('OWN Sense',d);
   var firstOpenSet=!metaC.complete;
   var ownFilled=OWN_CATS.reduce(function(sum,cat){
@@ -9976,6 +10001,99 @@ async function updateContactCategories(dosName,tekst){
   }
 }
 
+/** Genoeg inhoud voor OWN-categorie-API: ≥40 tekens of ≥6 woorden (platte tekst, getrimd). */
+function ownSenseVertelRichEnoughForCategoryAI(t){
+  var s=(t||'').trim();
+  if(s.length>=40)return true;
+  var words=s.split(/\s+/).filter(function(w){return w.length>0;});
+  return words.length>=6;
+}
+
+/** Vertel → OWN Sense: vul OWN_CATS-velden uit vrije tekst (extra API-call). Alleen expliciete inhoud; lege strings als er niets over valt te halen. */
+async function updateOwnSenseCategoriesFromVertel(tekst){
+  if(!S.apiKey)return;
+  var t=(tekst||'').replace(/<[^>]*>/g,' ').trim();
+  if(!ownSenseVertelRichEnoughForCategoryAI(t))return;
+  var dosName='OWN Sense';
+  var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{},meta:{}};
+  if(!d.categories)d.categories={};
+  d.meta=d.meta||{};
+  var schemaObj={};
+  OWN_CATS.forEach(function(cat){
+    var o={};
+    cat.prompts.forEach(function(_,i){o['a'+i]='';});
+    schemaObj[cat.id]=o;
+  });
+  var schemaJson=JSON.stringify(schemaObj);
+  var vraagUitleg=OWN_CATS.map(function(cat){
+    var fields=cat.prompts.map(function(p,i){return 'a'+i+'='+p.q;}).join(', ');
+    return ' '+cat.id+': '+fields;
+  }).join('');
+
+  var sys='Je bent DateSensei. De tekst is van de gebruiker over zichzelf (ik/jij in reflectie). Vul ALLEEN velden in als de tekst dat expliciet ondersteunt.'
+    +' Het gaat om de persoon die de app gebruikt — niet over een date of ander tenzij de tekst duidelijk over de gebruiker zelf gaat.'
+    +' Laat velden leeg ("") als de tekst er NIETS over zegt — gok nooit en vul niets in uit aannames.'
+    +' Geef ENKEL geldig JSON (geen markdown):'
+    +schemaJson
+    +' Vragen:'
+    +vraagUitleg
+    +' Alle niet-lege veldwaarden in het Nederlands. Maximaal één zin per veld.';
+
+  try{
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],600);
+    var clean=raw.replace(/```json|```/g,'').trim();
+    var updates=JSON.parse(clean);
+
+    OWN_CATS.forEach(function(cat){
+      var catId=cat.id;
+      if(!updates[catId])return;
+      if(!d.categories[catId])d.categories[catId]={};
+      cat.prompts.forEach(function(_,i){
+        var ak='a'+i;
+        var newVal=(updates[catId][ak]||'').trim();
+        var oldVal=(d.categories[catId][ak]||'').trim();
+        if(!newVal)return;
+        if(!oldVal){
+          d.categories[catId][ak]=newVal;
+        }else if(newVal.toLowerCase()!==oldVal.toLowerCase()){
+          d.categories[catId][ak]=newVal+' (eerder: '+oldVal+')';
+        }
+      });
+    });
+
+    S.pdata[dosName]=d;
+    await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
+
+    OWN_CATS.forEach(function(cat){
+      var catId=cat.id;
+      if(!d.categories[catId])return;
+      cat.prompts.forEach(function(_,i){
+        var ak='a'+i;
+        var ta=document.getElementById('oc-'+catId+'-'+ak);
+        if(ta&&!ta.value.trim()&&d.categories[catId][ak]){
+          ta.value=d.categories[catId][ak];
+          autoResize(ta);
+          ta.style.background='#F0FFF4';
+          ta.style.borderColor='#A5D6A7';
+          setTimeout(function(){ta.style.background='';ta.style.borderColor='';},2000);
+        }
+      });
+      var progEl=document.querySelector('#oc-'+catId+' .own-cat-prog');
+      if(progEl){
+        var filled=Object.values(d.categories[catId]||{}).filter(function(v){return(v||'').trim().length>0;}).length;
+        var total=cat.prompts.length;
+        progEl.textContent=filled+'/'+total+' vragen beantwoord'+(filled===total?' ✓':'');
+        progEl.className='own-cat-prog'+(filled===total?' done':'');
+        if(filled>0){var catEl=document.getElementById('oc-'+catId);if(catEl)catEl.classList.add('filled');}
+      }
+    });
+
+    herbereken(dosName);
+  }catch(x){
+    console.warn('updateOwnSenseCategoriesFromVertel error:',x);
+  }
+}
+
 async function updateEigenschappenAI(dossier,tekst){
   if(!S.apiKey)return;
   var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{},meta:{}};
@@ -10395,10 +10513,107 @@ async function updateDossierSummary(dosName){
 
 // ══ Coach Context ════════════════════════════════════════════════
 
-/* ── OWN Sense localStorage-mirror (datesense.html → alle apps) ──
-   Schrijft de OWN Sense categorietekst naar ownsense_datesense_v1
-   zodat toekomstige SenseCorner-apps (SelfSense, CareerSense...) het
-   profiel ook kunnen lezen zonder Supabase-toegang.                       */
+/* ── OWN Sense ↔ ownsense.html (zelfde 11 kernvragen) ──
+   Houd deze strings synchroon met ownsense.html → QUESTIONS[].q            */
+var OWNSENSE_STANDALONE_QS=[
+  'Wie ben jij als persoon, los van wat je doet of welke rollen je vervult?',
+  'Wat geeft jou écht energie, en wat kost je? Wees concreet in mensen, situaties of omgevingen.',
+  'Hoe ga jij om met stress, tegenslagen of conflicten? Wat doe jij dan typisch?',
+  'Hoe makkelijk deel jij je gevoelens of je innerlijk leven met anderen?',
+  'Wat zijn jouw sterkste kanten, en waar loop jij soms op jezelf vast?',
+  'Ben jij meer iemand van routine en zekerheid, of van verandering en nieuwe ervaringen?',
+  'Hoe ben jij in contact met mensen? Hoe bouw jij vertrouwen op, en wat maakt verbinding soms lastig voor jou?',
+  'Welke rol speelt humor en luchtigheid in jouw leven en in hoe jij omgaat met anderen?',
+  'Wat heb jij nodig van mensen die dicht bij jou staan, en wat doet het met jou als je dat niet krijgt?',
+  'Zijn er patronen uit je jeugd of verleden die je nog terugziet in hoe je vandaag reageert op mensen of situaties?',
+  'Wat drijft jou diep van binnen, en waar wil jij naartoe in je leven?'
+];
+function normOwnsenseQLabel(s){
+  return String(s||'').toLowerCase().replace(/\s+/g,' ').replace(/[?!.]+$/,'').trim();
+}
+function matchOwnsenseQIndex(label){
+  var L=normOwnsenseQLabel(label);
+  if(!L)return -1;
+  for(var i=0;i<OWNSENSE_STANDALONE_QS.length;i++){
+    var Q=normOwnsenseQLabel(OWNSENSE_STANDALONE_QS[i]);
+    if(Q===L)return i;
+    var shorter=L.length<Q.length?L:Q;
+    var longer=L.length<Q.length?Q:L;
+    if(shorter.length>=40&&longer.indexOf(shorter)!==-1)return i;
+  }
+  return -1;
+}
+function syncOwnsenseProfileV1FromCategoryEntries(entries){
+  if(!entries||!entries.length)return;
+  try{
+    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var profile={};
+    if(raw){try{profile=JSON.parse(raw);}catch(_e){profile={};}}
+    if(!Array.isArray(profile.answers))profile.answers=[];
+    var n=OWNSENSE_STANDALONE_QS.length;
+    while(profile.answers.length<n)profile.answers.push('');
+    var changed=false;
+    entries.forEach(function(e){
+      var idx=matchOwnsenseQIndex(e.label);
+      if(idx<0)return;
+      var prev=String(profile.answers[idx]||'').trim();
+      var next=String(e.value||'').trim();
+      if(!next)return;
+      if(next.length>prev.length||!prev){
+        profile.answers[idx]=e.value;
+        changed=true;
+      }
+    });
+    if(!changed)return;
+    var filled=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
+    var statusWas=String(profile.status||'');
+    if(filled>0&&statusWas!=='skipped')profile.status='completed';
+    profile.completionPct=profile.status==='completed'
+      ?Math.round(80+(filled/n)*20)
+      :Math.round((filled/n)*60);
+    profile.totalQ=n;
+    profile.syncedFromAppAt=new Date().toISOString();
+    profile.syncedFromApp='datesense';
+    localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));
+  }catch(_e){}
+}
+
+async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
+  if(!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
+  try{
+    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    if(!raw)return;
+    var prof=JSON.parse(raw);
+    if(!prof||!Array.isArray(prof.answers))return;
+    var d=S.pdata['OWN Sense'];
+    var cats=JSON.parse(JSON.stringify(d.categories||{}));
+    var changed=false;
+    OWN_CATS.forEach(function(cat){
+      var catData=Object.assign({},cats[cat.id]||{});
+      cat.prompts.forEach(function(pr,idx){
+        var qIdx=matchOwnsenseQIndex(pr.q);
+        if(qIdx<0)return;
+        var ans=prof.answers[qIdx];
+        if(ans==null||!String(ans).trim())return;
+        var key='a'+idx;
+        var prev=String(catData[key]||'').trim();
+        var next=String(ans).trim();
+        if(next.length>prev.length||!prev){
+          catData[key]=ans;
+          changed=true;
+        }
+      });
+      cats[cat.id]=catData;
+    });
+    if(!changed)return;
+    d.categories=cats;
+    S.pdata['OWN Sense']=d;
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+  }catch(e){console.warn('mergeOwnsenseProfileV1IntoOwnSensePdata',e);}
+}
+
+/* ── OWN Sense localStorage-mirror (DateSense → alle apps / ownsense.html) ──
+   Schrijft categorieteksten naar ownsense_datesense_v1 (historische sleutelnaam). */
 function mirrorOwnSenseCatsToLocalStorage(){
   try{
     var d=S.pdata&&S.pdata['OWN Sense'];
@@ -10417,10 +10632,11 @@ function mirrorOwnSenseCatsToLocalStorage(){
       entries:entries,
       source:'datesense'
     }));
+    syncOwnsenseProfileV1FromCategoryEntries(entries);
   }catch(_){}
 }
 
-/* ── OWN Sense onboarding-brug (ownsense.html → datesense.html) ──
+/* ── OWN Sense onboarding-brug (ownsense.html ↔ SenseCorner-apps) ──
    Leest ownsense_profile_v1 uit localStorage (ingevuld via ownsense.html)
    en brengt de antwoorden mee als extra context voor de AI-coach.         */
 function getOwnSenseOnboardingBlock(){
@@ -10447,7 +10663,7 @@ function getOwnSenseOnboardingBlock(){
     }
   }catch(_){}
 
-  /* Bron 2: ownsense_datesense_v1 — gespiegelde DateSense OWN Sense categorieën
+  /* Bron 2: ownsense_datesense_v1 — gespiegelde OWN Sense-categorieën uit een andere SenseCorner-tab
      (alleen toevoegen als S.pdata['OWN Sense'] leeg/incompleet is, om dubbeling te vermijden) */
   try{
     var ownInApp=S&&S.pdata&&S.pdata['OWN Sense']&&S.pdata['OWN Sense'].categories;
@@ -10459,7 +10675,8 @@ function getOwnSenseOnboardingBlock(){
       if(raw2){
         var d2=JSON.parse(raw2);
         if(d2&&Array.isArray(d2.entries)&&d2.entries.length){
-          var dlines=['OWN Sense (eerder ingevuld in DateSense):'];
+          var src=String(d2.source||'andere app').trim();
+          var dlines=['OWN Sense (eerder ingevuld in '+src+'):'];
           d2.entries.forEach(function(e){
             if(e.label&&e.value&&String(e.value).trim().length>5)
               dlines.push('- '+e.label+': '+String(e.value).trim().substring(0,220));
@@ -11086,8 +11303,12 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     pd.count=(pd.count||0)+1;
     S.pdata[dossier]=pd;
     await saveP(dossier,pd.props,pd.count,pd.categories);
-    if(dossier==='OWN Sense')await updateEigenschappenAI(dossier,tekst);
-    else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+    if(dossier==='OWN Sense'){
+      await updateOwnSenseCategoriesFromVertel(tekst);
+      var _ownT=(tekst||'').replace(/<[^>]*>/g,' ').trim();
+      if(!ownSenseVertelRichEnoughForCategoryAI(_ownT))await updateEigenschappenAI(dossier,tekst);
+      updateDossierSummary(dossier).catch(function(e){console.warn('updateDossierSummary OWN Sense',e);});
+    }else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
     rDrawer();
     if(sid&&window._saveData)delete window._saveData[sid];
     S.vertelGesprekDossier=dossier;
