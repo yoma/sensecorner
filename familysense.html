@@ -1673,31 +1673,32 @@ async function addCustomFamilieRolFromProfileModal(){
   }
 }
 
-/** Basis profiel-compleet voor een contact: rol gekozen; bij «anders» is toelichting verplicht. Legacy: alleen vrije tekst telt ook. */
+/** Basis profiel-compleet voor een contact: rol gekozen; bij «anders» is toelichting verplicht. Legacy: alleen vrije tekst (familie_relatie). DateSense-«intent» telt hier niet — geen dating in FamilySense. */
 function contactRolMetaComplete(m){
   m=m||{};
   var rol=String(m.familie_rol||'').trim();
   var fr=String(m.familie_relatie||'').trim();
-  var leg=String(m.intent||'').trim();
   if(rol==='anders')return fr.length>=2;
   if(rol)return true;
-  return fr.length>=2||leg.length>=2;
+  return fr.length>=2;
 }
 
-/** Badge / korte regel: vaste rol + optionele toelichting; legacy zonder rol = vrije tekst of oude intent. */
+/**
+ * Badge / korte regel voor FamilySense: alleen gezins-velden (familie_rol / familie_relatie / legacy rol-ids).
+ * Gebruikt bewust géén meta.intent — dat is DateSense-data («serieuze relatie») en hoort niet op gezinsdossiers.
+ */
 function getContactRolBadgeText(meta){
   meta=meta||{};
   var rol=String(meta.familie_rol||'').trim();
   var fr=String(meta.familie_relatie||'').trim();
-  var leg=String(meta.intent||'').trim();
   var base=familieRolLabel(rol);
-  if(rol==='anders')return fr||leg;
+  if(rol==='anders')return fr;
   if(rol){
-    if(!base)return fr||leg||rol;
+    if(!base)return fr||rol;
     if(fr&&fr.toLowerCase()!==base.toLowerCase())return base+' · '+fr;
     return base;
   }
-  return fr||leg;
+  return fr;
 }
 
 function calcAgeFromBirthdate(birthdate){
@@ -1999,7 +2000,7 @@ function readProfileFormDraftValues(){
   var familieRelEl=document.getElementById('familieRelatieInput');
   var rolEl=document.getElementById('familieRolSelect');
   var familie_rol=rolEl?String(rolEl.value||'').trim():'';
-  var familie_relatie=familieRelEl?v('familieRelatieInput'):intent;
+  var familie_relatie=familieRelEl?v('familieRelatieInput'):'';
   return{birthdate:v('pf_birthdate'),city:v('pf_city'),country:v('pf_country'),intent:intent,familie_rol:familie_rol,familie_relatie:familie_relatie};
 }
 function updateProfileModalCompletionLive(){
@@ -3996,7 +3997,7 @@ function openProfileModal(name){
   avatar.src=meta.photo_url||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect width="46" height="46" fill="%23eceff3"/></svg>';
   status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
   var isOwnProf=_profileModalFor==='OWN Sense';
-  var familieRelVal=escA(String(meta.familie_relatie||meta.intent||'').trim());
+  var familieRelVal=escA(String(meta.familie_relatie||'').trim());
   var curRolSel=String(meta.familie_rol||'').trim();
   var rolOpts=buildFamilieRolSelectOptionsHtml(curRolSel);
   fields.innerHTML=''
@@ -6280,6 +6281,7 @@ function rSenses(el){
   }
   if(cs.length){
     h+='<div class="sh">Familieleden</div>';
+    h+='<p style="font-size:12px;color:#8a8f97;line-height:1.45;margin:0 0 10px">Deze lijst hoort bij <strong>jouw account</strong> (dezelfde dossiers als in DateSense als je die app ook gebruikt). Wil je ze hier niet? Zet ze op <strong>on hold</strong>, <strong>sluit af</strong> of verwijder ze definitief uit het archief. In FamilySense tonen we geen dating-intentie meer als gezinsrol.</p>';
     h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
       +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
       
