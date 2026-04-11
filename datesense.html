@@ -907,7 +907,7 @@ a:focus-visible,
       <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
       <span>Senses</span>
     </button>
-    <button class="tab" id="tab-own" onclick="goScreen('own')" title="OWN Sense">
+    <button class="tab" id="tab-own" onclick="window.location.href='ownsense.html'" title="OWN Sense">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
       <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
       <span>OwnSense</span>
@@ -1550,7 +1550,7 @@ function ownProfileSetupComplete(){
 function getOnboardingChecklist(){
   var contacts=getContactProfileNames();
   return [
-    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openProfileModal('OWN Sense')"},
+    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"window.location.href='ownsense.html'"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste dossier aan',action:'newSenseFromDrawer()'},
     {id:'relation-ready',done:contacts.length>0,label:'Kies pas daarna een relatiestatus',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
@@ -3425,11 +3425,6 @@ function _goScreenBody(sc){
     sc='settings';
     toast('Alleen admin heeft toegang tot Prompt Center.');
   }
-  // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
-  if(sc==='own' && S.user){
-    viewDossier('OWN Sense');
-    return;
-  }
   S.prev=S.screen;S.screen=sc;
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
@@ -3500,7 +3495,7 @@ function rDrawer(){
   var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Mijn Senses</div>
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
 <div class="dlbl">Persoonlijk</div>
-<div class="drow" onclick="goScreen('own')">
+<div class="drow" onclick="window.location.href='ownsense.html'">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense</div>
   <div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('OWN Sense')">${own.count}</div>
@@ -3787,6 +3782,10 @@ async function viewDossierTijdlijn(name){
 }
 
 function openProfileModal(name){
+  if((name||'')==='OWN Sense'){
+    window.location.href='ownsense.html';
+    return;
+  }
   _profileModalFor=name||'OWN Sense';
   var modal=document.getElementById('profileModal');
   var title=document.getElementById('profileModalTitle');
@@ -4699,7 +4698,7 @@ function buildCoachTasks(){
   var own=S.pdata['OWN Sense']||{categories:{},meta:{}};
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
   if(ownMissingProfile){
-    tasks.push({id:'check-own-profile',type:'a',prio:'high',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open profielgegevens →',action:"goScreen('own');setTimeout(function(){openProfileModal('OWN Sense');},120)"});
+    tasks.push({id:'check-own-profile',type:'a',prio:'high',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open OWN Sense om je profiel aan te vullen →',action:"window.location.href='ownsense.html'"});
   }
   return tasks;
 }
@@ -5168,7 +5167,7 @@ function renderAdviceEmptyState(name){
     +'<div style="display:flex;flex-direction:column;gap:8px;max-width:340px;margin:0 auto">'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';S.vertelGesprekDossier=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel, voeg een tijdlijnbericht toe</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'profiel\')">📋 Tab Profiel — invulvakjes &amp; eigenschappen</button>'
-    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="openProfileModal(\''+escN+'\')">'+(isOwn?'👤 Profielgegevens (OWN Sense)':'👤 Profielgegevens van dit dossier')+'</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="'+(isOwn?'window.location.href=\'ownsense.html\'':'openProfileModal(\''+escN+'\')')+'">'+(isOwn?'👤 Profielgegevens (OWN Sense)':'👤 Profielgegevens van dit dossier')+'</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="goScreen(\'settings\')">⚙️ Instellingen (API-sleutel)</button>'
     +'</div>'
     +apiNote
@@ -6287,7 +6286,7 @@ function rPlanner(el){
     +'</div>';
 }
 
-function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="goScreen('own')">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
+function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="window.location.href='ownsense.html'">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('compare')">Advies / Actie</button><button class="btn-r" onclick="goScreen('compare')">Vergelijken</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
 
 function rNotifications(el){
   var q=(S.notificationsFilter||'all');
@@ -6395,7 +6394,7 @@ function rSenses(el){
   var _sensesStrip={stripTopRule:true};
   var ownCardMatchHtml=getSensesCardMatchHtml('OWN Sense',_sensesStrip);
   var h=`<div style="padding:0 16px 32px"><div class="sh">Persoonlijk</div>
-<div class="srow srow-own-card" onclick="goScreen('own')">
+<div class="srow srow-own-card" onclick="window.location.href='ownsense.html'">
   <div class="srow-dossier-main">
   <div class="srow-dossier-top">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
@@ -6736,7 +6735,7 @@ function buildOwnOverzichtSummaryAndMood(d){
   var html='<div style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.45">'
     +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+ownFilled+'/'+ownTotal+'</strong> invulvragen'
     +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="switchTab(\'profiel\')">Tab Profiel</button>'
-    +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="openProfileModal(\'OWN Sense\')">Profielgegevens</button>'
+    +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="window.location.href=\'ownsense.html\'">OWN Sense beheren →</button>'
     +'</div>';
   html+='<div style="font-size:12px;font-weight:700;color:#333;margin-bottom:6px">Hoe voel je je vandaag?</div>';
   html+='<p style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Wordt opgeslagen en meegegeven aan je coach (Vertel, advies) voor vandaag.</p>';
@@ -6846,9 +6845,9 @@ async function loadTab(name,tab,d){
         var p=[];
         if(ownF<ownT)p.push('Nog '+(ownT-ownF)+' van '+ownT+' vragen open');
         if(!ownMc.complete)p.push('basisgegevens nog niet af');
-        openProfielCta='<button type="button" class="dossier-open-prof-cta" onclick="switchTab(\'profiel\')">'
+        openProfielCta='<button type="button" class="dossier-open-prof-cta" onclick="window.location.href=\'ownsense.html\'">'
           +'<span class="dossier-open-prof-cta-strong">'+escHTML(p.join(' · '))+'</span>'
-          +'<span class="dossier-open-prof-cta-sub">Alles invullen op tab Profiel — tik hier</span>'
+          +'<span class="dossier-open-prof-cta-sub">Open OWN Sense om je profiel aan te vullen — tik hier</span>'
           +'</button>';
       }
     }else if(contactTotal>contactFilled){
@@ -6866,7 +6865,7 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:13px;font-weight:700;color:#333">'+(isOwnDossier?'Jouw eigenschappen':'Eigenschappen')+'</div>'
       +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
       +'</div>';
-    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Zelfde scores als op tab <strong>Profiel</strong> (één databron). Invulvragen en aanpassingen doe je daar; hieronder de balken.</div>';
+    html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">'+(isOwnDossier?'Zelfde scores als in <strong>OWN Sense</strong> (één databron). Aanpassingen doe je in OWN Sense; hieronder de balken.':'Zelfde scores als op tab <strong>Profiel</strong> (één databron). Invulvragen en aanpassingen doe je daar; hieronder de balken.')+'</div>';
     var extraMetrics=[];
     if(!isOwnDossier){
       var ownMetaX=((S.pdata['OWN Sense']||{}).meta)||{};
@@ -7643,105 +7642,24 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
 
 // ══ OWN Sense ═════════════════════════════════════════════════════
 function rOWN(el){
-  var d=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
-  var cats=d.categories||{};
-  var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
-  var moodKeys=['goed','oke','moeilijk','sterk','verward'];
-  var dm=getOwnDailyMoodMeta(d.meta||{});
-  var selKey=dm&&dm.key?dm.key:'';
-
-  // Bereken progress per categorie
-  function catProgress(catId){
-    var catData=cats[catId]||{};
-    var cat=OWN_CATS.find(c=>c.id===catId);
-    if(!cat)return{filled:0,total:0};
-    var total=cat.prompts.length;
-    var filled=cat.prompts.filter((_,i)=>(catData['a'+i]||'').trim().length>0).length;
-    return{filled,total};
-  }
-
-  var totalFilled=OWN_CATS.reduce((s,c)=>s+catProgress(c.id).filled,0);
-  var totalQuestions=OWN_CATS.reduce((s,c)=>s+c.prompts.length,0);
-
-  el.innerHTML=`<div style="padding:14px 16px 32px">
-
-<!-- Stemming vandaag -->
-<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:12px">Hoe voel je je vandaag?</div>
-<p style="font-size:12px;color:#8a8f97;margin:-6px 0 12px;line-height:1.45">Wordt opgeslagen en meegegeven aan je coach (Vertel, advies) voor vandaag.</p>
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">
-  ${moods.map((m,i)=>{
-    var mk=moodKeys[i];
-    var on=(selKey&&selKey===mk)||(!selKey&&i===0)?' on':'';
-    return `<button type="button" class="mbtn${on}" onclick="saveOwnDailyMoodKey('${mk}')">${m}</button>`;
-  }).join('')}
-</div>
-
-<!-- Eigen eigenschappen -->
-<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
-  <div class="sh" style="margin:0">Jouw eigenschappen</div>
-  <div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: ${fmtPropUpdate(getPropsUpdatedAt(d.meta||{}))}</div>
-</div>
-<div style="display:flex;justify-content:flex-end;margin:-8px 0 10px">
-  <button class="coach-save-other" onclick="openProfileModal('OWN Sense')">Profielgegevens beheren</button>
-</div>
-<div id="own-props-bars" style="margin-bottom:20px">${renderProps(d.props,true,{propUpdates:(d.meta&&d.meta.prop_updates)||{}})}</div>
-
-<!-- Profiel compleetheid -->
-<div style="background:var(--g);border-radius:12px;padding:14px 16px;margin-bottom:20px;border:1px solid var(--b)">
-  <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-    <span style="font-size:14px;font-weight:700;color:#333">Profiel volledigheid</span>
-    <span style="font-size:15px;font-weight:800;color:var(--r)">${Math.round(totalFilled/totalQuestions*100)}%</span>
-  </div>
-  <div style="height:6px;background:var(--b);border-radius:3px;overflow:hidden">
-    <div style="height:100%;background:var(--r);border-radius:3px;width:${Math.round(totalFilled/totalQuestions*100)}%;transition:width .6s"></div>
-  </div>
-  <div style="font-size:12px;color:var(--m);margin-top:6px">${totalFilled} van ${totalQuestions} vragen beantwoord</div>
-</div>
-
-<!-- Categorieën -->
-<div class="sh">Vertel me meer over jezelf</div>
-<div id="ownCats">
-${(()=>{
-  var firstOpenDone=false;
-  return OWN_CATS.map(cat=>{
-  var prog=catProgress(cat.id);
-  var catData=cats[cat.id]||{};
-  var isFilled=prog.filled>0;
-  var isComplete=(prog.filled===prog.total);
-  var shouldOpen=!firstOpenDone&&!isComplete;
-  if(shouldOpen)firstOpenDone=true;
-  var catLast=getCategoryUpdate(d.meta||{},'own',cat.id);
-  return`<div class="own-cat ${shouldOpen?'open ':''}${isFilled?'filled':''}" id="oc-${cat.id}">
-  <div class="own-cat-head" onclick="toggleCat('${cat.id}')">
-    <div class="own-cat-icon">${cat.icon}</div>
-    <div class="own-cat-info">
-      <div class="own-cat-title">${cat.title}</div>
-      <div id="oc-cat-upd-${cat.id}" style="font-size:11px;color:#8a8f97;margin-top:2px">Laatst bijgewerkt: ${fmtPropUpdate(catLast)}</div>
-      <div class="own-cat-prog ${prog.filled===prog.total?'done':''}">${prog.filled}/${prog.total} vragen beantwoord${prog.filled===prog.total?' ✓':''}</div>
+  el.innerHTML=`
+    <div style="padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+      <div style="font-size:48px">🪞</div>
+      <div style="font-size:20px;font-weight:800;color:#333">OWN Sense</div>
+      <p style="font-size:14px;color:#666;line-height:1.6;max-width:300px">
+        Je persoonlijke basisprofiel. Dit vormt de basis voor alle advies in DateSense en andere SenseCorner-apps.
+      </p>
+      <p style="font-size:13px;color:#8a8f97;line-height:1.5;max-width:300px">
+        Je profiel is geladen en actief in DateSense. Wil je het bekijken of aanpassen? Ga naar OWN Sense.
+      </p>
+      <button class="btn-r" style="min-width:200px;padding:14px 20px;font-size:15px;font-weight:700" onclick="window.location.href='ownsense.html'">
+        Open OWN Sense →
+      </button>
+      <button class="btn-g" style="min-width:200px" onclick="goScreen('home')">
+        Terug naar DateSense
+      </button>
     </div>
-    <div class="own-cat-arrow">›</div>
-  </div>
-  <div class="own-cat-body">
-    ${cat.prompts.map((p,i)=>`
-      <div class="own-q-label">${p.q} <span id="oc-field-upd-${cat.id}-a${i}" style="font-size:10px;color:#9a9a9a;text-transform:none;letter-spacing:0">· Laatst bijgewerkt: ${fmtPropUpdate(getFieldUpdate(d.meta||{},'own',cat.id,'a'+i))}</span></div>
-      <textarea class="own-ta" id="oc-${cat.id}-a${i}" placeholder="${p.ph}" rows="2" data-catid="${cat.id}" data-type="own" oninput="autoResize(this);scheduleAutoSave('own','OWN Sense','${cat.id}',${i});if(${i}===cat.prompts.length-1)scheduleOwnVoorstel(this.value,'${cat.id}')">${catData['a'+i]||''}</textarea>
-      <div class="autosave-indicator" id="oc-field-${cat.id}-a${i}"></div>
-    `).join('')}
-    <div class="autosave-indicator" id="oc-saved-${cat.id}"></div>
-    <div id="own-voorstel-${cat.id}"></div>
-  </div>
-</div>`;
-}).join('');
-})()}
-</div>
-
-<div class="sh">Activiteit</div>
-<div style="background:var(--g);border-radius:14px;padding:16px;font-size:14px;color:#555;border:1px solid var(--b)">
-  ${d.count>0?d.count+' berichten opgeslagen.':'Nog geen berichten.'}
-  <span style="color:var(--r);cursor:pointer;font-weight:600" onclick="goScreen('vertel')"> Vertel iets →</span>
-</div>
-
-</div>`;
+  `;
 }
 
 // AI voorstel genereren voor OWN Sense na typing
@@ -8236,7 +8154,7 @@ function settingsAction(action){
   if(action==='prompt-center'){goScreen('promptcenter');return;}
   if(action==='quick-tour'){startFullAppTour();return;}
   if(action==='help-reset'){resetAllHelpPopups();return;}
-  if(action==='my-data'){openProfileModal('OWN Sense');return;}
+  if(action==='my-data'){window.location.href='ownsense.html';return;}
   if(action==='notifications'){goScreen('notifications');return;}
   if(action==='export'){exportAllData();return;}
   if(action==='about'){
@@ -9013,8 +8931,8 @@ function renderAiImportHomeLanding(){
   return'<div class="ai-rich-card home-mini-card" style="margin:-8px 0 10px;border:1px solid #F0D4D4;background:linear-gradient(180deg,#FFFBFB 0%,#FFF 100%)">'
     +'<div class="ai-sec">'
     +'<div class="ai-sec-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
-    +'<p class="ai-sec-text">Import uit je chats: DateSensei vouwt nieuwe info <strong>samen</strong> met wat je al in OWN Sense had — minder herhaling, één leesbare tekst per vak.</p>'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 11px;font-weight:800;border-color:#F0C4C4;color:var(--r);background:#FFF5F5" onclick="window.openAiImportModal&&window.openAiImportModal()">Start import</button>'
+    +'<p class="ai-sec-text">Import uit je chats gebeurt in <strong>OWN Sense</strong>. DateSensei vouwt nieuwe info daar <strong>samen</strong> met wat je al had — minder herhaling, één leesbare tekst per vak.</p>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 11px;font-weight:800;border-color:#F0C4C4;color:var(--r);background:#FFF5F5" onclick="window.location.href=\'ownsense.html\'">Open OWN Sense voor import →</button>'
     +'</div></div>';
 }
 

@@ -21,8 +21,11 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
 .app{max-width:680px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:0 0 40px}
 
 /* ── Top bar ── */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;position:sticky;top:0;z-index:10;background:rgba(247,248,250,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.06)}
-.brand{font-size:13px;font-weight:800;color:var(--r);letter-spacing:.02em}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px 12px;position:sticky;top:0;z-index:10;background:rgba(247,248,250,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.06)}
+.topbar-slot{display:flex;align-items:center;min-width:48px}
+.topbar-slot--left{justify-content:flex-start}
+.topbar-slot--right{justify-content:flex-end;gap:4px}
+.brand{font-size:13px;font-weight:800;color:var(--r);letter-spacing:.02em;text-align:center;flex:1;min-width:0}
 .skip-btn{background:none;border:none;font:inherit;font-size:13px;color:var(--s);cursor:pointer;padding:4px 0;transition:color .2s}
 .skip-btn:hover{color:var(--m)}
 
@@ -160,8 +163,14 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
 
   <!-- Top bar -->
   <div class="topbar">
-    <div class="brand">SenseCorner · OWN Sense</div>
-    <button class="skip-btn" id="skipBtn" type="button" aria-label="Overslaan voor nu">Sla over</button>
+    <div class="topbar-slot topbar-slot--left">
+      <button class="skip-btn" id="topbarBackBtn" type="button" style="display:none" aria-label="Terug">← Terug</button>
+    </div>
+    <div class="brand" id="topbarBrand">SenseCorner · OWN Sense</div>
+    <div class="topbar-slot topbar-slot--right">
+      <button class="skip-btn" id="topbarEditBtn" type="button" style="display:none;color:var(--r);font-weight:700" aria-label="Profiel bewerken">Profiel bewerken</button>
+      <button class="skip-btn" id="skipBtn" type="button" aria-label="Overslaan voor nu">Sla over</button>
+    </div>
   </div>
 
   <!-- Progress -->
@@ -300,9 +309,15 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:linear-gradien
         <div class="apps-unlock" id="appsUnlock" aria-label="Apps die jouw profiel nu kennen"></div>
         <div class="done-cta">
           <a class="btn btn-primary" href="datesense.html">Open DateSense</a>
+          <button class="btn btn-secondary" type="button" id="btnDoneToHub">Terug naar mijn profiel</button>
           <a class="btn btn-secondary" href="sensecorner.html">Naar de hub</a>
         </div>
       </div>
+    </div>
+
+    <!-- ── OWN Sense hub (terugkerende gebruikers) ── -->
+    <div class="screen" id="screenHub" role="region" aria-label="OWN Sense overzicht">
+      <div id="hubContent"></div>
     </div>
 
     <!-- ── Overgeslagen ── -->
@@ -422,11 +437,14 @@ var state={
 };
 
 /* ── DOM refs ── */
+var savedProfile=null;
+
 var screens={
   welcome:document.getElementById('screenWelcome'),
   question:document.getElementById('screenQuestion'),
   summary:document.getElementById('screenSummary'),
   done:document.getElementById('screenDone'),
+  hub:document.getElementById('screenHub'),
   skip:document.getElementById('screenSkip')
 };
 var progressWrap=document.getElementById('progressWrap');
@@ -434,6 +452,8 @@ var progressFill=document.getElementById('progressFill');
 var progressLabel=document.getElementById('progressLabel');
 var progressPct=document.getElementById('progressPct');
 var skipBtn=document.getElementById('skipBtn');
+var topbarBackBtn=document.getElementById('topbarBackBtn');
+var topbarEditBtn=document.getElementById('topbarEditBtn');
 var qLabel=document.getElementById('qLabel');
 var qText=document.getElementById('qText');
 var qHint=document.getElementById('qHint');
@@ -450,6 +470,7 @@ function say(msg){announce.textContent='';setTimeout(function(){announce.textCon
 function showScreen(name,dir){
   Object.keys(screens).forEach(function(k){
     var el=screens[k];
+    if(!el)return;
     el.classList.remove('active','slide-right','slide-left');
     el.style.display='none';
   });
@@ -460,6 +481,163 @@ function showScreen(name,dir){
   el.classList.add('active');
   if(dir==='forward')el.classList.add('slide-right');
   else if(dir==='back')el.classList.add('slide-left');
+  syncTopbar(name);
+}
+
+/* ── Topbar per scherm (hub: terug + bewerken, geen skip) ── */
+function syncTopbar(name){
+  var onHub=name==='hub';
+  topbarBackBtn.style.display=onHub?'inline-block':'none';
+  topbarEditBtn.style.display=onHub?'inline-block':'none';
+  if(onHub){
+    skipBtn.style.display='none';
+    progressWrap.style.display='none';
+  }
+  if(name==='welcome'){
+    skipBtn.style.display='block';
+    progressWrap.style.display='none';
+  }
+  if(name==='summary'||name==='done'||name==='skip'){
+    skipBtn.style.display='none';
+  }
+  if(name==='question'){
+    progressWrap.style.display='block';
+  }
+}
+
+function refreshSavedProfile(){
+  savedProfile=null;
+  try{
+    var raw=localStorage.getItem('ownsense_profile_v1');
+    if(raw)savedProfile=JSON.parse(raw);
+  }catch(_e){}
+}
+
+function traitLabel(t){
+  if(t==null)return '';
+  if(typeof t==='object'&&t.label)return String(t.label);
+  return String(t);
+}
+
+function escAttr(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function escText(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ── Hub: HTML bouwen ── */
+function buildHubHTML(answers,filled,pct,name,traits,photo){
+  var displayName=name&&String(name).trim()?escText(String(name).trim()):'Jouw OWN Sense';
+  var photoInner='';
+  if(photo&&String(photo).trim()){
+    photoInner='<img src="'+escAttr(String(photo))+'" alt="" style="width:100%;height:100%;object-fit:cover"/>';
+  }else{
+    photoInner='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width:28px;height:28px;color:var(--r)"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  }
+  var traitsBlock='';
+  if(!traits||!traits.length){
+    traitsBlock='<p style="font-size:13px;color:var(--s);line-height:1.55;margin:0">Zodra je meer invult, verschijnen hier herkenpunten uit je antwoorden.</p>';
+  }else{
+    traitsBlock='<div style="display:flex;flex-wrap:wrap;gap:7px">';
+    traits.forEach(function(t){
+      var lab=traitLabel(t);
+      if(!lab)return;
+      traitsBlock+='<span style="background:var(--rl);color:var(--r);border:1px solid #f0c0c0;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600">'+escText(lab)+'</span>';
+    });
+    traitsBlock+='</div>';
+  }
+  var qList='';
+  for(var i=0;i<QUESTIONS.length;i++){
+    var q=QUESTIONS[i];
+    var ans=String(answers[i]||'').trim();
+    var preview=ans.length>80?ans.substring(0,80)+'\u2026':ans;
+    qList+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:8px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--r);margin-bottom:4px">Vraag '+(i+1)+'</div>'
+      +'<div style="font-size:13px;color:var(--t);margin-bottom:6px;line-height:1.4">'+escText(q.q)+'</div>';
+    if(ans){
+      qList+='<div style="font-size:13px;color:#555;line-height:1.5;font-style:italic">\u201c'+escText(preview)+'\u201d</div>';
+    }else{
+      qList+='<div style="font-size:12px;color:var(--s);font-style:italic">Nog niet beantwoord</div>';
+    }
+    qList+='<button type="button" onclick="startEditAt('+i+')" style="margin-top:8px;background:none;border:1px solid var(--b);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--m);cursor:pointer;font-family:inherit">'
+      +(ans?'Bewerken':'+ Beantwoorden')+'</button></div>';
+  }
+  var appsSection=''
+    +'<div style="font-size:13px;font-weight:700;color:var(--t);margin-bottom:12px">Jouw profiel is actief in</div>'
+    +'<div style="background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px">'
+    +'<div style="width:42px;height:42px;background:#FFF3F3;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0" aria-hidden="true">\uD83D\uDC98</div>'
+    +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t)">DateSense</div>'
+    +'<div style="font-size:12px;color:var(--m);margin-top:2px">Relatie- en datingcoach</div></div>'
+    +'<button type="button" onclick="location.href=\'datesense.html\'" style="background:var(--r);color:#fff;border:none;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Open</button></div>'
+    +'<div style="background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px">'
+    +'<div style="width:42px;height:42px;background:#F0FBF1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0" aria-hidden="true">\uD83C\uDFE1</div>'
+    +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t)">FamilySense</div>'
+    +'<div style="font-size:12px;color:var(--m);margin-top:2px">Familie- en relatiecoach</div></div>'
+    +'<button type="button" onclick="location.href=\'familysense.html\'" style="background:#1E7E34;color:#fff;border:none;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Open</button></div>'
+    +'<div style="background:#fafafa;border:1.5px dashed var(--b);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;opacity:.6">'
+    +'<div style="width:42px;height:42px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0" aria-hidden="true">\u2728</div>'
+    +'<div><div style="font-size:13px;font-weight:700;color:var(--t)">Meer apps \u2014 binnenkort</div>'
+    +'<div style="font-size:12px;color:var(--s);margin-top:2px">WorkSense, MindSense en meer</div></div></div>';
+
+  var ext='<div id="extensionPacks" style="margin:0 0 24px;display:none" aria-hidden="true">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--t);margin-bottom:8px">Extra vragen per app</div>'
+    +'<p style="font-size:12px;color:var(--s);margin:0">DateSense- en FamilySense-pakketten volgen.</p></div>';
+
+  return '<div class="card">'
+    +'<div style="padding:8px 0 12px;text-align:center">'
+    +'<div style="width:72px;height:72px;border-radius:50%;background:var(--rl);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;overflow:hidden">'+photoInner+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--t)">'+displayName+'</div>'
+    +'<div style="font-size:13px;color:var(--m);margin-top:4px">'+filled+' van '+QUESTIONS.length+' vragen ingevuld</div>'
+    +'<div style="margin:14px 0 0;height:6px;background:#F0E8E8;border-radius:3px;overflow:hidden">'
+    +'<div style="height:100%;background:var(--r);border-radius:3px;width:'+pct+'%;transition:width .6s"></div></div>'
+    +'<div style="font-size:11px;color:var(--s);margin-top:5px">'+pct+'% volledig</div></div>'
+    +'<div style="margin:0 0 20px"><div style="font-size:13px;font-weight:700;color:var(--t);margin-bottom:10px">Wie ben jij</div>'+traitsBlock+'</div>'
+    +'<div style="margin:0 0 24px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--t)">Je antwoorden</div>'
+    +'<button type="button" onclick="startEditAll()" style="background:none;border:none;font-size:12px;color:var(--r);font-weight:600;cursor:pointer;font-family:inherit">Alles bewerken</button></div>'
+    +qList+'</div>'
+    +'<div style="margin:0 0 24px">'+appsSection+'</div>'
+    +ext
+    +'<p style="font-size:12px;color:var(--s);text-align:center;margin:0"><a href="sensecorner.html" style="color:var(--m);text-decoration:none">\u2190 Terug naar SenseCorner</a></p>'
+    +'</div>';
+}
+
+function renderHub(suppressAnnounce){
+  refreshSavedProfile();
+  var el=document.getElementById('hubContent');
+  if(!el)return;
+  var profile=savedProfile||{};
+  var answers=profile.answers?profile.answers.slice(0,QUESTIONS.length):[];
+  while(answers.length<QUESTIONS.length)answers.push('');
+  var filled=answers.filter(function(a){return a&&String(a).trim();}).length;
+  var pct=Math.round((filled/QUESTIONS.length)*100);
+  var name=profile.name||'';
+  var traits=profile.traits||[];
+  var photo=profile.photo||'';
+  el.innerHTML=buildHubHTML(answers,filled,pct,name,traits,photo);
+  if(!suppressAnnounce)say('OWN Sense overzicht geladen.');
+}
+
+function startEditAt(index){
+  refreshSavedProfile();
+  var base=(savedProfile&&savedProfile.answers)?savedProfile.answers:[];
+  state.answers=[];
+  for(var i=0;i<QUESTIONS.length;i++){
+    state.answers.push(i<base.length?String(base[i]||''):'');
+  }
+  state.qIndex=Math.max(0,Math.min(QUESTIONS.length-1,index|0));
+  progressWrap.style.display='block';
+  skipBtn.style.display='none';
+  showScreen('question','forward');
+  renderQuestion('forward');
+}
+
+function startEditAll(){
+  startEditAt(0);
 }
 
 /* ── Progress bar ── */
@@ -631,13 +809,6 @@ function renderDone(isActive){
   }).join('');
 }
 
-/* ── Escape helper ── */
-function escText(s){
-  return String(s==null?'':s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
 /* ── Event handlers ── */
 document.getElementById('btnStart').onclick=function(){
   state.qIndex=0;
@@ -706,12 +877,20 @@ document.getElementById('btnConfirm').onclick=function(){
   var filled=state.answers.filter(function(a){return a&&a.trim();}).length;
   var active=filled>0;
   persistProfile(active?'completed':'empty');
-  progressFill.style.width='100%';
-  progressLabel.textContent='Klaar';
-  renderDone(active);
+  refreshSavedProfile();
   skipBtn.style.display='none';
-  showScreen('done','forward');
-  say(active?'Profiel opgeslagen. Goed gedaan!':'Nog niets ingevuld. Profiel nog niet actief.');
+  if(active){
+    progressWrap.style.display='none';
+    showScreen('hub','forward');
+    renderHub(true);
+    say('Profiel opgeslagen. Goed gedaan!');
+  }else{
+    progressFill.style.width='100%';
+    progressLabel.textContent='Klaar';
+    renderDone(false);
+    showScreen('done','forward');
+    say('Nog niets ingevuld. Profiel nog niet actief.');
+  }
 };
 
 /* ── Keyboard shortcut: Ctrl/Cmd+Enter → Volgende ── */
@@ -878,30 +1057,46 @@ function stopMic(preserveText){
 
 /* ── Initialisatie ── */
 (function init(){
-  // Eventueel bestaand profiel inladen
-  var raw=localStorage.getItem('ownsense_profile_v1');
-  if(raw){
-    try{
-      var p=JSON.parse(raw);
-      var filled=Array.isArray(p.answers)?p.answers.filter(function(a){return a&&String(a).trim();}).length:0;
-      // Migratie: oude "completed" zonder inhoud mag niet als actief blijven staan.
-      if(p.status==='completed'&&filled===0){
-        p.status='empty';
-        p.completionPct=0;
-        localStorage.setItem('ownsense_profile_v1',JSON.stringify(p));
-      }
-      if(p.answers&&Array.isArray(p.answers)){
-        state.answers=p.answers.slice(0,QUESTIONS.length);
-        while(state.answers.length<QUESTIONS.length)state.answers.push('');
-      }
-      if(p.photo&&typeof p.photo==='string'&&p.photo.length>0){
-        _profilePhoto=p.photo;
-        setPhotoPreview(_profilePhoto);
-      }
-    }catch(_e){}
+  refreshSavedProfile();
+  if(savedProfile){
+    var p=savedProfile;
+    var filled=Array.isArray(p.answers)?p.answers.filter(function(a){return a&&String(a).trim();}).length:0;
+    if(p.status==='completed'&&filled===0){
+      p.status='empty';
+      p.completionPct=0;
+      localStorage.setItem('ownsense_profile_v1',JSON.stringify(p));
+      refreshSavedProfile();
+    }
+    if(p.answers&&Array.isArray(p.answers)){
+      state.answers=p.answers.slice(0,QUESTIONS.length);
+      while(state.answers.length<QUESTIONS.length)state.answers.push('');
+    }
+    if(p.photo&&typeof p.photo==='string'&&p.photo.length>0){
+      _profilePhoto=p.photo;
+      setPhotoPreview(_profilePhoto);
+    }
   }
-  skipBtn.style.display='block';
-  showScreen('welcome');
+  var hasHub=savedProfile&&savedProfile.answers&&savedProfile.answers.filter(function(a){return a&&String(a).trim();}).length>0;
+  if(hasHub){
+    showScreen('hub','forward');
+    renderHub();
+  }else{
+    showScreen('welcome','forward');
+  }
+  // Hub-topbar "← Terug": altijd naar de SenseCorner-startpagina. We gebruiken geen history.back():
+  // history.length is in browsers niet betrouwbaar als "mag ik terug?", en terug kan naar een willekeurige externe referrer gaan.
+  topbarBackBtn.onclick=function(){
+    window.location.href='sensecorner.html';
+  };
+  topbarEditBtn.onclick=function(){startEditAll();};
+  var btnDoneToHub=document.getElementById('btnDoneToHub');
+  if(btnDoneToHub){
+    btnDoneToHub.onclick=function(){
+      refreshSavedProfile();
+      showScreen('hub','forward');
+      renderHub();
+    };
+  }
 })();
 </script>
 </body>
