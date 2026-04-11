@@ -1274,6 +1274,30 @@ const OWN_CATS=[
   }
 ];
 
+/** Standaardrollen: bewust beperkt — nonkel, schoonfamilie, … voeg je zelf toe via «Eigen rol». */
+const FAMILIE_ROL_OPTIONS=[
+  {v:'',l:'— Kies een rol —'},
+  {v:'zoon',l:'Zoon'},
+  {v:'dochter',l:'Dochter'},
+  {v:'vader',l:'Vader'},
+  {v:'moeder',l:'Moeder'},
+  {v:'broer',l:'Broer'},
+  {v:'zus',l:'Zus'},
+  {v:'grootouder',l:'Grootouder'},
+  {v:'partner_gezin',l:'Partner (gezin / co-ouder)'},
+  {v:'anders',l:'Anders (beschrijf hieronder)'}
+];
+
+/** Oude opgeslagen waarden blijven leesbaar tot iemand het dossier opnieuw bewaart. */
+const LEGACY_FAMILIE_ROL_LABELS={
+  kind:'Kind',
+  ouder:'Ouder',
+  broer_zus:'Broer of zus',
+  nonkel_tante:'Nonkel of tante',
+  schoonfamilie:'Schoonfamilie',
+  vriend_nabije:'Hechte vriend(in) / naaste'
+};
+
 // App state
 var S={
   user:null,
@@ -1562,6 +1586,120 @@ function getMetaFor(name){
   return d.meta||{};
 }
 
+/** Eigen rollen staan in OWN Sense meta (sync over apparaten). */
+function getCustomFamilieRollenFromOwn(){
+  try{
+    var m=((S.pdata['OWN Sense']||{}).meta)||{};
+    var arr=m.custom_familie_rollen;
+    if(!Array.isArray(arr))return[];
+    return arr.filter(function(c){
+      return c&&/^c_[\w]+$/.test(String(c.id||''))&&String(c.label||'').trim().length>=1;
+    });
+  }catch(e){return[];}
+}
+
+/** Standaardrollen + jouw eigen rollen + «Anders» onderaan. */
+function getMergedFamilieRolOptions(){
+  var out=[{v:'',l:'— Kies een rol —'}];
+  var i;
+  for(i=1;i<FAMILIE_ROL_OPTIONS.length;i++){
+    if(FAMILIE_ROL_OPTIONS[i].v==='anders')break;
+    out.push(FAMILIE_ROL_OPTIONS[i]);
+  }
+  getCustomFamilieRollenFromOwn().forEach(function(c){
+    out.push({v:c.id,l:String(c.label).trim()});
+  });
+  out.push({v:'anders',l:'Anders (beschrijf hieronder)'});
+  return out;
+}
+
+function buildFamilieRolSelectOptionsHtml(selectedVal){
+  var cur=String(selectedVal||'').trim();
+  return getMergedFamilieRolOptions().map(function(o){
+    return '<option value="'+escHTML(o.v)+'"'+(o.v===cur?' selected':'')+'>'+escHTML(o.l)+'</option>';
+  }).join('');
+}
+
+function familieRolLabel(rol){
+  var r=String(rol||'').trim();
+  if(!r)return'';
+  for(var i=0;i<FAMILIE_ROL_OPTIONS.length;i++){
+    if(FAMILIE_ROL_OPTIONS[i].v===r)return FAMILIE_ROL_OPTIONS[i].l;
+  }
+  if(Object.prototype.hasOwnProperty.call(LEGACY_FAMILIE_ROL_LABELS,r))
+    return LEGACY_FAMILIE_ROL_LABELS[r];
+  var customs=getCustomFamilieRollenFromOwn();
+  for(var j=0;j<customs.length;j++){
+    if(customs[j].id===r)return String(customs[j].label||'').trim();
+  }
+  return'';
+}
+
+/** Voeg een eigen rol toe (OWN Sense meta) en selecteer die in het open profiel-modal. */
+async function addCustomFamilieRolFromProfileModal(){
+  if(!S.user){toast('Log in.');return;}
+  var raw=prompt('Naam voor je eigen rol (max. 48 tekens), bv. peetoom, stiefkind, buur, coach:','');
+  if(raw==null)return;
+  var label=String(raw).trim().substring(0,48);
+  if(label.length<2){toast('Te kort — minstens 2 tekens.');return;}
+  if(getMergedFamilieRolOptions().some(function(o){return o.l.toLowerCase()===label.toLowerCase();})){
+    toast('Die naam staat al in de lijst.');
+    return;
+  }
+  var existing=getCustomFamilieRollenFromOwn();
+  if(existing.length>=36){
+    toast('Maximum aantal eigen rollen bereikt (36).');
+    return;
+  }
+  try{
+    await ensureP('OWN Sense');
+    var own=S.pdata['OWN Sense']||{props:{...DP},count:0,categories:{},meta:{}};
+    own.meta=own.meta||{};
+    own.meta.custom_familie_rollen=Array.isArray(own.meta.custom_familie_rollen)?own.meta.custom_familie_rollen.slice():[];
+    var id='c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+    own.meta.custom_familie_rollen.push({id:id,label:label});
+    S.pdata['OWN Sense']=own;
+    await saveP('OWN Sense',own.props,own.count,own.categories,own.summary,own.meta);
+    var sel=document.getElementById('familieRolSelect');
+    if(sel){
+      sel.innerHTML=buildFamilieRolSelectOptionsHtml(id);
+      sel.value=id;
+    }
+    updateProfileModalCompletionLive();
+    toast('✓ Eigen rol toegevoegd.');
+  }catch(e){
+    console.error('addCustomFamilieRolFromProfileModal',e);
+    toast(e&&e.message?e.message:'Kon rol niet bewaren.');
+  }
+}
+
+/** Basis profiel-compleet voor een contact: rol gekozen; bij «anders» is toelichting verplicht. Legacy: alleen vrije tekst telt ook. */
+function contactRolMetaComplete(m){
+  m=m||{};
+  var rol=String(m.familie_rol||'').trim();
+  var fr=String(m.familie_relatie||'').trim();
+  var leg=String(m.intent||'').trim();
+  if(rol==='anders')return fr.length>=2;
+  if(rol)return true;
+  return fr.length>=2||leg.length>=2;
+}
+
+/** Badge / korte regel: vaste rol + optionele toelichting; legacy zonder rol = vrije tekst of oude intent. */
+function getContactRolBadgeText(meta){
+  meta=meta||{};
+  var rol=String(meta.familie_rol||'').trim();
+  var fr=String(meta.familie_relatie||'').trim();
+  var leg=String(meta.intent||'').trim();
+  var base=familieRolLabel(rol);
+  if(rol==='anders')return fr||leg;
+  if(rol){
+    if(!base)return fr||leg||rol;
+    if(fr&&fr.toLowerCase()!==base.toLowerCase())return base+' · '+fr;
+    return base;
+  }
+  return fr||leg;
+}
+
 function calcAgeFromBirthdate(birthdate){
   var raw=String(birthdate||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return'';
@@ -1589,7 +1727,7 @@ function getOnboardingChecklist(){
   return [
     {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"window.location.href='ownsense.html'"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste familiedossier aan',action:'newSenseFromDrawer()'},
-    {id:'relation-ready',done:contacts.length>0,label:'Stel daarna de familierelatie in',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
+    {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Kies per dossier een rol (kind, ouder, nonkel…)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
   ];
 }
@@ -1859,19 +1997,28 @@ function readProfileFormDraftValues(){
   function v(id){var e=document.getElementById(id);return e?String(e.value||'').trim():'';}
   var intent=v('pf_intent');
   var familieRelEl=document.getElementById('familieRelatieInput');
+  var rolEl=document.getElementById('familieRolSelect');
+  var familie_rol=rolEl?String(rolEl.value||'').trim():'';
   var familie_relatie=familieRelEl?v('familieRelatieInput'):intent;
-  return{birthdate:v('pf_birthdate'),city:v('pf_city'),country:v('pf_country'),intent:intent,familie_relatie:familie_relatie};
+  return{birthdate:v('pf_birthdate'),city:v('pf_city'),country:v('pf_country'),intent:intent,familie_rol:familie_rol,familie_relatie:familie_relatie};
 }
 function updateProfileModalCompletionLive(){
   var box=document.getElementById('profileModalCompletionLive');
   if(!box)return;
   var d=readProfileFormDraftValues();
   var isOwn=_profileModalFor==='OWN Sense';
-  var keys=isOwn?['birthdate','city','country','intent']:['birthdate','city','country','familie_relatie'];
-  var labels=isOwn
-    ?{birthdate:'geboortedatum',city:'regio / woonplaats',country:'land',intent:'intentie'}
-    :{birthdate:'geboortedatum',city:'regio / woonplaats',country:'land',familie_relatie:'wie is dit voor jou'};
-  var missing=keys.filter(function(k){return!String(d[k]||'').trim();}).map(function(k){return labels[k];});
+  var missing=[];
+  if(isOwn){
+    var keys=['birthdate','city','country','intent'];
+    var labels={birthdate:'geboortedatum',city:'regio / woonplaats',country:'land',intent:'intentie'};
+    missing=keys.filter(function(k){return!String(d[k]||'').trim();}).map(function(k){return labels[k];});
+  }else{
+    if(!String(d.birthdate||'').trim())missing.push('geboortedatum');
+    if(!String(d.city||'').trim())missing.push('regio / woonplaats');
+    if(!String(d.country||'').trim())missing.push('land');
+    if(!String(d.familie_rol||'').trim())missing.push('hoofdrol (dropdown)');
+    if(String(d.familie_rol||'')==='anders'&&!String(d.familie_relatie||'').trim())missing.push('toelichting bij «Anders»');
+  }
   var photo=!!String(getMetaFor(_profileModalFor).photo_url||'').trim();
   var complete=!missing.length;
   if(complete){
@@ -1896,7 +2043,7 @@ function ensureProfileModalLiveListeners(){
   modal._pfLiveBound=true;
   function tick(e){
     var id=e&&e.target&&e.target.id?String(e.target.id):'';
-    if(id&&(id.indexOf('pf_')===0||id==='familieRelatieInput'))updateProfileModalCompletionLive();
+    if(id&&(id.indexOf('pf_')===0||id==='familieRelatieInput'||id==='familieRolSelect'))updateProfileModalCompletionLive();
   }
   modal.addEventListener('input',tick);
   modal.addEventListener('change',tick);
@@ -2197,10 +2344,9 @@ function getProfileMetaCompletion(name){
     var filledOwn=keysOwn.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
     return{filled:filledOwn,total:keysOwn.length,complete:filledOwn===keysOwn.length};
   }
-  var rel=String(m.familie_relatie||m.intent||'').trim();
   var keysC=['birthdate','city','country'];
   var filledC=keysC.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
-  if(rel)filledC++;
+  if(contactRolMetaComplete(m))filledC++;
   var totalC=4;
   return{filled:filledC,total:totalC,complete:filledC===totalC};
 }
@@ -3442,6 +3588,57 @@ async function delP(name){
   delete S.pdata[name];
 }
 
+/**
+ * Wist alle contactdossiers (niet OWN Sense) en maakt vaste testdossiers (kids, nonkel, tante, …).
+ * Alleen voor development/demo: in de browserconsole na inloggen uitvoeren:
+ *   seedFamilySenseTestDossiers()
+ */
+async function seedFamilySenseTestDossiers(){
+  if(!S.user||!sb){toast('Log eerst in.');return;}
+  if(!confirm('Alle contactdossiers en hun berichten wissen en vervangen door testdossiers?\n\nOWN Sense blijft behouden. Dit kan niet ongedaan worden.'))return;
+  try{
+    try{await flushPendingAutosavesAsync();}catch(_f){}
+    toast('Bezig met reset…');
+    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+    for(var i=0;i<contacts.length;i++){
+      await delP(contacts[i]);
+    }
+    var stubs=[
+      {name:'EmmaSense',display_name:'Emma',familie_rol:'dochter',familie_relatie:'',birthdate:'2015-04-12',city:'Leuven',country:'België'},
+      {name:'LucasSense',display_name:'Lucas',familie_rol:'zoon',familie_relatie:'',birthdate:'2018-09-22',city:'Leuven',country:'België'},
+      {name:'MamaSense',display_name:'Mama',familie_rol:'moeder',familie_relatie:'',birthdate:'1986-03-14',city:'Leuven',country:'België'},
+      {name:'PapaSense',display_name:'Papa',familie_rol:'vader',familie_relatie:'',birthdate:'1984-11-02',city:'Leuven',country:'België'},
+      {name:'NonkelFransSense',display_name:'Nonkel Frans',familie_rol:'anders',familie_relatie:'Nonkel',birthdate:'1980-07-08',city:'Gent',country:'België'},
+      {name:'TanteLiesSense',display_name:'Tante Lies',familie_rol:'anders',familie_relatie:'Tante',birthdate:'1988-01-30',city:'Antwerpen',country:'België'},
+      {name:'OmaRitaSense',display_name:'Oma Rita',familie_rol:'grootouder',familie_relatie:'Grootmoeder',birthdate:'1955-12-05',city:'Brugge',country:'België'}
+    ];
+    for(var j=0;j<stubs.length;j++){
+      var st=stubs[j];
+      await ensureP(st.name);
+      var d=S.pdata[st.name]||{props:{...DP},count:0,categories:{},meta:{}};
+      var meta={
+        display_name:st.display_name,
+        familie_rol:st.familie_rol,
+        familie_relatie:st.familie_relatie,
+        birthdate:st.birthdate,
+        city:st.city,
+        country:st.country
+      };
+      await saveP(st.name,d.props,d.count,d.categories||{},d.summary||'',meta);
+    }
+    await loadAll();
+    updateNavTabIndicators();
+    rDrawer();
+    if(S.screen==='dossier'&&S.viewDossier&&S.viewDossier!=='OWN Sense'&&!S.profiles.includes(S.viewDossier)){
+      goScreen('home');
+    }
+    toast('✓ Testdossiers klaar (Emma, Lucas, mama/papa, nonkel, tante, oma).');
+  }catch(e){
+    console.error('seedFamilySenseTestDossiers',e);
+    toast('Mislukt: '+(e&&e.message?e.message:'onbekend'));
+  }
+}
+
 // ══ Navigation ═══════════════════════════════════════════════════
 function goBack(){
   if(S.screen==='dossier'){goScreen('senses');return;}
@@ -3657,7 +3854,7 @@ function getSensesCardMatchHtml(name,opts){
       +'</div>'+dossierHint+'</div>';
   }
   var d=S.pdata[name]||{};
-  var fr=String((d.meta&&d.meta.familie_relatie)||'').trim()||String((d.meta&&d.meta.intent)||'').trim();
+  var fr=getContactRolBadgeText(d.meta);
   var badge=fr?'<span class="familie-rel-badge">'+escHTML(fr)+'</span>':'';
   if(opts.profielOnly){
     var topF='width:100%';
@@ -3670,7 +3867,7 @@ function getSensesCardMatchHtml(name,opts){
     ?'<div style="font-size:10px;color:#B00020;font-weight:600;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
     :'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+'</div>';
   return'<div style="'+top+'">'
-    +(badge?'<div style="margin-bottom:6px">'+badge+'</div>':'<div style="font-size:11px;color:#8a8f97;margin-bottom:4px">Geen relatie-omschrijving — vul die in bij profielgegevens</div>')
+    +(badge?'<div style="margin-bottom:6px">'+badge+'</div>':'<div style="font-size:11px;color:#8a8f97;margin-bottom:4px">Nog geen rol — vul bij profiel (bv. kind, ouder, nonkel, tante…)</div>')
     +line2
     +'</div>';
 }
@@ -3678,7 +3875,7 @@ function getSensesCardMatchHtml(name,opts){
 function getSensesMatchInlineHtml(name){
   if(name==='OWN Sense')return '';
   var d=S.pdata[name]||{};
-  var fr=String((d.meta&&d.meta.familie_relatie)||'').trim()||String((d.meta&&d.meta.intent)||'').trim();
+  var fr=getContactRolBadgeText(d.meta);
   return fr?'<span class="familie-rel-badge">'+escHTML(fr)+'</span>':'';
 }
 
@@ -3800,6 +3997,8 @@ function openProfileModal(name){
   status.textContent=meta.photo_url?'Foto toegevoegd':'Geen foto';
   var isOwnProf=_profileModalFor==='OWN Sense';
   var familieRelVal=escA(String(meta.familie_relatie||meta.intent||'').trim());
+  var curRolSel=String(meta.familie_rol||'').trim();
+  var rolOpts=buildFamilieRolSelectOptionsHtml(curRolSel);
   fields.innerHTML=''
     +'<input class="profile-field" value="'+escA(dn(_profileModalFor))+'" readonly>'
     +renderProfileField('pf_birthdate','Geboortedatum',escA(meta.birthdate),false,'date','oninput="updateProfileAgePreview()"')
@@ -3810,9 +4009,14 @@ function openProfileModal(name){
       +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
     +(isOwnProf
       ?renderProfileField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
-      :('<label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Wie is dit voor jou?</label>'
-        +'<input type="text" id="familieRelatieInput" placeholder="Bv: mama, plus zus, nonkel Frans, stiefvader, beste vriend..." value="'+familieRelVal+'" maxlength="60" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box"/>'
-        +'<p style="font-size:11px;color:#8a8f97;margin-top:4px">Vrij in te vullen — geen beperking op type relatie.</p>'))
+      :('<label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Hoofdrol in je gezin</label>'
+        +'<select id="familieRolSelect" class="profile-field" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-bottom:6px">'
+        +rolOpts
+        +'</select>'
+        +'<button type="button" class="coach-save-other" style="font-size:12px;padding:6px 10px;margin:0 0 10px 0;width:100%;max-width:100%;box-sizing:border-box" onclick="addCustomFamilieRolFromProfileModal()">+ Eigen rol toevoegen</button>'
+        +'<label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Extra toelichting <span style="font-weight:500;color:#8a8f97">(optioneel, verplicht bij «Anders»)</span></label>'
+        +'<input type="text" id="familieRelatieInput" placeholder="Bv: jongste, schoonzus, co-ouder, nonkel van vaders kant…" value="'+familieRelVal+'" maxlength="60" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box"/>'
+        +'<p style="font-size:11px;color:#8a8f97;margin-top:4px">Alleen <strong>basics</strong> in de lijst (zoon, moeder, …). Ontbreekt iets (nonkel, stiefkind, …)? Gebruik <strong>+ Eigen rol</strong> — die blijft bewaard. «Anders» + toelichting kan ook. Geen dating (daarvoor DateSense).</p>'))
     +(isOwnProf?(renderProfileField('pf_billing_pref','Betaalvoorkeur (optioneel, bv. Visa/Bancontact later)',escA(meta.billing_pref),true)):'')
     +'<div id="profileModalCompletionLive" style="margin-top:12px;padding:10px 12px;border:1px solid var(--b);border-radius:10px;line-height:1.45" role="status" aria-live="polite"></div>';
   ensureProfileModalLiveListeners();
@@ -4034,9 +4238,22 @@ async function saveProfileMetaForm(){
       d.meta.postal_code=v('pf_postal');
       d.meta.billing_pref=v('pf_billing_pref');
     }else{
+      var rolEl=document.getElementById('familieRolSelect');
+      var rol=rolEl?String(rolEl.value||'').trim():'';
       var fr=v('familieRelatieInput');
+      if(!rol){
+        toast('Kies een hoofdrol uit de lijst.');
+        setButtonSaveBusy(btn,false);
+        return;
+      }
+      if(rol==='anders'&&!fr){
+        toast('Vul een korte toelichting in bij «Anders».');
+        setButtonSaveBusy(btn,false);
+        return;
+      }
+      d.meta.familie_rol=rol;
       d.meta.familie_relatie=fr;
-      d.meta.intent=fr;
+      delete d.meta.intent;
       delete d.meta.address;
       delete d.meta.postal_code;
       delete d.meta.billing_pref;
@@ -5513,9 +5730,9 @@ function buildPlannerContextPayload(name){
   var stage=getDossierStage(name);
   var shortMeta=[
     meta.display_name||'',
-    meta.intent||'',
-    meta.relationship_type?('relatietype '+meta.relationship_type):'',
-    stage?('relatie '+stageLabel(stage)):''
+    getContactRolBadgeText(meta),
+    meta.relationship_type?('notitie '+meta.relationship_type):'',
+    stage?('fase '+stageLabel(stage)):''
   ].filter(Boolean).join(', ');
   if(shortMeta)lines.push('Profiel: '+shortMeta.substring(0,140));
   if(d.summary)lines.push('Samenvatting: '+String(d.summary).replace(/\s+/g,' ').substring(0,200));
@@ -6204,9 +6421,9 @@ async function rDossier(el){
   header+='<div style="flex:1;min-width:0">';
   header+='<div style="font-size:18px;font-weight:800;color:var(--t)">'+personName2+'</div>';
   if(!isOwn){
-    var fr=String((d.meta&&d.meta.familie_relatie)||'').trim()||String((d.meta&&d.meta.intent)||'').trim();
+    var fr=getContactRolBadgeText(d.meta);
     if(fr)header+='<div style="margin-top:6px"><span class="familie-rel-badge">'+escHTML(fr)+'</span></div>';
-    else header+='<div style="font-size:12px;color:#8a8f97;margin-top:6px">Vul bij profielgegevens in wie dit voor jou is.</div>';
+    else header+='<div style="font-size:12px;color:#8a8f97;margin-top:6px">Vul bij profielgegevens je rol (kind, ouder, nonkel…).</div>';
   }
   if(!isOwn&&d.lastActive){
     header+='<div style="font-size:12px;color:var(--m);margin-top:2px">Laatste update: '+timeAgo(d.lastActive)+'</div>';
@@ -6730,7 +6947,7 @@ async function loadTab(name,tab,d){
 function buildAdviceContextPayload(name,d,msgs){
   var lines=[];
   var meta=(d&&d.meta)||{};
-  var famRel=String(meta.familie_relatie||meta.intent||'').trim();
+  var famRel=getContactRolBadgeText(meta);
   var summary=String((d&&d.summary)||'').trim();
   if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,320));
   var catSnips=[];
@@ -6751,7 +6968,7 @@ function buildAdviceContextPayload(name,d,msgs){
     .map(function(t){return '- '+t.substring(0,180);});
   if(recentFacts.length)lines.push('Recente signalen:\n'+recentFacts.join('\n'));
   var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
-  if(name!=='OWN Sense'&&famRel)payload+='\nWie is dit voor jou: '+famRel;
+  if(name!=='OWN Sense'&&famRel)payload+='\nRol in je gezin: '+famRel;
   if(lines.length)payload+='\n'+lines.join('\n');
   return payload;
 }
@@ -7045,6 +7262,14 @@ async function herbereken(dosName,silent=true){
   var combinedContext=(manualText+' '+msgText).trim();
   if(!combinedContext){toast('Voeg eerst info toe via de invulvakjes of via Vertel.');return;}
 
+  var geoPrefix='';
+  if(dosName!=='OWN Sense'){
+    var rlH=getContactRolBadgeText(d.meta||{});
+    geoPrefix=rlH
+      ?'[Gezinsdossier: '+dn(dosName)+' is voor jou «'+rlH+'». Lees alleen wat in de tekst staat; géén dating-context tenzij expliciet.]\n'
+      :'[Gezinsdossier: persoon uit familie of hechte kring — géén date-app.]\n';
+  }
+
   var sys=`Je bent FamilySensei. Analyseer alles wat beschikbaar is over "${dn(dosName)}" en schat de 9 eigenschappen in op basis van de tekst.
 BELANGRIJK: gebruik ENKEL info die expliciet in de tekst staat. Bij weinig of onduidelijke info gebruik je 0 — gok nooit.
 Geef ENKEL geldig JSON (geen markdown, geen uitleg):
@@ -7052,7 +7277,7 @@ Geef ENKEL geldig JSON (geen markdown, geen uitleg):
 0=geen info. 100=maximaal. stabiliteit=em.stabiliteit. vertrouwen=betrouwbaarheid. communicatie=openheid in communicatie. onafhankelijkheid=zelfstandigheid.`;
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:combinedContext}],300);
+    var raw=await callAPI(sys,[{role:'user',content:geoPrefix+combinedContext}],300);
     var clean=raw.replace(/```json|```/g,'').trim();
     var updates=JSON.parse(clean);
     PK.forEach(k=>{
@@ -8257,42 +8482,42 @@ function getContactCatsDef(personName){
   return [
     {
       id:'karakter_contact',
-      title:'Wie is '+personName,
+      title:'In het gezin',
       icon:'🧠',
       prompts:[
-        {q:'Hoe zou jij '+personName+' omschrijven als persoon?',ph:'Bv: warm, afstandelijk, gesloten, grappig, zorgzaam, dominant, kwetsbaar...'},
-        {q:'Hoe gedraagt '+personName+' zich in contact met jou — wat valt je op?',ph:'Bv: luistert goed, praat veel over zichzelf, vermijdt bepaalde onderwerpen, is snel aanwezig...'},
-        {q:'Wat zijn de sterkste kanten van '+personName+', en waar loopt hij/zij soms op vast?',ph:'Bv: erg loyaal maar kan niet loslaten, heel zorgzaam maar moeite met grenzen stellen...'}
+        {q:'Hoe zou jij '+personName+' typeren als mens — los van de rol (kind, ouder, …)?',ph:'Bv: koppig maar lief, snel overstuur, zorgzaam, eigenwijs, stil van buiten…'},
+        {q:'Hoe komt '+personName+' over in gezinsmomenten (eten, ruzie, feest, dagelijkse sleur)?',ph:'Bv: trekt zich terug bij spanning, maakt grapjes om spanning te breken, wil alles regelen…'},
+        {q:'Waar heeft '+personName+' het duidelijk moeilijk mee, en waar blinkt hij/zij in uit?',ph:'Bv: moeite met verliezen, sterk in troosten, snel gefrustreerd met huiswerk, heel loyaal naar broers/zussen…'}
       ]
     },
     {
       id:'patronen_contact',
-      title:'Dynamiek & Gedrag',
+      title:'Rollen, grenzen, gewoontes',
       icon:'🔄',
       prompts:[
-        {q:'Welke rol neemt '+personName+' typisch in binnen de familie of jullie relatie?',ph:'Bv: de zorger, de bemiddelaar, de zwarte schaap, de stille, de dominante figuur...'},
-        {q:'Hoe reageert '+personName+' als er spanning, conflict of emotie in het spel is?',ph:'Bv: vermijdt conflict, wordt defensief, zoekt toenadering, trekt zich terug, escaleert...'},
-        {q:'Zijn er terugkerende patronen of onderwerpen die jullie contact telkens opnieuw beïnvloeden?',ph:'Bv: dezelfde discussie over grenzen, moeite met eerlijkheid, altijd oppervlakkig blijven...'}
+        {q:'Welke plek heeft '+personName+' in jullie gezin of netwerk (zorger, brug, stoorzender, kluizenaar, grappenmaker…)?',ph:'Bv: de ouder die alles plant, het kind dat alles test, de nonkel die tussenbeide komt…'},
+        {q:'Wat gebeurt er als er ruzie, teleurstelling of veel drukte is — hoe reageert '+personName+'?',ph:'Bv: stil worden, schreeuwen, weglopen, alles willen oplossen, bij een ander aankloppen…'},
+        {q:'Welke thema’s of situaties spelen steeds opnieuw rond '+personName+' (school, schermen, afspraken, eerlijkheid, aandacht)?',ph:'Bv: elke week hetzelfde gesprek over opruimen, wie er gelijk heeft, wie voor wie zorgt…'}
       ]
     },
     {
       id:'gevoel_contact',
-      title:'Jouw Gevoel',
+      title:'Jouw band met '+personName,
       icon:'💬',
       prompts:[
-        {q:'Hoe voel jij je bij '+personName+'? Wat doet het contact met jou?',ph:'Bv: ik voel me op mijn gemak, gespannen, onzeker, veilig, geprikkeld, mezelf...'},
-        {q:'Wat waardeer jij het meest in '+personName+'?',ph:'Bv: de warmte, de eerlijkheid, dat hij/zij er altijd is, de humor, de diepgang...'},
-        {q:'Wat maakt contact met '+personName+' soms moeilijk of zwaar voor jou?',ph:'Bv: weinig initiatief, emotionele afstand, onvoorspelbaar gedrag, onopgeloste spanning...'}
+        {q:'Hoe voel jij je bij '+personName+' — veilig, geërgerd, zorgelijk, dichtbij, op afstand?',ph:'Bv: ik kan ademen, ik loop op eieren, ik wil het goed doen maar raak uitgeput…'},
+        {q:'Wat maakt dat je van '+personName+' houdt of trots op hem/haar bent?',ph:'Bv: doorzettingsvermogen, humor, hoe hij/zij voor anderen zorgt, eerlijkheid…'},
+        {q:'Wat maakt jullie band soms lastig of pijnlijk voor jou?',ph:'Bv: geen grenzen, weinig erkenning, voorspelbare escalaties, je voelt je niet gehoord…'}
       ]
     },
     {
       id:'achtergrond_contact',
-      title:'Achtergrond & Familiegeschiedenis',
+      title:'Verleden & context',
       icon:'📖',
       prompts:[
-        {q:'Wat weet jij over hoe '+personName+' is opgegroeid of welke ervaringen hem/haar gevormd hebben?',ph:'Bv: moeilijke jeugd, veel verantwoordelijkheid vroeg, verlies meegemaakt, hechte familie...'},
-        {q:'Welke familiedynamieken of patronen van vroeger zie je vandaag nog terug bij '+personName+'?',ph:'Bv: moeite met autoriteit door strenge opvoeding, angst voor verlating, altijd moeten presteren...'},
-        {q:'Is er iets in het verleden of de situatie van '+personName+' dat helpt begrijpen waarom jullie relatie is zoals ze is?',ph:'Bv: een onverwerkt conflict, rolverdeling die nooit uitgesproken is, oud zeer dat nog speelt...'}
+        {q:'Wat weet jij over de jeugd of grote gebeurtenissen die '+personName+' gevormd hebben?',ph:'Bv: scheiding, verlies, verhuizing, zorg voor iemand thuis, pesten op school…'},
+        {q:'Welke oude patronen uit het gezin zie je nu nog terug bij '+personName+' of tussen jullie?',ph:'Bv: niemand mag boos zijn, alles moet perfect, humor ipv moeilijke gesprekken…'},
+        {q:'Wat helpt jou begrijpen waarom jullie band of dynamiek nu zo is (zonder '+personName+' te veroordelen)?',ph:'Bv: weinig slaap bij jonge kinderen, stress op werk, onuitgesproken verwachtingen, jaloersheid tussen kinderen…'}
       ]
     }
   ];
@@ -8308,8 +8533,8 @@ function buildProfileMetaPreviewRows(name,d){
   if(String(m.country||'').trim())rows.push({k:'Land',v:String(m.country).trim()});
   if(name==='OWN Sense'&&String(m.intent||'').trim())rows.push({k:'Intentie',v:String(m.intent).trim()});
   if(name!=='OWN Sense'){
-    var frShow=String(m.familie_relatie||m.intent||'').trim();
-    if(frShow)rows.push({k:'Wie is dit voor jou',v:frShow});
+    var frShow=getContactRolBadgeText(m);
+    if(frShow)rows.push({k:'Rol in je gezin',v:frShow});
   }
   if(String(m.photo_url||'').trim())rows.push({k:'Profielfoto',v:'ingesteld'});
   else rows.push({k:'Profielfoto',v:'nog niet toegevoegd'});
@@ -8328,7 +8553,7 @@ function buildProfileMetaAccordionHtml(name,d){
   html+='<div class="own-cat-icon">👤</div>';
   html+='<div class="own-cat-info">';
   html+='<div class="own-cat-title">Profielgegevens</div>';
-  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">'+(isOwn?'Geboorte, regio, land en intentie (foto apart via Foto-tab)':'Geboorte, regio, land en wie dit voor jou is (foto apart via Foto-tab)')+'</div>';
+  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">'+(isOwn?'Geboorte, regio, land en intentie (foto apart via Foto-tab)':'Geboorte, regio, land, hoofdrol + evt. toelichting (foto apart via Foto-tab)')+'</div>';
   html+='<div class="own-cat-prog '+(metaC.complete?'done':'')+'">'+metaC.filled+'/'+metaC.total+' basisvelden'+(metaC.complete?' ✓':'')+'</div>';
   html+='</div>';
   if(metaC.complete)html+='<span class="own-meta-check" title="Basisvelden ingevuld" aria-label="Compleet">✓</span>';
@@ -8413,15 +8638,15 @@ function buildProfielContactHtml(name,d){
   var profielIncomplete=!metaCC.complete||(contactTotal>0&&contactFilled<contactTotal);
   var html='';
   html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
-  html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen en «wie is dit voor jou») helpt FamilySensei scherper te adviseren. Vul ook OWN Sense aan voor jouw eigen context.</div>';
+  html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen + <strong>rol in je gezin</strong>) helpt FamilySensei scherper te adviseren. Vul ook OWN Sense aan voor jouw eigen context.</div>';
   if(profielIncomplete){
     html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 12px">Profiel nog niet volledig ingevuld</div>';
   }
-  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Invullen voor <strong>'+personName+'</strong> — dit stuurt eigenschappen en advies.</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:14px;line-height:1.45">Dit is een <strong>gezins- of naastendossier</strong> voor <strong>'+personName+'</strong> — geen date-profiel. Hieronder: rol + observaties voor FamilySensei.</div>';
   html+=buildProfileMetaAccordionHtml(name,d);
   html+=buildInvulvragenStripHtml(name);
-  html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat weet jij over '+personName+'?</div>';
-  html+='<div style="font-size:13px;color:var(--m);margin-bottom:10px;line-height:1.5">Vul in wat je weet. Dit + je opgeslagen berichten bepalen samen de eigenschappen.</div>';
+  html+='<div style="font-size:14px;font-weight:700;color:#333;margin:18px 0 4px">Wat merk jij van '+personName+' in jullie gezin (of hechte kring)?</div>';
+  html+='<div style="font-size:13px;color:var(--m);margin-bottom:10px;line-height:1.5">Vul in wat je ziet en weet. Samen met je Vertel-berichten vormt dit de eigenschappen en het advies.</div>';
   html+='<div style="font-size:12px;color:#5c6470;margin-bottom:14px;line-height:1.45;padding:8px 10px;background:#f4f6f8;border-radius:10px;border:1px solid #e8eaed"><strong>Zo werkt het:</strong> <strong>Dikteer dit vak</strong> = dit veld. Onderaan <strong>Vrij vertellen</strong> = aparte Vertel-chat over dit dossier.</div>';
   var firstContactOpenSet=!metaCC.complete;
   CONTACT_CATS.forEach(function(cat){
@@ -9159,7 +9384,8 @@ async function updateContactCategories(dosName,tekst){
     return ' '+cat.id+': '+fields;
   }).join('');
 
-  var sys='Je bent FamilySensei. Analyseer de tekst over "'+personName+'" en vul ALLEEN in wat de tekst expliciet vermeldt.'
+  var sys='Je bent FamilySensei. De gebruiker beschrijft iemand uit het GEZIN of de hechte kring (kind, ouder, nonkel, grootouder, …) — géén dating-app.'
+    +' Analyseer de tekst over "'+personName+'" en vul ALLEEN in wat de tekst expliciet vermeldt.'
     +' Laat velden leeg ("") als de tekst er NIETS over zegt — gok nooit.'
     +' Geef ENKEL geldig JSON (geen markdown):'
     +schemaJson
@@ -9169,7 +9395,9 @@ async function updateContactCategories(dosName,tekst){
     +' Schrijf bondig (max 1 zin per veld). Combineer met bestaande antwoorden als die er al zijn.';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:'Bestaande info: '+JSON.stringify(d.categories)+'\nNieuwe tekst: '+tekst}],600);
+    var rlC=getContactRolBadgeText(d.meta||{});
+    var famHead=rlC?'CONTEXT: «'+personName+'» is voor de gebruiker: '+rlC+'. Thema familie/gezin.\n\n':'CONTEXT: gezins- of naastenboodschap.\n\n';
+    var raw=await callAPI(sys,[{role:'user',content:famHead+'Bestaande info: '+JSON.stringify(d.categories)+'\nNieuwe tekst: '+tekst}],600);
     var clean=raw.replace(/```json|```/g,'').trim();
     var updates=JSON.parse(clean);
 
@@ -9938,15 +10166,15 @@ function buildCoachContext(){
   /* Contacten eerst: bij afkappen op max. lengte verdwijnen ze anders vaak (OWN-blok is lang). */
   var contacts=getActiveContactNames();
   if(contacts.length){
-    lines.push('JOUW CONTACTEN:');
+    lines.push('GEZINS- EN NAASTENDOSSIER:');
     contacts.forEach(function(p){
       var d=S.pdata[p]||{props:{},count:0,categories:{},meta:{}};
       var props=[];
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
       var meta=d.meta||{};
       var metaAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
-      var famRel=String(meta.familie_relatie||meta.intent||'').trim();
-      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',famRel?('rol: '+famRel):''].filter(Boolean).join(', ');
+      var famRel=getContactRolBadgeText(meta);
+      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
       var photoShort=(meta.photo_analysis&&meta.photo_analysis.summary)?(' | foto: '+String(meta.photo_analysis.summary).substring(0,80)):'';
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
@@ -9987,7 +10215,7 @@ function buildContactNamesLine(){
   var contacts=S.profiles.filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';});
   if(!contacts.length)return'';
   var parts=contacts.map(function(p){return dn(p)+' (dossier '+p+')';});
-  return'CONTACTNAMEN (actief): '+parts.join(', ')+'. Een voornaam in je tekst hoort bij het dossier met dezelfde voornaam (voor de naam «Sense»).';
+  return'NAMEN VAN GEZINSLEDEN/NAASTEN (actieve dossiers): '+parts.join(', ')+'. Een voornaam in je tekst hoort bij het dossier met dezelfde voornaam (achtervoegsel «Sense»).';
 }
 
 async function buildDossierContextForAI(dosName){
@@ -9996,8 +10224,8 @@ async function buildDossierContextForAI(dosName){
   var lines=[];
   var m=d.meta||{};
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
-  var famRel=String(m.familie_relatie||m.intent||'').trim();
-  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,famRel?('wie voor jou: '+famRel):''].filter(Boolean).join(', ');
+  var famRel=getContactRolBadgeText(m);
+  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
   if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
   if(m.photo_analysis){
     var ptxt='Foto-analyse: mood '+(m.photo_analysis.mood||'')+', openheid '+(m.photo_analysis.openheid||0)+'%, glimlach '+(m.photo_analysis.glimlach||0)+'%, energie '+(m.photo_analysis.energie||0)+'%, verzorging '+(m.photo_analysis.verzorging||0)+'%, benaderbaarheid '+(m.photo_analysis.benaderbaarheid||0)+'%';
@@ -10627,6 +10855,8 @@ try{
   window.confirmAiImportSave=confirmAiImportSave;
   window.runAiImportSaveClick=runAiImportSaveClick;
   window.forceUiRecovery=forceUiRecovery;
+  window.seedFamilySenseTestDossiers=seedFamilySenseTestDossiers;
+  window.addCustomFamilieRolFromProfileModal=addCustomFamilieRolFromProfileModal;
 }catch(e){console.warn('window exports:',e);}
 (function bindAiImportModalClicks(){
   var modal=document.getElementById('aiImportModal');
