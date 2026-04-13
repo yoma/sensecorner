@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 16:05">
+<meta name="os-build" content="13-04-2026 16:20">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 16:05</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 16:20</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -577,17 +577,24 @@ async function loadOwnTimelineFromSupabase(){
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
     if(!user)return;
-    var q=client.from('sense_messages')
-      .select('*')
-      .eq('user_id',user.id)
-      .eq('profile_name','OWN Sense')
-      .order('created_at',{ascending:false})
-      .limit(500);
-    var res=await q;
-    if(res&&Array.isArray(res.data)){
-      ownTimeline=res.data;
-      renderTimelineTab();
+    async function fetchBy(field){
+      var q=client.from('sense_messages')
+        .select('*')
+        .eq('user_id',user.id)
+        .eq(field,'OWN Sense')
+        .order('created_at',{ascending:false})
+        .limit(500);
+      var res=await q;
+      if(res&&res.error)throw new Error(res.error.message||'timeline fetch failed');
+      return Array.isArray(res&&res.data)?res.data:[];
     }
+    var rows=[];
+    try{rows=await fetchBy('profile_name');}catch(_e){}
+    if(!rows.length){
+      try{rows=await fetchBy('dossier');}catch(_e2){}
+    }
+    ownTimeline=rows;
+    renderTimelineTab();
   }catch(e){}
 }
 
@@ -686,10 +693,23 @@ function saveHubState(){
 
 function calcPropsFromCategories(){
   var text='';
+  var filledCount=0;
   OWN_CATS.forEach(function(c){
     var cat=hubState.categories[c.id]||{};
-    ['a0','a1','a2','a3'].forEach(function(k){text+=' '+String(cat[k]||'').toLowerCase();});
+    ['a0','a1','a2','a3'].forEach(function(k){
+      var v=String(cat[k]||'').trim();
+      if(v)filledCount++;
+      text+=' '+v.toLowerCase();
+    });
   });
+  if(!filledCount){
+    var hasSavedProps=PK.some(function(k){return (parseInt(hubState.props[k],10)||0)>0;});
+    if(!hasSavedProps){
+      PK.forEach(function(k){hubState.props[k]=0;});
+      return false;
+    }
+    return true;
+  }
   function has(words){return words.some(function(w){return text.indexOf(w)>=0;});}
   hubState.props.gevoeligheid=has(['gevoel','emot','gevoelig','geraakt'])?74:36;
   hubState.props.openheid=has(['open','eerlijk','deel','kwets'])?72:38;
@@ -700,6 +720,7 @@ function calcPropsFromCategories(){
   hubState.props.vertrouwen=has(['vertrouwen','veilig','trouw'])?75:39;
   hubState.props.communicatie=has(['communicatie','gesprek','praten','uitspreken'])?71:41;
   hubState.props.onafhankelijkheid=has(['zelfstandig','eigen','ruimte'])?72:40;
+  return true;
 }
 
 function fmtDate(iso){
@@ -730,9 +751,9 @@ function renderHero(){
 }
 
 function renderProps(){
-  calcPropsFromCategories();
+  var hasData=calcPropsFromCategories();
   var el=document.getElementById('propsCard');
-  var bars='<h3>Eigenschappen</h3><p class="subtle">Automatisch afgeleid uit je vragenlijst-antwoorden.</p>';
+  var bars='<h3>Eigenschappen</h3><p class="subtle">'+(hasData?'Automatisch afgeleid uit je vragenlijst-antwoorden.':'Nog geen profielinput gevonden. Vul vragen in of laad eerst data via Date/FamilySense.')+'</p>';
   PK.forEach(function(k,i){
     var v=Math.max(0,Math.min(100,parseInt(hubState.props[k],10)||0));
     bars+='<div class="bar-row"><div class="bar-head"><span>'+PL[i]+'</span><strong>'+v+'%</strong></div>'
