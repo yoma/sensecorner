@@ -7,6 +7,7 @@
 <meta name="os-build" content="13-04-2026 17:30">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 :root{
   --accent:#B11F1F;
@@ -280,6 +281,26 @@ html,body{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:18px;height:18px;border-radius:999px;background:#B11F1F;color:#fff;font-size:10px;font-weight:800;margin-left:6px;
 }
+.import-hub-box{border:0.5px solid #E7C7C2;border-radius:14px;background:linear-gradient(180deg,#FFFBFB 0%,#FFF 100%);padding:12px}
+.import-hub-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#8E2B20;margin-bottom:6px}
+.import-hub-text{font-size:13px;line-height:1.55;color:#4E535B}
+.import-modal{position:fixed;inset:0;display:none;z-index:60}
+.import-modal.show{display:block}
+.import-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.import-modal-sheet{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(92vw,640px);max-height:88vh;overflow:hidden;
+  background:#fff;border:0.5px solid var(--border);border-radius:16px;padding:14px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.import-tabs{display:flex;gap:6px}
+.import-tab{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fafbfc;font-size:12px;font-weight:700;cursor:pointer}
+.import-tab.active{background:var(--accent-soft);border-color:#E7B9B1;color:var(--accent)}
+.import-help{font-size:12px;line-height:1.55;color:#50555D;border:0.5px solid var(--border);border-radius:10px;background:#F8F7F5;padding:10px}
+.import-review-label{font-size:11px;font-weight:800;color:#7A2A21;margin:9px 0 4px}
+.import-review-ta{width:100%;min-height:56px;border:0.5px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;resize:vertical}
+.import-status{font-size:12px;color:#6E7177;line-height:1.45;min-height:18px}
+.import-status.err{color:#9F2A20}
 </style>
 </head>
 <body>
@@ -314,6 +335,7 @@ html,body{
 
   <section id="hubShell">
     <section class="tab-panel active" id="tab-profiel" aria-label="Profiel tab">
+      <article class="card" id="importCard"></article>
       <article class="card" id="heroCard"></article>
       <article class="card" id="propsCard"></article>
       <article class="card" id="photoCard"></article>
@@ -329,7 +351,43 @@ html,body{
     </section>
   </section>
 </main>
+<div class="import-modal" id="aiImportModal" aria-hidden="true">
+  <div class="import-modal-bg" onclick="closeAiImportModal()"></div>
+  <div class="import-modal-sheet">
+    <div style="font-size:16px;font-weight:800">OWN Sense vullen via chat-export</div>
+    <div class="subtle">Upload ChatGPT ZIP of Claude JSON, bekijk de voorgestelde tekst en sla op in je OWN-profiel.</div>
+    <div id="aiImportStepUpload">
+      <div class="import-tabs">
+        <button type="button" class="import-tab active" id="aiImportTabGpt" onclick="switchAiImportTab('chatgpt')">ChatGPT</button>
+        <button type="button" class="import-tab" id="aiImportTabClaude" onclick="switchAiImportTab('claude')">Claude</button>
+      </div>
+      <div class="import-help" id="aiImportPaneGpt" style="margin-top:8px">
+        <strong>ChatGPT (ZIP)</strong><br>Exporteer in chatgpt.com via Instellingen > Gegevensbeheer > Gegevens exporteren, en upload je ZIP.
+      </div>
+      <div class="import-help" id="aiImportPaneClaude" style="margin-top:8px;display:none">
+        <strong>Claude (JSON)</strong><br>Exporteer via claude.ai > Settings > Privacy > Export data, en upload bij voorkeur `conversations.json`.
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('aiImportFileInput').click()">Bestand kiezen</button>
+      </div>
+    </div>
+    <div id="aiImportStepLoading" style="display:none" class="subtle">Je profiel wordt opgebouwd… even geduld.</div>
+    <div id="aiImportStepReview" style="display:none;overflow:auto">
+      <div class="subtle">Controleer en pas aan. Bij opslaan wordt dit samengevoegd met bestaande OWN-tekst.</div>
+      <div id="aiImportReviewFields"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" id="aiImportSaveBtn" onclick="confirmAiImportSave()">Opslaan in OWN Sense</button>
+        <button type="button" class="btn btn-muted" onclick="resetAiImportToUpload()">Terug</button>
+      </div>
+    </div>
+    <div id="aiImportStatus" class="import-status"></div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-muted" onclick="closeAiImportModal()">Sluiten</button>
+    </div>
+  </div>
+</div>
 <input id="photoPicker" type="file" accept="image/*" style="display:none">
+<input id="aiImportFileInput" type="file" accept=".zip,application/zip,.json,application/json" style="display:none" onchange="handleAiImportFile(this)">
 
 <script>
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -824,6 +882,324 @@ function renderHero(){
   });
 }
 
+function renderImportCard(){
+  var el=document.getElementById('importCard');
+  if(!el)return;
+  el.innerHTML=''
+    +'<div class="import-hub-box">'
+    +'<div class="import-hub-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
+    +'<div class="import-hub-text">Import uit je chats vult je OWN-profiel centraal aan. DateSense en FamilySense lezen daarna dezelfde basis, met minder herhaling en meer consistentie.</div>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary" type="button" onclick="openAiImportModal()">Start import</button>'
+    +'</div></div>';
+}
+
+var _AI_IMPORT_KEYS=['waarden','persoonlijkheid','communicatiestijl','zoektInPartner','emotioneleStijl','levensstijl','overige'];
+var _AI_IMPORT_LABELS={waarden:'Waarden',persoonlijkheid:'Persoonlijkheid',communicatiestijl:'Communicatiestijl',zoektInPartner:'Zoekt in partner',emotioneleStijl:'Emotionele stijl',levensstijl:'Levensstijl',overige:'Overige'};
+var _AI_IMPORT_SYS='Je bent een persoonlijkheidsanalist. Analyseer de volgende berichten van een gebruiker en destilleer een profiel. Geef geldig JSON met velden: waarden, persoonlijkheid, communicatiestijl, zoektInPartner, emotioneleStijl, levensstijl, overige.';
+var _AI_IMPORT_MERGE_SYS='Je bent OWN Sensei. De gebruiker voegt OWN-profieltekst toe vanuit chat-export. Per item krijg je BESTAAND en NIEUW. Geef ALLEEN geldig JSON: {"velden":{"karakter.a0":"..."}} en gebruik exact de aangeleverde keys.';
+var _aiImportSaving=false;
+
+function importStatus(msg,isErr){
+  var el=document.getElementById('aiImportStatus');
+  if(!el)return;
+  el.textContent=String(msg||'');
+  el.classList.toggle('err',!!isErr);
+}
+function escHTML(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+function openAiImportModal(){
+  resetAiImportToUpload();
+  var m=document.getElementById('aiImportModal');
+  if(m){m.classList.add('show');m.setAttribute('aria-hidden','false');}
+}
+function closeAiImportModal(){
+  var m=document.getElementById('aiImportModal');
+  if(m){m.classList.remove('show');m.setAttribute('aria-hidden','true');}
+}
+function resetAiImportToUpload(){
+  _aiImportSaving=false;
+  importStatus('');
+  var u=document.getElementById('aiImportStepUpload');
+  var l=document.getElementById('aiImportStepLoading');
+  var r=document.getElementById('aiImportStepReview');
+  if(u)u.style.display='block';
+  if(l)l.style.display='none';
+  if(r)r.style.display='none';
+  var inp=document.getElementById('aiImportFileInput');
+  if(inp)inp.value='';
+}
+function switchAiImportTab(which){
+  var gpt=which==='chatgpt';
+  var tg=document.getElementById('aiImportTabGpt');
+  var tc=document.getElementById('aiImportTabClaude');
+  var pg=document.getElementById('aiImportPaneGpt');
+  var pc=document.getElementById('aiImportPaneClaude');
+  if(tg)tg.classList.toggle('active',gpt);
+  if(tc)tc.classList.toggle('active',!gpt);
+  if(pg)pg.style.display=gpt?'block':'none';
+  if(pc)pc.style.display=gpt?'none':'block';
+}
+function chatGptMessageToText(msg){
+  if(!msg)return'';
+  var c=msg.content;
+  if(c==null)return'';
+  if(typeof c==='string')return c.trim();
+  if(Array.isArray(c))return c.map(function(p){return typeof p==='string'?p:((p&&p.text)||'');}).join('').trim();
+  if(c.parts&&Array.isArray(c.parts))return c.parts.map(function(p){return typeof p==='string'?p:((p&&p.text)||'');}).join('').trim();
+  return'';
+}
+function extractChatGptUserMessages(data){
+  var rows=[];
+  var convs=Array.isArray(data)?data:(data&&data.conversations);
+  if(!Array.isArray(convs))return rows;
+  convs.forEach(function(conv){
+    var mapping=conv&&conv.mapping;
+    if(!mapping||typeof mapping!=='object')return;
+    Object.keys(mapping).forEach(function(id){
+      var n=mapping[id];
+      if(!n||!n.message)return;
+      var msg=n.message;
+      if(((msg.author&&msg.author.role)||'')!=='user')return;
+      var text=chatGptMessageToText(msg);
+      if(!text)return;
+      var ct=typeof msg.create_time==='number'?msg.create_time:parseFloat(msg.create_time);
+      rows.push({t:isNaN(ct)?0:ct,text:text});
+    });
+  });
+  rows.sort(function(a,b){return a.t-b.t;});
+  return rows;
+}
+async function extractFromChatGptZipFile(file){
+  if(typeof JSZip==='undefined')throw new Error('ZIP-ondersteuning niet geladen. Herlaad de pagina.');
+  var zip=await JSZip.loadAsync(await file.arrayBuffer());
+  var target=null;
+  zip.forEach(function(path,entry){
+    if(entry.dir)return;
+    if(path.split('/').pop()==='conversations.json')target=entry;
+  });
+  if(!target)throw new Error('Geen conversations.json gevonden in ZIP.');
+  var data=JSON.parse(await target.async('string'));
+  return extractChatGptUserMessages(data);
+}
+function extractClaudeUserMessages(root){
+  var rows=[],q=[root],seen=new WeakSet(),visited=0;
+  while(q.length&&visited<65000){
+    var node=q.pop();visited++;
+    if(node==null||typeof node!=='object')continue;
+    if(seen.has(node))continue;
+    seen.add(node);
+    if(Array.isArray(node)){for(var i=0;i<node.length;i++)q.push(node[i]);continue;}
+    var role=String(node.role||'').toLowerCase();
+    var sender=String(node.sender||node.type||'').toLowerCase();
+    var isUser=role==='user'||sender==='human'||sender==='user';
+    var body=node.content!=null?node.content:(node.text!=null?node.text:null);
+    if(isUser&&body!=null){
+      var t=typeof body==='string'?body:(Array.isArray(body)?body.map(function(b){return typeof b==='string'?b:((b&&b.text)||'');}).join(' '):'');
+      t=String(t).replace(/\s+/g,' ').trim();
+      if(t.length>=2)rows.push({t:parseFloat(node.created_at||node.timestamp||node.updated_at||0)||0,text:t});
+    }
+    for(var k in node){if(Object.prototype.hasOwnProperty.call(node,k))q.push(node[k]);}
+  }
+  rows.sort(function(a,b){return a.t-b.t;});
+  return rows;
+}
+function extractClaudeConversationsExport(data){
+  var rows=[];
+  function textFromContent(c){
+    if(c==null)return'';
+    if(typeof c==='string')return c;
+    if(Array.isArray(c))return c.map(function(part){return typeof part==='string'?part:((part&&part.text)||'');}).join('');
+    return'';
+  }
+  function fromMsg(m){
+    if(!m)return;
+    var role=String(m.role||'').toLowerCase();
+    var sender=String(m.sender||'').toLowerCase();
+    var human=role==='user'||sender==='human'||String(m.type||'').toLowerCase()==='human';
+    if(!human)return;
+    var body=m.content!=null?m.content:(m.text!=null?m.text:null);
+    var t=String(textFromContent(body)||'').replace(/\s+/g,' ').trim();
+    if(t.length<2)return;
+    rows.push({t:parseFloat(m.created_at||m.timestamp||m.updated_at||0)||0,text:t});
+  }
+  var list=Array.isArray(data)?data:(data&&Array.isArray(data.conversations)?data.conversations:(data&&Array.isArray(data.chats)?data.chats:[]));
+  list.forEach(function(conv){
+    var msgs=conv&&(conv.chat_messages||conv.messages||conv.message_list);
+    if(Array.isArray(msgs))msgs.forEach(fromMsg);
+  });
+  rows.sort(function(a,b){return a.t-b.t;});
+  return rows;
+}
+function parseImportProfileJson(raw){
+  var clean=String(raw||'').replace(/```json\s*/gi,'').replace(/```/g,'').trim();
+  var o=JSON.parse(clean),out={};
+  _AI_IMPORT_KEYS.forEach(function(k){out[k]=String(o[k]==null?'':o[k]).trim();});
+  return out;
+}
+function mapImportProfileToOwnCategories(j){
+  function z(s,max){s=String(s==null?'':s).trim();return(max&&s.length>max)?s.substring(0,max):s;}
+  var p={persoonlijkheid:z(j.persoonlijkheid),waarden:z(j.waarden),communicatiestijl:z(j.communicatiestijl),zoekt:z(j.zoektInPartner),emoties:z(j.emotioneleStijl),lev:z(j.levensstijl),overig:z(j.overige)};
+  var o1=z(p.overig,500),o2=z(p.overig.substring(500),500),o3=z(p.overig.substring(1000),500),o4=z(p.overig.substring(1500),500);
+  var gevoelsA1=p.zoekt?z('Wat ik zoek bij een partner (samenvatting import): '+p.zoekt,520):'';
+  return{
+    karakter:{a0:p.persoonlijkheid,a1:p.waarden,a2:p.communicatiestijl,a3:o1},
+    interesses:{a0:p.lev,a1:o2,a2:o3,a3:o4},
+    relatie:{a0:p.zoekt,a1:'',a2:'',a3:''},
+    gevoels:{a0:'',a1:gevoelsA1,a2:p.emoties,a3:z(p.communicatiestijl,420)}
+  };
+}
+function renderAiImportReview(p){
+  var el=document.getElementById('aiImportReviewFields');
+  if(!el)return;
+  var h='';
+  _AI_IMPORT_KEYS.forEach(function(k){
+    h+='<div class="import-review-label">'+escHTML(_AI_IMPORT_LABELS[k]||k)+'</div><textarea class="import-review-ta" id="aiImportRev-'+k+'" rows="3">'+escHTML(p[k]||'')+'</textarea>';
+  });
+  el.innerHTML=h;
+}
+async function callAnthropicJson(systemPrompt,userPrompt,maxTokens){
+  var key=getAnthropicKey();
+  if(!key)throw new Error('Geen Anthropic API-key gevonden.');
+  var r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:userPrompt}]})
+  });
+  var j=await r.json();
+  if(!r.ok)throw new Error((j&&j.error&&j.error.message)||'AI-aanroep mislukt');
+  var txt='';
+  if(j&&Array.isArray(j.content)){j.content.forEach(function(c){if(c&&c.type==='text')txt+=String(c.text||'');});}
+  return String(txt||'').trim();
+}
+async function runAiImportProfileAnalysis(bundle){
+  return await callAnthropicJson(_AI_IMPORT_SYS,'Berichten van de gebruiker (chronologisch, laatste stuk):\n\n'+bundle,1800);
+}
+async function runAiImportConsolidate(items){
+  if(!items||!items.length)return{};
+  var payload=JSON.stringify({items:items.map(function(it){return{veld:it.id,bestaand:it.bestaand,nieuw:it.nieuw};})});
+  var raw=await callAnthropicJson(_AI_IMPORT_MERGE_SYS,'Voeg per item bestaand + nieuw samen. Input JSON:\n\n'+payload,2600);
+  var clean=String(raw||'').replace(/```json\s*/gi,'').replace(/```/g,'').trim();
+  var o=JSON.parse(clean);
+  var velden=(o&&o.velden&&typeof o.velden==='object')?o.velden:o;
+  var out={};
+  items.forEach(function(it){out[it.id]=String(velden&&velden[it.id]||'').trim();});
+  return out;
+}
+function mergeOwnSenseImportField(prevVal,newVal){
+  var nv=String(newVal==null?'':newVal).trim();
+  if(!nv)return'';
+  var ov=String(prevVal==null?'':prevVal).trim();
+  if(!ov)return nv;
+  if(ov.indexOf(nv)>=0)return ov;
+  return ov+'\n\n— Aanvulling (import)\n'+nv;
+}
+async function handleAiImportFile(inp){
+  var f=inp&&inp.files&&inp.files[0];
+  if(inp)inp.value='';
+  if(!f)return;
+  importStatus('',false);
+  if(!getAnthropicKey()){importStatus('Geen API-key gevonden in localStorage (`anthropic_api_key`).',true);return;}
+  var rows=[],name=(f.name||'').toLowerCase();
+  try{
+    if(name.endsWith('.zip')||f.type==='application/zip'||f.type==='application/x-zip-compressed')rows=await extractFromChatGptZipFile(f);
+    else{
+      var data=JSON.parse(await f.text());
+      if(Array.isArray(data)&&data.length&&data[0]&&data[0].mapping)rows=extractChatGptUserMessages(data);
+      else{
+        rows=extractClaudeConversationsExport(data);
+        if(!rows.length)rows=extractClaudeUserMessages(data);
+      }
+    }
+  }catch(e){
+    importStatus('Bestand lezen mislukt: '+(e&&e.message?e.message:'onbekend'),true);
+    return;
+  }
+  if(!rows.length){importStatus('Geen gebruikersberichten gevonden in dit bestand.',true);return;}
+  rows.sort(function(a,b){return a.t-b.t;});
+  var bundle=rows.slice(-300).map(function(r){return r.text;}).join('\n\n---\n\n');
+  if(bundle.length>120000)bundle=bundle.substring(bundle.length-120000);
+  var u=document.getElementById('aiImportStepUpload'),l=document.getElementById('aiImportStepLoading'),r=document.getElementById('aiImportStepReview');
+  if(u)u.style.display='none';
+  if(r)r.style.display='none';
+  if(l)l.style.display='block';
+  try{
+    importStatus('Analyse loopt…');
+    var profile=parseImportProfileJson(await runAiImportProfileAnalysis(bundle));
+    window._aiImportDraft=profile;
+    renderAiImportReview(profile);
+    if(l)l.style.display='none';
+    if(r)r.style.display='block';
+    importStatus('Controleer de velden en klik op opslaan.');
+  }catch(e2){
+    if(l)l.style.display='none';
+    if(u)u.style.display='block';
+    importStatus('Profiel opbouwen mislukt: '+(e2&&e2.message?e2.message:String(e2)),true);
+  }
+}
+async function confirmAiImportSave(){
+  if(_aiImportSaving)return;
+  _aiImportSaving=true;
+  try{
+    var draft={};
+    _AI_IMPORT_KEYS.forEach(function(k){
+      var ta=document.getElementById('aiImportRev-'+k);
+      draft[k]=ta?(ta.value||'').trim():'';
+    });
+    var hasIncoming=_AI_IMPORT_KEYS.some(function(k){return !!draft[k];});
+    if(!hasIncoming){importStatus('Geen tekst om op te slaan.',true);return;}
+    var cats=mapImportProfileToOwnCategories(draft);
+    var toMerge=[],trivial=[];
+    Object.keys(cats).forEach(function(catId){
+      var patch=cats[catId]||{};
+      var prev=hubState.categories[catId]||{};
+      Object.keys(patch).forEach(function(ak){
+        var nv=String(patch[ak]||'').trim();
+        if(!nv)return;
+        var ov=String(prev[ak]||'').trim();
+        var id=catId+'.'+ak;
+        if(!ov)trivial.push({catId:catId,ak:ak,val:nv});
+        else toMerge.push({id:id,bestaand:ov,nieuw:nv});
+      });
+    });
+    importStatus('Opslaan en samenvoegen…');
+    var merged={};
+    if(toMerge.length){
+      try{merged=await runAiImportConsolidate(toMerge);}
+      catch(_e){
+        toMerge.forEach(function(it){merged[it.id]=mergeOwnSenseImportField(it.bestaand,it.nieuw);});
+      }
+    }
+    var nowIso=new Date().toISOString();
+    toMerge.forEach(function(it){
+      var dot=it.id.indexOf('.');
+      var catId=it.id.slice(0,dot);
+      var ak=it.id.slice(dot+1);
+      var txt=String(merged[it.id]||'').trim()||mergeOwnSenseImportField(it.bestaand,it.nieuw);
+      hubState.categories[catId][ak]=txt;
+      hubState.cat_updated[catId]=nowIso;
+    });
+    trivial.forEach(function(it){
+      hubState.categories[it.catId][it.ak]=it.val;
+      hubState.cat_updated[it.catId]=nowIso;
+    });
+    saveHubState();
+    renderProfileTab();
+    importStatus('OWN Sense bijgewerkt.');
+    closeAiImportModal();
+  }catch(e){
+    importStatus('Opslaan mislukt: '+(e&&e.message?e.message:String(e)),true);
+  }finally{
+    _aiImportSaving=false;
+  }
+}
+
 function renderProps(){
   var hasData=calcPropsFromCategories();
   var el=document.getElementById('propsCard');
@@ -1256,6 +1632,7 @@ function renderInsightsTab(statusText){
 }
 
 function renderProfileTab(){
+  renderImportCard();
   renderHero();
   renderProps();
   renderPhotoSection();
