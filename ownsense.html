@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#C0392B">
-<meta name="os-build" content="13-04-2026 14:17">
+<meta name="theme-color" content="#B11F1F">
+<meta name="os-build" content="13-04-2026 15:30">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --accent:#C0392B;
-  --accent-soft:#FBECEC;
+  --accent:#B11F1F;
+  --accent-soft:#FAEAEA;
   --bg:#F7F5F2;
   --text:#1E1E1E;
   --muted:#6E7177;
@@ -59,7 +59,7 @@ html,body{
   display:inline-flex;
   align-items:center;
   border-radius:999px;
-  border:0.5px solid #E7B3AE;
+  border:0.5px solid #E2B0B0;
   background:var(--accent-soft);
   color:var(--accent);
   font-size:11px;
@@ -67,6 +67,23 @@ html,body{
   letter-spacing:.08em;
   text-transform:uppercase;
   padding:6px 10px;
+}
+.quick-nav{
+  display:flex;
+  justify-content:flex-start;
+  gap:6px;
+  padding:6px 0 10px;
+}
+.quick-nav-btn{
+  border:0.5px solid var(--border);
+  border-radius:999px;
+  background:#FFFFFFC9;
+  color:#5C6068;
+  font:inherit;
+  font-size:11px;
+  font-weight:700;
+  padding:5px 10px;
+  cursor:pointer;
 }
 .tabs{
   display:flex;
@@ -261,7 +278,7 @@ html,body{
 .mini-fill{height:100%;background:#B74D3F;border-radius:999px}
 .new-dot{
   display:inline-flex;align-items:center;justify-content:center;
-  min-width:18px;height:18px;border-radius:999px;background:#C0392B;color:#fff;font-size:10px;font-weight:800;margin-left:6px;
+  min-width:18px;height:18px;border-radius:999px;background:#B11F1F;color:#fff;font-size:10px;font-weight:800;margin-left:6px;
 }
 </style>
 </head>
@@ -271,7 +288,12 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 14:17</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 15:30</span>
+    </div>
+    <div class="quick-nav">
+      <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
+      <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none">Terug app</button>
+      <button type="button" class="quick-nav-btn" id="cornerBtn">SenseCorner</button>
     </div>
     <nav class="tabs" aria-label="OWN Sense tabs">
       <button class="tab-btn active" type="button" data-tab="profiel">Profiel</button>
@@ -340,6 +362,7 @@ var OWN_CATS=[
 ];
 
 var HUB_KEY='ownsense_hub_profile_v2';
+var returnToApp='';
 var SB_URL='';
 var SB_ANON='';
 var sb=null;
@@ -399,6 +422,25 @@ tabButtons.forEach(function(btn){
 
 function safeJsonParse(raw){
   try{return JSON.parse(raw);}catch(e){return null;}
+}
+function initQuickNav(){
+  try{
+    var qp=new URLSearchParams(window.location.search||'');
+    returnToApp=String(qp.get('returnTo')||'').trim();
+  }catch(_e){returnToApp='';}
+  var ownHomeBtn=document.getElementById('ownHomeBtn');
+  var backAppBtn=document.getElementById('backAppBtn');
+  var cornerBtn=document.getElementById('cornerBtn');
+  if(ownHomeBtn){
+    ownHomeBtn.onclick=function(){window.location.href='ownsense.html';};
+  }
+  if(backAppBtn&&returnToApp){
+    backAppBtn.style.display='inline-flex';
+    backAppBtn.onclick=function(){window.location.href=returnToApp;};
+  }
+  if(cornerBtn){
+    cornerBtn.onclick=function(){window.location.href='sensecorner.html';};
+  }
 }
 
 function initSupabase(){
@@ -483,10 +525,18 @@ async function loadOwnFromSupabase(){
     if(res&&res.data){
       var row=res.data;
       var p=row.props||{};
-      hubState.display_name=String((row.meta&&row.meta.display_name)||p.display_name||hubState.display_name||'');
+      var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
+      hubState.display_name=String((row.meta&&row.meta.display_name)||pm.display_name||p.display_name||hubState.display_name||'');
       hubState.photo_urls=Array.isArray(row.foto_urls)?row.foto_urls.slice(0,4):Array.isArray(p.foto_urls)?p.foto_urls.slice(0,4):hubState.photo_urls;
       hubState.foto_analyse=String(row.foto_analyse||p.foto_analyse||hubState.foto_analyse||'');
       if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=String(hubState.photo_urls[0]||'');
+      if(!hubState.photo_url)hubState.photo_url=String(pm.photo_url||'').trim();
+      if(p.categories&&typeof p.categories==='object'){
+        hubState.categories=Object.assign({},hubState.categories,p.categories);
+      }
+      PK.forEach(function(k){
+        if(typeof p[k]==='number')hubState.props[k]=p[k];
+      });
       hubState.insight_all=String(row.insight_all||hubState.insight_all||'');
       hubState.insight_ds=String(row.insight_ds||hubState.insight_ds||'');
       hubState.insight_fs=String(row.insight_fs||hubState.insight_fs||'');
@@ -1056,6 +1106,7 @@ function renderProfileTab(){
 var IS_NEW_USER=false;
 document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'none';
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
+initQuickNav();
 loadHubState();
 loadOwnFromSupabase().finally(function(){
   renderProfileTab();
