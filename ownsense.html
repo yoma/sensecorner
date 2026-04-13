@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 16:50">
+<meta name="os-build" content="13-04-2026 17:05">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 16:50</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 17:05</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -489,10 +489,21 @@ function stripHtml(s){
 }
 
 function detectSourceFromMsg(msg){
-  var t=(stripHtml(msg.html||msg.content||'')+' '+String(msg.app_source||'')).toLowerCase();
+  var explicit=String(msg.app_source||msg.source_app||msg.app||'').toLowerCase();
+  if(explicit.indexOf('date')>=0)return'ds';
+  if(explicit.indexOf('family')>=0||explicit.indexOf('gezin')>=0)return'fs';
+  if(explicit.indexOf('own')>=0)return'gen';
+  var t=(stripHtml(msg.html||msg.content||'')+' '+explicit).toLowerCase();
   if(t.indexOf('datesense')>=0||t.indexOf('date')>=0)return'ds';
   if(t.indexOf('familysense')>=0||t.indexOf('family')>=0||t.indexOf('gezin')>=0)return'fs';
   return'gen';
+}
+function isRelevantOwnTimelineEntry(msg){
+  var raw=stripHtml(msg&&((msg.html||msg.content||'')))||'';
+  if(raw.length<20)return false;
+  var t=raw.toLowerCase();
+  if(/dossier detectie|wil je dit opslaan|ja, opslaan|nee, bewaar|opgeslagen in .*sense|kies dossier/.test(t))return false;
+  return true;
 }
 
 function detectTopic(msgText){
@@ -656,6 +667,22 @@ function loadHubState(){
       hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
     }
   }
+  var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  if(old&&Array.isArray(old.answers)&&old.answers.some(function(a){return String(a||'').trim();})){
+    var mapped=[
+      ['karakter','a0',0],['karakter','a1',1],['karakter','a2',2],['karakter','a3',3],
+      ['interesses','a0',4],['interesses','a1',5],
+      ['relatie','a0',6],['relatie','a1',7],
+      ['gevoels','a0',8],['gevoels','a1',9],['gevoels','a2',10]
+    ];
+    mapped.forEach(function(m){
+      var cat=m[0],key=m[1],idx=m[2];
+      if(!hubState.categories[cat])hubState.categories[cat]={a0:'',a1:'',a2:'',a3:''};
+      if(!String(hubState.categories[cat][key]||'').trim()){
+        hubState.categories[cat][key]=String(old.answers[idx]||'').trim();
+      }
+    });
+  }
   var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
   if(handoff&&typeof handoff==='object'){
     if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
@@ -727,12 +754,8 @@ function calcPropsFromCategories(){
     });
   });
   if(!filledCount){
-    var hasSavedProps=PK.some(function(k){return (parseInt(hubState.props[k],10)||0)>0;});
-    if(!hasSavedProps){
-      PK.forEach(function(k){hubState.props[k]=0;});
-      return false;
-    }
-    return true;
+    PK.forEach(function(k){hubState.props[k]=0;});
+    return false;
   }
   function has(words){return words.some(function(w){return text.indexOf(w)>=0;});}
   hubState.props.gevoeligheid=has(['gevoel','emot','gevoelig','geraakt'])?74:36;
@@ -935,9 +958,10 @@ function renderQuestions(){
 function renderTimelineTab(){
   var el=document.getElementById('timelineCard');
   if(!el)return;
-  var total=ownTimeline.length;
+  var filtered=ownTimeline.filter(isRelevantOwnTimelineEntry);
+  var total=filtered.length;
   var appSet={};
-  ownTimeline.forEach(function(m){appSet[detectSourceFromMsg(m)]=1;});
+  filtered.forEach(function(m){appSet[detectSourceFromMsg(m)]=1;});
   var appCount=Object.keys(appSet).length||0;
 
   var html='<h3>Tijdlijn</h3><p class="subtle">Berichten over jezelf uit alle apps, dossier: OWN Sense.</p>'
@@ -953,7 +977,7 @@ function renderTimelineTab(){
   }
 
   var groups={};
-  ownTimeline.forEach(function(m){
+  filtered.forEach(function(m){
     var key=monthKey(m.created_at);
     if(!groups[key])groups[key]=[];
     groups[key].push(m);
@@ -977,6 +1001,7 @@ function renderTimelineTab(){
       html+='<div class="entry" id="'+eid+'">'
         +'<div class="entry-top"><span class="badge-app '+badgeCls+'">'+badgeTxt+'</span>'
         +'<span class="entry-date">'+fmtDateTime(m.created_at)+'</span></div>'
+        +'<div class="subtle" style="font-size:11px;margin:2px 0 6px">Bron: '+badgeTxt+'</div>'
         +'<div class="entry-text">'+raw.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'
         +'<div class="entry-actions"><span class="topic-tag">'+topic+'</span>'
         +'<button class="more-btn" type="button" data-more="'+eid+'">meer tonen</button></div>'
