@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 16:35">
+<meta name="os-build" content="13-04-2026 16:50">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 16:35</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 16:50</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -364,6 +364,7 @@ var OWN_CATS=[
 ];
 
 var HUB_KEY='ownsense_hub_profile_v2';
+var HANDOFF_KEY='ownsense_handoff_v1';
 var returnToApp='';
 var SB_URL='';
 var SB_ANON='';
@@ -595,7 +596,7 @@ async function loadOwnTimelineFromSupabase(){
     if(!rows.length){
       try{rows=await fetchBy('dossier');}catch(_e2){}
     }
-    ownTimeline=rows;
+    if(rows.length||!ownTimeline.length)ownTimeline=rows;
     renderTimelineTab();
   }catch(e){}
 }
@@ -653,6 +654,27 @@ function loadHubState(){
     if(!hubState.photo_url)hubState.photo_url=String(mirror.photo_url||'').trim();
     if(!hubState.photo_url&&Array.isArray(hubState.photo_urls)&&hubState.photo_urls.length){
       hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
+    }
+  }
+  var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
+  if(handoff&&typeof handoff==='object'){
+    if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
+    if(!hubState.photo_url)hubState.photo_url=String(handoff.photo_url||'').trim();
+    if(Array.isArray(handoff.photo_urls)&&handoff.photo_urls.length&&!hubState.photo_urls.length){
+      hubState.photo_urls=handoff.photo_urls.slice(0,4).map(function(u){return String(u||'').trim();}).filter(Boolean);
+      if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=hubState.photo_urls[0];
+    }
+    if(handoff.categories&&typeof handoff.categories==='object'){
+      hubState.categories=Object.assign({},handoff.categories,hubState.categories||{});
+    }
+    if(handoff.props&&typeof handoff.props==='object'){
+      PK.forEach(function(k){
+        var v=parseInt(handoff.props[k],10);
+        if(!isNaN(v)&&v>0)hubState.props[k]=v;
+      });
+    }
+    if(Array.isArray(handoff.timeline)&&handoff.timeline.length&&!ownTimeline.length){
+      ownTimeline=handoff.timeline.slice();
     }
   }
   if(!hubState.props)hubState.props={};
