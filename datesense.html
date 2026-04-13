@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="13-04-2026 15:30">
+<meta name="ds-build" content="13-04-2026 16:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -829,7 +829,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 13-04-2026 15:30</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 13-04-2026 16:05</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <div class="app" id="app">
@@ -1546,7 +1546,27 @@ function calcAgeFromBirthdate(birthdate){
   return String(age);
 }
 function getContactProfileNames(){
-  return (S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+  return getDateSenseContactNames();
+}
+function normalizeAppScopeList(meta){
+  var m=meta||{};
+  var list=Array.isArray(m.app_scope)?m.app_scope:[];
+  return list.map(function(v){return String(v||'').toLowerCase().trim();}).filter(Boolean);
+}
+function isFamilyTaggedMeta(meta){
+  var m=meta||{};
+  if(String(m.familie_rol||'').trim())return true;
+  if(String(m.familie_relatie||'').trim())return true;
+  var scopes=normalizeAppScopeList(m);
+  return scopes.indexOf('fs')>=0&&scopes.indexOf('ds')<0;
+}
+function isDateSenseVisibleContact(name){
+  if(!name||name==='OWN Sense')return false;
+  var m=((S.pdata&&S.pdata[name])||{}).meta||{};
+  return !isFamilyTaggedMeta(m);
+}
+function getDateSenseContactNames(){
+  return (S.profiles||[]).filter(function(p){return isDateSenseVisibleContact(p);});
 }
 function hasAnyContactDossier(){
   return getContactProfileNames().length>0;
@@ -2473,7 +2493,7 @@ function openSaveModeModal(){
   var opts=document.getElementById('saveModeModalOpts');
   if(!modal||!opts)return;
   var forced=getForcedDossier();
-  var all=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var all=getDateSenseContactNames();
   var html='';
   html+='<button class="save-modal-opt" onclick="setSaveModeAskAlways()"><span class="save-modal-dot" style="background:'+(!forced?'#AE0000':'#bbb')+'"></span><span><strong>Altijd vragen</strong><br><span style="font-size:12px;color:#666">Na elk AI-antwoord kies jij zelf het dossier.</span></span></button>';
   html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Altijd opslaan bij</div>';
@@ -2517,7 +2537,7 @@ function openDossierPickModal(title,sub,type,payload){
   titleEl.textContent=title||'Kies dossier';
   subEl.textContent=sub||'Selecteer een dossier.';
   window._dossierPickCtx={type:type,payload:payload||null};
-  var all=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var all=getDateSenseContactNames();
   window._modalPickDossiers=all.slice();
   var html='';
   if(type==='save'){
@@ -2591,7 +2611,7 @@ function verplaatsEntry(msgId, huidigDossier){
   // Bouw keuze modal
   window._verplaatsMsgId=msgId;
   window._verplaatsVan=huidigDossier;
-  var allDossiers=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var allDossiers=getDateSenseContactNames();
   var optsHtml='<div class="seg-modal-grid">';
   window._modalDossiers=allDossiers;
   allDossiers.forEach(function(p,i){
@@ -3259,6 +3279,12 @@ async function saveP(name,props,count,categories,summary,meta){
     null;
   if(safeCats&&Object.keys(safeCats).length>0)propsToSave.categories=safeCats;
   var safeMeta=meta||(S.pdata[name]&&S.pdata[name].meta)||null;
+  if(name!=='OWN Sense'){
+    safeMeta=Object.assign({},safeMeta||{});
+    var scopeList=Array.isArray(safeMeta.app_scope)?safeMeta.app_scope.slice():[];
+    if(scopeList.map(function(v){return String(v||'').toLowerCase();}).indexOf('ds')<0)scopeList.push('ds');
+    safeMeta.app_scope=scopeList;
+  }
   if(safeMeta&&Object.keys(safeMeta).length>0)propsToSave.meta=safeMeta;
   // Verwijder lege categories key
   if(propsToSave.categories&&Object.keys(propsToSave.categories).length===0)delete propsToSave.categories;
@@ -3516,7 +3542,7 @@ function _goScreenBody(sc){
 
 // ══ Drawer ═══════════════════════════════════════════════════════
 function rDrawer(){
-  var cs=S.profiles.filter(p=>p!=='OWN Sense');
+  var cs=getDateSenseContactNames();
   var own=S.pdata['OWN Sense']||{count:0};
   var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Mijn Senses</div>
 <div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
@@ -4363,14 +4389,13 @@ async function activateRelationshipFocus(name){
 }
 
 function getActiveContactNames(){
-  return(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';
+  return getDateSenseContactNames().filter(function(p){
+    return getDossierLifecycle(p)==='active';
   });
 }
 /** Actief + on hold (niet gesloten): Vertel moet grote/vaak gebruikte dossiers herkennen ook als focus ergens anders ligt. */
 function getProfilesForVertelNameMatch(){
-  return(S.profiles||[]).filter(function(p){
-    if(p==='OWN Sense')return false;
+  return getDateSenseContactNames().filter(function(p){
     var s=getDossierLifecycle(p);
     return s==='active'||s==='on_hold';
   });
@@ -4622,9 +4647,13 @@ async function markDossierOnHold(name){
     +'- Je kan later altijd heropenen'
   );
   if(!ok)return;
-  await setDossierLifecycle(name,'on_hold');
-  toast('⏸️ '+dn(name)+' op on hold gezet');
-  goScreen('senses');
+  try{
+    await setDossierLifecycle(name,'on_hold');
+    toast('⏸️ '+dn(name)+' op on hold gezet');
+    goScreen('senses');
+  }catch(e){
+    toast('On hold mislukt: '+(e&&e.message?e.message:'onbekende fout'));
+  }
 }
 async function closeDossier(name){
   if(!name||name==='OWN Sense')return;
@@ -4636,9 +4665,13 @@ async function closeDossier(name){
     +'- Je kan dit nog heropenen'
   );
   if(!ok)return;
-  await setDossierLifecycle(name,'closed');
-  toast('✅ '+dn(name)+' afgesloten');
-  goScreen('senses');
+  try{
+    await setDossierLifecycle(name,'closed');
+    toast('✅ '+dn(name)+' afgesloten');
+    goScreen('senses');
+  }catch(e){
+    toast('Afsluiten mislukt: '+(e&&e.message?e.message:'onbekende fout'));
+  }
 }
 async function reopenDossier(name){
   if(!name||name==='OWN Sense')return;
@@ -6421,7 +6454,7 @@ function rNotifications(el){
 
 // ══ Senses lijst ═════════════════════════════════════════════════
 function rSenses(el){
-  var allContacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var allContacts=getDateSenseContactNames();
   var csRaw=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
   var archivedRaw=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
   var sortM=getSensesSortMode();
@@ -6583,7 +6616,11 @@ async function delSense(name){
     +'- Dit kan niet ongedaan gemaakt worden\n'
     +'- Gebruik "On hold" of "Sluit af" als je wil bewaren'
   ))return;
-  await delP(name);toast('🗑️ '+name+' verwijderd');goScreen('senses');
+  try{
+    await delP(name);toast('🗑️ '+name+' verwijderd');goScreen('senses');
+  }catch(e){
+    toast('Verwijderen mislukt: '+(e&&e.message?e.message:'onbekende fout'));
+  }
 }
 
 // ══ Dossier detail ════════════════════════════════════════════════
@@ -9261,12 +9298,12 @@ function hydrateContactProfileFields(cont,name,d){
 
 // Kleur per dossier (consistent)
 function dossierColor(dosName){
-  var all=['OWN Sense',...S.profiles.filter(p=>p!=='OWN Sense')];
+    var all=['OWN Sense',...getDateSenseContactNames()];
   var i=all.indexOf(dosName);
   return SEG_DOT_COLORS[i>=0?i%SEG_DOT_COLORS.length:0];
 }
 function dossierSegClass(dosName){
-  var all=['OWN Sense',...S.profiles.filter(p=>p!=='OWN Sense')];
+  var all=['OWN Sense',...getDateSenseContactNames()];
   var i=all.indexOf(dosName);
   return SEG_COLORS[i>=0?i%SEG_COLORS.length:0];
 }
@@ -9278,7 +9315,7 @@ function dossierSegInitial(dosName){
 }
 
 function normalizeSegmentDossier(suggested){
-  var all=['OWN Sense'].concat(S.profiles.filter(function(p){return p!=='OWN Sense';}));
+  var all=['OWN Sense'].concat(getDateSenseContactNames());
   var t=String(suggested||'').trim();
   if(!t)return'OWN Sense';
   var i;
@@ -9301,7 +9338,7 @@ function normalizeSegmentDossier(suggested){
 
 async function fetchVertelSegmentation(userText){
   if(!S.apiKey)return null;
-  var dossiers=['OWN Sense'].concat(S.profiles.filter(function(p){return p!=='OWN Sense';}));
+  var dossiers=['OWN Sense'].concat(getDateSenseContactNames());
   var sys='Je bent een classificatie-assistent voor DateSense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; contactnamen = dossiers zoals in de lijst). '
     +'Regels: (1) elk fragment is letterlijke tekst uit het bericht (geen parafrase). (2) Alle fragmenten samen dekken het volledige bericht zonder overlap. '
     +'(3) Minimaal 2 fragmenten als er inhoud voor meerdere onderdelen is; anders 1 fragment. '
@@ -9371,7 +9408,7 @@ function openSegModal(idx){
 
   document.getElementById('segModalQuote').textContent='"'+seg.tekst+'"';
 
-  var allDossiers=['OWN Sense',...S.profiles.filter(p=>p!=='OWN Sense')];
+  var allDossiers=['OWN Sense',...getDateSenseContactNames()];
   var optsHtml='<div class="seg-modal-grid">';
 
   // Dossier opties — grid met gekleurde linker borders
@@ -10643,13 +10680,15 @@ function mirrorOwnSenseCatsToLocalStorage(){
       var cData=d.categories[cat.id]||{};
       cat.prompts.forEach(function(p,i){
         var v=(cData['a'+i]||'').trim();
-        if(v)entries.push({label:p.q,value:v});
+        if(v)entries.push({label:String(p||''),value:v});
       });
     });
     if(!entries.length)return;
     localStorage.setItem('ownsense_datesense_v1',JSON.stringify({
       updatedAt:new Date().toISOString(),
       entries:entries,
+      display_name:String((((S.pdata||{})['OWN Sense']||{}).meta||{}).display_name||'').trim(),
+      photo_url:String((((S.pdata||{})['OWN Sense']||{}).meta||{}).photo_url||'').trim(),
       source:'datesense'
     }));
     syncOwnsenseProfileV1FromCategoryEntries(entries);
