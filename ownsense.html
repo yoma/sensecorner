@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 15:30">
+<meta name="os-build" content="13-04-2026 15:45">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 15:30</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 15:45</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -422,6 +422,28 @@ tabButtons.forEach(function(btn){
 
 function safeJsonParse(raw){
   try{return JSON.parse(raw);}catch(e){return null;}
+}
+function normTxt(v){
+  return String(v||'').toLowerCase().replace(/[^a-z0-9à-ÿ]+/g,' ').trim();
+}
+function mergeMirrorEntriesIntoCategories(entries){
+  if(!Array.isArray(entries)||!entries.length)return;
+  if(!hubState.categories||typeof hubState.categories!=='object')hubState.categories={};
+  OWN_CATS.forEach(function(cat){
+    if(!hubState.categories[cat.id])hubState.categories[cat.id]={a0:'',a1:'',a2:'',a3:''};
+    cat.prompts.forEach(function(prompt,idx){
+      var key='a'+idx;
+      if(String(hubState.categories[cat.id][key]||'').trim())return;
+      var pNorm=normTxt(prompt);
+      var hit=entries.find(function(en){
+        var label=normTxt(en&&en.label);
+        return label&&pNorm&&(label===pNorm||label.indexOf(pNorm)>=0||pNorm.indexOf(label)>=0);
+      });
+      if(hit&&String(hit.value||'').trim()){
+        hubState.categories[cat.id][key]=String(hit.value).trim();
+      }
+    });
+  });
 }
 function initQuickNav(){
   try{
@@ -614,6 +636,10 @@ function loadHubState(){
       hubState.display_name=String(old.name||'').trim();
       hubState.photo_url=String(old.photo||'').trim();
     }
+  }
+  var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+  if(mirror&&Array.isArray(mirror.entries)){
+    mergeMirrorEntriesIntoCategories(mirror.entries);
   }
   if(!hubState.props)hubState.props={};
   PK.forEach(function(k){
