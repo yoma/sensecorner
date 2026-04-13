@@ -284,6 +284,9 @@ html,body{
 .import-hub-box{border:0.5px solid #E7C7C2;border-radius:14px;background:linear-gradient(180deg,#FFFBFB 0%,#FFF 100%);padding:12px}
 .import-hub-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#8E2B20;margin-bottom:6px}
 .import-hub-text{font-size:13px;line-height:1.55;color:#4E535B}
+.free-own-text{width:100%;min-height:92px;border:0.5px solid var(--border);border-radius:10px;padding:9px 10px;font:inherit;font-size:13px;line-height:1.5;resize:vertical;background:#fff}
+.free-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.free-chip{border:0.5px solid #DEC8C4;border-radius:999px;background:#fff;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;color:#7A3A33}
 .import-modal{position:fixed;inset:0;display:none;z-index:60}
 .import-modal.show{display:block}
 .import-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
@@ -889,8 +892,20 @@ function renderImportCard(){
     +'<div class="import-hub-box">'
     +'<div class="import-hub-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
     +'<div class="import-hub-text">Import uit je chats vult je OWN-profiel centraal aan. DateSense en FamilySense lezen daarna dezelfde basis, met minder herhaling en meer consistentie.</div>'
+    +'<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #E7C7C2">'
+    +'<div style="font-size:12px;font-weight:800;color:#8E2B20;margin-bottom:6px">Of vertel gewoon vrij over jezelf</div>'
+    +'<textarea id="ownFreeTextInput" class="free-own-text" placeholder="Schrijf in je eigen woorden over wie je bent, wat je belangrijk vindt, wat je zoekt, hoe je communiceert, wat je energie geeft of kost..."></textarea>'
+    +'<div class="free-chip-row">'
+    +'<button type="button" class="free-chip" onclick="appendOwnFreeChipText(\'Wat mensen vaak verkeerd inschatten aan mij is...\')">Misbegrepen kant</button>'
+    +'<button type="button" class="free-chip" onclick="appendOwnFreeChipText(\'In relaties heb ik vooral nood aan...\')">Noden in relatie</button>'
+    +'<button type="button" class="free-chip" onclick="appendOwnFreeChipText(\'Als ik onder druk sta, reageer ik meestal...\')">Stress-reactie</button>'
+    +'<button type="button" class="free-chip" onclick="appendOwnFreeChipText(\'Ik voel me op mijn best wanneer...\')">Beste versie van mij</button>'
+    +'</div>'
+    +'<div class="subtle" style="margin-top:6px">AI doet een voorstel per profielvak. Jij controleert en past aan voor het opgeslagen wordt.</div>'
+    +'</div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
     +'<button class="btn btn-primary" type="button" onclick="openAiImportModal()">Start import</button>'
+    +'<button class="btn btn-muted" type="button" onclick="startOwnFreeTellFill()">Gebruik deze tekst</button>'
     +'</div></div>';
 }
 
@@ -1142,6 +1157,46 @@ async function handleAiImportFile(inp){
     if(u)u.style.display='block';
     importStatus('Profiel opbouwen mislukt: '+(e2&&e2.message?e2.message:String(e2)),true);
   }
+}
+async function startOwnFreeTellFill(){
+  var ta=document.getElementById('ownFreeTextInput');
+  var txt=String(ta&&ta.value||'').trim();
+  if(!txt){
+    importStatus('Schrijf eerst kort iets over jezelf.',true);
+    return;
+  }
+  if(!getAnthropicKey()){
+    importStatus('Geen API-key gevonden in localStorage (`anthropic_api_key`).',true);
+    return;
+  }
+  openAiImportModal();
+  var u=document.getElementById('aiImportStepUpload'),l=document.getElementById('aiImportStepLoading'),r=document.getElementById('aiImportStepReview');
+  if(u)u.style.display='none';
+  if(r)r.style.display='none';
+  if(l)l.style.display='block';
+  try{
+    importStatus('AI verwerkt je tekst…');
+    var profile=parseImportProfileJson(await runAiImportProfileAnalysis(txt));
+    window._aiImportDraft=profile;
+    renderAiImportReview(profile);
+    if(l)l.style.display='none';
+    if(r)r.style.display='block';
+    importStatus('Controleer de velden en klik op opslaan.');
+  }catch(e){
+    if(l)l.style.display='none';
+    if(u)u.style.display='block';
+    importStatus('Voorstel maken mislukt: '+(e&&e.message?e.message:String(e)),true);
+  }
+}
+function appendOwnFreeChipText(snippet){
+  var ta=document.getElementById('ownFreeTextInput');
+  if(!ta)return;
+  var s=String(snippet||'').trim();
+  if(!s)return;
+  var cur=String(ta.value||'').trim();
+  ta.value=cur?(cur+'\n'+s):s;
+  ta.focus();
+  try{ta.setSelectionRange(ta.value.length,ta.value.length);}catch(_e){}
 }
 async function confirmAiImportSave(){
   if(_aiImportSaving)return;
