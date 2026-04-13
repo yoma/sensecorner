@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 17:05">
+<meta name="os-build" content="13-04-2026 17:30">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 17:05</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 17:30</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -362,6 +362,21 @@ var OWN_CATS=[
     'Wat geeft je leven betekenis?'
   ]}
 ];
+var APP_CATS=[
+  {id:'datesense_focus',app:'ds',title:'DateSense verdieping',icon:'💬',prompts:[
+    'Welke patronen zie je in je dates of romantische keuzes?',
+    'Wat werkt goed in je communicatie met dates?',
+    'Wat wil je bewust anders doen bij volgende interacties?',
+    'Welke grenzen wil je beter bewaken in DateSense-context?'
+  ]},
+  {id:'familysense_focus',app:'fs',title:'FamilySense verdieping',icon:'🏠',prompts:[
+    'Welke gezinsdynamiek vraagt momenteel het meeste aandacht?',
+    'Wat wil je verbeteren in communicatie met familieleden?',
+    'Welke terugkerende triggers merk je in familiecontext?',
+    'Wat is je concrete volgende stap voor meer rust thuis?'
+  ]}
+];
+var ALL_CATS=OWN_CATS.concat(APP_CATS);
 
 var HUB_KEY='ownsense_hub_profile_v2';
 var HANDOFF_KEY='ownsense_handoff_v1';
@@ -397,7 +412,7 @@ var activeInsightScope='all';
 var hasNewInsightBadge=false;
 
 PK.forEach(function(k){hubState.props[k]=0;});
-OWN_CATS.forEach(function(c){
+ALL_CATS.forEach(function(c){
   hubState.categories[c.id]={a0:'',a1:'',a2:'',a3:''};
 });
 
@@ -712,7 +727,7 @@ function loadHubState(){
   hubState.photo_urls=hubState.photo_urls.slice(0,4).map(function(u){return String(u||'');}).filter(Boolean);
   hubState.foto_analyse=String(hubState.foto_analyse||'');
   if(!hubState.categories)hubState.categories={};
-  OWN_CATS.forEach(function(c){
+  ALL_CATS.forEach(function(c){
     var cat=hubState.categories[c.id]||{};
     hubState.categories[c.id]={
       a0:String(cat.a0||''),
@@ -915,14 +930,40 @@ function renderPhotoSection(){
 }
 
 function renderQuestions(){
+  function hasAnswersInCat(catId){
+    var c=hubState.categories[catId]||{};
+    return ['a0','a1','a2','a3'].some(function(k){return String(c[k]||'').trim().length>0;});
+  }
+  function appMessageCount(scope){
+    var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
+    return rows.filter(function(m){return detectSourceFromMsg(m)===scope;}).length;
+  }
+  function appScopeLabel(scope){
+    if(scope==='ds')return'DateSense';
+    if(scope==='fs')return'FamilySense';
+    return'Algemeen';
+  }
+  function visibleCats(){
+    var list=OWN_CATS.slice();
+    APP_CATS.forEach(function(cat){
+      var active=appMessageCount(cat.app)>=1;
+      if(active||hasAnswersInCat(cat.id))list.push(cat);
+    });
+    return list;
+  }
   var el=document.getElementById('questionsCard');
-  var html='<h3>Vragenlijsten</h3><p class="subtle">Category IDs blijven behouden: karakter, interesses, relatie, gevoels.</p>';
-  OWN_CATS.forEach(function(cat){
+  var html='<h3>Vragenlijsten</h3><p class="subtle">Basisvragen altijd zichtbaar. App-specifieke vragen verschijnen alleen als je die app actief gebruikt.</p>';
+  visibleCats().forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
     var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>0;}).length;
+    var appInfo='';
+    if(cat.app){
+      var cnt=appMessageCount(cat.app);
+      appInfo=' <span class="subtle" style="font-size:11px">· Actief via '+appScopeLabel(cat.app)+' ('+cnt+' relevant bericht'+(cnt===1?'':'en')+')</span>';
+    }
     html+='<div class="qcat" id="cat-'+cat.id+'">'
       +'<div class="qcat-head" data-cat="'+cat.id+'"><div>'
-      +'<div class="qcat-title">'+cat.icon+' '+cat.title+'</div>'
+      +'<div class="qcat-title">'+cat.icon+' '+cat.title+appInfo+'</div>'
       +'<div class="qcat-meta">'+filled+'/4 vragen · update '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
       +'</div><div class="subtle">Open</div></div>'
       +'<div class="qcat-body">';
