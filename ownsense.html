@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="13-04-2026 16:20">
+<meta name="os-build" content="13-04-2026 16:35">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -288,7 +288,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 13-04-2026 16:20</span>
+      <span class="hub-badge">HUB · BUILD 13-04-2026 16:35</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -332,6 +332,8 @@ html,body{
 <input id="photoPicker" type="file" accept="image/*" style="display:none">
 
 <script>
+const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
+const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
 var PK=['gevoeligheid','openheid','humor','directheid','avontuur','stabiliteit','vertrouwen','communicatie','onafhankelijkheid'];
 var PL=['Gevoeligheid','Openheid','Humor','Directheid','Avontuur','Stabiliteit','Vertrouwen','Communicatie','Onafhankelijkheid'];
 var OWN_CATS=[
@@ -468,8 +470,8 @@ function initQuickNav(){
 function initSupabase(){
   try{
     if(sb)return sb;
-    SB_URL=window.SUPABASE_URL||localStorage.getItem('sc_supabase_url')||'';
-    SB_ANON=window.SUPABASE_ANON_KEY||localStorage.getItem('sc_supabase_anon_key')||'';
+    SB_URL=window.SUPABASE_URL||localStorage.getItem('sc_supabase_url')||SURL||'';
+    SB_ANON=window.SUPABASE_ANON_KEY||localStorage.getItem('sc_supabase_anon_key')||SKEY||'';
     if(window.supabase&&SB_URL&&SB_ANON){
       sb=window.supabase.createClient(SB_URL,SB_ANON);
     }
@@ -721,6 +723,18 @@ function calcPropsFromCategories(){
   hubState.props.communicatie=has(['communicatie','gesprek','praten','uitspreken'])?71:41;
   hubState.props.onafhankelijkheid=has(['zelfstandig','eigen','ruimte'])?72:40;
   return true;
+}
+function hasMeaningfulOwnData(){
+  var qFilled=0;
+  OWN_CATS.forEach(function(c){
+    var cat=hubState.categories[c.id]||{};
+    ['a0','a1','a2','a3'].forEach(function(k){if(String(cat[k]||'').trim())qFilled++;});
+  });
+  if(qFilled>0)return true;
+  if(Array.isArray(hubState.photo_urls)&&hubState.photo_urls.length>0)return true;
+  if(String(hubState.photo_url||'').trim())return true;
+  if(Array.isArray(ownTimeline)&&ownTimeline.length>0)return true;
+  return false;
 }
 
 function fmtDate(iso){
@@ -1077,6 +1091,7 @@ async function recomputeAllInsightsAuto(){
 }
 
 function topDeltas(){
+  if(!hasMeaningfulOwnData())return[];
   var prev=hubState.insight_scores_snap||{};
   var arr=PK.map(function(k,i){
     var cur=parseInt(hubState.props[k],10)||0;
@@ -1108,13 +1123,18 @@ function renderInsightsTab(statusText){
   var tags=(insightMeta[activeInsightScope]&&insightMeta[activeInsightScope].tags)||extractTags(txt);
   var upAt=(insightMeta[activeInsightScope]&&insightMeta[activeInsightScope].updated_at)||hubState.last_insight_at;
   var deltas=topDeltas();
-  var evo='<h3 style="margin-top:14px">Evolutie</h3><p class="subtle">Grootste verandering sinds laatste inzichten-snapshot.</p>';
-  deltas.forEach(function(d){
-    var sign=d.delta>0?'↑ +'+d.delta+'%':(d.delta<0?'↓ '+d.delta+'%':'→ stabiel');
-    evo+='<div class="delta-row"><span class="subtle">'+d.label+'</span>'
-      +'<div class="mini-track"><div class="mini-fill" style="width:'+Math.max(0,Math.min(100,d.cur))+'%"></div></div>'
-      +'<strong style="font-size:12px">'+sign+'</strong></div>';
-  });
+  var evo='';
+  if(deltas.length){
+    evo='<h3 style="margin-top:14px">Evolutie</h3><p class="subtle">Grootste verandering sinds laatste inzichten-snapshot.</p>';
+    deltas.forEach(function(d){
+      var sign=d.delta>0?'↑ +'+d.delta+'%':(d.delta<0?'↓ '+d.delta+'%':'→ stabiel');
+      evo+='<div class="delta-row"><span class="subtle">'+d.label+'</span>'
+        +'<div class="mini-track"><div class="mini-fill" style="width:'+Math.max(0,Math.min(100,d.cur))+'%"></div></div>'
+        +'<strong style="font-size:12px">'+sign+'</strong></div>';
+    });
+  }else{
+    evo='<h3 style="margin-top:14px">Evolutie</h3><p class="subtle">Nog geen betrouwbare evolutie: vul eerst vragen/foto/tijdlijn aan.</p>';
+  }
 
   el.innerHTML=''
     +'<h3>Inzichten</h3>'
