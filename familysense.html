@@ -38,7 +38,7 @@ html,body{height:100%;background:#FAFAF9;font-family:'DM Sans',sans-serif;overfl
 .ico{transition:background .18s ease}
 .ico:active{background:var(--g)}
 .fs-build-badge{position:fixed;top:calc(8px + var(--st));right:10px;z-index:120;background:rgba(255,255,255,.92);border:1px solid var(--b);border-radius:999px;padding:4px 9px;font-size:11px;font-weight:800;color:#555;backdrop-filter:blur(6px);display:none!important}
-.quick-nav{display:none!important}
+.quick-nav{display:flex;justify-content:flex-end;gap:6px;padding:6px 14px 8px;background:rgba(250,250,249,.92);border-bottom:1px solid rgba(0,0,0,.05)}
 .quick-nav-btn{border:1px solid var(--b);background:#fff;color:#555;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer}
 
 /* Logobar */
@@ -6973,10 +6973,10 @@ async function loadTab(name,tab,d){
     advHtml+='</div>';
     // Body
     advHtml+='<div style="background:#fff;padding:18px 16px">';
-    if(cache){
-      advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px">'
-        +'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>'
-        +'<button id="advGroundBtnTop" class="btn-g" style="margin-left:8px;padding:11px 14px;font-size:13px;font-weight:800">Verdiep met betrouwbare bronnen</button>'
+    if(cache||hasAdviceInput){
+      advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px;gap:8px;flex-wrap:wrap">'
+        +(cache?'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>':'')
+        +'<button id="advGroundBtnTop" class="btn-g" style="padding:11px 14px;font-size:13px;font-weight:800">Verdiep met betrouwbare bronnen</button>'
         +'</div>';
     }
     // Herstel ook acties uit cache
@@ -7214,6 +7214,14 @@ async function genAdviesOnderbouwd(name){
   }
   try{
     var d=S.pdata[name]||{props:{...DP},meta:{}};
+    if(!dossierHasAdviceInput(name)){
+      toast('Voeg eerst wat input toe via Profiel of Vertel.');
+      return;
+    }
+    var existingCache=(S.adviesCache&&S.adviesCache[name])||null;
+    if(!existingCache||!String(existingCache.html||'').trim()){
+      await genAdvies(name,false);
+    }
     var msgs=[];
     try{
       msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
