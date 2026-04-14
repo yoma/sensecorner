@@ -7261,7 +7261,14 @@ async function loadTab(name,tab,d){
     var cache=S.adviesCache[name];
     var persisted=((d.meta||{}).last_advice)||null;
     if(!cache&&persisted&&persisted.html){
-      cache={html:String(persisted.html||''),ts:String(persisted.ts||''),count:parseInt(persisted.count||0,10)||0,acties:String(persisted.acties||'')};
+      cache={
+        html:String(persisted.html||''),
+        ts:String(persisted.ts||''),
+        count:parseInt(persisted.count||0,10)||0,
+        acties:String(persisted.acties||''),
+        extra_html:String(persisted.extra_html||''),
+        extra_ts:String(persisted.extra_ts||'')
+      };
       S.adviesCache[name]=cache;
     }
     var currentCount=d.count||0;
@@ -7283,9 +7290,10 @@ async function loadTab(name,tab,d){
     if(name!=='OWN Sense'){
       advHtml+='<div style="margin-bottom:14px"><button type="button" class="coach-save-other" style="padding:10px 14px;border-color:#FFE0BF;background:#FFF7F0;color:#A55B00;font-weight:700" onclick="openPlanner(\''+escJsStr(name)+'\')">📅 Plan iets leuks</button></div>';
     }
-    if(cache){
-      advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px">'
-        +'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>'
+    if(cache||hasAdviceInput){
+      advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px;gap:8px;flex-wrap:wrap">'
+        +(cache?'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>':'')
+        +'<button id="advGroundBtnTop" class="btn-g" style="padding:11px 14px;font-size:13px;font-weight:800">Verdiep met betrouwbare bronnen</button>'
         +'</div>';
     }
     // Herstel ook acties uit cache
@@ -7305,6 +7313,18 @@ async function loadTab(name,tab,d){
       advHtml+=renderAdviceLoadingCard();
     }
     advHtml+='</div>';
+    var extraHtml=cache&&cache.extra_html?cache.extra_html:'';
+    if(extraHtml){
+      advHtml+='<div id="advExtraWrap" style="margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
+        +'<div style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra onderbouwing (kort en concreet)'+(cache.extra_ts?'<span style="font-weight:600;color:#6B7280"> · '+escHTML(cache.extra_ts)+'</span>':'')+'</div>'
+        +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155">'+extraHtml+'</div>'
+        +'</div>';
+    }else{
+      advHtml+='<div id="advExtraWrap" style="display:none;margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
+        +'<div id="advExtraHdr" style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra onderbouwing (kort en concreet)</div>'
+        +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155"></div>'
+        +'</div>';
+    }
     // Footer met status + duidelijke updateknop
     if(cache){
       advHtml+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
@@ -7319,6 +7339,8 @@ async function loadTab(name,tab,d){
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
+    var gb=document.getElementById('advGroundBtnTop');
+    if(gb){(function(n){gb.onclick=function(){genAdviesOnderbouwd(n);};})(name);}
     var suggestBtn=document.getElementById('advSuggestUpdateBtn');
     if(suggestBtn){(function(n){suggestBtn.onclick=function(){genAdvies(n,true);};})(name);}
     hydrateActieItems(name);
@@ -7397,12 +7419,12 @@ async function genAdvies(name,forced){
     adviesTxt=sanitizeAdviceForRelationshipStage(adviesTxt,name,stageNow,relType);
     var actiesTxt=actMatch&&actMatch[1]?actMatch[1].trim():'';
     var result=formatAiCard(adviesTxt);
-    var toneLabelPublic=autoStrict?'extra waakzaam':'helder';
     var toneLabelAdmin=autoStrict?'tone_strict (risk)':'tone_honest';
-    var toneHtml='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">'
-      +'<span style="font-size:11px;color:#6f7680;background:#F6F7F9;border:1px solid #E4E7EB;border-radius:999px;padding:4px 8px">Adviesmodus: '+toneLabelPublic+'</span>'
-      +(isAdminUser()?'<span style="font-size:11px;color:#8a8f97;background:#fff;border:1px dashed #E2E4E8;border-radius:999px;padding:4px 8px">Admin: '+toneLabelAdmin+'</span>':'')
-      +'</div>';
+    var toneHtml=isAdminUser()
+      ?('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">'
+        +'<span style="font-size:11px;color:#8a8f97;background:#fff;border:1px dashed #E2E4E8;border-radius:999px;padding:4px 8px">Admin: '+toneLabelAdmin+'</span>'
+        +'</div>')
+      :'';
     var boostHtml='';
     if(boost&&boost.ideas.length){
       var insp=buildBoostInspirationCards(boost).slice(0,3);
@@ -7451,11 +7473,30 @@ async function genAdvies(name,forced){
     // Cache opslaan met count en timestamp
     if(!S.adviesCache)S.adviesCache={};
     var d2=S.pdata[name]||{count:0};
-    S.adviesCache[name]={html:(redHtml+result+boostHtml),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||((S.adviesCache[name]&&S.adviesCache[name].acties)||'')};
+    var prevExtra=(S.adviesCache[name]&&S.adviesCache[name].extra_html)||'';
+    var prevExtraTs=(S.adviesCache[name]&&S.adviesCache[name].extra_ts)||'';
+    S.adviesCache[name]={
+      html:(redHtml+result+boostHtml),
+      ts:ts,
+      count:d2.count||0,
+      acties:actiesHtmlForCache||((S.adviesCache[name]&&S.adviesCache[name].acties)||''),
+      extra_html:prevExtra,
+      extra_ts:prevExtraTs
+    };
     // Bewaar laatste advies ook in profiel-meta zodat het blijft na herladen
     d.meta=d.meta||{};
     var prevDoneKeys=((d.meta.last_advice||{}).action_done_keys)||((d.meta.last_advice||{}).action_done)||{};
-    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,action_done:prevDoneKeys,action_done_keys:prevDoneKeys,updated_at:new Date().toISOString()};
+    d.meta.last_advice={
+      html:S.adviesCache[name].html,
+      ts:S.adviesCache[name].ts,
+      count:S.adviesCache[name].count,
+      acties:S.adviesCache[name].acties,
+      extra_html:S.adviesCache[name].extra_html||'',
+      extra_ts:S.adviesCache[name].extra_ts||'',
+      action_done:prevDoneKeys,
+      action_done_keys:prevDoneKeys,
+      updated_at:new Date().toISOString()
+    };
     S.pdata[name]=d;
     try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
@@ -7483,6 +7524,70 @@ async function genAdvies(name,forced){
       }else{
         box.innerHTML='<div style="color:#c00;font-size:14px">Kon geen advies genereren: '+escHTML(errMsg)+'</div>';
       }
+    }
+  }
+}
+
+async function genAdviesOnderbouwd(name){
+  if(!S.apiKey){
+    toast('Voeg je API key toe via ⚙️ instellingen.');
+    return;
+  }
+  var btn=document.getElementById('advGroundBtnTop');
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Bezig...';
+  }
+  try{
+    if(!dossierHasAdviceInput(name)){
+      toast('Voeg eerst wat input toe via Profiel of Vertel.');
+      return;
+    }
+    var d=S.pdata[name]||{props:{...DP},meta:{}};
+    var existingCache=(S.adviesCache&&S.adviesCache[name])||null;
+    if(!existingCache||!String(existingCache.html||'').trim()){
+      await genAdvies(name,false);
+    }
+    var msgs=[];
+    try{
+      msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
+    }catch(_e){msgs=[];}
+    var cache=(S.adviesCache&&S.adviesCache[name])||{};
+    var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    var ctx=buildAdviceContextPayload(name,d,msgs);
+    var sys='Je bent DateSensei. Geef extra onderbouwing voor het bestaande advies. '
+      +'Gebruik algemeen erkende principes uit relationele communicatie en grenzen (zoals in betrouwbare boeken/richtlijnen), '
+      +'maar leg alles uit in eenvoudige mensentaal zonder jargon. '
+      +'Noem geen specifieke studies of bronlinks als je die niet zeker weet. '
+      +'Schrijf maximaal 6 zinnen, warm en praktisch, in het Nederlands.';
+    var userContent='Bestaand advies (samengevat): '+adviesPlain+'\n\nDossiercontext:\n'+ctx;
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,30000);
+    var txt=String(raw||'').trim();
+    var card=formatAiCard(txt);
+    var wrap=document.getElementById('advExtraWrap');
+    var hdr=document.getElementById('advExtraHdr');
+    var box=document.getElementById('advExtraTxt');
+    var tsDate=new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    var tsTime=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    var ts='Gegenereerd op '+tsDate+' om '+tsTime;
+    if(wrap)wrap.style.display='block';
+    if(hdr)hdr.innerHTML='Extra onderbouwing (kort en concreet) <span style="font-weight:600;color:#6B7280">· '+ts+'</span>';
+    if(box)box.innerHTML=card;
+    if(!S.adviesCache)S.adviesCache={};
+    if(!S.adviesCache[name])S.adviesCache[name]={html:'',ts:'',count:(d.count||0),acties:''};
+    S.adviesCache[name].extra_html=card;
+    S.adviesCache[name].extra_ts=ts;
+    d.meta=d.meta||{};
+    d.meta.last_advice=d.meta.last_advice||{};
+    d.meta.last_advice.extra_html=card;
+    d.meta.last_advice.extra_ts=ts;
+    await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+  }catch(e){
+    toast('Extra onderbouwing mislukt: '+(e&&e.message?e.message:'onbekend'));
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Verdiep met betrouwbare bronnen';
     }
   }
 }
