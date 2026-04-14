@@ -4019,20 +4019,27 @@ function chooseAnalysisPhoto(dosName){
   if(inp)inp.click();
 }
 async function uploadToPhotoStorage(path,file){
+  var buckets=['datesense-photos','sense-photos','familysense-photos'];
   var lastErr=null;
-  for(var attempt=1;attempt<=3;attempt++){
-    try{
-      var up=await withTimeout(
-        sb.storage.from('datesense-photos').upload(path,file,{upsert:true,contentType:(file&&file.type)||'image/jpeg'}),
-        45000,
-        'Upload timeout na 45s. Probeer opnieuw.'
-      );
-      if(up&&up.error)throw up.error;
-      return up;
-    }catch(err){
-      lastErr=err;
-      if(attempt<3){
-        await new Promise(function(resolve){setTimeout(resolve,600);});
+  for(var b=0;b<buckets.length;b++){
+    var bucket=buckets[b];
+    for(var attempt=1;attempt<=3;attempt++){
+      try{
+        var up=await withTimeout(
+          sb.storage.from(bucket).upload(path,file,{upsert:true,contentType:(file&&file.type)||'image/jpeg'}),
+          45000,
+          'Upload timeout na 45s. Probeer opnieuw.'
+        );
+        if(up&&up.error)throw up.error;
+        return{up:up,bucket:bucket};
+      }catch(err){
+        lastErr=err;
+        var msg=String((err&&err.message)||err||'').toLowerCase();
+        var missingBucket=msg.indexOf('bucket not found')!==-1||msg.indexOf('not found')!==-1;
+        if(missingBucket)break;
+        if(attempt<3){
+          await new Promise(function(resolve){setTimeout(resolve,600);});
+        }
       }
     }
   }
@@ -4102,9 +4109,10 @@ async function handleAnalysisPhotoInput(input){
     var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
     var safeName=dos.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/analysis_'+safeName+'_'+Date.now()+'.'+ext;
-    var up=await uploadToPhotoStorage(path,file);
-    if(up.error)throw up.error;
-    var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
+    var upRes=await uploadToPhotoStorage(path,file);
+    if(upRes&&upRes.up&&upRes.up.error)throw upRes.up.error;
+    var usedBucket=(upRes&&upRes.bucket)||'sense-photos';
+    var pub=sb.storage.from(usedBucket).getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
     if(!url)throw new Error('Kon analysefoto-URL niet ophalen na upload.');
     var d=S.pdata[dos]||newDossierDataStub();
@@ -4179,10 +4187,11 @@ async function handleProfilePhotoInput(input){
     var safeName=_profileModalFor.replace(/[^a-zA-Z0-9_-]/g,'_');
     var path=S.user.id+'/'+safeName+'_'+Date.now()+'.'+ext;
     setProfilePhotoUploadProgress(45,'Foto uploaden…');
-    var up=await uploadToPhotoStorage(path,file);
-    if(up.error)throw up.error;
+    var upRes=await uploadToPhotoStorage(path,file);
+    if(upRes&&upRes.up&&upRes.up.error)throw upRes.up.error;
+    var usedBucket=(upRes&&upRes.bucket)||'sense-photos';
     setProfilePhotoUploadProgress(72,'URL ophalen…');
-    var pub=sb.storage.from('datesense-photos').getPublicUrl(path);
+    var pub=sb.storage.from(usedBucket).getPublicUrl(path);
     var url=(pub&&pub.data&&pub.data.publicUrl)||'';
     if(!url)throw new Error('Kon foto URL niet maken');
     var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
