@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="13-04-2026 16:50">
+<meta name="fs-build" content="14-04-2026 10:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -235,6 +235,9 @@ a:focus-visible,
 .prop-empty{text-align:center;padding:22px 16px;background:var(--g);border-radius:var(--rad-md);margin-bottom:14px;border:1px solid var(--b)}
 .prop-empty-icon{font-size:28px;margin-bottom:8px}
 .prop-empty-text{font-size:var(--fs-sm);color:var(--m);line-height:1.6}
+.prop-empty.prop-empty--compact{padding:12px 12px;margin-bottom:8px;border-radius:10px}
+.prop-empty.prop-empty--compact .prop-empty-icon{font-size:16px;margin-bottom:4px}
+.prop-empty.prop-empty--compact .prop-empty-text{font-size:12px;line-height:1.45}
 .props-compact{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:5px;margin-bottom:4px}
 @media (min-width:400px){.props-compact{grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px}}
 @media (min-width:520px){.props-compact{grid-template-columns:repeat(5,1fr)}}
@@ -763,7 +766,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 13-04-2026 16:50</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 14-04-2026 10:43</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1218,7 +1221,7 @@ const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 const PROMPT_DEFAULTS={
-  advice_core:'Je bent FamilySensei — een warme, directe coach die mensen helpt om hun familierelaties en hechte banden beter te begrijpen. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Je toon is menselijk, zonder jargon. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Maximaal 8 zinnen. Geen gestructureerde regels zoals AANDACHTSPUNTEN: of ACTIES:.',
+  advice_core:'Je bent FamilySensei — een warme, directe familievriend met inhoudelijke kennis. Je advies is evidence-informed: je baseert je op algemeen erkende inzichten uit opvoeding, communicatie en gezinsdynamiek (zoals je die in boeken of officiele richtlijnen terugvindt), maar je legt alles uit in heel eenvoudige, niet-technische taal. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Noem geen pseudo-bronnen of verzonnen studies; als iets onzeker is, benoem dat eerlijk en blijf praktisch. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Maximaal 8 zinnen. Geen gestructureerde regels zoals AANDACHTSPUNTEN: of ACTIES:.',
   tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
@@ -3010,10 +3013,11 @@ function renderProps(props,showSource,opt){
   var useBars=o.bars===true;
   var extras=Array.isArray(o.extra)?o.extra:[];
   var propUpdates=(o.propUpdates&&typeof o.propUpdates==='object')?o.propUpdates:{};
+  var compactEmpty=o.compactEmpty===true;
   var collapsePills=o.collapsePills!==false;
   var firstN=Math.max(4,Math.min(9,parseInt(o.pillFirstN||6,10)||6));
   if(!hasData){
-    return'<div class="prop-empty">'
+    return'<div class="prop-empty'+(compactEmpty?' prop-empty--compact':'')+'">'
       +'<div class="prop-empty-icon">📊</div>'
       +'<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:6px">Nog geen eigenschappen ingeschat</div>'
       +'<div class="prop-empty-text">Voeg meer info toe via de invulvakjes of via <strong>Vertel</strong>.</div>'
@@ -6705,7 +6709,7 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:11px;color:#8a8f97">Laatst geüpdatet: '+fmtPropUpdate(propsLastIso)+'</div>'
       +'</div>';
     var extraMetrics=[];
-    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{bars:true,barsCompact:true,extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
+    html+='<div id="contact-props-bars-'+name+'">'+renderProps(d.props,true,{bars:true,barsCompact:true,compactEmpty:true,extra:extraMetrics,propUpdates:((d.meta&&d.meta.prop_updates)||{})})+'</div>';
     var lastFieldsIso=isOwnDossier
       ?getLatestScopeFieldUpdate(d.meta,'own')
       :getLatestScopeFieldUpdate(d.meta,'contact');
@@ -6943,7 +6947,14 @@ async function loadTab(name,tab,d){
     var cache=S.adviesCache[name];
     var persisted=((d.meta||{}).last_advice)||null;
     if(!cache&&persisted&&persisted.html){
-      cache={html:String(persisted.html||''),ts:String(persisted.ts||''),count:parseInt(persisted.count||0,10)||0,acties:String(persisted.acties||'')};
+      cache={
+        html:String(persisted.html||''),
+        ts:String(persisted.ts||''),
+        count:parseInt(persisted.count||0,10)||0,
+        acties:String(persisted.acties||''),
+        extra_html:String(persisted.extra_html||''),
+        extra_ts:String(persisted.extra_ts||'')
+      };
       S.adviesCache[name]=cache;
     }
     var currentCount=d.count||0;
@@ -6965,6 +6976,7 @@ async function loadTab(name,tab,d){
     if(cache){
       advHtml+='<div style="display:flex;justify-content:flex-start;margin-bottom:12px">'
         +'<button id="advRefreshBtnTop" style="padding:11px 16px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(174,0,0,.22)">↻ Update uw advies</button>'
+        +'<button id="advGroundBtnTop" class="btn-g" style="margin-left:8px;padding:11px 14px;font-size:13px;font-weight:800">Verdiep met betrouwbare bronnen</button>'
         +'</div>';
     }
     // Herstel ook acties uit cache
@@ -6984,6 +6996,18 @@ async function loadTab(name,tab,d){
       advHtml+=renderAdviceLoadingCard();
     }
     advHtml+='</div>';
+    var extraHtml=cache&&cache.extra_html?cache.extra_html:'';
+    if(extraHtml){
+      advHtml+='<div id="advExtraWrap" style="margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
+        +'<div style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra onderbouwing (simpel uitgelegd)'+(cache.extra_ts?'<span style="font-weight:600;color:#6B7280"> · '+escHTML(cache.extra_ts)+'</span>':'')+'</div>'
+        +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155">'+extraHtml+'</div>'
+        +'</div>';
+    }else{
+      advHtml+='<div id="advExtraWrap" style="display:none;margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
+        +'<div id="advExtraHdr" style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra onderbouwing (simpel uitgelegd)</div>'
+        +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155"></div>'
+        +'</div>';
+    }
     // Footer met status + duidelijke updateknop
     if(cache){
       advHtml+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
@@ -6998,6 +7022,8 @@ async function loadTab(name,tab,d){
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
     if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
+    var gb=document.getElementById('advGroundBtnTop');
+    if(gb){(function(n){gb.onclick=function(){genAdviesOnderbouwd(n);};})(name);}
     var suggestBtn=document.getElementById('advSuggestUpdateBtn');
     if(suggestBtn){(function(n){suggestBtn.onclick=function(){genAdvies(n,true);};})(name);}
     hydrateActieItems(name);
@@ -7128,11 +7154,23 @@ async function genAdvies(name,forced){
     // Cache opslaan met count en timestamp
     if(!S.adviesCache)S.adviesCache={};
     var d2=S.pdata[name]||{count:0};
-    S.adviesCache[name]={html:(toneHtml+result),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||''};
+    var prevExtra=(S.adviesCache[name]&&S.adviesCache[name].extra_html)||'';
+    var prevExtraTs=(S.adviesCache[name]&&S.adviesCache[name].extra_ts)||'';
+    S.adviesCache[name]={html:(toneHtml+result),ts:ts,count:d2.count||0,acties:actiesHtmlForCache||'',extra_html:prevExtra,extra_ts:prevExtraTs};
     // Bewaar laatste advies ook in profiel-meta zodat het blijft na herladen
     d.meta=d.meta||{};
     var prevDoneKeys=((d.meta.last_advice||{}).action_done_keys)||((d.meta.last_advice||{}).action_done)||{};
-    d.meta.last_advice={html:S.adviesCache[name].html,ts:S.adviesCache[name].ts,count:S.adviesCache[name].count,acties:S.adviesCache[name].acties,action_done:prevDoneKeys,action_done_keys:prevDoneKeys,updated_at:new Date().toISOString()};
+    d.meta.last_advice={
+      html:S.adviesCache[name].html,
+      ts:S.adviesCache[name].ts,
+      count:S.adviesCache[name].count,
+      acties:S.adviesCache[name].acties,
+      extra_html:S.adviesCache[name].extra_html||'',
+      extra_ts:S.adviesCache[name].extra_ts||'',
+      action_done:prevDoneKeys,
+      action_done_keys:prevDoneKeys,
+      updated_at:new Date().toISOString()
+    };
     S.pdata[name]=d;
     try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
@@ -7160,6 +7198,63 @@ async function genAdvies(name,forced){
       }else{
         box.innerHTML='<div style="color:#c00;font-size:14px">Kon geen advies genereren: '+escHTML(errMsg)+'</div>';
       }
+    }
+  }
+}
+
+async function genAdviesOnderbouwd(name){
+  if(!S.apiKey){
+    toast('Voeg je API key toe via ⚙️ instellingen.');
+    return;
+  }
+  var btn=document.getElementById('advGroundBtnTop');
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Bezig...';
+  }
+  try{
+    var d=S.pdata[name]||{props:{...DP},meta:{}};
+    var msgs=[];
+    try{
+      msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
+    }catch(_e){msgs=[];}
+    var cache=(S.adviesCache&&S.adviesCache[name])||{};
+    var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    var ctx=buildAdviceContextPayload(name,d,msgs);
+    var sys='Je bent FamilySensei. Geef extra onderbouwing voor het bestaande advies. '
+      +'Gebruik algemeen erkende opvoedkundige en relationele principes (zoals je die in betrouwbare boeken en officiele richtlijnen terugvindt), '
+      +'maar leg alles uit in heel eenvoudige, mensentaal zonder jargon. '
+      +'Noem geen specifieke studies of bronlinks als je die niet zeker weet. '
+      +'Als iets context-afhankelijk is, benoem dat kort. '
+      +'Schrijf maximaal 6 zinnen, warm en praktisch, in het Nederlands.';
+    var userContent='Bestaand advies (samengevat): '+adviesPlain+'\n\nDossiercontext:\n'+ctx;
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,30000);
+    var txt=String(raw||'').trim();
+    var card=formatAiCard(txt);
+    var wrap=document.getElementById('advExtraWrap');
+    var hdr=document.getElementById('advExtraHdr');
+    var box=document.getElementById('advExtraTxt');
+    var tsDate=new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    var tsTime=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    var ts='Gegenereerd op '+tsDate+' om '+tsTime;
+    if(wrap)wrap.style.display='block';
+    if(hdr)hdr.innerHTML='Extra onderbouwing (simpel uitgelegd) <span style="font-weight:600;color:#6B7280">· '+ts+'</span>';
+    if(box)box.innerHTML=card;
+    if(!S.adviesCache)S.adviesCache={};
+    if(!S.adviesCache[name])S.adviesCache[name]={html:'',ts:'',count:(d.count||0),acties:''};
+    S.adviesCache[name].extra_html=card;
+    S.adviesCache[name].extra_ts=ts;
+    d.meta=d.meta||{};
+    d.meta.last_advice=d.meta.last_advice||{};
+    d.meta.last_advice.extra_html=card;
+    d.meta.last_advice.extra_ts=ts;
+    await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+  }catch(e){
+    toast('Extra onderbouwing mislukt: '+(e&&e.message?e.message:'onbekend'));
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Verdiep met betrouwbare bronnen';
     }
   }
 }
