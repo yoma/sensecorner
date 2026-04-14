@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="sc-build" content="14-04-2026 13:13">
+<meta name="sc-build" content="14-04-2026 14:08">
 <title>SenseCorner</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -68,6 +69,27 @@ a{text-decoration:none;color:inherit}
 }
 .hero-import-title{font-size:12px;font-weight:800;color:#9A2F2F;margin-bottom:4px}
 .hero-import-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:8px}
+.hub-settings{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
+.hub-settings-title{font-size:13px;font-weight:800;color:#2A313A;margin-bottom:6px}
+.hub-settings-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
+.hub-settings-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.hub-input{flex:1;min-width:180px;border:1px solid #D9DEE5;border-radius:10px;padding:9px 10px;font:inherit;font-size:13px;background:#fff}
+.hub-save{border:none;border-radius:10px;background:var(--r);color:#fff;padding:9px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.hub-state{font-size:12px;color:#6B7280;margin-top:8px}
+.hub-auth{margin-top:10px;padding-top:10px;border-top:1px dashed #E6E8ED}
+.hub-auth-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.hub-auth-state{font-size:12px;color:#4B5563;line-height:1.45}
+.hub-auth-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.hub-auth-btn.primary{background:var(--r);border-color:var(--r);color:#fff}
+.auth-overlay{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
+.auth-overlay.show{display:flex}
+.auth-modal{width:min(440px,100%);background:#fff;border-radius:14px;border:1px solid #E5E7EB;box-shadow:0 20px 45px rgba(0,0,0,.2);padding:16px}
+.auth-title{font-size:18px;font-weight:800;color:#1F2937;margin-bottom:6px}
+.auth-sub{font-size:13px;color:#6B7280;line-height:1.5;margin-bottom:12px}
+.auth-input{width:100%;border:1px solid #D9DEE5;border-radius:10px;padding:10px 11px;font:inherit;font-size:14px;margin-bottom:8px}
+.auth-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.auth-msg{font-size:12px;color:#6B7280;min-height:18px;margin-top:8px}
+.auth-close{border:none;background:transparent;color:#6B7280;font-size:12px;font-weight:700;cursor:pointer;padding:4px 2px}
 
 /* Section label */
 .section-label{font-size:11px;font-weight:700;color:var(--s);letter-spacing:.07em;text-transform:uppercase;margin:16px 0 10px 2px}
@@ -177,7 +199,7 @@ a{text-decoration:none;color:inherit}
         </div>
 
         <div class="cta-row" id="ctaRow">
-          <a class="btn btn-primary" href="ownsense.html" id="btnMain">
+          <a class="btn btn-primary" href="ownsense.html" id="btnMain" data-app-link="ownsense.html">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             Start OWN Sense
           </a>
@@ -185,9 +207,28 @@ a{text-decoration:none;color:inherit}
         <div class="hero-import">
           <div class="hero-import-title">📥 Import naar OWN Sense</div>
           <div class="hero-import-sub">Importeer je ChatGPT/Claude-geschiedenis centraal in OWN Sense. DateSense en FamilySense gebruiken die basis daarna automatisch.</div>
-          <a class="btn btn-soft" href="ownsense.html" style="font-size:12px;padding:8px 12px">Open OWN Sense import</a>
+          <a class="btn btn-soft" href="ownsense.html" data-app-link="ownsense.html" style="font-size:12px;padding:8px 12px">Open OWN Sense import</a>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="hub-settings" aria-label="Hub instellingen">
+    <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
+    <div class="hub-settings-sub">Eén centrale API-key en accountflow voor al je Sense-apps. App-specifieke keuzes beheer je in elke app apart.</div>
+    <div class="hub-settings-row">
+      <input id="hubApiKeyField" class="hub-input" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off">
+      <button id="hubApiSaveBtn" class="hub-save" type="button">Opslaan</button>
+    </div>
+    <div id="hubApiState" class="hub-state"></div>
+    <div class="hub-auth">
+      <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
+      <div class="hub-auth-row">
+        <button id="hubLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
+        <button id="hubRegisterBtn" class="hub-auth-btn" type="button">Account aanmaken</button>
+        <button id="hubLogoutBtn" class="hub-auth-btn" type="button" style="display:none">Uitloggen</button>
+      </div>
+      <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
     </div>
   </section>
 
@@ -195,7 +236,7 @@ a{text-decoration:none;color:inherit}
   <p class="section-label">Sense Apps</p>
   <section class="grid" aria-label="Beschikbare apps" role="list">
 
-    <article class="app-card own-card clickable" role="listitem" tabindex="0" onclick="location.href='ownsense.html'" onkeydown="if(event.key==='Enter')location.href='ownsense.html'">
+    <article class="app-card own-card clickable" role="listitem" tabindex="0" data-app-link="ownsense.html">
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -210,7 +251,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card date-card clickable" role="listitem" tabindex="0" onclick="location.href='datesense.html'" onkeydown="if(event.key==='Enter')location.href='datesense.html'">
+    <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-link="datesense.html">
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -250,7 +291,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense, prototype beschikbaar" onclick="location.href='familysense.html'" onkeydown="if(event.key==='Enter')location.href='familysense.html'">
+    <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense, prototype beschikbaar" data-app-link="familysense.html">
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11.5l9-7 9 7"/><path d="M5 10.5V20h14v-9.5"/><path d="M9 20v-5h6v5"/></svg>
@@ -275,13 +316,39 @@ a{text-decoration:none;color:inherit}
 <!-- Screen reader announcements -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
 
+<div id="authOverlay" class="auth-overlay" aria-hidden="true">
+  <div class="auth-modal" role="dialog" aria-modal="true" aria-label="Hub login">
+    <div class="auth-title" id="authTitle">Inloggen in SenseCorner</div>
+    <div class="auth-sub" id="authSub">Eén account voor OWN Sense, DateSense en FamilySense.</div>
+    <input id="authEmail" class="auth-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
+    <input id="authPassword" class="auth-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
+    <div class="auth-actions">
+      <button id="authLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
+      <button id="authRegisterConfirmBtn" class="hub-auth-btn" type="button">Account maken</button>
+      <button id="authMagicBtn" class="hub-auth-btn" type="button">Magic link sturen</button>
+      <button id="authCloseBtn" class="auth-close" type="button">Sluiten</button>
+    </div>
+    <div id="authMsg" class="auth-msg"></div>
+  </div>
+</div>
+
 <script>
-(function(){
+(async function(){
+  var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
+  var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+  var sb=null;
+  try{
+    if(window.supabase&&window.supabase.createClient){
+      sb=window.supabase.createClient(SURL,SKEY);
+    }
+  }catch(_e){}
+  var pendingReturnTo='';
+
   /* ── Datum in header ── */
   var d=new Date();
   var days=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 14-04-2026 13:13';
+  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 14-04-2026 14:08';
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30
@@ -297,6 +364,23 @@ a{text-decoration:none;color:inherit}
   var btnMain=document.getElementById('btnMain');
   var ownBadge=document.getElementById('ownBadge');
   var ringIcon=document.getElementById('ringIcon');
+  var hubApiField=document.getElementById('hubApiKeyField');
+  var hubApiSaveBtn=document.getElementById('hubApiSaveBtn');
+  var hubApiState=document.getElementById('hubApiState');
+  var hubAuthState=document.getElementById('hubAuthState');
+  var hubLoginBtn=document.getElementById('hubLoginBtn');
+  var hubRegisterBtn=document.getElementById('hubRegisterBtn');
+  var hubLogoutBtn=document.getElementById('hubLogoutBtn');
+  var authOverlay=document.getElementById('authOverlay');
+  var authTitle=document.getElementById('authTitle');
+  var authSub=document.getElementById('authSub');
+  var authEmail=document.getElementById('authEmail');
+  var authPassword=document.getElementById('authPassword');
+  var authMsg=document.getElementById('authMsg');
+  var authLoginBtn=document.getElementById('authLoginBtn');
+  var authRegisterConfirmBtn=document.getElementById('authRegisterConfirmBtn');
+  var authMagicBtn=document.getElementById('authMagicBtn');
+  var authCloseBtn=document.getElementById('authCloseBtn');
   var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
   var filledAnswers=0;
   if(profile&&Array.isArray(profile.answers)){
@@ -313,6 +397,89 @@ a{text-decoration:none;color:inherit}
     var offset=CIRCUMFERENCE*(1-pct/100);
     ringFg.style.strokeDashoffset=offset;
     miniBar.style.width=pct+'%';
+  }
+  function renderHubApiState(msg){
+    if(hubApiState)hubApiState.textContent=msg;
+  }
+  var existingHubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
+  if(hubApiField)hubApiField.value=existingHubKey;
+  renderHubApiState(existingHubKey?'API key actief voor alle apps.':'Nog geen API key ingesteld.');
+  if(hubApiSaveBtn){
+    hubApiSaveBtn.onclick=function(){
+      var v=String((hubApiField&&hubApiField.value)||'').trim();
+      if(v){
+        localStorage.setItem('anthropic_api_key',v);
+        localStorage.setItem('ds_ak',v);
+        renderHubApiState('Opgeslagen. DateSense en FamilySense gebruiken nu deze key.');
+      }else{
+        localStorage.removeItem('anthropic_api_key');
+        localStorage.removeItem('ds_ak');
+        renderHubApiState('API key verwijderd.');
+      }
+    };
+  }
+
+  function setAuthMsg(msg,isErr){
+    if(!authMsg)return;
+    authMsg.textContent=msg||'';
+    authMsg.style.color=isErr?'#B42318':'#6B7280';
+  }
+  function openAuthModal(mode,targetApp){
+    pendingReturnTo=targetApp||'';
+    if(authTitle)authTitle.textContent=(mode==='register'?'Account aanmaken':'Inloggen in SenseCorner');
+    if(authSub)authSub.textContent=(mode==='register'
+      ?'Maak je account aan. Na bevestiging ga je door naar je gekozen app.'
+      :'Eén account voor OWN Sense, DateSense en FamilySense.');
+    if(authOverlay){
+      authOverlay.classList.add('show');
+      authOverlay.setAttribute('aria-hidden','false');
+    }
+    setAuthMsg('');
+    if(authEmail)authEmail.focus();
+  }
+  function closeAuthModal(){
+    if(authOverlay){
+      authOverlay.classList.remove('show');
+      authOverlay.setAttribute('aria-hidden','true');
+    }
+    setAuthMsg('');
+  }
+  function authReturnUrl(target){
+    var t=String(target||'').trim()||'ownsense.html';
+    return window.location.origin+window.location.pathname.replace(/[^/]*$/,'')+t;
+  }
+  async function getCurrentUser(){
+    if(!sb)return null;
+    try{
+      var res=await sb.auth.getSession();
+      return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
+    }catch(_e){return null;}
+  }
+  async function refreshAuthUi(){
+    var user=await getCurrentUser();
+    if(user){
+      var em=String(user.email||'').trim();
+      if(hubAuthState)hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
+      if(hubLoginBtn)hubLoginBtn.style.display='none';
+      if(hubRegisterBtn)hubRegisterBtn.style.display='none';
+      if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
+    }else{
+      if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
+      if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
+      if(hubRegisterBtn)hubRegisterBtn.style.display='inline-flex';
+      if(hubLogoutBtn)hubLogoutBtn.style.display='none';
+    }
+    return user;
+  }
+  async function openAppWithAuth(target){
+    var t=String(target||'').trim();
+    if(!t)return;
+    var user=await refreshAuthUi();
+    if(user){
+      window.location.href=t;
+      return;
+    }
+    openAuthModal('login',t);
   }
 
   try{
@@ -372,6 +539,88 @@ a{text-decoration:none;color:inherit}
   cards.forEach(function(c,i){
     setTimeout(function(){c.classList.add('enter');}, 80 + i*60);
   });
+  Array.prototype.slice.call(document.querySelectorAll('[data-app-link]')).forEach(function(el){
+    var target=el.getAttribute('data-app-link');
+    if(!target)return;
+    el.addEventListener('click',function(e){
+      e.preventDefault();
+      openAppWithAuth(target);
+    });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();
+        openAppWithAuth(target);
+      }
+    });
+  });
+  if(hubLoginBtn)hubLoginBtn.onclick=function(){openAuthModal('login','');};
+  if(hubRegisterBtn)hubRegisterBtn.onclick=function(){openAuthModal('register','');};
+  if(hubLogoutBtn)hubLogoutBtn.onclick=async function(){
+    try{
+      if(sb)await sb.auth.signOut();
+      await refreshAuthUi();
+      setAuthMsg('Je bent uitgelogd.');
+    }catch(_e){
+      setAuthMsg('Uitloggen lukt nu even niet.',true);
+    }
+  };
+  if(authCloseBtn)authCloseBtn.onclick=closeAuthModal;
+  if(authOverlay)authOverlay.addEventListener('click',function(e){
+    if(e.target===authOverlay)closeAuthModal();
+  });
+  if(authLoginBtn)authLoginBtn.onclick=async function(){
+    if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
+    var email=String((authEmail&&authEmail.value)||'').trim();
+    var pw=String((authPassword&&authPassword.value)||'');
+    if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
+    setAuthMsg('Bezig met inloggen…');
+    try{
+      var res=await sb.auth.signInWithPassword({email:email,password:pw});
+      if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
+      await refreshAuthUi();
+      closeAuthModal();
+      if(pendingReturnTo)window.location.href=pendingReturnTo;
+    }catch(_e){setAuthMsg('Inloggen mislukt. Probeer opnieuw.',true);}
+  };
+  if(authRegisterConfirmBtn)authRegisterConfirmBtn.onclick=async function(){
+    if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
+    var email=String((authEmail&&authEmail.value)||'').trim();
+    var pw=String((authPassword&&authPassword.value)||'');
+    if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
+    setAuthMsg('Account aanmaken…');
+    try{
+      var signRes=await sb.auth.signUp({
+        email:email,
+        password:pw,
+        options:{emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html')}
+      });
+      if(signRes&&signRes.error){setAuthMsg(signRes.error.message||'Account maken mislukt.',true);return;}
+      setAuthMsg('Account aangemaakt. Bevestig je e-mail en log daarna in.');
+    }catch(_e){setAuthMsg('Account maken mislukt. Probeer opnieuw.',true);}
+  };
+  if(authMagicBtn)authMagicBtn.onclick=async function(){
+    if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
+    var email=String((authEmail&&authEmail.value)||'').trim();
+    if(!email){setAuthMsg('Vul eerst je e-mail in.',true);return;}
+    setAuthMsg('Magic link verzenden…');
+    try{
+      var ml=await sb.auth.signInWithOtp({email:email,options:{emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html')}});
+      if(ml&&ml.error){setAuthMsg(ml.error.message||'Verzenden mislukt.',true);return;}
+      setAuthMsg('Magic link verzonden. Check je mailbox.');
+    }catch(_e){setAuthMsg('Verzenden mislukt. Probeer opnieuw.',true);}
+  };
+  await refreshAuthUi();
+  try{
+    var params=new URLSearchParams(window.location.search||'');
+    var returnTo=String(params.get('returnTo')||'').trim();
+    if(returnTo){
+      var target=decodeURIComponent(returnTo);
+      if(target.indexOf('.html')===-1||target.indexOf('http')===0)target='ownsense.html';
+      var user=await getCurrentUser();
+      if(user)window.location.href=target;
+      else openAuthModal('login',target);
+    }
+  }catch(_e){}
 })();
 </script>
 </body>

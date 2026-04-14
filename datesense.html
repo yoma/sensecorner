@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="14-04-2026 13:13">
+<meta name="ds-build" content="14-04-2026 14:08">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -829,7 +829,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 14-04-2026 13:13</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 14-04-2026 14:08</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <div class="app" id="app">
@@ -1256,7 +1256,8 @@ const OWN_CATS=[
 // App state
 var S={
   user:null,
-  apiKey:localStorage.getItem('ds_ak')||'',
+  adminRole:'user',
+  apiKey:localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'',
   adviceTone:'eerlijk',
   screen:'home',prev:'home',
   busy:false,
@@ -1447,7 +1448,19 @@ function setSessAssignMap(map){
 }
 function isAdminUser(){
   var em=((S.user&&S.user.email)||'').toLowerCase().trim();
-  return !!em&&ADMIN_EMAILS.indexOf(em)!==-1;
+  return (!!em&&ADMIN_EMAILS.indexOf(em)!==-1)||S.adminRole==='admin';
+}
+async function refreshAdminRoleFromSupabase(){
+  try{
+    S.adminRole='user';
+    if(!sb||!S.user||!S.user.id)return;
+    var res=await sb.from('user_roles').select('role').eq('user_id',S.user.id).maybeSingle();
+    if(res&&res.data&&String(res.data.role||'').toLowerCase()==='admin'){
+      S.adminRole='admin';
+    }
+  }catch(_e){
+    S.adminRole='user';
+  }
 }
 function getPromptOverrides(){
   var raw=getScopedStorage('ds_prompt_overrides','{}')||'{}';
@@ -2966,6 +2979,11 @@ function clearAuthHash(){
     history.replaceState(null,'',window.location.pathname+window.location.search);
   }
 }
+function redirectToSenseCornerAuth(){
+  var target='datesense.html';
+  var url='sensecorner.html?returnTo='+encodeURIComponent(target);
+  window.location.href=url;
+}
 async function handlePendingAuthFromUrl(){
   if(!sb)return;
   var hashParams=getAuthHashParams();
@@ -3019,24 +3037,28 @@ async function init(){
     var {data:{session}}=await sb.auth.getSession();
     if(session){
       S.user=session.user;
+      await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       initSessie(); // Na auth — sessie aanmaken
       goScreen('home');
     } else {
-      goScreen('login');
+      redirectToSenseCornerAuth();
+      return;
     }
   }catch(e){
     console.error('init error:',e);
-    goScreen('login');
+    redirectToSenseCornerAuth();
+    return;
   }
   sb.auth.onAuthStateChange(async(ev,ses)=>{
     if(ev==='SIGNED_IN'&&ses){
       S.user=ses.user;
+      await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       goScreen('home');
     } else if(ev==='SIGNED_OUT'){
       applySignedOutClientState();
-      goScreen('login');
+      redirectToSenseCornerAuth();
     }
   });
   document.addEventListener('visibilitychange',function(){
@@ -3178,6 +3200,7 @@ async function doRegister(){
 
 function applySignedOutClientState(){
   S.user=null;
+  S.adminRole='user';
   S.profiles=['OWN Sense'];
   S.pdata={};
   updateNavTabIndicators();
@@ -3194,7 +3217,7 @@ async function doSignOut(){
   }
   // Altijd lokaal afmelden + naar login — niet enkel vertrouwen op onAuthStateChange (kan uitblijven in sommige browsers/extensies).
   applySignedOutClientState();
-  goScreen('login');
+  redirectToSenseCornerAuth();
   toast('👋 Tot ziens!');
 }
 
@@ -8286,26 +8309,25 @@ function rSettings(el){
   if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
   var adminTile=isAdminUser()?renderSettingsTile('🛠️','Prompt Center','Bekijk en finetune system prompts','prompt-center'):'';
   var extraHtml=''
-    +renderSettingsTile('⚙️','Instellingen','Algemene voorkeuren','settings-placeholder')
-    +renderSettingsTile('💳','Abonnement','Plan en facturatie','subscription-placeholder')
     +renderSettingsTile('🔔','Meldingen','Notificaties beheren','notifications')
-    +renderSettingsTile('💬','Feedback','Stuur je suggestie','feedback-placeholder')
-    +renderSettingsTile('🛟','Help & Support','Hulp en contact','support-placeholder')
-    +renderSettingsTile('🔒','Privacy','Data en rechten','privacy-placeholder')
-    +renderSettingsTile('📘','Over DateSense','Info over de app','about')
-    +renderSettingsTile('❓',"FAQ's",'Veelgestelde vragen','faq')
-    +renderSettingsTile('📦','Export data','Download je gegevens','export')
+    +renderSettingsTile('🏠','Open Hub-instellingen','Algemene instellingen in SenseCorner','hub-settings')
     +renderSettingsTile('📥','Import beheren in OWN Sense','Open centrale import in OWN Sense','own-import')
+    +renderSettingsTile('📘','Over DateSense','Info over de app','about')
     +adminTile
     +renderSettingsTile('🧭','Korte rondleiding','Home → Senses → Vertel → OwnSense','quick-tour')
     +renderSettingsTile('🔁','Hulp opnieuw tonen','Rondleiding + uitlegballonnetjes resetten','help-reset')
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data');
 
+  var hubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
   el.innerHTML=`<div style="padding:32px 20px">
-<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Anthropic API Key</div>
-<p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:22px">Nodig om DateSensei te activeren. Aanmaken op <strong>console.anthropic.com</strong>.</p>
-<form class="ds-settings-api-form" onsubmit="event.preventDefault();return false;" autocomplete="off"><input class="form-input" id="akField" name="apikey" type="password" autocomplete="off" placeholder="sk-ant-api..." aria-label="Anthropic API Key" value="${S.apiKey||''}"/></form>
-<div style="font-size:13px;color:#666;line-height:1.6;margin-top:16px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
+<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">DateSense instellingen</div>
+<p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:12px">Algemene account- en API-instellingen beheer je centraal in SenseCorner Hub.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+  <button type="button" class="coach-save-other" onclick="window.location.href='sensecorner.html'" style="font-size:13px;padding:8px 12px">🏠 Open Hub-instellingen</button>
+  <button type="button" class="coach-save-other" onclick="openOwnSenseEntryPoint()" style="font-size:13px;padding:8px 12px">📥 Import beheren in OWN Sense</button>
+</div>
+<div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Hub API-key status: <strong>${hubKey?'actief':'niet ingesteld'}</strong>. DateSense gebruikt automatisch dezelfde key.</div>
+<div style="font-size:13px;color:#666;line-height:1.6;margin-top:10px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
 <div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
 <select class="form-input" id="usageModeField" aria-label="Gebruiksmode">
   <option value="multi" ${usageMode==='multi'?'selected':''}>Meerdere dossiers opvolgen</option>
@@ -8341,7 +8363,6 @@ function rSettings(el){
   </div>
 </div>
 <button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>
-${S.apiKey?'<div style="margin-top:14px;padding:14px;background:#F0FFF4;border-radius:12px;font-size:15px;color:#2E7D32">✅ API key actief!</div>':''}
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Account</div>
   <p style="font-size:15px;color:#666;margin-bottom:14px">Ingelogd als: <strong>${S.user?S.user.email:''}</strong></p>
@@ -8388,7 +8409,12 @@ async function exportAllData(){
 }
 
 function settingsAction(action){
-  if(action==='prompt-center'){goScreen('promptcenter');return;}
+  if(action==='prompt-center'){
+    if(!isAdminUser()){toast('Geen toegang.');return;}
+    goScreen('promptcenter');
+    return;
+  }
+  if(action==='hub-settings'){window.location.href='sensecorner.html';return;}
   if(action==='quick-tour'){startFullAppTour();return;}
   if(action==='help-reset'){resetAllHelpPopups();return;}
   if(action==='my-data'){openOwnSenseEntryPoint();return;}
@@ -8429,8 +8455,6 @@ async function saveSettings(){
   var btn=document.getElementById('btnSaveSettings');
   setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
   try{
-    var kEl=document.getElementById('akField');
-    var k=kEl?kEl.value.trim():'';
     var usageEl=document.getElementById('usageModeField');
     var usage=usageEl?usageEl.value:'multi';
     var boostPrefs={
@@ -8439,10 +8463,7 @@ async function saveSettings(){
       style:(document.getElementById('focusBoostStyleField')||{}).value||'',
       time:(document.getElementById('focusBoostTimeField')||{}).value||''
     };
-    if(k){
-      S.apiKey=k;
-      localStorage.setItem('ds_ak',k);
-    }
+    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'').trim();
     S.adviceTone='eerlijk';
     localStorage.removeItem('ds_advice_tone');
     setUsageMode(usage);
