@@ -70,12 +70,17 @@ a{text-decoration:none;color:inherit}
 .hero-import-title{font-size:12px;font-weight:800;color:#9A2F2F;margin-bottom:4px}
 .hero-import-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:8px}
 .hub-settings{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
-.hub-settings-title{font-size:13px;font-weight:800;color:#2A313A;margin-bottom:6px}
+.hub-settings-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.hub-settings-title{font-size:13px;font-weight:800;color:#2A313A}
+.hub-settings-toggle{border:1px solid #D9DEE5;background:#fff;color:#4B5563;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .hub-settings-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
 .hub-settings-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .hub-input{flex:1;min-width:180px;border:1px solid #D9DEE5;border-radius:10px;padding:9px 10px;font:inherit;font-size:13px;background:#fff}
 .hub-save{border:none;border-radius:10px;background:var(--r);color:#fff;padding:9px 12px;font-size:12px;font-weight:800;cursor:pointer}
 .hub-state{font-size:12px;color:#6B7280;margin-top:8px}
+.hub-settings.collapsed{padding:10px 12px}
+.hub-settings.collapsed .hub-settings-body{display:none}
+.hub-settings.collapsed .hub-settings-head{margin-bottom:0}
 .hub-auth{margin-top:10px;padding-top:10px;border-top:1px dashed #E6E8ED}
 .hub-auth-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .hub-auth-state{font-size:12px;color:#4B5563;line-height:1.45}
@@ -213,22 +218,27 @@ a{text-decoration:none;color:inherit}
     </div>
   </section>
 
-  <section class="hub-settings" aria-label="Hub instellingen">
-    <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
-    <div class="hub-settings-sub">Eén centrale API-key en accountflow voor al je Sense-apps. App-specifieke keuzes beheer je in elke app apart.</div>
-    <div class="hub-settings-row">
-      <input id="hubApiKeyField" class="hub-input" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off">
-      <button id="hubApiSaveBtn" class="hub-save" type="button">Opslaan</button>
+  <section id="hubSettingsCard" class="hub-settings" aria-label="Hub instellingen">
+    <div class="hub-settings-head">
+      <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
+      <button id="hubSettingsToggle" class="hub-settings-toggle" type="button">Inklappen</button>
     </div>
-    <div id="hubApiState" class="hub-state"></div>
-    <div class="hub-auth">
-      <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
-      <div class="hub-auth-row">
-        <button id="hubLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
-        <button id="hubRegisterBtn" class="hub-auth-btn" type="button">Account aanmaken</button>
-        <button id="hubLogoutBtn" class="hub-auth-btn" type="button" style="display:none">Uitloggen</button>
+    <div class="hub-settings-body">
+      <div class="hub-settings-sub">Eén centrale API-key en accountflow voor al je Sense-apps. App-specifieke keuzes beheer je in elke app apart.</div>
+      <div class="hub-settings-row">
+        <input id="hubApiKeyField" class="hub-input" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off">
+        <button id="hubApiSaveBtn" class="hub-save" type="button">Opslaan</button>
       </div>
-      <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
+      <div id="hubApiState" class="hub-state"></div>
+      <div class="hub-auth">
+        <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
+        <div class="hub-auth-row">
+          <button id="hubLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
+          <button id="hubRegisterBtn" class="hub-auth-btn" type="button">Account aanmaken</button>
+          <button id="hubLogoutBtn" class="hub-auth-btn" type="button" style="display:none">Uitloggen</button>
+        </div>
+        <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
+      </div>
     </div>
   </section>
 
@@ -367,6 +377,8 @@ a{text-decoration:none;color:inherit}
   var hubApiField=document.getElementById('hubApiKeyField');
   var hubApiSaveBtn=document.getElementById('hubApiSaveBtn');
   var hubApiState=document.getElementById('hubApiState');
+  var hubSettingsCard=document.getElementById('hubSettingsCard');
+  var hubSettingsToggle=document.getElementById('hubSettingsToggle');
   var hubAuthState=document.getElementById('hubAuthState');
   var hubLoginBtn=document.getElementById('hubLoginBtn');
   var hubRegisterBtn=document.getElementById('hubRegisterBtn');
@@ -381,6 +393,16 @@ a{text-decoration:none;color:inherit}
   var authRegisterConfirmBtn=document.getElementById('authRegisterConfirmBtn');
   var authMagicBtn=document.getElementById('authMagicBtn');
   var authCloseBtn=document.getElementById('authCloseBtn');
+  function setHubSettingsCollapsed(collapsed){
+    if(!hubSettingsCard||!hubSettingsToggle)return;
+    if(collapsed){
+      hubSettingsCard.classList.add('collapsed');
+      hubSettingsToggle.textContent='Openen';
+    }else{
+      hubSettingsCard.classList.remove('collapsed');
+      hubSettingsToggle.textContent='Inklappen';
+    }
+  }
   var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
   var filledAnswers=0;
   if(profile&&Array.isArray(profile.answers)){
@@ -404,6 +426,13 @@ a{text-decoration:none;color:inherit}
   var existingHubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
   if(hubApiField)hubApiField.value=existingHubKey;
   renderHubApiState(existingHubKey?'API key actief voor alle apps.':'Nog geen API key ingesteld.');
+  setHubSettingsCollapsed(!!existingHubKey);
+  if(hubSettingsToggle){
+    hubSettingsToggle.onclick=function(){
+      var isCollapsed=hubSettingsCard&&hubSettingsCard.classList.contains('collapsed');
+      setHubSettingsCollapsed(!isCollapsed);
+    };
+  }
   if(hubApiSaveBtn){
     hubApiSaveBtn.onclick=function(){
       var v=String((hubApiField&&hubApiField.value)||'').trim();
@@ -411,10 +440,12 @@ a{text-decoration:none;color:inherit}
         localStorage.setItem('anthropic_api_key',v);
         localStorage.setItem('ds_ak',v);
         renderHubApiState('Opgeslagen. DateSense en FamilySense gebruiken nu deze key.');
+        setHubSettingsCollapsed(true);
       }else{
         localStorage.removeItem('anthropic_api_key');
         localStorage.removeItem('ds_ak');
         renderHubApiState('API key verwijderd.');
+        setHubSettingsCollapsed(false);
       }
     };
   }
