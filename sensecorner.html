@@ -70,8 +70,14 @@ a{text-decoration:none;color:inherit}
 .hero-import-title{font-size:12px;font-weight:800;color:#9A2F2F;margin-bottom:4px}
 .hero-import-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:8px}
 .hub-settings{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
+.hub-settings.ok{border-color:#B7E4C7;box-shadow:0 1px 8px rgba(30,126,52,.08)}
+.hub-settings.warn{border-color:#F6C7C7;box-shadow:0 1px 8px rgba(174,0,0,.08)}
 .hub-settings-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.hub-settings-title-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .hub-settings-title{font-size:13px;font-weight:800;color:#2A313A}
+.hub-health-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}
+.hub-health-pill.ok{background:#ECFDF3;color:#136D2F;border:1px solid #B7E4C7}
+.hub-health-pill.warn{background:#FFF4F4;color:#9B1C1C;border:1px solid #F6C7C7}
 .hub-settings-toggle{border:1px solid #D9DEE5;background:#fff;color:#4B5563;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .hub-settings-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
 .hub-settings-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -225,7 +231,10 @@ a{text-decoration:none;color:inherit}
 
   <section id="hubSettingsCard" class="hub-settings" aria-label="Hub instellingen">
     <div class="hub-settings-head">
-      <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
+      <div class="hub-settings-title-wrap">
+        <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
+        <div id="hubHealthPill" class="hub-health-pill warn">⚠ Actie nodig</div>
+      </div>
       <button id="hubSettingsToggle" class="hub-settings-toggle" type="button">Inklappen</button>
     </div>
     <div class="hub-settings-body">
@@ -390,6 +399,7 @@ a{text-decoration:none;color:inherit}
   var hubApiState=document.getElementById('hubApiState');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
+  var hubHealthPill=document.getElementById('hubHealthPill');
   var hubAuthState=document.getElementById('hubAuthState');
   var hubLoginBtn=document.getElementById('hubLoginBtn');
   var hubRegisterBtn=document.getElementById('hubRegisterBtn');
@@ -414,6 +424,25 @@ a{text-decoration:none;color:inherit}
     }else{
       hubSettingsCard.classList.remove('collapsed');
       hubSettingsToggle.textContent='Inklappen';
+    }
+  }
+  function updateHubHealthUi(user,hasApiKey){
+    var isOk=!!user&&!!hasApiKey;
+    if(hubSettingsCard){
+      hubSettingsCard.classList.remove('ok','warn');
+      hubSettingsCard.classList.add(isOk?'ok':'warn');
+    }
+    if(hubHealthPill){
+      hubHealthPill.classList.remove('ok','warn');
+      hubHealthPill.classList.add(isOk?'ok':'warn');
+      if(isOk){
+        var email=String((user&&user.email)||'').trim();
+        hubHealthPill.textContent='✓ Aangemeld'+(email?' als '+email:'');
+      }else if(!user){
+        hubHealthPill.textContent='⚠ Log in nodig';
+      }else{
+        hubHealthPill.textContent='⚠ API key nodig';
+      }
     }
   }
   var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
@@ -460,6 +489,7 @@ a{text-decoration:none;color:inherit}
         renderHubApiState('API key verwijderd.');
         setHubSettingsCollapsed(false);
       }
+      refreshAuthUi();
     };
   }
 
@@ -501,17 +531,21 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
+    var hasApiKey=String(localStorage.getItem('anthropic_api_key')||'').trim().length>0;
+    updateHubHealthUi(user,hasApiKey);
     if(user){
       var em=String(user.email||'').trim();
       if(hubAuthState)hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
       if(hubLoginBtn)hubLoginBtn.style.display='none';
       if(hubRegisterBtn)hubRegisterBtn.style.display='none';
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
+      setHubSettingsCollapsed(hasApiKey);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
       if(hubRegisterBtn)hubRegisterBtn.style.display='inline-flex';
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
+      setHubSettingsCollapsed(false);
     }
     return user;
   }
