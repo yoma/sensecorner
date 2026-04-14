@@ -172,6 +172,7 @@ html,body{
   overflow:hidden;font-weight:800;color:#7D3A32;
 }
 .avatar img{width:100%;height:100%;object-fit:cover}
+.avatar.has-photo{cursor:zoom-in}
 .hero-title{font-size:18px;font-weight:800}
 .hero-sub{font-size:12px;color:var(--muted);margin-top:2px}
 .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
@@ -200,6 +201,7 @@ html,body{
   overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;
 }
 .thumb img{width:100%;height:100%;object-fit:cover}
+.thumb img{cursor:zoom-in}
 .thumb-add{
   width:100%;height:100%;border:none;background:#F8EFED;color:#A8493F;cursor:pointer;
   font:inherit;font-weight:800;font-size:28px;
@@ -281,6 +283,11 @@ html,body{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:18px;height:18px;border-radius:999px;background:#B11F1F;color:#fff;font-size:10px;font-weight:800;margin-left:6px;
 }
+.img-preview-overlay{position:fixed;inset:0;background:rgba(10,12,16,.72);display:none;align-items:center;justify-content:center;z-index:2300;padding:20px}
+.img-preview-overlay.show{display:flex}
+.img-preview-card{position:relative;max-width:min(92vw,560px);max-height:82vh}
+.img-preview-img{display:block;width:auto;max-width:min(92vw,560px);max-height:82vh;border-radius:16px;border:1px solid rgba(255,255,255,.25);box-shadow:0 20px 50px rgba(0,0,0,.35);background:#111}
+.img-preview-close{position:absolute;top:-12px;right:-12px;width:32px;height:32px;border:none;border-radius:16px;background:#fff;color:#222;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.22)}
 .import-hub-box{border:0.5px solid #E7C7C2;border-radius:14px;background:linear-gradient(180deg,#FFFBFB 0%,#FFF 100%);padding:12px}
 .import-hub-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#8E2B20;margin-bottom:6px}
 .import-hub-text{font-size:13px;line-height:1.55;color:#4E535B}
@@ -868,7 +875,7 @@ function renderHero(){
   var initials=(hubState.display_name||'J').trim().charAt(0).toUpperCase();
   var img=hubState.photo_url?'<img src="'+hubState.photo_url.replace(/"/g,'&quot;')+'" alt="Profielfoto">':initials;
   el.innerHTML=''
-    +'<div class="hero"><div class="avatar">'+img+'</div><div style="flex:1">'
+    +'<div class="hero"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'">'+img+'</div><div style="flex:1">'
     +'<div class="hero-title">'+(hubState.display_name||'Jij')+'</div>'
     +'<div class="hero-sub">Persoonlijk dossier · actief</div></div></div>'
     +'<div class="chip-row"><span class="chip">OWN Sense</span><span class="chip">DateSense</span><span class="chip">FamilySense</span></div>'
@@ -880,6 +887,41 @@ function renderHero(){
     hubState.display_name=this.value.trim();
     saveHubState();
     renderHero();
+  });
+}
+function openPhotoPreview(src,alt){
+  var ov=document.getElementById('imgPreviewOverlay');
+  var img=document.getElementById('imgPreviewImage');
+  if(!ov||!img||!src)return;
+  img.src=src;
+  img.alt=alt||'Foto preview';
+  ov.classList.add('show');
+  ov.setAttribute('aria-hidden','false');
+}
+function closePhotoPreview(){
+  var ov=document.getElementById('imgPreviewOverlay');
+  var img=document.getElementById('imgPreviewImage');
+  if(!ov||!img)return;
+  ov.classList.remove('show');
+  ov.setAttribute('aria-hidden','true');
+  img.src='';
+}
+function initPhotoPreview(){
+  if(window.__osPhotoPreviewInit)return;
+  window.__osPhotoPreviewInit=true;
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    var ov=document.getElementById('imgPreviewOverlay');
+    if(ov&&t===ov){closePhotoPreview();return;}
+    if(t&&t.id==='imgPreviewCloseBtn'){closePhotoPreview();return;}
+    var img=t&&t.closest?t.closest('.avatar img,.thumb img'):null;
+    if(!img)return;
+    var src=img.currentSrc||img.src||'';
+    if(!src)return;
+    openPhotoPreview(src,img.alt||'Profielfoto');
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closePhotoPreview();
   });
 }
 
@@ -1681,6 +1723,7 @@ var IS_NEW_USER=false;
 document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'none';
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
+initPhotoPreview();
 loadHubState();
 loadOwnFromSupabase().finally(function(){
   renderProfileTab();
@@ -1740,5 +1783,11 @@ if(insightTabBtn){
   }
 }
 </script>
+<div id="imgPreviewOverlay" class="img-preview-overlay" aria-hidden="true">
+  <div class="img-preview-card" role="dialog" aria-modal="true" aria-label="Foto preview">
+    <img id="imgPreviewImage" class="img-preview-img" alt="Foto preview">
+    <button id="imgPreviewCloseBtn" class="img-preview-close" type="button" aria-label="Sluiten">&times;</button>
+  </div>
+</div>
 </body>
 </html>

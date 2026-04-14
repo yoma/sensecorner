@@ -761,6 +761,11 @@ a:focus-visible,
 .vertel-btn-new:active{opacity:.88}
 .vertel-gesprek-banner{font-size:12px;color:#444;line-height:1.45;margin-top:4px}
 .vertel-gesprek-banner .linkish{background:none;border:none;padding:0;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px}
+.img-preview-overlay{position:fixed;inset:0;background:rgba(10,12,16,.72);display:none;align-items:center;justify-content:center;z-index:2300;padding:20px}
+.img-preview-overlay.show{display:flex}
+.img-preview-card{position:relative;max-width:min(92vw,560px);max-height:82vh}
+.img-preview-img{display:block;width:auto;max-width:min(92vw,560px);max-height:82vh;border-radius:16px;border:1px solid rgba(255,255,255,.25);box-shadow:0 20px 50px rgba(0,0,0,.35);background:#111}
+.img-preview-close{position:absolute;top:-12px;right:-12px;width:32px;height:32px;border:none;border-radius:16px;background:#fff;color:#222;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.22)}
 </style>
 </head>
 <body>
@@ -1431,6 +1436,46 @@ function sync(s){
 }
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);var ann=document.getElementById('a11y-announce');if(ann){ann.textContent='';setTimeout(()=>{ann.textContent=m;},50);}setTimeout(()=>{if(t.parentNode)t.parentNode.removeChild(t);},2500);}
+function openPhotoPreview(src,alt){
+  var ov=document.getElementById('imgPreviewOverlay');
+  var img=document.getElementById('imgPreviewImage');
+  if(!ov||!img||!src)return;
+  img.src=src;
+  img.alt=alt||'Foto preview';
+  ov.classList.add('show');
+  ov.setAttribute('aria-hidden','false');
+}
+function closePhotoPreview(){
+  var ov=document.getElementById('imgPreviewOverlay');
+  var img=document.getElementById('imgPreviewImage');
+  if(!ov||!img)return;
+  ov.classList.remove('show');
+  ov.setAttribute('aria-hidden','true');
+  img.src='';
+}
+function initPhotoPreview(){
+  if(window.__fsPhotoPreviewInit)return;
+  window.__fsPhotoPreviewInit=true;
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    var ov=document.getElementById('imgPreviewOverlay');
+    if(ov&&t===ov){closePhotoPreview();return;}
+    if(t&&t.id==='imgPreviewCloseBtn'){closePhotoPreview();return;}
+    var img=t&&t.closest?t.closest('img'):null;
+    if(!img)return;
+    var src=img.currentSrc||img.src||'';
+    if(!src)return;
+    var r=img.getBoundingClientRect();
+    if(!(r.width>0&&r.height>0&&r.width<=64&&r.height<=64))return;
+    var c=getComputedStyle(img);
+    var br=parseFloat(c.borderTopLeftRadius)||0;
+    if(br<Math.min(r.width,r.height)/3)return;
+    openPhotoPreview(src,img.alt||'Profielfoto');
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closePhotoPreview();
+  });
+}
 
 function autoResize(el){
   if(!el)return;
@@ -3219,6 +3264,7 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
+  initPhotoPreview();
   window.__fsBootOk=true;
   var mcBoot=document.getElementById('mainContent');
   if(mcBoot&&!String(mcBoot.textContent||'').replace(/\s+/g,'').trim()){
@@ -4332,6 +4378,10 @@ async function handleProfilePhotoInput(input){
     );
     var av=document.getElementById('profileModalAvatar');
     if(av)av.src=url;
+    if(typeof renderOwnAvatar==='function')renderOwnAvatar();
+    if(S.screen==='dossier'&&S.viewDossier===_profileModalFor){
+      await loadTab(_profileModalFor,S.viewTab,S.pdata[_profileModalFor]||newDossierDataStub());
+    }
     setProfilePhotoUploadProgress(100,'Foto toegevoegd');
     toast('✅ Foto opgeslagen');
     updateProfileModalCompletionLive();
@@ -11191,5 +11241,11 @@ setTimeout(function(){
   }catch(_e){}
 },120);
 </script>
+<div id="imgPreviewOverlay" class="img-preview-overlay" aria-hidden="true">
+  <div class="img-preview-card" role="dialog" aria-modal="true" aria-label="Foto preview">
+    <img id="imgPreviewImage" class="img-preview-img" alt="Foto preview">
+    <button id="imgPreviewCloseBtn" class="img-preview-close" type="button" aria-label="Sluiten">&times;</button>
+  </div>
+</div>
 </body>
 </html>

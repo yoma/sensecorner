@@ -30,6 +30,7 @@ a{text-decoration:none;color:inherit}
 .logo{display:flex;align-items:center;gap:9px}
 .logo-mark{width:30px;height:30px;background:var(--r);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo-mark svg{width:16px;height:16px}
+.header-own-photo{width:30px;height:30px;border-radius:15px;border:1px solid #E3D5D1;object-fit:cover;display:none;flex-shrink:0}
 .logo-text{font-family:'Lora',serif;font-size:17px;font-weight:700;color:var(--t);letter-spacing:-.01em}
 .logo-sub{
   display:block;
@@ -190,6 +191,7 @@ a{text-decoration:none;color:inherit}
       <div class="logo-mark" aria-hidden="true">
         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="#fff" stroke-width="2"/><circle cx="8" cy="8" r="2" fill="#fff"/></svg>
       </div>
+      <img id="headerOwnPhoto" class="header-own-photo" alt="Jouw profielfoto">
       <div>
         <div class="logo-text">SenseCorner</div>
         <div class="logo-sub">Jouw plek voor gevoel, inzicht en groei</div>
@@ -395,6 +397,9 @@ a{text-decoration:none;color:inherit}
   var raw=localStorage.getItem('ownsense_profile_v1');
   var profile=null;
   try{if(raw)profile=JSON.parse(raw);}catch(_e){}
+  var hubRaw=localStorage.getItem('ownsense_hub_profile_v2');
+  var hubProfile=null;
+  try{if(hubRaw)hubProfile=JSON.parse(hubRaw);}catch(_e){}
 
   var dot=document.getElementById('statusDot');
   var statusText=document.getElementById('statusText');
@@ -404,6 +409,7 @@ a{text-decoration:none;color:inherit}
   var btnMain=document.getElementById('btnMain');
   var ownBadge=document.getElementById('ownBadge');
   var ringIcon=document.getElementById('ringIcon');
+  var headerOwnPhoto=document.getElementById('headerOwnPhoto');
   var hubApiField=document.getElementById('hubApiKeyField');
   var hubApiSaveBtn=document.getElementById('hubApiSaveBtn');
   var hubApiState=document.getElementById('hubApiState');
@@ -465,6 +471,23 @@ a{text-decoration:none;color:inherit}
     profile.status='empty';
     profile.completionPct=0;
     try{localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));}catch(_e){}
+  }
+  var ownPhotoUrl='';
+  if(hubProfile){
+    ownPhotoUrl=String(hubProfile.photo_url||'').trim();
+    if(!ownPhotoUrl&&Array.isArray(hubProfile.photo_urls)&&hubProfile.photo_urls.length){
+      ownPhotoUrl=String(hubProfile.photo_urls[0]||'').trim();
+    }
+  }
+  if(!ownPhotoUrl&&profile){
+    ownPhotoUrl=String(profile.photo||profile.photo_url||'').trim();
+    if(!ownPhotoUrl&&Array.isArray(profile.photo_urls)&&profile.photo_urls.length){
+      ownPhotoUrl=String(profile.photo_urls[0]||'').trim();
+    }
+  }
+  if(headerOwnPhoto&&ownPhotoUrl){
+    headerOwnPhoto.src=ownPhotoUrl;
+    headerOwnPhoto.style.display='block';
   }
 
   function setRing(pct){
