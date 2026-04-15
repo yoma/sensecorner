@@ -300,7 +300,7 @@ a{text-decoration:none;color:inherit}
           <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
         </div>
         <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
-        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">WhatsApp zoekt <strong>exact dit nummer</strong> op jouw OWN Sense-rij. Staat het bij een ander account of dubbel in de database, dan krijg je de verkeerde naam — dat is geen hardcoded «springen», maar verkeerde data. Foto en volledig profiel: open OWN Sense.</div>
+        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">WhatsApp zoekt <strong>exact dit nummer</strong> op jouw OWN Sense-rij. Staat het nummer nog op <strong>een ander</strong> OWN Sense-account (unieke regel in de database), dan weigert opslaan met een fout — dat los je op in Supabase (andere rij <code style="font-size:10px">phone</code> leegmaken) of via een admin. Foto en volledig profiel: open OWN Sense.</div>
         <div style="margin-top:10px">
           <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
         </div>
@@ -749,6 +749,13 @@ a{text-decoration:none;color:inherit}
   function isValidPhoneHub(v){
     return /^\+[1-9]\d{7,14}$/.test(String(v||'').trim());
   }
+  function formatPhoneSaveError(err){
+    var msg=String((err&&err.message)||err||'').trim();
+    if(/duplicate|unique constraint|uq_sense_profiles_ownsense_phone|23505/i.test(msg)){
+      return 'Dit gsm-nummer staat al op een andere OWN Sense-rij in de database (unieke index). Jouw browser ziet die andere rij soms niet door beveiliging (RLS), maar de server weigert terecht. Laat een beheerder in Supabase zoeken welke `sense_profiles`-rij (name = OWN Sense) nog `phone` = dit nummer heeft en zet die leeg, of verwijder de dubbele koppeling.';
+    }
+    return msg||'Opslaan mislukt.';
+  }
   async function refreshHubOwnPreview(user){
     if(!hubOwnPreview)return;
     if(!sb||!user||!user.id){
@@ -982,7 +989,7 @@ a{text-decoration:none;color:inherit}
         setHubPhoneState('Opgeslagen. WhatsApp zoekt dit exacte nummer op jouw OWN Sense-rij.',false);
         await refreshHubOwnPreview(u);
       }catch(e){
-        setHubPhoneState((e&&e.message)||'Opslaan mislukt.',true);
+        setHubPhoneState(formatPhoneSaveError(e),true);
       }finally{
         hubPhoneSave.disabled=false;
       }
