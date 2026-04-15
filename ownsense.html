@@ -628,6 +628,32 @@ async function uploadPhotoToStorage(file){
   return url;
 }
 
+function displayNameFromAuthUser(user){
+  if(!user||!user.user_metadata)return'';
+  var m=user.user_metadata;
+  var meta=(m&&typeof m==='object')?m:{};
+  var n=String(meta.full_name||meta.display_name||meta.name||'').trim();
+  if(!n||n.toLowerCase()==='own sense')return'';
+  return n;
+}
+
+async function syncDisplayNameFromRegistration(){
+  var client=initSupabase();
+  if(!client)return;
+  try{
+    var auth=await client.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user)return;
+    var fromReg=displayNameFromAuthUser(user);
+    if(!fromReg)return;
+    var cur=String(hubState.display_name||'').trim();
+    if(cur&&cur.toLowerCase()!=='own sense')return;
+    hubState.display_name=fromReg;
+    await saveOwnToSupabase();
+    saveHubState();
+  }catch(_e){}
+}
+
 async function loadOwnFromSupabase(){
   var client=initSupabase();
   if(!client)return;
@@ -698,12 +724,20 @@ async function saveOwnToSupabase(){
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
     if(!user)return;
+    var cleanName=String(hubState.display_name||'').trim();
     var propsOut={
       _v:1,
+      display_name:cleanName||'',
+      full_name:cleanName||'',
+      name:cleanName||'',
       categories:hubState.categories,
       foto_urls:hubState.photo_urls,
       foto_analyse:hubState.foto_analyse
     };
+    propsOut.meta=Object.assign({},(propsOut.meta&&typeof propsOut.meta==='object')?propsOut.meta:{},{
+      display_name:cleanName||'',
+      full_name:cleanName||''
+    });
     PK.forEach(function(k){propsOut[k]=hubState.props[k]||0;});
     var payload={
       user_id:user.id,
@@ -724,6 +758,11 @@ async function saveOwnToSupabase(){
     };
     var up=await client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'});
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+    if(cleanName){
+      try{
+        await client.auth.updateUser({data:{display_name:cleanName,full_name:cleanName}});
+      }catch(_e){}
+    }
   }catch(e){}
 }
 
@@ -1725,9 +1764,11 @@ document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
 initPhotoPreview();
 loadHubState();
-loadOwnFromSupabase().finally(function(){
-  renderProfileTab();
-});
+loadOwnFromSupabase()
+  .then(function(){return syncDisplayNameFromRegistration();})
+  .finally(function(){
+    renderProfileTab();
+  });
 loadOwnTimelineFromSupabase().finally(function(){
   renderTimelineTab();
   renderInsightsTab();
