@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="15-04-2026 10:25">
+<meta name="ds-build" content="15-04-2026 10:50">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -841,7 +841,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 10:25</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 10:50</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -10028,13 +10028,20 @@ async function sendMsg(){
     }
     var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
-    var messages=[...history,{role:'user',content:txtForAI}];
+    var messages=[...history];
+    if(pendingAdviceCtx){
+      messages.push({role:'user',content:pendingAdviceCtx});
+    }
+    messages.push({role:'user',content:txtForAI});
     var gesprekFocus=forcedDossier||S.vertelGesprekDossier||S.vertelFrom;
     var fullSys=sys
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
+    var adviceCtxBadge=pendingAdviceCtx
+      ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
+      :'';
     var raw=await callAPI(fullSys,messages,400);
     var segData=null;
     if(segPromise){
@@ -10064,14 +10071,14 @@ async function sendMsg(){
 
     if(forcedDossier){
       window._pendingSegmenten=null;
-      addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
+      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
       _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId).catch(function(e){
         console.warn('auto-opslaan gefaald',e);
         toast('Opslaan liep vast, probeer opnieuw via dossier.');
       });
     }else if(segData&&segData.length>=2){
       window._pendingSegmenten=segData;
-      addMsg('ai',formatAiCard(raw)+buildSegmentReviewCardHtml());
+      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildSegmentReviewCardHtml());
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
@@ -10082,7 +10089,7 @@ async function sendMsg(){
         if(voorgesteldSticky&&voorgesteldSticky!==sticky){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
-        addMsg('ai',formatAiCard(raw)+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
         _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId).catch(function(e){
           console.warn('sticky opslaan gefaald',e);
           toast('Opslaan liep vast, probeer opnieuw via dossier.');
@@ -10107,7 +10114,7 @@ async function sendMsg(){
           +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
           +'</div>';
 
-        addMsg('ai',formatAiCard(raw)+saveBar);
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+saveBar);
       }
     }
     // Update sidebar sessie preview
@@ -11814,8 +11821,8 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     bar.classList.remove('coach-save-bar-done');
   }
   try{
-    await ensureP(dossier);
-    var inserted=await saveMsg(dossier,'user',tekst);
+    await withTimeout(ensureP(dossier),9000,'Opslag-timeout bij dossiercontrole.');
+    var inserted=await withTimeout(saveMsg(dossier,'user',tekst),10000,'Opslag-timeout bij bericht bewaren.');
     if(sessionUserMsgId&&inserted&&inserted.id){
       var map=getSessAssignMap();
       map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
@@ -11824,7 +11831,7 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
     pd.count=(pd.count||0)+1;
     S.pdata[dossier]=pd;
-    await saveP(dossier,pd.props,pd.count,pd.categories);
+    await withTimeout(saveP(dossier,pd.props,pd.count,pd.categories),10000,'Opslag-timeout bij profiel bijwerken.');
     if(dossier==='OWN Sense'){
       await updateOwnSenseCategoriesFromVertel(tekst);
       var _ownT=(tekst||'').replace(/<[^>]*>/g,' ').trim();
