@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="15-04-2026 10:50">
+<meta name="ds-build" content="15-04-2026 11:00">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -841,7 +841,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 10:50</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 11:00</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -8461,8 +8461,9 @@ async function rVertel(el){
     S.vertelMsgs.forEach(function(m){
       var d=document.createElement('div');
       d.className=m.role==='user'?'msg-user':'msg-ai';
+      var ctxLbl=String((m&&m.ctxLabel)||'').trim();
       d.innerHTML=m.role==='user'
-        ?`<div class="bbl-user">${escRestore(m.html)}</div>`
+        ?`${ctxLbl?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+escRestore(ctxLbl)+'</div>':''}<div class="bbl-user">${escRestore(m.html)}</div>`
         :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${m.html}</div>`;
       ca.appendChild(d);
     });
@@ -9463,9 +9464,10 @@ function renderAiImportHomeLanding(){
 }
 
 // ══ Chat helpers ══════════════════════════════════════════════════
-function addMsg(role,html){
+function addMsg(role,html,opts){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var d=document.createElement('div');d.className=role==='user'?'msg-user':'msg-ai';
+  var ctxLabel=String((opts&&opts.ctxLabel)||'').trim();
   function esc(s){
     return String(s==null?'':s)
       .replace(/&/g,'&amp;')
@@ -9475,11 +9477,13 @@ function addMsg(role,html){
       .replace(/'/g,'&#39;');
   }
   // Escape alleen user's raw input; AI output mag (voor nu) wel HTML bevatten.
-  d.innerHTML=role==='user'?`<div class="bbl-user">${esc(html)}</div>`:`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}</div>`;
+  d.innerHTML=role==='user'
+    ?`${ctxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(ctxLabel)+'</div>':''}<div class="bbl-user">${esc(html)}</div>`
+    :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}</div>`;
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
   // Bewaar in sessie zodat de chat bewaard blijft bij navigeren weg/terug
   if(!S.vertelMsgs)S.vertelMsgs=[];
-  S.vertelMsgs.push({role,html});
+  S.vertelMsgs.push({role,html,ctxLabel:ctxLabel||''});
 }
 
 function showT(){
@@ -9967,12 +9971,14 @@ async function sendMsg(){
   }
   var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
   var pendingAdviceCtx='';
+  var hadAdviceCtx=false;
   try{
     var pa=S.vertelPendingAdvice||null;
     if(pa&&String(pa.text||'').trim()){
       var paIntro=String(pa.intro||'').trim();
       var paBody=String(pa.text||'').trim();
       if(paBody){
+        hadAdviceCtx=true;
         pendingAdviceCtx='ADVIESCONTEXT (automatisch uit vorige Advies-kaart):\n'
           +(paIntro?('Focus: '+paIntro+'\n'):'')
           +paBody.substring(0,1800);
@@ -9985,7 +9991,7 @@ async function sendMsg(){
   }
   inp.value='';inp.style.height='auto';S.busy=true;
 
-  addMsg('user',txt);
+  addMsg('user',txt,hadAdviceCtx?{ctxLabel:'Context: eerder advies meegenomen'}:null);
   showT();
 
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
@@ -10038,6 +10044,9 @@ async function sendMsg(){
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
+    if(hadAdviceCtx){
+      fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder.';
+    }
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
