@@ -1199,6 +1199,24 @@ window.addEventListener('unhandledrejection',function(ev){
   showFatalUi('Promise fout: '+m);
 });
 
+/** Roepnaam / weergavenaam voor UI (geen e-maillocal-part). Auth-metadata eerst (SenseCorner) vóór gecachte pdata. */
+function getUserHoofdNaam(){
+  if(!S.user)return'';
+  try{
+    var bad=/^own\s*sense$/i;
+    var m=S.user.user_metadata||{};
+    var fromMeta=String(m.roepnaam||m.display_name||m.full_name||m.first_name||m.name||'').trim();
+    if(fromMeta&&!bad.test(fromMeta))return fromMeta;
+    var own=S.pdata&&S.pdata['OWN Sense'];
+    var p=(own&&own.props)||{};
+    var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
+    var om=(own&&own.meta&&typeof own.meta==='object')?own.meta:{};
+    var fromProf=String(p.roepnaam||pm.roepnaam||om.roepnaam||p.display_name||pm.display_name||om.display_name||p.full_name||pm.full_name||'').trim();
+    if(fromProf&&!bad.test(fromProf))return fromProf;
+  }catch(_e){}
+  return'';
+}
+
 function setBuildTag(){
   var el=document.getElementById('buildTagTop');
   var userEl=document.getElementById('buildUserTop');
@@ -1208,9 +1226,7 @@ function setBuildTag(){
   var fsBadge=document.getElementById('fsBuildBadge');
   if(fsBadge)fsBadge.textContent='FS BUILD '+escHTML(getAppBuildDisplay());
   if(S.user){
-    var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
-    var email=(S.user&&S.user.email)||'';
-    var name=(first&&String(first).trim())||((email&&email.split('@')[0])||'Jij');
+    var name=getUserHoofdNaam()||'Jij';
     userEl.innerHTML=escHTML(name)+'<button class="bt-logout-btn" type="button" onclick="safeSignOut()">Afmelden</button>';
   }else{
     userEl.innerHTML='';
@@ -2636,8 +2652,25 @@ async function focusFirstEmptyContactField(name){
 function getOwnNameTokens(){
   var set=new Set(['ik','jij','you','mij','me']);
   try{
+    var hoof=getUserHoofdNaam();
+    if(hoof){
+      set.add(hoof.toLowerCase());
+      hoof.split(/\s+/).forEach(function(part){
+        if(part&&part.length>=2)set.add(part.toLowerCase());
+      });
+    }
     var first=(S.user&&S.user.user_metadata&&S.user.user_metadata.first_name)||'';
     if(first)set.add(String(first).toLowerCase());
+    var um=S.user&&S.user.user_metadata;
+    if(um){
+      var full=String(um.full_name||'').trim();
+      if(full&&full.length>=2&&!/^own\s*sense$/i.test(full)){
+        set.add(full.toLowerCase());
+        full.split(/\s+/).forEach(function(part){
+          if(part&&part.length>=2)set.add(part.toLowerCase());
+        });
+      }
+    }
     var email=(S.user&&S.user.email)||'';
     var local=email.split('@')[0]||'';
     if(local){
@@ -4857,12 +4890,31 @@ function isLikelySamePersonName(word,canonical){
 }
 function getDossierNameVariants(p){
   var out=[];
-  var base=dn(p);
-  if(base)out.push(base);
-  if(p&&p!=='OWN Sense'){
-    var disp=String((S.pdata[p]&&S.pdata[p].meta&&S.pdata[p].meta.display_name)||'').trim();
-    if(disp&&disp.toLowerCase()!==String(base).toLowerCase())out.push(disp);
+  var seen={};
+  function add(s){
+    s=String(s||'').trim();
+    if(s.length<2)return;
+    if(/^own\s*sense$/i.test(s))return;
+    var k=s.toLowerCase();
+    if(seen[k])return;
+    seen[k]=1;
+    out.push(s);
   }
+  add(dn(p));
+  if(!p||p==='OWN Sense')return out;
+  var d=S.pdata[p]||{};
+  var m=d.meta||{};
+  var props=(d.props&&typeof d.props==='object')?d.props:{};
+  var pm=(props.meta&&typeof props.meta==='object')?props.meta:{};
+  add(m.roepnaam);
+  add(m.display_name);
+  add(m.full_name);
+  add(props.roepnaam);
+  add(pm.roepnaam);
+  add(props.display_name);
+  add(pm.display_name);
+  add(props.full_name);
+  add(pm.full_name);
   return out;
 }
 function findExistingDossierForMention(token){
@@ -5384,9 +5436,7 @@ function rHome(el){
 
   // Ingelogd → clean home
   var cs=getActiveContactNames();
-  var userMeta=(S.user&&S.user.user_metadata)?S.user.user_metadata:{};
-  var userEmail=(S.user&&S.user.email)?String(S.user.email):'';
-  var firstName=(userMeta.first_name||'')||(userEmail.split('@')[0]||'');
+  var firstName=getUserHoofdNaam();
   var usageMode=getUsageMode();
   var modeDraft=(S.homeModeDraft==='single'||S.homeModeDraft==='multi')?S.homeModeDraft:usageMode;
   var focusName=getFocusDossier();
@@ -10708,7 +10758,7 @@ function buildCoachContext(){
       var meta=d.meta||{};
       var metaAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
       var famRel=getContactRolBadgeText(meta);
-      var metaShort=[meta.display_name,metaAge?('leeftijd '+metaAge):'',famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
+      var metaShort=[meta.roepnaam,meta.display_name,metaAge?('leeftijd '+metaAge):'',famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
       var photoShort=(meta.photo_analysis&&meta.photo_analysis.summary)?(' | foto: '+String(meta.photo_analysis.summary).substring(0,80)):'';
       var cat='';
       if(d.categories){Object.values(d.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())cat+=' '+v.trim();});});}
@@ -10729,7 +10779,21 @@ function buildCoachContext(){
   if(own.categories){Object.values(own.categories).forEach(function(c){Object.values(c||{}).forEach(function(v){if((v||'').trim())ownCat+=' '+v.trim();});});}
   var ownMeta=own.meta||{};
   var ownAge=calcAgeFromBirthdate(ownMeta.birthdate)||ownMeta.age||'';
-  var ownMetaParts=[ownMeta.display_name,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
+  var op=(own.props&&typeof own.props==='object')?own.props:{};
+  var opm=(op.meta&&typeof op.meta==='object')?op.meta:{};
+  var ownRn=String(op.roepnaam||opm.roepnaam||'').trim();
+  var ownDn=String(ownMeta.display_name||'').trim();
+  var ownNameBits=[];
+  function pushOwnLabel(s){
+    s=String(s||'').trim();
+    if(!s||/^own\s*sense$/i.test(s))return;
+    if(ownNameBits.some(function(x){return x.toLowerCase()===s.toLowerCase();}))return;
+    ownNameBits.push(s);
+  }
+  pushOwnLabel(ownRn);
+  pushOwnLabel(ownDn);
+  var ownNameLine=ownNameBits.length?ownNameBits.join(' / '):'';
+  var ownMetaParts=[ownNameLine,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
   if(ownMeta.photo_analysis&&ownMeta.photo_analysis.summary){
     ownMetaParts.push('foto: '+String(ownMeta.photo_analysis.summary).substring(0,80));
   }
@@ -10759,7 +10823,7 @@ async function buildDossierContextForAI(dosName){
   var m=d.meta||{};
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
   var famRel=getContactRolBadgeText(m);
-  var mLine=[m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
+  var mLine=[m.roepnaam,m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
   if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
   if(m.photo_analysis){
     var ptxt='Foto-analyse: mood '+(m.photo_analysis.mood||'')+', openheid '+(m.photo_analysis.openheid||0)+'%, glimlach '+(m.photo_analysis.glimlach||0)+'%, energie '+(m.photo_analysis.energie||0)+'%, verzorging '+(m.photo_analysis.verzorging||0)+'%, benaderbaarheid '+(m.photo_analysis.benaderbaarheid||0)+'%';
