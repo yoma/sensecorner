@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="15-04-2026 08:57">
+<meta name="ds-build" content="15-04-2026 09:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -834,7 +834,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 08:57</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 09:40</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -7801,13 +7801,24 @@ function discussAdviceInVertel(name,mode){
     var liveExtra=document.getElementById('advExtraTxt');
     extra=stripTagsPlainExport(String((liveExtra&&liveExtra.innerHTML)||'')).replace(/\s+/g,' ').trim();
   }
-  var intro=(mode==='extra'?'Ik wil verder praten over dit EXTRA expertise-advies voor '+dn(dName)+':':'Ik wil verder praten over dit advies voor '+dn(dName)+':');
+  var intro=(mode==='extra'?'Kan je me helpen dit extra expertise-advies te verdiepen voor '+dn(dName)+'?':'Kan je me helpen dit advies verder uit te diepen voor '+dn(dName)+'?');
   var body=(mode==='extra'?(extra||core):core);
   if(!body){
     toast('Nog geen advies om op verder te gaan.');
     return;
   }
-  var prefill=intro+'\n"'+body.substring(0,320)+'"';
+  var cleaned=String(body||'')
+    .replace(/&quot;/g,'"')
+    .replace(/&#39;/g,"'")
+    .replace(/&amp;/g,'&')
+    .replace(/&lt;/g,'<')
+    .replace(/&gt;/g,'>')
+    .trim();
+  var cap=1200;
+  var finalText=cleaned.length>cap
+    ?(cleaned.substring(0,cap)+'\n\n[Ingekort voor leesbaarheid. Vraag gerust: "toon het volledige advies opnieuw".]')
+    :cleaned;
+  var prefill=intro+'\n\n"'+finalText+'"';
   S.vertelFrom=dName;
   S.vertelGesprekDossier=dName;
   goScreen('vertel');
