@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="sc-build" content="15-04-2026 11:00">
+<meta name="sc-build" content="15-04-2026 14:30">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -103,6 +103,23 @@ a{text-decoration:none;color:inherit}
 .hub-auth-state{font-size:12px;color:#4B5563;line-height:1.45}
 .hub-auth-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
 .hub-auth-btn.primary{background:var(--r);border-color:var(--r);color:#fff}
+.admin-panel{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
+.admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.admin-panel-title{font-size:13px;font-weight:800;color:#2A313A}
+.admin-panel-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
+.admin-refresh-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.admin-state{font-size:12px;color:#6B7280;margin-bottom:8px}
+.admin-list{display:flex;flex-direction:column;gap:8px}
+.admin-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid #E5E7EB;border-radius:12px;background:#fff}
+.admin-row-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.admin-email{font-size:13px;font-weight:700;color:#1F2937;word-break:break-all}
+.admin-meta{font-size:11px;color:#6B7280}
+.admin-pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800}
+.admin-pill.ok{background:#ECFDF3;color:#136D2F;border:1px solid #B7E4C7}
+.admin-pill.warn{background:#FFF4F4;color:#9B1C1C;border:1px solid #F6C7C7}
+.admin-action-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
+.admin-action-btn.revoke{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
 .auth-overlay{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
 .auth-overlay.show{display:flex}
 .auth-modal{width:min(440px,100%);background:#fff;border-radius:14px;border:1px solid #E5E7EB;box-shadow:0 20px 45px rgba(0,0,0,.2);padding:16px}
@@ -268,6 +285,16 @@ a{text-decoration:none;color:inherit}
     </div>
   </section>
 
+  <section id="adminAiPanel" class="admin-panel" aria-label="Admin AI toegang" style="display:none">
+    <div class="admin-panel-head">
+      <div class="admin-panel-title">Admin · AI toegang beheren</div>
+      <button id="adminAiRefreshBtn" class="admin-refresh-btn" type="button">Vernieuwen</button>
+    </div>
+    <div class="admin-panel-sub">Nieuwe users staan standaard op wacht. Keur hier per gebruiker AI-toegang goed of trek die terug in.</div>
+    <div id="adminAiState" class="admin-state">Laden…</div>
+    <div id="adminAiList" class="admin-list"></div>
+  </section>
+
   <!-- App grid -->
   <p class="section-label">Sense Apps</p>
   <section class="grid" aria-label="Beschikbare apps" role="list">
@@ -390,7 +417,7 @@ a{text-decoration:none;color:inherit}
   var d=new Date();
   var days=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 15-04-2026 11:00';
+  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 15-04-2026 14:30';
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30
@@ -432,6 +459,11 @@ a{text-decoration:none;color:inherit}
   var authPwToggleBtn=document.getElementById('authPwToggleBtn');
   var authForgotBtn=document.getElementById('authForgotBtn');
   var authCloseBtn=document.getElementById('authCloseBtn');
+  var adminAiPanel=document.getElementById('adminAiPanel');
+  var adminAiRefreshBtn=document.getElementById('adminAiRefreshBtn');
+  var adminAiState=document.getElementById('adminAiState');
+  var adminAiList=document.getElementById('adminAiList');
+  var currentAdminRole='user';
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
     if(collapsed){
@@ -562,10 +594,92 @@ a{text-decoration:none;color:inherit}
       return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
     }catch(_e){return null;}
   }
+  function setAdminAiState(msg,isErr){
+    if(!adminAiState)return;
+    adminAiState.textContent=msg||'';
+    adminAiState.style.color=isErr?'#B42318':'#6B7280';
+  }
+  function fmtDateTime(iso){
+    if(!iso)return'';
+    var dt=new Date(iso);
+    if(isNaN(dt.getTime()))return'';
+    return dt.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})
+      +' '+dt.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+  }
+  async function refreshAdminRole(user){
+    currentAdminRole='user';
+    if(!sb||!user||!user.id)return currentAdminRole;
+    try{
+      var r=await sb.from('user_roles').select('role').eq('user_id',user.id).maybeSingle();
+      if(r&&r.data&&String(r.data.role||'').toLowerCase()==='admin')currentAdminRole='admin';
+    }catch(_e){}
+    return currentAdminRole;
+  }
+  function renderAdminAiRows(rows){
+    if(!adminAiList)return;
+    if(!rows||!rows.length){
+      adminAiList.innerHTML='<div class="subtle">Nog geen gebruikers gevonden.</div>';
+      return;
+    }
+    adminAiList.innerHTML=rows.map(function(r){
+      var email=String(r.email||'').trim()||('user '+String(r.user_id||'').slice(0,8));
+      var enabled=!!r.ai_enabled;
+      var statusHtml=enabled
+        ?'<span class="admin-pill ok">✓ AI actief</span>'
+        :'<span class="admin-pill warn">⏳ Wacht op approval</span>';
+      var btnHtml=enabled
+        ?'<button class="admin-action-btn revoke" type="button" data-user="'+String(r.user_id||'')+'" data-enable="0">Revoke</button>'
+        :'<button class="admin-action-btn approve" type="button" data-user="'+String(r.user_id||'')+'" data-enable="1">Approve</button>';
+      var meta=enabled
+        ?('Goedgekeurd: '+(fmtDateTime(r.approved_at)||'onbekend'))
+        :('Aangemaakt: '+(fmtDateTime(r.created_at)||'onbekend'));
+      return '<div class="admin-row">'
+        +'<div class="admin-row-main"><div class="admin-email">'+email+'</div><div class="admin-meta">'+meta+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+statusHtml+btnHtml+'</div>'
+        +'</div>';
+    }).join('');
+    Array.prototype.slice.call(adminAiList.querySelectorAll('[data-user][data-enable]')).forEach(function(btn){
+      btn.addEventListener('click',async function(){
+        var uid=String(btn.getAttribute('data-user')||'').trim();
+        var enable=String(btn.getAttribute('data-enable')||'')==='1';
+        if(!uid)return;
+        btn.disabled=true;
+        setAdminAiState('Opslaan…',false);
+        try{
+          var rs=await sb.rpc('admin_set_ai_access',{p_user_id:uid,p_enabled:enable});
+          if(rs&&rs.error)throw new Error(rs.error.message||'Opslaan mislukt');
+          setAdminAiState(enable?'AI toegang goedgekeurd.':'AI toegang ingetrokken.',false);
+          await loadAdminAiPanel();
+        }catch(e){
+          setAdminAiState((e&&e.message)||'Opslaan mislukt.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      });
+    });
+  }
+  async function loadAdminAiPanel(){
+    if(!adminAiPanel||currentAdminRole!=='admin'||!sb)return;
+    setAdminAiState('Laden…',false);
+    if(adminAiList)adminAiList.innerHTML='';
+    try{
+      var rs=await sb.rpc('admin_list_ai_access');
+      if(rs&&rs.error)throw new Error(rs.error.message||'Admin lijst laden mislukt');
+      renderAdminAiRows(Array.isArray(rs&&rs.data)?rs.data:[]);
+      setAdminAiState('Klik Approve/Revoke om toegang te beheren.',false);
+    }catch(e){
+      setAdminAiState((e&&e.message)||'Laden mislukt.',true);
+      if(adminAiList)adminAiList.innerHTML='<div class="subtle">Geen data geladen.</div>';
+    }
+  }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
+    await refreshAdminRole(user);
     var hasApiKey=String(localStorage.getItem('anthropic_api_key')||'').trim().length>0;
     updateHubHealthUi(user,hasApiKey);
+    if(adminAiPanel){
+      adminAiPanel.style.display=(user&&currentAdminRole==='admin')?'block':'none';
+    }
     if(user){
       var em=String(user.email||'').trim();
       if(hubAuthState)hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
@@ -579,6 +693,9 @@ a{text-decoration:none;color:inherit}
       if(hubRegisterBtn)hubRegisterBtn.style.display='inline-flex';
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
       setHubSettingsCollapsed(false);
+    }
+    if(user&&currentAdminRole==='admin'){
+      await loadAdminAiPanel();
     }
     return user;
   }
@@ -737,6 +854,9 @@ a{text-decoration:none;color:inherit}
       if(rr&&rr.error){setAuthMsg(rr.error.message||'Reset-link kon niet verstuurd worden.',true);return;}
       setAuthMsg('Reset-link verzonden. Check je mailbox.');
     }catch(_e){setAuthMsg('Reset-link kon niet verstuurd worden.',true);}
+  };
+  if(adminAiRefreshBtn)adminAiRefreshBtn.onclick=function(){
+    loadAdminAiPanel();
   };
   await refreshAuthUi();
   try{

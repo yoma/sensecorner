@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="15-04-2026 11:00">
+<meta name="os-build" content="15-04-2026 14:30">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -317,7 +317,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 15-04-2026 11:00</span>
+      <span class="hub-badge">HUB · BUILD 15-04-2026 14:30</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -452,6 +452,7 @@ var SB_ANON='';
 var sb=null;
 var hubState={
   display_name:'',
+  phone:'',
   photo_url:'',
   photo_urls:[],
   foto_analyse:'',
@@ -561,10 +562,6 @@ function initSupabase(){
   return sb;
 }
 
-function getAnthropicKey(){
-  return localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'';
-}
-
 function stripHtml(s){
   return String(s||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 }
@@ -644,6 +641,7 @@ async function loadOwnFromSupabase(){
       var p=row.props||{};
       var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
       hubState.display_name=String((row.meta&&row.meta.display_name)||pm.display_name||p.display_name||hubState.display_name||'');
+      hubState.phone=String(row.phone||pm.phone||p.phone||hubState.phone||'').trim();
       hubState.photo_urls=Array.isArray(row.foto_urls)?row.foto_urls.slice(0,4):Array.isArray(p.foto_urls)?p.foto_urls.slice(0,4):hubState.photo_urls;
       hubState.foto_analyse=String(row.foto_analyse||p.foto_analyse||hubState.foto_analyse||'');
       if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=String(hubState.photo_urls[0]||'');
@@ -710,6 +708,7 @@ async function saveOwnToSupabase(){
     var payload={
       user_id:user.id,
       name:'OWN Sense',
+      phone:hubState.phone||null,
       bericht_count:Math.max(hubState.last_insight_count||0,0),
       last_active:new Date().toISOString(),
       props:propsOut,
@@ -739,6 +738,7 @@ function loadHubState(){
       hubState.photo_url=String(old.photo||'').trim();
     }
   }
+  hubState.phone=String(hubState.phone||'').trim();
   var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
   if(mirror&&Array.isArray(mirror.entries)){
     mergeMirrorEntriesIntoCategories(mirror.entries);
@@ -870,6 +870,26 @@ function fmtDate(iso){
   return d.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
+function normalizePhoneE164(raw){
+  var s=String(raw==null?'':raw).trim();
+  if(!s)return'';
+  s=s.replace(/[^\d+]/g,'');
+  if(s.indexOf('00')===0)s='+'+s.slice(2);
+  if(s.charAt(0)!=='+'){
+    var digits=s.replace(/\D/g,'');
+    if(digits.indexOf('0')===0)digits=digits.slice(1);
+    if(!digits)digits='32';
+    s='+32'+digits;
+  }else{
+    s='+'+s.slice(1).replace(/\D/g,'');
+  }
+  return s;
+}
+
+function isValidPhoneE164(v){
+  return /^\+[1-9]\d{7,14}$/.test(String(v||'').trim());
+}
+
 function renderHero(){
   var el=document.getElementById('heroCard');
   var initials=(hubState.display_name||'J').trim().charAt(0).toUpperCase();
@@ -880,6 +900,8 @@ function renderHero(){
     +'<div class="hero-sub">Persoonlijk dossier · actief</div></div></div>'
     +'<div class="chip-row"><span class="chip">OWN Sense</span><span class="chip">DateSense</span><span class="chip">FamilySense</span></div>'
     +'<input class="field" id="nameInput" placeholder="Jouw naam" value="'+(hubState.display_name||'').replace(/"/g,'&quot;')+'">'
+    +'<input class="field" id="phoneInput" placeholder="+32471234567" value="'+((hubState.phone||'+32').replace(/"/g,'&quot;'))+'">'
+    +'<div class="subtle" id="phoneFeedback" style="margin-top:6px"></div>'
     +'<div class="save-row"><span class="subtle">Laatst aangepast: '+fmtDate(hubState.updated_at)+'</span>'
     +'<span class="save-ind" id="saveIndicator"></span></div>';
   var nameInput=document.getElementById('nameInput');
@@ -888,6 +910,39 @@ function renderHero(){
     saveHubState();
     renderHero();
   });
+  var phoneInput=document.getElementById('phoneInput');
+  var phoneFeedback=document.getElementById('phoneFeedback');
+  function phoneMsg(msg,isErr){
+    if(!phoneFeedback)return;
+    phoneFeedback.textContent=msg||'';
+    phoneFeedback.style.color=isErr?'#B42318':'#6E7177';
+  }
+  if(phoneInput){
+    var currentPhone=String(hubState.phone||'').trim();
+    if(currentPhone&&isValidPhoneE164(currentPhone)){
+      phoneMsg('Universeel nummer actief voor alle SenseCorner apps.',false);
+    }
+    phoneInput.addEventListener('focus',function(){
+      if(!String(phoneInput.value||'').trim())phoneInput.value='+32';
+    });
+    phoneInput.addEventListener('blur',function(){
+      var normalized=normalizePhoneE164(phoneInput.value);
+      phoneInput.value=normalized||'+32';
+      if(!normalized){
+        hubState.phone='';
+        saveHubState();
+        phoneMsg('',false);
+        return;
+      }
+      if(!isValidPhoneE164(normalized)){
+        phoneMsg('Gebruik internationaal formaat, bv. +32471234567.',true);
+        return;
+      }
+      hubState.phone=normalized;
+      saveHubState();
+      phoneMsg('Nummer opgeslagen in je OWN Sense profiel.',false);
+    });
+  }
 }
 function openPhotoPreview(src,alt){
   var ov=document.getElementById('imgPreviewOverlay');
@@ -1114,11 +1169,17 @@ function renderAiImportReview(p){
   el.innerHTML=h;
 }
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens){
-  var key=getAnthropicKey();
-  if(!key)throw new Error('Geen Anthropic API-key gevonden.');
-  var r=await fetch('https://api.anthropic.com/v1/messages',{
+  var client=initSupabase();
+  if(!client)throw new Error('Supabase niet beschikbaar.');
+  var sess=await client.auth.getSession();
+  var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
+  if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
+  var r=await fetch(SURL+'/functions/v1/sensei-chat',{
     method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
+    },
     body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:userPrompt}]})
   });
   var j=await r.json();
@@ -1154,7 +1215,6 @@ async function handleAiImportFile(inp){
   if(inp)inp.value='';
   if(!f)return;
   importStatus('',false);
-  if(!getAnthropicKey()){importStatus('Geen API-key gevonden in localStorage (`anthropic_api_key`).',true);return;}
   var rows=[],name=(f.name||'').toLowerCase();
   try{
     if(name.endsWith('.zip')||f.type==='application/zip'||f.type==='application/x-zip-compressed')rows=await extractFromChatGptZipFile(f);
@@ -1197,10 +1257,6 @@ async function startOwnFreeTellFill(){
   var txt=String(ta&&ta.value||'').trim();
   if(!txt){
     importStatus('Schrijf eerst kort iets over jezelf.',true);
-    return;
-  }
-  if(!getAnthropicKey()){
-    importStatus('Geen API-key gevonden in localStorage (`anthropic_api_key`).',true);
     return;
   }
   openAiImportModal();
@@ -1294,43 +1350,15 @@ function renderProps(){
 async function runPhotoAnalysis(){
   var box=document.getElementById('analysisBox');
   if(box)box.innerHTML='Analyse bezig...';
-  var key=getAnthropicKey();
   if(!hubState.photo_urls.length){
     hubState.foto_analyse='';
     saveHubState();
     renderPhotoSection();
     return;
   }
-  if(!key){
-    hubState.foto_analyse='Geen API-key gevonden. Voeg een key toe via localStorage `anthropic_api_key` om heranalyse uit te voeren.';
-    saveHubState();
-    renderPhotoSection();
-    return;
-  }
   try{
     var prompt='Je bent OWN Sense Vision. Geef een korte, empathische analyse in het Nederlands over hoe deze persoon overkomt op anderen. Sluit aan bij 9 eigenschappen: gevoeligheid, openheid, humor, directheid, avontuur, stabiliteit, vertrouwen, communicatie, onafhankelijkheid. Geef 4-6 zinnen en noem 3 korte tags op het einde als "Tags: ...". URLS: '+hubState.photo_urls.join(', ');
-    var r=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01'
-      },
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:380,
-        messages:[{role:'user',content:prompt}]
-      })
-    });
-    var j=await r.json();
-    if(!r.ok)throw new Error((j&&j.error&&j.error.message)||'Analyse mislukt');
-    var txt='';
-    if(j&&Array.isArray(j.content)){
-      j.content.forEach(function(c){
-        if(c&&c.type==='text')txt+=String(c.text||'');
-      });
-    }
-    hubState.foto_analyse=String(txt||'').trim();
+    hubState.foto_analyse=String(await callAnthropicJson('',prompt,380)||'').trim();
     saveHubState();
     renderPhotoSection();
   }catch(e){
@@ -1572,37 +1600,9 @@ async function recomputeInsight(scope,isAuto){
     renderInsightsTab();
     return;
   }
-  var key=getAnthropicKey();
-  if(!key){
-    setInsightTextByScope(scope,'Geen API-key gevonden voor herberekening.');
-    insightMeta[scope].tags=[];
-    insightMeta[scope].updated_at=new Date().toISOString();
-    saveHubState();
-    renderInsightsTab();
-    return;
-  }
   if(!isAuto)renderInsightsTab('Herberekenen...');
   try{
-    var r=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01'
-      },
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:850,
-        messages:[{role:'user',content:buildInsightPrompt(scope,rows)}]
-      })
-    });
-    var j=await r.json();
-    if(!r.ok)throw new Error((j&&j.error&&j.error.message)||'Inzicht mislukt');
-    var out='';
-    if(j&&Array.isArray(j.content)){
-      j.content.forEach(function(c){if(c&&c.type==='text')out+=String(c.text||'');});
-    }
-    out=String(out||'').trim();
+    var out=String(await callAnthropicJson('',buildInsightPrompt(scope,rows),850)||'').trim();
     setInsightTextByScope(scope,out);
     insightMeta[scope].tags=extractTags(out);
     insightMeta[scope].updated_at=new Date().toISOString();

@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="15-04-2026 11:00">
+<meta name="fs-build" content="15-04-2026 14:30">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -778,7 +778,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 15-04-2026 11:00</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 15-04-2026 14:30</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -8424,16 +8424,21 @@ function getEffectiveAnthropicKey(){
 }
 
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
-  // AbortController stopt de fetch; res.json() kan apart blijven hangen — response daarom met timeout als tekst lezen.
-  var apiKey=String(apiKeyOverride!=null&&apiKeyOverride!==''?apiKeyOverride:getEffectiveAnthropicKey()).trim();
-  if(!apiKey)throw new Error('Geen API-sleutel. Vul die in via ⚙️ Instellingen (of anthropic_api_key / ds_ak in localStorage).');
+  // Centrale server-side gateway: auth + ai_access check + Claude call.
+  if(!sb)throw new Error('Supabase is niet beschikbaar.');
+  var sess=await sb.auth.getSession();
+  var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
+  if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{
+    var res=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+token
+      },
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),
       signal:controller.signal
     });
@@ -8449,6 +8454,9 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
     }
     if(!res.ok){
       var apiMsg=(data&&data.error&&data.error.message)||('HTTP '+res.status);
+      if(res.status===403){
+        apiMsg='AI toegang nog niet geactiveerd. Vraag admin approval in SenseCorner.';
+      }
       throw new Error(apiMsg);
     }
     if(data.error)throw new Error(data.error.message);
@@ -10439,7 +10447,6 @@ function handleTxtFile(input){
 }
 
 async function handleImgFile(input){
-  if(!S.apiKey){toast('⚠️ API key nodig voor foto-analyse');return;}
   var file=input.files[0];
   if(!file)return;
   toast('📸 Foto analyseren...');
@@ -10447,20 +10454,10 @@ async function handleImgFile(input){
   reader.onload=async function(e){
     var base64=e.target.result.split(',')[1];
     try{
-      var res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',max_tokens:500,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
-            {type:'text',text:'Beschrijf de inhoud van dit gesprek of screenshot in gewone tekst, alsof je het navertelt. Geen namen van de afzender, alleen de inhoud. Max 300 woorden. Nederlands.'}
-          ]}]
-        })
-      });
-      var data=await res.json();
-      if(data.error)throw new Error(data.error.message);
-      var tekst=(data.content&&data.content[0]&&data.content[0].text)||'';
+      var tekst=await callAPI('',[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
+        {type:'text',text:'Beschrijf de inhoud van dit gesprek of screenshot in gewone tekst, alsof je het navertelt. Geen namen van de afzender, alleen de inhoud. Max 300 woorden. Nederlands.'}
+      ]}],500,45000);
       var inp=document.getElementById('msgInput');
       if(inp&&tekst){inp.value=tekst;autoResize(inp);inp.focus();}
       toast('✅ Foto gelezen — controleer en verstuur!');
