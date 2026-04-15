@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="sc-build" content="15-04-2026 14:30">
+<meta name="sc-build" content="15-04-2026 18:00">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -283,6 +283,14 @@ a{text-decoration:none;color:inherit}
         </div>
         <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
       </div>
+      <div id="hubRoepnaamWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
+        <div class="hub-settings-sub" style="margin-bottom:8px">Roepnaam — zo spreken Sensei en de AI je aan in WhatsApp en in alle Sense-apps.</div>
+        <div class="hub-settings-row">
+          <input id="hubRoepnaamField" class="hub-input" type="text" maxlength="80" placeholder="Je roepnaam" autocomplete="nickname" aria-label="Roepnaam">
+          <button id="hubRoepnaamSave" class="hub-save" type="button">Opslaan</button>
+        </div>
+        <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
+      </div>
     </div>
   </section>
 
@@ -447,6 +455,10 @@ a{text-decoration:none;color:inherit}
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
   var hubHealthPill=document.getElementById('hubHealthPill');
   var hubAuthState=document.getElementById('hubAuthState');
+  var hubRoepnaamWrap=document.getElementById('hubRoepnaamWrap');
+  var hubRoepnaamField=document.getElementById('hubRoepnaamField');
+  var hubRoepnaamSave=document.getElementById('hubRoepnaamSave');
+  var hubRoepnaamState=document.getElementById('hubRoepnaamState');
   var hubLoginBtn=document.getElementById('hubLoginBtn');
   var hubRegisterBtn=document.getElementById('hubRegisterBtn');
   var hubLogoutBtn=document.getElementById('hubLogoutBtn');
@@ -684,6 +696,31 @@ a{text-decoration:none;color:inherit}
       if(adminAiList)adminAiList.innerHTML='<div class="subtle">Geen data geladen.</div>';
     }
   }
+  function setHubRoepnaamState(msg,isErr){
+    if(!hubRoepnaamState)return;
+    hubRoepnaamState.textContent=msg||'';
+    hubRoepnaamState.style.color=isErr?'#B42318':'#6B7280';
+  }
+  async function persistRoepnaamToOwnSenseProfile(uid,val){
+    if(!sb||!uid||!val)return;
+    var sel=await sb.from('sense_profiles').select('props').eq('user_id',uid).eq('name','OWN Sense').maybeSingle();
+    if(sel&&sel.error)throw new Error(sel.error.message||'Profiel lezen mislukt');
+    var base=(sel&&sel.data&&sel.data.props&&typeof sel.data.props==='object')?sel.data.props:{};
+    var props=Object.assign({},base);
+    props.roepnaam=val;
+    props.display_name=val;
+    props.full_name=val;
+    props.name=val;
+    props.meta=Object.assign({},(props.meta&&typeof props.meta==='object')?props.meta:{},{roepnaam:val,display_name:val,full_name:val});
+    var iso=new Date().toISOString();
+    if(sel&&sel.data){
+      var up=await sb.from('sense_profiles').update({props:props,last_active:iso}).eq('user_id',uid).eq('name','OWN Sense');
+      if(up&&up.error)throw new Error(up.error.message||'Profiel bijwerken mislukt');
+    }else{
+      var ins=await sb.from('sense_profiles').insert({user_id:uid,name:'OWN Sense',props:props,last_active:iso});
+      if(ins&&ins.error)throw new Error(ins.error.message||'Profiel aanmaken mislukt');
+    }
+  }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
     await refreshAdminRole(user);
@@ -699,12 +736,21 @@ a{text-decoration:none;color:inherit}
       if(hubRegisterBtn)hubRegisterBtn.style.display='none';
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
       setHubSettingsCollapsed(hasApiKey);
+      if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='block';
+      if(hubRoepnaamField){
+        var m=user.user_metadata&&typeof user.user_metadata==='object'?user.user_metadata:{};
+        hubRoepnaamField.value=String(m.roepnaam||m.display_name||m.full_name||'').trim();
+      }
+      setHubRoepnaamState('',false);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
       if(hubRegisterBtn)hubRegisterBtn.style.display='inline-flex';
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
       setHubSettingsCollapsed(false);
+      if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='none';
+      if(hubRoepnaamField)hubRoepnaamField.value='';
+      setHubRoepnaamState('',false);
     }
     if(user&&currentAdminRole==='admin'){
       await loadAdminAiPanel();
@@ -804,6 +850,28 @@ a{text-decoration:none;color:inherit}
       setAuthMsg('Uitloggen lukt nu even niet.',true);
     }
   };
+  if(hubRoepnaamSave){
+    hubRoepnaamSave.onclick=async function(){
+      if(!sb){setHubRoepnaamState('Supabase niet beschikbaar.',true);return;}
+      var u=await getCurrentUser();
+      if(!u||!u.id){setHubRoepnaamState('Log eerst in.',true);return;}
+      var v=String((hubRoepnaamField&&hubRoepnaamField.value)||'').trim();
+      if(!v){setHubRoepnaamState('Vul een roepnaam in.',true);return;}
+      if(/^own\s*sense$/i.test(v)){setHubRoepnaamState('Kies een andere roepnaam.',true);return;}
+      hubRoepnaamSave.disabled=true;
+      setHubRoepnaamState('Opslaan…',false);
+      try{
+        var up=await sb.auth.updateUser({data:{roepnaam:v,display_name:v,full_name:v}});
+        if(up&&up.error)throw new Error(up.error.message||'Bijwerken mislukt');
+        await persistRoepnaamToOwnSenseProfile(u.id,v);
+        setHubRoepnaamState('Opgeslagen. Apps en Sensei gebruiken nu deze roepnaam.',false);
+      }catch(e){
+        setHubRoepnaamState((e&&e.message)||'Opslaan mislukt.',true);
+      }finally{
+        hubRoepnaamSave.disabled=false;
+      }
+    };
+  }
   if(authCloseBtn)authCloseBtn.onclick=closeAuthModal;
   if(authOverlay)authOverlay.addEventListener('click',function(e){
     if(e.target===authOverlay)closeAuthModal();
@@ -836,7 +904,7 @@ a{text-decoration:none;color:inherit}
         password:pw,
         options:{
           emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html'),
-          data:{full_name:name,display_name:name}
+          data:{full_name:name,display_name:name,roepnaam:name}
         }
       });
       if(signRes&&signRes.error){setAuthMsg(signRes.error.message||'Account maken mislukt.',true);return;}

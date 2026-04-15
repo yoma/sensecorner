@@ -178,6 +178,7 @@ html,body{
 .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .chip{padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700;border:0.5px solid #E7C7C2;background:#FFF8F7;color:#B24537}
 .field{width:100%;border:0.5px solid #D9CFCB;border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;margin-top:10px}
+.field-readonly{background:#FAFAFA;color:#4F545C;cursor:default;line-height:1.4}
 .subtle{font-size:12px;color:var(--muted)}
 .bar-row{margin:9px 0}
 .bar-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
@@ -632,7 +633,7 @@ function displayNameFromAuthUser(user){
   if(!user||!user.user_metadata)return'';
   var m=user.user_metadata;
   var meta=(m&&typeof m==='object')?m:{};
-  var n=String(meta.full_name||meta.display_name||meta.name||'').trim();
+  var n=String(meta.roepnaam||meta.full_name||meta.display_name||meta.name||'').trim();
   if(!n||n.toLowerCase()==='own sense')return'';
   return n;
 }
@@ -666,7 +667,7 @@ async function loadOwnFromSupabase(){
       var row=res.data;
       var p=row.props||{};
       var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
-      hubState.display_name=String((row.meta&&row.meta.display_name)||pm.display_name||p.display_name||hubState.display_name||'');
+      hubState.display_name=String(p.roepnaam||pm.roepnaam||(row.meta&&row.meta.roepnaam)||(row.meta&&row.meta.display_name)||pm.display_name||p.display_name||hubState.display_name||'').trim();
       hubState.phone=String(row.phone||pm.phone||p.phone||hubState.phone||'').trim();
       hubState.photo_urls=Array.isArray(row.foto_urls)?row.foto_urls.slice(0,4):Array.isArray(p.foto_urls)?p.foto_urls.slice(0,4):hubState.photo_urls;
       hubState.foto_analyse=String(row.foto_analyse||p.foto_analyse||hubState.foto_analyse||'');
@@ -727,6 +728,7 @@ async function saveOwnToSupabase(){
     var cleanName=String(hubState.display_name||'').trim();
     var propsOut={
       _v:1,
+      roepnaam:cleanName||'',
       display_name:cleanName||'',
       full_name:cleanName||'',
       name:cleanName||'',
@@ -735,6 +737,7 @@ async function saveOwnToSupabase(){
       foto_analyse:hubState.foto_analyse
     };
     propsOut.meta=Object.assign({},(propsOut.meta&&typeof propsOut.meta==='object')?propsOut.meta:{},{
+      roepnaam:cleanName||'',
       display_name:cleanName||'',
       full_name:cleanName||''
     });
@@ -760,7 +763,7 @@ async function saveOwnToSupabase(){
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
     if(cleanName){
       try{
-        await client.auth.updateUser({data:{display_name:cleanName,full_name:cleanName}});
+        await client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}});
       }catch(_e){}
     }
   }catch(e){}
@@ -938,17 +941,12 @@ function renderHero(){
     +'<div class="hero-title">'+(hubState.display_name||'Jij')+'</div>'
     +'<div class="hero-sub">Persoonlijk dossier · actief</div></div></div>'
     +'<div class="chip-row"><span class="chip">OWN Sense</span><span class="chip">DateSense</span><span class="chip">FamilySense</span></div>'
-    +'<input class="field" id="nameInput" placeholder="Jouw naam" value="'+(hubState.display_name||'').replace(/"/g,'&quot;')+'">'
+    +'<div class="field field-readonly" id="nameDisplay" aria-readonly="true">'+(hubState.display_name?escHTML(String(hubState.display_name).trim()):'—')+'</div>'
+    +'<div class="subtle" style="margin-top:6px">Naam uit je SenseCorner-account (ingesteld bij registratie). Wijzig via <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a> indien nodig.</div>'
     +'<input class="field" id="phoneInput" placeholder="+32471234567" value="'+((hubState.phone||'+32').replace(/"/g,'&quot;'))+'">'
     +'<div class="subtle" id="phoneFeedback" style="margin-top:6px"></div>'
     +'<div class="save-row"><span class="subtle">Laatst aangepast: '+fmtDate(hubState.updated_at)+'</span>'
     +'<span class="save-ind" id="saveIndicator"></span></div>';
-  var nameInput=document.getElementById('nameInput');
-  nameInput.addEventListener('input',function(){
-    hubState.display_name=this.value.trim();
-    saveHubState();
-    renderHero();
-  });
   var phoneInput=document.getElementById('phoneInput');
   var phoneFeedback=document.getElementById('phoneFeedback');
   function phoneMsg(msg,isErr){
