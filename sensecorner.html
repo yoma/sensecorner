@@ -291,6 +291,20 @@ a{text-decoration:none;color:inherit}
         </div>
         <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
       </div>
+      <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
+        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">Jouw OWN Sense (WhatsApp)</div>
+        <div id="hubOwnPreview" class="hub-state" style="margin-bottom:10px;line-height:1.55;color:#374151"></div>
+        <div class="hub-settings-sub" style="margin-bottom:6px">Gsm-nummer (E.164, zelfde als in WhatsApp)</div>
+        <div class="hub-settings-row">
+          <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon OWN Sense">
+          <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
+        </div>
+        <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
+        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">WhatsApp zoekt <strong>exact dit nummer</strong> op jouw OWN Sense-rij. Staat het bij een ander account of dubbel in de database, dan krijg je de verkeerde naam — dat is geen hardcoded «springen», maar verkeerde data. Foto en volledig profiel: open OWN Sense.</div>
+        <div style="margin-top:10px">
+          <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -459,6 +473,12 @@ a{text-decoration:none;color:inherit}
   var hubRoepnaamField=document.getElementById('hubRoepnaamField');
   var hubRoepnaamSave=document.getElementById('hubRoepnaamSave');
   var hubRoepnaamState=document.getElementById('hubRoepnaamState');
+  var hubAccountWrap=document.getElementById('hubAccountWrap');
+  var hubOwnPreview=document.getElementById('hubOwnPreview');
+  var hubPhoneField=document.getElementById('hubPhoneField');
+  var hubPhoneSave=document.getElementById('hubPhoneSave');
+  var hubPhoneState=document.getElementById('hubPhoneState');
+  var hubOpenOwnBtn=document.getElementById('hubOpenOwnBtn');
   var hubLoginBtn=document.getElementById('hubLoginBtn');
   var hubRegisterBtn=document.getElementById('hubRegisterBtn');
   var hubLogoutBtn=document.getElementById('hubLogoutBtn');
@@ -696,10 +716,64 @@ a{text-decoration:none;color:inherit}
       if(adminAiList)adminAiList.innerHTML='<div class="subtle">Geen data geladen.</div>';
     }
   }
+  function escHTML(s){
+    var d=document.createElement('div');
+    d.textContent=String(s==null?'':s);
+    return d.innerHTML;
+  }
   function setHubRoepnaamState(msg,isErr){
     if(!hubRoepnaamState)return;
     hubRoepnaamState.textContent=msg||'';
     hubRoepnaamState.style.color=isErr?'#B42318':'#6B7280';
+  }
+  function setHubPhoneState(msg,isErr){
+    if(!hubPhoneState)return;
+    hubPhoneState.textContent=msg||'';
+    hubPhoneState.style.color=isErr?'#B42318':'#6B7280';
+  }
+  function normalizePhoneHub(raw){
+    var s=String(raw==null?'':raw).trim();
+    if(!s)return'';
+    s=s.replace(/[^\d+]/g,'');
+    if(s.indexOf('00')===0)s='+'+s.slice(2);
+    if(s.charAt(0)!=='+'){
+      var digits=s.replace(/\D/g,'');
+      if(digits.indexOf('0')===0)digits=digits.slice(1);
+      if(!digits)digits='32';
+      s='+32'+digits;
+    }else{
+      s='+'+s.slice(1).replace(/\D/g,'');
+    }
+    return s;
+  }
+  function isValidPhoneHub(v){
+    return /^\+[1-9]\d{7,14}$/.test(String(v||'').trim());
+  }
+  async function refreshHubOwnPreview(user){
+    if(!hubOwnPreview)return;
+    if(!sb||!user||!user.id){
+      hubOwnPreview.textContent='';
+      return;
+    }
+    hubOwnPreview.textContent='Laden…';
+    try{
+      var res=await sb.from('sense_profiles').select('phone,props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
+      if(res&&res.error)throw new Error(res.error.message||'Laden mislukt');
+      var row=res&&res.data;
+      var p=(row&&row.props&&typeof row.props==='object')?row.props:{};
+      var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
+      var rn=String(p.roepnaam||pm.roepnaam||'').trim();
+      var dn=String(p.display_name||pm.display_name||p.full_name||pm.full_name||'').trim();
+      var ph=String(row&&row.phone||'').trim();
+      if(hubPhoneField)hubPhoneField.value=ph||'';
+      var bits=[];
+      bits.push('<strong>Account-e-mail:</strong> '+escHTML(String(user.email||'').trim()||'—'));
+      bits.push('<strong>Roepnaam / weergave in OWN Sense:</strong> '+(dn||rn?escHTML(dn||rn):'—'));
+      bits.push('<strong>Gsm op jouw OWN Sense-rij:</strong> '+(ph?escHTML(ph):'<span style="color:#B42318">nog leeg — WhatsApp vindt je zo niet</span>'));
+      hubOwnPreview.innerHTML=bits.join('<br>');
+    }catch(e){
+      hubOwnPreview.textContent=(e&&e.message)||'Kon OWN Sense niet laden.';
+    }
   }
   async function persistRoepnaamToOwnSenseProfile(uid,val){
     if(!sb||!uid||!val)return;
@@ -737,11 +811,14 @@ a{text-decoration:none;color:inherit}
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
       setHubSettingsCollapsed(hasApiKey);
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='block';
+      if(hubAccountWrap)hubAccountWrap.style.display='block';
       if(hubRoepnaamField){
         var m=user.user_metadata&&typeof user.user_metadata==='object'?user.user_metadata:{};
         hubRoepnaamField.value=String(m.roepnaam||m.display_name||m.full_name||'').trim();
       }
       setHubRoepnaamState('',false);
+      setHubPhoneState('',false);
+      await refreshHubOwnPreview(user);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
@@ -749,8 +826,12 @@ a{text-decoration:none;color:inherit}
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
       setHubSettingsCollapsed(false);
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='none';
+      if(hubAccountWrap)hubAccountWrap.style.display='none';
       if(hubRoepnaamField)hubRoepnaamField.value='';
+      if(hubOwnPreview)hubOwnPreview.textContent='';
+      if(hubPhoneField)hubPhoneField.value='';
       setHubRoepnaamState('',false);
+      setHubPhoneState('',false);
     }
     if(user&&currentAdminRole==='admin'){
       await loadAdminAiPanel();
@@ -865,12 +946,50 @@ a{text-decoration:none;color:inherit}
         if(up&&up.error)throw new Error(up.error.message||'Bijwerken mislukt');
         await persistRoepnaamToOwnSenseProfile(u.id,v);
         setHubRoepnaamState('Opgeslagen. Apps en Sensei gebruiken nu deze roepnaam.',false);
+        await refreshHubOwnPreview(u);
       }catch(e){
         setHubRoepnaamState((e&&e.message)||'Opslaan mislukt.',true);
       }finally{
         hubRoepnaamSave.disabled=false;
       }
     };
+  }
+  if(hubPhoneSave){
+    hubPhoneSave.onclick=async function(){
+      if(!sb){setHubPhoneState('Supabase niet beschikbaar.',true);return;}
+      var u=await getCurrentUser();
+      if(!u||!u.id){setHubPhoneState('Log eerst in.',true);return;}
+      var norm=normalizePhoneHub(String((hubPhoneField&&hubPhoneField.value)||''));
+      if(!isValidPhoneHub(norm)){setHubPhoneState('Gebruik internationaal formaat, bv. +32471234567.',true);return;}
+      var clash=await sb.from('sense_profiles').select('user_id').eq('phone',norm).eq('name','OWN Sense').neq('user_id',u.id).limit(1);
+      if(clash&&clash.data&&clash.data.length){
+        setHubPhoneState('Dit nummer staat al op een ander OWN Sense-account. Los dubbele koppeling op (admin) of gebruik een ander nummer.',true);
+        return;
+      }
+      hubPhoneSave.disabled=true;
+      setHubPhoneState('Opslaan…',false);
+      try{
+        var iso=new Date().toISOString();
+        var sel=await sb.from('sense_profiles').select('user_id,props').eq('user_id',u.id).eq('name','OWN Sense').maybeSingle();
+        if(sel&&sel.error)throw new Error(sel.error.message||'Profiel lezen mislukt');
+        if(sel&&sel.data){
+          var up=await sb.from('sense_profiles').update({phone:norm,last_active:iso}).eq('user_id',u.id).eq('name','OWN Sense');
+          if(up&&up.error)throw new Error(up.error.message||'Bijwerken mislukt');
+        }else{
+          var ins=await sb.from('sense_profiles').insert({user_id:u.id,name:'OWN Sense',phone:norm,props:{_v:1},last_active:iso});
+          if(ins&&ins.error)throw new Error(ins.error.message||'Aanmaken mislukt');
+        }
+        setHubPhoneState('Opgeslagen. WhatsApp zoekt dit exacte nummer op jouw OWN Sense-rij.',false);
+        await refreshHubOwnPreview(u);
+      }catch(e){
+        setHubPhoneState((e&&e.message)||'Opslaan mislukt.',true);
+      }finally{
+        hubPhoneSave.disabled=false;
+      }
+    };
+  }
+  if(hubOpenOwnBtn){
+    hubOpenOwnBtn.onclick=function(){window.location.href='ownsense.html';};
   }
   if(authCloseBtn)authCloseBtn.onclick=closeAuthModal;
   if(authOverlay)authOverlay.addEventListener('click',function(e){
