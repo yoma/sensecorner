@@ -781,13 +781,13 @@ a{text-decoration:none;color:inherit}
       var res=await sb.from('sense_profiles').select('props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
       if(res&&res.error)throw new Error(res.error.message||'Laden mislukt');
       var row=res&&res.data;
-      var ap=await sb.from('account_phone').select('phone,updated_at,whatsapp_mirror_dossier').eq('user_id',user.id).maybeSingle();
+      var ap=await sb.from('account_phone').select('phone,updated_at,whatsapp_mirror_dossier,whatsapp_mirror_offer_dossier').eq('user_id',user.id).maybeSingle();
       if(ap&&ap.error){
         var am=String(ap.error.message||'');
         if(/relation|does not exist|42P01/i.test(am)){
           throw new Error('Tabel account_phone ontbreekt. Voer het SQL-script sql/account_phone.sql uit in Supabase.');
         }
-        if(/whatsapp_mirror_dossier|column|does not exist/i.test(am)){
+        if(/whatsapp_mirror_dossier|whatsapp_mirror_offer_dossier|column|does not exist/i.test(am)){
           ap=await sb.from('account_phone').select('phone,updated_at').eq('user_id',user.id).maybeSingle();
         }else if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
       }
@@ -797,6 +797,7 @@ a{text-decoration:none;color:inherit}
       var dn=String(p.display_name||pm.display_name||p.full_name||pm.full_name||'').trim();
       var ph=String(ap&&ap.data&&ap.data.phone||'').trim();
       var waD=String(ap&&ap.data&&ap.data.whatsapp_mirror_dossier||'').trim()||'OWN Sense';
+      var waOffer=String(ap&&ap.data&&ap.data.whatsapp_mirror_offer_dossier||'').trim();
       if(hubPhoneField)hubPhoneField.value=ph||'';
       var namesRes=await sb.from('sense_profiles').select('name').eq('user_id',user.id).order('name');
       if(namesRes&&namesRes.error)throw new Error(namesRes.error.message||'Dossiers laden mislukt');
@@ -829,6 +830,7 @@ a{text-decoration:none;color:inherit}
       bits.push('<strong>Roepnaam / weergave in OWN Sense:</strong> '+(dn||rn?escHTML(dn||rn):'—'));
       bits.push('<strong>Gsm in je account (WhatsApp):</strong> '+(ph?escHTML(ph):'<span style="color:#6B7280">niet ingesteld — optioneel</span>'));
       bits.push('<strong>WhatsApp → tijdlijn-dossier:</strong> '+escHTML(waD));
+      if(waOffer)bits.push('<strong>Openstaande vraag (WhatsApp):</strong> wacht op ja/nee voor opslag onder «'+escHTML(waOffer)+'»');
       hubOwnPreview.innerHTML=bits.join('<br>');
     }catch(e){
       hubOwnPreview.textContent=(e&&e.message)||'Kon OWN Sense niet laden.';
