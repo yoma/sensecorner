@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="15-04-2026 10:00">
+<meta name="ds-build" content="15-04-2026 10:25">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -841,7 +841,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 10:00</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 10:25</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -1678,7 +1678,8 @@ function getContactProfileNames(){
 }
 function normalizeAppScopeList(meta){
   var m=meta||{};
-  var list=Array.isArray(m.app_scope)?m.app_scope:[];
+  var raw=m.app_scope;
+  var list=Array.isArray(raw)?raw:(typeof raw==='string'?raw.split(/[,\s]+/):[]);
   return list.map(function(v){return String(v||'').toLowerCase().trim();}).filter(Boolean);
 }
 function isFamilyTaggedMeta(meta){
@@ -1686,7 +1687,8 @@ function isFamilyTaggedMeta(meta){
   if(String(m.familie_rol||'').trim())return true;
   if(String(m.familie_relatie||'').trim())return true;
   var scopes=normalizeAppScopeList(m);
-  return scopes.indexOf('fs')>=0&&scopes.indexOf('ds')<0;
+  // Strikte scheiding: elk dossier met family-scope blijft uit DateSense.
+  return scopes.indexOf('fs')>=0;
 }
 function isDateSenseVisibleContact(name){
   if(!name||name==='OWN Sense')return false;
@@ -3419,7 +3421,33 @@ async function loadAll(){
   updateNavTabIndicators();
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
+  try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
+}
+
+/** Herstelt oude gemixte scope-data: family-dossiers horen geen ds-scope te houden. */
+async function normalizeLegacyFamilyScopes(){
+  if(!S.user||!Array.isArray(S.profiles)||!S.profiles.length)return;
+  var changed=0;
+  for(var i=0;i<S.profiles.length;i++){
+    var name=S.profiles[i];
+    if(!name||name==='OWN Sense')continue;
+    var d=S.pdata[name];
+    if(!d)continue;
+    var meta=Object.assign({},d.meta||{});
+    if(!isFamilyTaggedMeta(meta))continue;
+    var scopes=normalizeAppScopeList(meta);
+    var next=scopes.filter(function(s){return s!=='ds';});
+    if(next.indexOf('fs')<0)next.push('fs');
+    var same=next.length===scopes.length&&next.every(function(v,idx){return v===scopes[idx];});
+    if(same)continue;
+    meta.app_scope=next;
+    d.meta=meta;
+    S.pdata[name]=d;
+    await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+    changed++;
+  }
+  if(changed>0)console.log('[DateSense] scope cleanup aangepast:',changed);
 }
 
 async function ensureP(name){
