@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="15-04-2026 09:40">
+<meta name="fs-build" content="15-04-2026 10:00">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -745,6 +745,13 @@ a:focus-visible,
 .vertel-chip{padding:6px 9px;border-radius:999px;border:1px solid #F3D6D6;background:#fff;color:#8A2D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
 .vertel-chip .chip-short{display:none}
 .vertel-help-mount{margin:0 8px 4px}
+.vertel-advice-context{margin:0 0 8px;padding:10px 12px;border:1px solid #F0CACA;border-radius:12px;background:linear-gradient(180deg,#FFF7F7 0%,#FFFDFD 100%)}
+.vertel-advice-context .vac-kicker{font-size:11px;font-weight:800;color:#AE0000;letter-spacing:.02em;text-transform:uppercase}
+.vertel-advice-context .vac-title{font-size:13px;font-weight:700;color:#6E1B1B;margin-top:2px}
+.vertel-advice-context .vac-body{margin-top:6px;font-size:12px;color:#4F565F;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap}
+.vertel-advice-context .vac-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.vertel-advice-context .vac-btn{padding:6px 9px;border-radius:999px;border:1px solid #F0C4C4;background:#fff;color:#8A2D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+.vertel-advice-context .vac-btn.primary{background:#FFEFEF;border-color:#E7B5B5}
 @media (max-width:520px){
   .vertel-shell .vertel-top-bar{padding:6px 8px!important;margin:4px 8px 0!important;gap:4px!important}
   .msg-user,.msg-ai{margin:7px 0}
@@ -771,7 +778,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 15-04-2026 09:40</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 15-04-2026 10:00</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1334,7 +1341,9 @@ var S={
   vertelSessionStickyDossier:null,
   timelineLimitByDossier:{},
   /** Vertel geschiedenis: {sessionId,rows,chronological DB rows,hasOlder} */
-  sessionHistoryPager:null
+  sessionHistoryPager:null,
+  /** Tijdelijke context uit Advies → Vertel (toon boven invoervak i.p.v. invoervak zelf te vullen). */
+  vertelPendingAdvice:null
 };
 
 var _profileModalFor='OWN Sense';
@@ -1939,8 +1948,32 @@ function addVertelHintToInput(text){
 function renderVertelInputCoachTip(){
   var mount=document.getElementById('vertelHelpMount');
   if(!mount)return;
-  mount.innerHTML='';
-  // Hulpblok verborgen: uitleg staat al duidelijk in het welkomstbericht bovenaan.
+  var p=S.vertelPendingAdvice||null;
+  if(!p||!String(p.text||'').trim()){
+    mount.innerHTML='';
+    return;
+  }
+  var intro=String(p.intro||'').trim();
+  var body=String(p.text||'').trim();
+  mount.innerHTML=''
+    +'<div class="vertel-advice-context" role="region" aria-label="Adviescontext">'
+    +'<div class="vac-kicker">Adviescontext klaar</div>'
+    +'<div class="vac-title">'+escHTML(intro||'Context uit advies')+'</div>'
+    +'<div class="vac-body">'+escHTML(body)+'</div>'
+    +'<div class="vac-actions">'
+    +'<button type="button" class="vac-btn primary" onclick="usePendingAdviceInInput()">Plaats in invoervak</button>'
+    +'<button type="button" class="vac-btn" onclick="clearPendingAdviceContext()">Sluiten</button>'
+    +'</div></div>';
+}
+function usePendingAdviceInInput(){
+  var p=S.vertelPendingAdvice||null;
+  if(!p||!String(p.text||'').trim())return;
+  var full=(String(p.intro||'').trim()+'\n\n"'+String(p.text||'').trim()+'"').trim();
+  addVertelHintToInput(full);
+}
+function clearPendingAdviceContext(){
+  S.vertelPendingAdvice=null;
+  renderVertelInputCoachTip();
 }
 function toggleVertelHelpPanel(){
   var btn=document.getElementById('vertelHelpToggle');
@@ -3536,11 +3569,14 @@ async function loadAll(){
 
 async function ensureP(name){
   if(!S.user||S.pdata[name])return;
+  var seedProps={...DP};
+  if(name!=='OWN Sense')seedProps.meta={app_scope:['fs']};
   await sb.from('sense_profiles').upsert(
-    {user_id:S.user.id,name,props:{...DP},bericht_count:0},
+    {user_id:S.user.id,name,props:seedProps,bericht_count:0},
     {onConflict:'user_id,name'}
   );
-  S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:{}};
+  var seedMeta=(name!=='OWN Sense')?{app_scope:['fs']}:{};
+  S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:seedMeta};
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
 }
 
@@ -4943,6 +4979,18 @@ async function setDossierLifecycle(name,status){
   S.pdata[name]=d;
   await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
 }
+function refreshSensesAfterStatusChange(){
+  if(S.screen==='senses'){
+    try{
+      var mc=document.getElementById('mainContent');
+      if(mc)rSenses(mc);
+      return;
+    }catch(e){
+      console.warn('refreshSensesAfterStatusChange',e);
+    }
+  }
+  goScreen('senses');
+}
 
 async function ensureSingleModeHolds(silent){
   if(!S.user||getUsageMode()!=='single')return;
@@ -4997,7 +5045,7 @@ async function markDossierOnHold(name){
   try{
     await setDossierLifecycle(name,'on_hold');
     toast('⏸️ '+dn(name)+' op on hold gezet');
-    goScreen('senses');
+    refreshSensesAfterStatusChange();
   }catch(e){
     toast('On hold mislukt: '+(e&&e.message?e.message:'onbekende fout'));
   }
@@ -5015,7 +5063,7 @@ async function closeDossier(name){
   try{
     await setDossierLifecycle(name,'closed');
     toast('✅ '+dn(name)+' afgesloten');
-    goScreen('senses');
+    refreshSensesAfterStatusChange();
   }catch(e){
     toast('Afsluiten mislukt: '+(e&&e.message?e.message:'onbekende fout'));
   }
@@ -5025,7 +5073,7 @@ async function reopenDossier(name){
   await setDossierLifecycle(name,'active');
   try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
   toast('🔄 '+dn(name)+' opnieuw actief');
-  goScreen('senses');
+  refreshSensesAfterStatusChange();
 }
 async function updateDossierStageFromUI(name){
   var el=document.getElementById('dosStageSel');
@@ -6517,9 +6565,9 @@ function rSenses(el){
         </div>
         </div>
         <div class="srow-actions" onclick="event.stopPropagation()">
-                    <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
-          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="markDossierOnHold('${escJsStr(p)}')">On hold</button>
-          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;'+(S.compareMode?'opacity:.45;pointer-events:none;':'')+'" onclick="closeDossier('${escJsStr(p)}')">Sluit af</button>
+                    <button class="coach-save-other" title="Meldingen aan/uit" style="font-size:11px;padding:5px 7px;${S.compareMode?'opacity:.45;pointer-events:none;':''}" onclick="toggleDossierNotifications('${escJsStr(p)}')">${isDossierNotificationsEnabled(p)?'🔔':'🔕'}</button>
+          <button class="coach-save-other" title="Tijdelijk pauzeren" style="font-size:11px;padding:5px 7px;${S.compareMode?'opacity:.45;pointer-events:none;':''}" onclick="markDossierOnHold('${escJsStr(p)}')">On hold</button>
+          <button class="coach-save-other" title="Afronden en archiveren" style="font-size:11px;padding:5px 7px;${S.compareMode?'opacity:.45;pointer-events:none;':''}" onclick="closeDossier('${escJsStr(p)}')">Sluit af</button>
         </div>
         </div>
         <div class="srow-dossier-match">`+rowFootMatch+`</div>
@@ -7477,15 +7525,14 @@ function discussAdviceInVertel(name,mode){
   var finalText=cleaned.length>cap
     ?(cleaned.substring(0,cap)+'\n\n[Ingekort voor leesbaarheid. Vraag gerust: "toon het volledige advies opnieuw".]')
     :cleaned;
-  var prefill=intro+'\n\n"'+finalText+'"';
+  S.vertelPendingAdvice={intro:intro,text:finalText,mode:mode||'core',at:Date.now()};
   S.vertelFrom=dName;
   S.vertelGesprekDossier=dName;
   goScreen('vertel');
   setTimeout(function(){
     var inp=document.getElementById('msgInput');
     if(!inp)return;
-    inp.value=prefill;
-    try{autoResize(inp);}catch(_e){}
+    try{inp.value='';autoResize(inp);}catch(_e){}
     try{inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}catch(_e){}
   },120);
 }
