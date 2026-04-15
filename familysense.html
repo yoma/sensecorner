@@ -6805,9 +6805,20 @@ async function loadTab(name,tab,d){
     if(isOwnDossier){
       html+=buildOwnOverzichtSummaryAndMood(d);
     }else{
+      var isEmptyContact=((d.count||0)===0)&&contactFilled===0&&!hasData;
       html+='<div style="font-size:13px;color:#555;margin-bottom:14px;line-height:1.45">'
         +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+contactFilled+'/'+contactTotal+'</strong> profiel'
         +'</div>';
+      if(isEmptyContact){
+        html+='<div style="background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px 14px;margin-bottom:12px">'
+          +'<div style="font-size:14px;font-weight:800;color:#333;margin-bottom:6px">Nog geen input voor '+escHTML(dn(name))+'</div>'
+          +'<div style="font-size:13px;color:#666;line-height:1.55;margin-bottom:10px">Start met een korte profielinput of vertel iets in de tijdlijn. Daarna verschijnen hier automatisch eigenschappen en samenvatting.</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px" onclick="switchTab(\'profiel\')">📋 Tab Profiel invullen</button>'
+          +'<button type="button" class="btn-r" style="padding:8px 12px;max-width:190px;font-size:12px" onclick="S.vertelFrom=\''+escJsStr(name)+'\';S.vertelGesprekDossier=\''+escJsStr(name)+'\';goScreen(\'vertel\')">🗣️ Naar Vertel</button>'
+          +'</div>'
+          +'</div>';
+      }
     }
 
     var openProfielCta='';
@@ -7137,17 +7148,19 @@ async function loadTab(name,tab,d){
     } else {
       advHtml+=renderAdviceLoadingCard();
     }
-    advHtml+='</div></div>';
+    advHtml+='</div><div style="margin-top:10px"><button id="advTalkCoreBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#E7C7C2;background:#FFF8F7;color:#8E2B20;font-weight:800">🗣️ Bespreek dit advies in Vertel</button></div></div>';
     var extraHtml=cache&&cache.extra_html?cache.extra_html:'';
     if(extraHtml){
       advHtml+='<div id="advExtraWrap" style="margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
         +'<div style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra expertise (simpel uitgelegd)'+(cache.extra_ts?'<span style="font-weight:600;color:#6B7280"> · '+escHTML(cache.extra_ts)+'</span>':'')+'</div>'
         +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155">'+extraHtml+'</div>'
+        +'<div style="margin-top:10px"><button id="advTalkExtraBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#D7DEE7;background:#fff;color:#334155;font-weight:800">🗣️ Bespreek extra expertise in Vertel</button></div>'
         +'</div>';
     }else{
       advHtml+='<div id="advExtraWrap" style="display:none;margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
         +'<div id="advExtraHdr" style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra expertise (simpel uitgelegd)</div>'
         +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155"></div>'
+        +'<div style="margin-top:10px"><button id="advTalkExtraBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#D7DEE7;background:#fff;color:#334155;font-weight:800">🗣️ Bespreek extra expertise in Vertel</button></div>'
         +'</div>';
     }
     // Footer met status + duidelijke updateknop
@@ -7168,6 +7181,10 @@ async function loadTab(name,tab,d){
     if(gb){(function(n){gb.onclick=function(){genAdviesOnderbouwd(n);};})(name);}
     var suggestBtn=document.getElementById('advSuggestUpdateBtn');
     if(suggestBtn){(function(n){suggestBtn.onclick=function(){genAdvies(n,true);};})(name);}
+    var talkCoreBtn=document.getElementById('advTalkCoreBtn');
+    if(talkCoreBtn){(function(n){talkCoreBtn.onclick=function(){discussAdviceInVertel(n,'core');};})(name);}
+    var talkExtraBtn=document.getElementById('advTalkExtraBtn');
+    if(talkExtraBtn){(function(n){talkExtraBtn.onclick=function(){discussAdviceInVertel(n,'extra');};})(name);}
     hydrateActieItems(name);
 
     // Genereer enkel automatisch als er nog geen advies bestaat.
@@ -7432,6 +7449,34 @@ function scrollToAdviceSection(id){
     el.scrollIntoView(true);
   }
   flashAdviceSection(el);
+}
+function discussAdviceInVertel(name,mode){
+  var dName=name||S.viewDossier||S.vertelGesprekDossier||S.vertelFrom;
+  if(!dName){toast('Geen dossier geselecteerd.');return;}
+  var cache=(S.adviesCache&&S.adviesCache[dName])||{};
+  var core=stripTagsPlainExport(String(cache.html||'')).replace(/\s+/g,' ').trim();
+  var extra=stripTagsPlainExport(String(cache.extra_html||'')).replace(/\s+/g,' ').trim();
+  if(mode==='extra'&&!extra){
+    var liveExtra=document.getElementById('advExtraTxt');
+    extra=stripTagsPlainExport(String((liveExtra&&liveExtra.innerHTML)||'')).replace(/\s+/g,' ').trim();
+  }
+  var intro=(mode==='extra'?'Ik wil verder praten over dit EXTRA expertise-advies voor '+dn(dName)+':':'Ik wil verder praten over dit advies voor '+dn(dName)+':');
+  var body=(mode==='extra'?(extra||core):core);
+  if(!body){
+    toast('Nog geen advies om op verder te gaan.');
+    return;
+  }
+  var prefill=intro+'\n"'+body.substring(0,320)+'"';
+  S.vertelFrom=dName;
+  S.vertelGesprekDossier=dName;
+  goScreen('vertel');
+  setTimeout(function(){
+    var inp=document.getElementById('msgInput');
+    if(!inp)return;
+    inp.value=prefill;
+    try{autoResize(inp);}catch(_e){}
+    try{inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}catch(_e){}
+  },120);
 }
 
 async function resetOwnProps(){
