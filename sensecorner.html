@@ -126,6 +126,7 @@ a{text-decoration:none;color:inherit}
 .auth-title{font-size:18px;font-weight:800;color:#1F2937;margin-bottom:6px}
 .auth-sub{font-size:13px;color:#6B7280;line-height:1.5;margin-bottom:12px}
 .auth-input{width:100%;border:1px solid #D9DEE5;border-radius:10px;padding:10px 11px;font:inherit;font-size:14px;margin-bottom:8px}
+.auth-name-hint{font-size:11px;color:#6B7280;margin-top:-2px;margin-bottom:8px}
 .auth-pw-wrap{position:relative}
 .auth-pw-wrap .auth-input{padding-right:44px}
 .auth-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:1px solid #D9DEE5;background:#fff;color:#4B5563;border-radius:8px;padding:4px 8px;font-size:12px;line-height:1;cursor:pointer}
@@ -383,6 +384,8 @@ a{text-decoration:none;color:inherit}
   <div class="auth-modal" role="dialog" aria-modal="true" aria-label="Hub login">
     <div class="auth-title" id="authTitle">Inloggen in SenseCorner</div>
     <div class="auth-sub" id="authSub">Eén account voor OWN Sense, DateSense en FamilySense.</div>
+    <input id="authName" class="auth-input" type="text" placeholder="Jouw naam" autocomplete="name" style="display:none">
+    <div id="authNameHint" class="auth-name-hint" style="display:none">Naam is verplicht bij account aanmaken.</div>
     <input id="authEmail" class="auth-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
     <div class="auth-pw-wrap">
       <input id="authPassword" class="auth-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
@@ -451,6 +454,8 @@ a{text-decoration:none;color:inherit}
   var authTitle=document.getElementById('authTitle');
   var authSub=document.getElementById('authSub');
   var authEmail=document.getElementById('authEmail');
+  var authName=document.getElementById('authName');
+  var authNameHint=document.getElementById('authNameHint');
   var authPassword=document.getElementById('authPassword');
   var authMsg=document.getElementById('authMsg');
   var authLoginBtn=document.getElementById('authLoginBtn');
@@ -565,10 +570,17 @@ a{text-decoration:none;color:inherit}
   }
   function openAuthModal(mode,targetApp){
     pendingReturnTo=targetApp||'';
+    var isRegister=(mode==='register');
     if(authTitle)authTitle.textContent=(mode==='register'?'Account aanmaken':'Inloggen in SenseCorner');
     if(authSub)authSub.textContent=(mode==='register'
       ?'Maak je account aan. Na bevestiging ga je door naar je gekozen app.'
       :'Eén account voor OWN Sense, DateSense en FamilySense.');
+    if(authName){
+      authName.style.display=isRegister?'block':'none';
+      if(!isRegister)authName.value='';
+    }
+    if(authNameHint)authNameHint.style.display=isRegister?'block':'none';
+    if(authPassword)authPassword.autocomplete=isRegister?'new-password':'current-password';
     if(authOverlay){
       authOverlay.classList.add('show');
       authOverlay.setAttribute('aria-hidden','false');
@@ -812,15 +824,20 @@ a{text-decoration:none;color:inherit}
   };
   if(authRegisterConfirmBtn)authRegisterConfirmBtn.onclick=async function(){
     if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
+    var name=String((authName&&authName.value)||'').trim();
     var email=String((authEmail&&authEmail.value)||'').trim();
     var pw=String((authPassword&&authPassword.value)||'');
-    if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
+    if(!name){setAuthMsg('Naam is verplicht bij account aanmaken.',true);if(authName)authName.focus();return;}
+    if(!email||!pw){setAuthMsg('Vul naam, email en wachtwoord in.',true);return;}
     setAuthMsg('Account aanmaken…');
     try{
       var signRes=await sb.auth.signUp({
         email:email,
         password:pw,
-        options:{emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html')}
+        options:{
+          emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html'),
+          data:{full_name:name,display_name:name}
+        }
       });
       if(signRes&&signRes.error){setAuthMsg(signRes.error.message||'Account maken mislukt.',true);return;}
       setAuthMsg('Account aangemaakt. Bevestig je e-mail en log daarna in.');
