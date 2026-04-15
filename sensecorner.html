@@ -292,15 +292,15 @@ a{text-decoration:none;color:inherit}
         <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
       </div>
       <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
-        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">Jouw OWN Sense (WhatsApp)</div>
+        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">Account · gsm voor WhatsApp (optioneel)</div>
         <div id="hubOwnPreview" class="hub-state" style="margin-bottom:10px;line-height:1.55;color:#374151"></div>
-        <div class="hub-settings-sub" style="margin-bottom:6px">Gsm-nummer (E.164, zelfde als in WhatsApp)</div>
+        <div class="hub-settings-sub" style="margin-bottom:6px">Gsm alleen invullen als je WhatsApp wilt gebruiken (E.164, zelfde als in WhatsApp). Leeg laten = geen koppeling.</div>
         <div class="hub-settings-row">
-          <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon OWN Sense">
+          <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon account WhatsApp">
           <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
         </div>
         <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
-        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">WhatsApp zoekt <strong>exact dit nummer</strong> op jouw OWN Sense-rij. Staat het nummer nog op <strong>een ander</strong> OWN Sense-account (unieke regel in de database), dan weigert opslaan met een fout — dat los je op in Supabase (andere rij <code style="font-size:10px">phone</code> leegmaken) of via een admin. Foto en volledig profiel: open OWN Sense.</div>
+        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">Het nummer wordt opgeslagen in je <strong>account</strong> (<code style="font-size:10px">account_phone</code>), niet in je OWN Sense-dossier. WhatsApp zoekt exact dit nummer. Staat het al op een <strong>ander</strong> account, dan weigert de database terecht — gebruik een ander nummer of laat een admin de dubbele rij opruimen. Roepnaam en profielfoto: OWN Sense.</div>
         <div style="margin-top:10px">
           <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
         </div>
@@ -751,8 +751,8 @@ a{text-decoration:none;color:inherit}
   }
   function formatPhoneSaveError(err){
     var msg=String((err&&err.message)||err||'').trim();
-    if(/duplicate|unique constraint|uq_sense_profiles_ownsense_phone|23505/i.test(msg)){
-      return 'Dit gsm-nummer staat al op een andere OWN Sense-rij in de database (unieke index). Jouw browser ziet die andere rij soms niet door beveiliging (RLS), maar de server weigert terecht. Laat een beheerder in Supabase zoeken welke `sense_profiles`-rij (name = OWN Sense) nog `phone` = dit nummer heeft en zet die leeg, of verwijder de dubbele koppeling.';
+    if(/duplicate|unique constraint|uq_sense_profiles_ownsense_phone|account_phone|23505/i.test(msg)){
+      return 'Dit gsm-nummer staat al op een ander account (unieke index op `account_phone` of oude `sense_profiles.phone`). Jouw browser ziet die andere rij soms niet door beveiliging (RLS), maar de server weigert terecht. Laat een beheerder in Supabase het nummer vrijmaken of gebruik een ander nummer.';
     }
     return msg||'Opslaan mislukt.';
   }
@@ -764,19 +764,27 @@ a{text-decoration:none;color:inherit}
     }
     hubOwnPreview.textContent='Laden…';
     try{
-      var res=await sb.from('sense_profiles').select('phone,props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
+      var res=await sb.from('sense_profiles').select('props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
       if(res&&res.error)throw new Error(res.error.message||'Laden mislukt');
       var row=res&&res.data;
+      var ap=await sb.from('account_phone').select('phone,updated_at').eq('user_id',user.id).maybeSingle();
+      if(ap&&ap.error){
+        var am=String(ap.error.message||'');
+        if(/relation|does not exist|42P01/i.test(am)){
+          throw new Error('Tabel account_phone ontbreekt. Voer het SQL-script sql/account_phone.sql uit in Supabase.');
+        }
+        if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
+      }
       var p=(row&&row.props&&typeof row.props==='object')?row.props:{};
       var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
       var rn=String(p.roepnaam||pm.roepnaam||'').trim();
       var dn=String(p.display_name||pm.display_name||p.full_name||pm.full_name||'').trim();
-      var ph=String(row&&row.phone||'').trim();
+      var ph=String(ap&&ap.data&&ap.data.phone||'').trim();
       if(hubPhoneField)hubPhoneField.value=ph||'';
       var bits=[];
       bits.push('<strong>Account-e-mail:</strong> '+escHTML(String(user.email||'').trim()||'—'));
       bits.push('<strong>Roepnaam / weergave in OWN Sense:</strong> '+(dn||rn?escHTML(dn||rn):'—'));
-      bits.push('<strong>Gsm op jouw OWN Sense-rij:</strong> '+(ph?escHTML(ph):'<span style="color:#B42318">nog leeg — WhatsApp vindt je zo niet</span>'));
+      bits.push('<strong>Gsm in je account (WhatsApp):</strong> '+(ph?escHTML(ph):'<span style="color:#6B7280">niet ingesteld — optioneel</span>'));
       hubOwnPreview.innerHTML=bits.join('<br>');
     }catch(e){
       hubOwnPreview.textContent=(e&&e.message)||'Kon OWN Sense niet laden.';
@@ -966,30 +974,43 @@ a{text-decoration:none;color:inherit}
       if(!sb){setHubPhoneState('Supabase niet beschikbaar.',true);return;}
       var u=await getCurrentUser();
       if(!u||!u.id){setHubPhoneState('Log eerst in.',true);return;}
-      var norm=normalizePhoneHub(String((hubPhoneField&&hubPhoneField.value)||''));
-      if(!isValidPhoneHub(norm)){setHubPhoneState('Gebruik internationaal formaat, bv. +32471234567.',true);return;}
-      var clash=await sb.from('sense_profiles').select('user_id').eq('phone',norm).eq('name','OWN Sense').neq('user_id',u.id).limit(1);
-      if(clash&&clash.data&&clash.data.length){
-        setHubPhoneState('Dit nummer staat al op een ander OWN Sense-account. Los dubbele koppeling op (admin) of gebruik een ander nummer.',true);
-        return;
-      }
+      var raw=String((hubPhoneField&&hubPhoneField.value)||'').trim();
       hubPhoneSave.disabled=true;
       setHubPhoneState('Opslaan…',false);
       try{
         var iso=new Date().toISOString();
-        var sel=await sb.from('sense_profiles').select('user_id,props').eq('user_id',u.id).eq('name','OWN Sense').maybeSingle();
-        if(sel&&sel.error)throw new Error(sel.error.message||'Profiel lezen mislukt');
-        if(sel&&sel.data){
-          var up=await sb.from('sense_profiles').update({phone:norm,last_active:iso}).eq('user_id',u.id).eq('name','OWN Sense');
-          if(up&&up.error)throw new Error(up.error.message||'Bijwerken mislukt');
-        }else{
-          var ins=await sb.from('sense_profiles').insert({user_id:u.id,name:'OWN Sense',phone:norm,props:{_v:1},last_active:iso});
-          if(ins&&ins.error)throw new Error(ins.error.message||'Aanmaken mislukt');
+        if(!raw){
+          var del=await sb.from('account_phone').delete().eq('user_id',u.id);
+          if(del&&del.error)throw new Error(del.error.message||'Verwijderen mislukt');
+          await sb.from('sense_profiles').update({phone:null,last_active:iso}).eq('user_id',u.id).eq('name','OWN Sense');
+          setHubPhoneState('Nummer uit je account gehaald.',false);
+          await refreshHubOwnPreview(u);
+          return;
         }
-        setHubPhoneState('Opgeslagen. WhatsApp zoekt dit exacte nummer op jouw OWN Sense-rij.',false);
+        var norm=normalizePhoneHub(raw);
+        if(!isValidPhoneHub(norm)){setHubPhoneState('Gebruik internationaal formaat, bv. +32471234567.',true);return;}
+        var clashAc=await sb.from('account_phone').select('user_id').eq('phone',norm).neq('user_id',u.id).limit(1);
+        if(clashAc&&clashAc.data&&clashAc.data.length){
+          setHubPhoneState('Dit nummer hoort al bij een ander account. Kies een ander nummer of vraag admin.',true);
+          return;
+        }
+        var clashLegacy=await sb.from('sense_profiles').select('user_id').eq('phone',norm).eq('name','OWN Sense').neq('user_id',u.id).limit(1);
+        if(clashLegacy&&clashLegacy.data&&clashLegacy.data.length){
+          setHubPhoneState('Dit nummer staat nog op een ander OWN Sense-profiel (legacy). Admin moet die `phone` leegmaken.',true);
+          return;
+        }
+        var upPh=await sb.from('account_phone').upsert({user_id:u.id,phone:norm,updated_at:iso},{onConflict:'user_id'});
+        if(upPh&&upPh.error)throw new Error(upPh.error.message||'account_phone mislukt');
+        await sb.from('sense_profiles').update({phone:null,last_active:iso}).eq('user_id',u.id).eq('name','OWN Sense');
+        setHubPhoneState('Opgeslagen in je account. WhatsApp gebruikt dit exacte nummer.',false);
         await refreshHubOwnPreview(u);
       }catch(e){
-        setHubPhoneState(formatPhoneSaveError(e),true);
+        var em=String((e&&e.message)||e||'');
+        if(/relation|does not exist|42P01/i.test(em)){
+          setHubPhoneState('Tabel account_phone ontbreekt. Voer sql/account_phone.sql uit in Supabase.',true);
+        }else{
+          setHubPhoneState(formatPhoneSaveError(e),true);
+        }
       }finally{
         hubPhoneSave.disabled=false;
       }

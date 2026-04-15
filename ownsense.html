@@ -453,7 +453,6 @@ var SB_ANON='';
 var sb=null;
 var hubState={
   display_name:'',
-  phone:'',
   photo_url:'',
   photo_urls:[],
   foto_analyse:'',
@@ -668,7 +667,6 @@ async function loadOwnFromSupabase(){
       var p=row.props||{};
       var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
       hubState.display_name=String(p.roepnaam||pm.roepnaam||(row.meta&&row.meta.roepnaam)||(row.meta&&row.meta.display_name)||pm.display_name||p.display_name||hubState.display_name||'').trim();
-      hubState.phone=String(row.phone||pm.phone||p.phone||hubState.phone||'').trim();
       hubState.photo_urls=Array.isArray(row.foto_urls)?row.foto_urls.slice(0,4):Array.isArray(p.foto_urls)?p.foto_urls.slice(0,4):hubState.photo_urls;
       hubState.foto_analyse=String(row.foto_analyse||p.foto_analyse||hubState.foto_analyse||'');
       if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=String(hubState.photo_urls[0]||'');
@@ -745,7 +743,7 @@ async function saveOwnToSupabase(){
     var payload={
       user_id:user.id,
       name:'OWN Sense',
-      phone:hubState.phone||null,
+      phone:null,
       bericht_count:Math.max(hubState.last_insight_count||0,0),
       last_active:new Date().toISOString(),
       props:propsOut,
@@ -780,7 +778,7 @@ function loadHubState(){
       hubState.photo_url=String(old.photo||'').trim();
     }
   }
-  hubState.phone=String(hubState.phone||'').trim();
+  delete hubState.phone;
   var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
   if(mirror&&Array.isArray(mirror.entries)){
     mergeMirrorEntriesIntoCategories(mirror.entries);
@@ -912,26 +910,6 @@ function fmtDate(iso){
   return d.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
-function normalizePhoneE164(raw){
-  var s=String(raw==null?'':raw).trim();
-  if(!s)return'';
-  s=s.replace(/[^\d+]/g,'');
-  if(s.indexOf('00')===0)s='+'+s.slice(2);
-  if(s.charAt(0)!=='+'){
-    var digits=s.replace(/\D/g,'');
-    if(digits.indexOf('0')===0)digits=digits.slice(1);
-    if(!digits)digits='32';
-    s='+32'+digits;
-  }else{
-    s='+'+s.slice(1).replace(/\D/g,'');
-  }
-  return s;
-}
-
-function isValidPhoneE164(v){
-  return /^\+[1-9]\d{7,14}$/.test(String(v||'').trim());
-}
-
 function renderHero(){
   var el=document.getElementById('heroCard');
   var initials=(hubState.display_name||'J').trim().charAt(0).toUpperCase();
@@ -943,43 +921,9 @@ function renderHero(){
     +'<div class="chip-row"><span class="chip">OWN Sense</span><span class="chip">DateSense</span><span class="chip">FamilySense</span></div>'
     +'<div class="field field-readonly" id="nameDisplay" aria-readonly="true">'+(hubState.display_name?escHTML(String(hubState.display_name).trim()):'—')+'</div>'
     +'<div class="subtle" style="margin-top:6px">Naam uit je SenseCorner-account (ingesteld bij registratie). Wijzig via <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a> indien nodig.</div>'
-    +'<input class="field" id="phoneInput" placeholder="+32471234567" value="'+((hubState.phone||'+32').replace(/"/g,'&quot;'))+'">'
-    +'<div class="subtle" id="phoneFeedback" style="margin-top:6px"></div>'
+    +'<div class="subtle" style="margin-top:10px;line-height:1.5">WhatsApp-koppeling: gsm staat in je <strong>account</strong> in SenseCorner (optioneel), niet in dit dossier. Open <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a> → Account · gsm voor WhatsApp.</div>'
     +'<div class="save-row"><span class="subtle">Laatst aangepast: '+fmtDate(hubState.updated_at)+'</span>'
     +'<span class="save-ind" id="saveIndicator"></span></div>';
-  var phoneInput=document.getElementById('phoneInput');
-  var phoneFeedback=document.getElementById('phoneFeedback');
-  function phoneMsg(msg,isErr){
-    if(!phoneFeedback)return;
-    phoneFeedback.textContent=msg||'';
-    phoneFeedback.style.color=isErr?'#B42318':'#6E7177';
-  }
-  if(phoneInput){
-    var currentPhone=String(hubState.phone||'').trim();
-    if(currentPhone&&isValidPhoneE164(currentPhone)){
-      phoneMsg('Universeel nummer actief voor alle SenseCorner apps.',false);
-    }
-    phoneInput.addEventListener('focus',function(){
-      if(!String(phoneInput.value||'').trim())phoneInput.value='+32';
-    });
-    phoneInput.addEventListener('blur',function(){
-      var normalized=normalizePhoneE164(phoneInput.value);
-      phoneInput.value=normalized||'+32';
-      if(!normalized){
-        hubState.phone='';
-        saveHubState();
-        phoneMsg('',false);
-        return;
-      }
-      if(!isValidPhoneE164(normalized)){
-        phoneMsg('Gebruik internationaal formaat, bv. +32471234567.',true);
-        return;
-      }
-      hubState.phone=normalized;
-      saveHubState();
-      phoneMsg('Nummer opgeslagen in je OWN Sense profiel.',false);
-    });
-  }
 }
 function openPhotoPreview(src,alt){
   var ov=document.getElementById('imgPreviewOverlay');
