@@ -300,7 +300,13 @@ a{text-decoration:none;color:inherit}
           <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
         </div>
         <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
-        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">Het nummer wordt opgeslagen in je <strong>account</strong> (<code style="font-size:10px">account_phone</code>), niet in je OWN Sense-dossier. WhatsApp zoekt exact dit nummer. Staat het al op een <strong>ander</strong> account, dan weigert de database terecht — gebruik een ander nummer of laat een admin de dubbele rij opruimen. Roepnaam en profielfoto: OWN Sense.</div>
+        <div class="hub-settings-sub" style="margin-top:12px;margin-bottom:6px">WhatsApp-gesprekken in de app-tijdlijn koppelen aan dit dossier (bestaande naam uit DateSense / OWN Sense):</div>
+        <div class="hub-settings-row">
+          <select id="hubWaMirrorDossier" class="hub-input" style="flex:1;min-width:0" aria-label="Dossier voor WhatsApp-tijdlijn"></select>
+          <button id="hubWaMirrorSave" class="hub-save" type="button">Koppeling opslaan</button>
+        </div>
+        <div id="hubWaMirrorState" class="hub-state" style="margin-top:6px"></div>
+        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">Het nummer wordt opgeslagen in je <strong>account</strong> (<code style="font-size:10px">account_phone</code>), niet in je OWN Sense-dossier. WhatsApp zoekt exact dit nummer. Staat het al op een <strong>ander</strong> account, dan weigert de database terecht — gebruik een ander nummer of laat een admin de dubbele rij opruimen. Roepnaam en profielfoto: OWN Sense. Berichten van Sensei op WhatsApp verschijnen in de tijdlijn van het gekozen dossier (standaard OWN Sense).</div>
         <div style="margin-top:10px">
           <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
         </div>
@@ -478,6 +484,9 @@ a{text-decoration:none;color:inherit}
   var hubPhoneField=document.getElementById('hubPhoneField');
   var hubPhoneSave=document.getElementById('hubPhoneSave');
   var hubPhoneState=document.getElementById('hubPhoneState');
+  var hubWaMirrorDossier=document.getElementById('hubWaMirrorDossier');
+  var hubWaMirrorSave=document.getElementById('hubWaMirrorSave');
+  var hubWaMirrorState=document.getElementById('hubWaMirrorState');
   var hubOpenOwnBtn=document.getElementById('hubOpenOwnBtn');
   var hubLoginBtn=document.getElementById('hubLoginBtn');
   var hubRegisterBtn=document.getElementById('hubRegisterBtn');
@@ -731,6 +740,11 @@ a{text-decoration:none;color:inherit}
     hubPhoneState.textContent=msg||'';
     hubPhoneState.style.color=isErr?'#B42318':'#6B7280';
   }
+  function setHubWaMirrorState(msg,isErr){
+    if(!hubWaMirrorState)return;
+    hubWaMirrorState.textContent=msg||'';
+    hubWaMirrorState.style.color=isErr?'#B42318':'#6B7280';
+  }
   function normalizePhoneHub(raw){
     var s=String(raw==null?'':raw).trim();
     if(!s)return'';
@@ -767,24 +781,54 @@ a{text-decoration:none;color:inherit}
       var res=await sb.from('sense_profiles').select('props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
       if(res&&res.error)throw new Error(res.error.message||'Laden mislukt');
       var row=res&&res.data;
-      var ap=await sb.from('account_phone').select('phone,updated_at').eq('user_id',user.id).maybeSingle();
+      var ap=await sb.from('account_phone').select('phone,updated_at,whatsapp_mirror_dossier').eq('user_id',user.id).maybeSingle();
       if(ap&&ap.error){
         var am=String(ap.error.message||'');
         if(/relation|does not exist|42P01/i.test(am)){
           throw new Error('Tabel account_phone ontbreekt. Voer het SQL-script sql/account_phone.sql uit in Supabase.');
         }
-        if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
+        if(/whatsapp_mirror_dossier|column|does not exist/i.test(am)){
+          ap=await sb.from('account_phone').select('phone,updated_at').eq('user_id',user.id).maybeSingle();
+        }else if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
       }
       var p=(row&&row.props&&typeof row.props==='object')?row.props:{};
       var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
       var rn=String(p.roepnaam||pm.roepnaam||'').trim();
       var dn=String(p.display_name||pm.display_name||p.full_name||pm.full_name||'').trim();
       var ph=String(ap&&ap.data&&ap.data.phone||'').trim();
+      var waD=String(ap&&ap.data&&ap.data.whatsapp_mirror_dossier||'').trim()||'OWN Sense';
       if(hubPhoneField)hubPhoneField.value=ph||'';
+      var namesRes=await sb.from('sense_profiles').select('name').eq('user_id',user.id).order('name');
+      if(namesRes&&namesRes.error)throw new Error(namesRes.error.message||'Dossiers laden mislukt');
+      var names=(namesRes&&namesRes.data)?namesRes.data.map(function(r){return String(r&&r.name||'').trim();}).filter(Boolean):[];
+      if(hubWaMirrorDossier){
+        var prev=hubWaMirrorDossier.value;
+        hubWaMirrorDossier.innerHTML='';
+        if(!names.length){
+          var o0=document.createElement('option');
+          o0.value='OWN Sense';
+          o0.textContent='OWN Sense (maak dossiers in DateSense)';
+          hubWaMirrorDossier.appendChild(o0);
+        }else{
+          names.forEach(function(nm){
+            var o=document.createElement('option');
+            o.value=nm;
+            o.textContent=nm;
+            hubWaMirrorDossier.appendChild(o);
+          });
+        }
+        if(names.indexOf(waD)>=0)hubWaMirrorDossier.value=waD;
+        else if(names.indexOf(prev)>=0)hubWaMirrorDossier.value=prev;
+        else if(names.indexOf('OWN Sense')>=0)hubWaMirrorDossier.value='OWN Sense';
+        else if(names.length)hubWaMirrorDossier.value=names[0];
+        else hubWaMirrorDossier.value='OWN Sense';
+      }
+      setHubWaMirrorState('',false);
       var bits=[];
       bits.push('<strong>Account-e-mail:</strong> '+escHTML(String(user.email||'').trim()||'—'));
       bits.push('<strong>Roepnaam / weergave in OWN Sense:</strong> '+(dn||rn?escHTML(dn||rn):'—'));
       bits.push('<strong>Gsm in je account (WhatsApp):</strong> '+(ph?escHTML(ph):'<span style="color:#6B7280">niet ingesteld — optioneel</span>'));
+      bits.push('<strong>WhatsApp → tijdlijn-dossier:</strong> '+escHTML(waD));
       hubOwnPreview.innerHTML=bits.join('<br>');
     }catch(e){
       hubOwnPreview.textContent=(e&&e.message)||'Kon OWN Sense niet laden.';
@@ -845,8 +889,10 @@ a{text-decoration:none;color:inherit}
       if(hubRoepnaamField)hubRoepnaamField.value='';
       if(hubOwnPreview)hubOwnPreview.textContent='';
       if(hubPhoneField)hubPhoneField.value='';
+      if(hubWaMirrorDossier)hubWaMirrorDossier.innerHTML='';
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
+      setHubWaMirrorState('',false);
     }
     if(user&&currentAdminRole==='admin'){
       await loadAdminAiPanel();
@@ -999,7 +1045,11 @@ a{text-decoration:none;color:inherit}
           setHubPhoneState('Dit nummer staat nog op een ander OWN Sense-profiel (legacy). Admin moet die `phone` leegmaken.',true);
           return;
         }
-        var upPh=await sb.from('account_phone').upsert({user_id:u.id,phone:norm,updated_at:iso},{onConflict:'user_id'});
+        var mirrorName=String((hubWaMirrorDossier&&hubWaMirrorDossier.value)||'OWN Sense').trim()||'OWN Sense';
+        var upPh=await sb.from('account_phone').upsert({user_id:u.id,phone:norm,whatsapp_mirror_dossier:mirrorName,updated_at:iso},{onConflict:'user_id'});
+        if(upPh&&upPh.error&&/whatsapp_mirror_dossier|column|does not exist/i.test(String(upPh.error.message||''))){
+          upPh=await sb.from('account_phone').upsert({user_id:u.id,phone:norm,updated_at:iso},{onConflict:'user_id'});
+        }
         if(upPh&&upPh.error)throw new Error(upPh.error.message||'account_phone mislukt');
         await sb.from('sense_profiles').update({phone:null,last_active:iso}).eq('user_id',u.id).eq('name','OWN Sense');
         setHubPhoneState('Opgeslagen in je account. WhatsApp gebruikt dit exacte nummer.',false);
@@ -1013,6 +1063,37 @@ a{text-decoration:none;color:inherit}
         }
       }finally{
         hubPhoneSave.disabled=false;
+      }
+    };
+  }
+  if(hubWaMirrorSave){
+    hubWaMirrorSave.onclick=async function(){
+      if(!sb){setHubWaMirrorState('Supabase niet beschikbaar.',true);return;}
+      var u=await getCurrentUser();
+      if(!u||!u.id){setHubWaMirrorState('Log eerst in.',true);return;}
+      var mirrorName=String((hubWaMirrorDossier&&hubWaMirrorDossier.value)||'').trim()||'OWN Sense';
+      hubWaMirrorSave.disabled=true;
+      setHubWaMirrorState('Opslaan…',false);
+      try{
+        var iso=new Date().toISOString();
+        var apRd=await sb.from('account_phone').select('phone').eq('user_id',u.id).maybeSingle();
+        var ph=null;
+        if(apRd&&apRd.data&&apRd.data.phone!=null)ph=String(apRd.data.phone||'').trim();
+        if(!ph)ph=String((hubPhoneField&&hubPhoneField.value)||'').trim()||null;
+        var payload={user_id:u.id,whatsapp_mirror_dossier:mirrorName,updated_at:iso};
+        if(ph)payload.phone=ph;
+        var up=await sb.from('account_phone').upsert(payload,{onConflict:'user_id'});
+        if(up&&up.error&&/whatsapp_mirror_dossier|column|does not exist/i.test(String(up.error.message||''))){
+          setHubWaMirrorState('Voer sql/account_phone_whatsapp_mirror_dossier.sql uit in Supabase.',true);
+          return;
+        }
+        if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+        setHubWaMirrorState('Opgeslagen. WhatsApp komt in de tijdlijn van «'+mirrorName+'».',false);
+        await refreshHubOwnPreview(u);
+      }catch(e){
+        setHubWaMirrorState((e&&e.message)||'Opslaan mislukt.',true);
+      }finally{
+        hubWaMirrorSave.disabled=false;
       }
     };
   }
