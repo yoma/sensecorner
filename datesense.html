@@ -1844,15 +1844,8 @@ function renderVertelInputCoachTip(){
     +'<div class="vac-title">'+escHTML(intro||'Context uit advies')+'</div>'
     +'<div class="vac-body">'+escHTML(body)+'</div>'
     +'<div class="vac-actions">'
-    +'<button type="button" class="vac-btn primary" onclick="usePendingAdviceInInput()">Plaats in invoervak</button>'
     +'<button type="button" class="vac-btn" onclick="clearPendingAdviceContext()">Sluiten</button>'
     +'</div></div>';
-}
-function usePendingAdviceInInput(){
-  var p=S.vertelPendingAdvice||null;
-  if(!p||!String(p.text||'').trim())return;
-  var full=(String(p.intro||'').trim()+'\n\n"'+String(p.text||'').trim()+'"').trim();
-  addVertelHintToInput(full);
 }
 function clearPendingAdviceContext(){
   S.vertelPendingAdvice=null;
@@ -3451,13 +3444,29 @@ async function normalizeLegacyFamilyScopes(){
 }
 
 async function ensureP(name){
-  if(!S.user||S.pdata[name])return;
+  if(!S.user)return;
+  if(S.pdata[name]){
+    if(name!=='OWN Sense'){
+      var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
+      existing.meta=Object.assign({},existing.meta||{});
+      var exScopes=normalizeAppScopeList(existing.meta);
+      if(exScopes.indexOf('ds')<0){
+        exScopes.push('ds');
+        existing.meta.app_scope=exScopes;
+        S.pdata[name]=existing;
+        await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+      }
+    }
+    if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
+    return;
+  }
   var seedProps={...DP};
   if(name!=='OWN Sense')seedProps.meta={app_scope:['ds']};
-  await sb.from('sense_profiles').upsert(
+  var createRes=await sb.from('sense_profiles').upsert(
     {user_id:S.user.id,name,props:seedProps,bericht_count:0},
     {onConflict:'user_id,name'}
   );
+  if(createRes&&createRes.error)throw new Error(createRes.error.message||'Dossier aanmaken mislukt');
   var seedMeta=(name!=='OWN Sense')?{app_scope:['ds']}:{};
   S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:seedMeta};
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
@@ -4377,9 +4386,14 @@ async function newSenseFromDrawer(){
   var n=prompt('Naam van je eerste of nieuwe dossier (bv. "Lisa"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
-  await ensureP(nm);
-  toast('✅ '+nm+' aangemaakt!');
-  viewDossier(nm);
+  try{
+    await ensureP(nm);
+    toast('✅ '+nm+' aangemaakt!');
+    viewDossier(nm);
+  }catch(e){
+    console.error('newSenseFromDrawer',e);
+    toast('Dossier kon niet opgeslagen worden: '+(e&&e.message?e.message:'onbekende fout'));
+  }
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
@@ -9952,6 +9966,20 @@ async function sendMsg(){
     return;
   }
   var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
+  var pendingAdviceCtx='';
+  try{
+    var pa=S.vertelPendingAdvice||null;
+    if(pa&&String(pa.text||'').trim()){
+      var paIntro=String(pa.intro||'').trim();
+      var paBody=String(pa.text||'').trim();
+      if(paBody){
+        pendingAdviceCtx='ADVIESCONTEXT (automatisch uit vorige Advies-kaart):\n'
+          +(paIntro?('Focus: '+paIntro+'\n'):'')
+          +paBody.substring(0,1800);
+        clearPendingAdviceContext();
+      }
+    }
+  }catch(_e){}
   if(txt.length>2800){
     toast('Lang bericht gedetecteerd: AI verwerkt een ingekorte context voor snelheid.');
   }
@@ -10004,7 +10032,8 @@ async function sendMsg(){
     var gesprekFocus=forcedDossier||S.vertelGesprekDossier||S.vertelFrom;
     var fullSys=sys
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
-      +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'');
+      +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
+      +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var raw=await callAPI(fullSys,messages,400);
     var segData=null;
