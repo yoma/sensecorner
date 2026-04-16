@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="16-04-2026 15:28">
+<meta name="fs-build" content="16-04-2026 15:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -2351,6 +2351,16 @@ function formatSavePDiag(diag){
   if(code)part+=' · code '+code;
   return part;
 }
+async function getStorageObjectUrl(bucket,path){
+  if(!sb||!bucket||!path)return'';
+  try{
+    var sign=await sb.storage.from(bucket).createSignedUrl(path,60*60*24*30);
+    var signed=(sign&&sign.data&&sign.data.signedUrl)||'';
+    if(signed)return signed;
+  }catch(_e){}
+  var pub=sb.storage.from(bucket).getPublicUrl(path);
+  return (pub&&pub.data&&pub.data.publicUrl)||'';
+}
 
 function parseFirstJSONObject(txt){
   var s=String(txt||'').trim();
@@ -4450,8 +4460,7 @@ async function handleAnalysisPhotoInput(input){
     var upRes=await uploadToPhotoStorage(path,file);
     if(upRes&&upRes.up&&upRes.up.error)throw upRes.up.error;
     var usedBucket=(upRes&&upRes.bucket)||'sense-photos';
-    var pub=sb.storage.from(usedBucket).getPublicUrl(path);
-    var url=(pub&&pub.data&&pub.data.publicUrl)||'';
+    var url=await getStorageObjectUrl(usedBucket,path);
     if(!url)throw new Error('Kon analysefoto-URL niet ophalen na upload.');
     var d=S.pdata[dos]||newDossierDataStub();
     d.meta=d.meta||{};
@@ -4459,11 +4468,7 @@ async function handleAnalysisPhotoInput(input){
     d.meta.analysis_photos.unshift(url);
     d.meta.analysis_photos=d.meta.analysis_photos.filter(function(u,i,a){return u&&a.indexOf(u)===i;}).slice(0,3);
     S.pdata[dos]=d;
-    await withTimeout(
-      saveP(dos,d.props,d.count,d.categories,d.summary,d.meta),
-      12000,
-      'Opslaan timeout. Probeer opnieuw.'
-    );
+    await saveP(dos,d.props,d.count,d.categories,d.summary,d.meta);
     if(S.screen==='dossier'&&S.viewDossier===dos&&S.viewTab==='foto')await loadTab(dos,'foto',d);
     toast('✅ Analysefoto toegevoegd');
   }catch(e){
@@ -4529,19 +4534,14 @@ async function handleProfilePhotoInput(input){
     if(upRes&&upRes.up&&upRes.up.error)throw upRes.up.error;
     var usedBucket=(upRes&&upRes.bucket)||'sense-photos';
     setProfilePhotoUploadProgress(72,'URL ophalen…');
-    var pub=sb.storage.from(usedBucket).getPublicUrl(path);
-    var url=(pub&&pub.data&&pub.data.publicUrl)||'';
+    var url=await getStorageObjectUrl(usedBucket,path);
     if(!url)throw new Error('Kon foto URL niet maken');
     var d=S.pdata[_profileModalFor]||{props:{...DP},count:0,categories:{},meta:{}};
     d.meta=d.meta||{};
     d.meta.photo_url=url;
     S.pdata[_profileModalFor]=d;
     setProfilePhotoUploadProgress(88,'Opslaan…');
-    await withTimeout(
-      saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta),
-      12000,
-      'Opslaan timeout. Foto staat mogelijk al in storage; probeer nogmaals op Opslaan.'
-    );
+    await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
     var av=document.getElementById('profileModalAvatar');
     if(av)av.src=url;
     if(typeof renderOwnAvatar==='function')renderOwnAvatar();
@@ -4602,11 +4602,7 @@ async function saveProfileMetaForm(){
       delete d.meta.billing_pref;
     }
     S.pdata[_profileModalFor]=d;
-    await withTimeout(
-      saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta),
-      12000,
-      'Opslaan timeout bij profielgegevens. Probeer opnieuw.'
-    );
+    await saveP(_profileModalFor,d.props,d.count,d.categories,d.summary,d.meta);
     closeProfileModal();
     if(S.screen==='dossier'&&S.viewDossier===_profileModalFor)goScreen('dossier');
     else if(S.screen==='own'&&_profileModalFor==='OWN Sense')openOwnSenseEntryPoint();
