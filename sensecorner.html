@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="sc-build" content="16-04-2026 15:28">
+<meta name="sc-build" content="16-04-2026 16:05">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -54,6 +54,8 @@ a{text-decoration:none;color:inherit}
 .hub-pill-btn.ok{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
 .hub-pill-btn.warn{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
 .hub-pill-ico{display:inline-flex;width:16px;height:16px;border-radius:999px;background:rgba(255,255,255,.65);align-items:center;justify-content:center;font-size:11px;line-height:1}
+.admin-pill-btn{display:none;border:1px solid #D9DEE5;background:#fff;color:#2A313A}
+.admin-pill-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.12)}
 .hub-dock-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);opacity:0;visibility:hidden;transition:opacity .2s ease, visibility .2s ease;z-index:900}
 .hub-dock-backdrop.show{opacity:1;visibility:visible}
 .hub-dock{position:fixed;inset:0;pointer-events:none;z-index:901;display:flex;justify-content:flex-end;align-items:stretch;padding:10px 0 10px 10px}
@@ -219,6 +221,10 @@ a{text-decoration:none;color:inherit}
       </div>
     </div>
     <div class="header-right">
+      <button type="button" id="adminPill" class="hub-pill-btn admin-pill-btn" aria-label="Open admin instellingen">
+        <span class="hub-pill-ico" aria-hidden="true">🛠</span>
+        <span>Admin instellingen</span>
+      </button>
       <button type="button" id="hubPill" class="hub-pill-btn warn" aria-expanded="false" aria-controls="hubDockPanel">
         <span class="hub-pill-ico" aria-hidden="true">⚙</span>
         <span id="hubPillText">Hub</span>
@@ -444,7 +450,7 @@ a{text-decoration:none;color:inherit}
   var d=new Date();
   var days=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 16-04-2026 15:28';
+  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 16-04-2026 16:05';
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30
@@ -466,6 +472,7 @@ a{text-decoration:none;color:inherit}
   var headerOwnPhoto=document.getElementById('headerOwnPhoto');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
+  var adminPill=document.getElementById('adminPill');
   var hubPill=document.getElementById('hubPill');
   var hubPillText=document.getElementById('hubPillText');
   var hubDock=document.getElementById('hubDock');
@@ -498,6 +505,7 @@ a{text-decoration:none;color:inherit}
   var authPwToggleBtn=document.getElementById('authPwToggleBtn');
   var authForgotBtn=document.getElementById('authForgotBtn');
   var authCloseBtn=document.getElementById('authCloseBtn');
+  var currentAdminRole='user';
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
     if(collapsed){
@@ -570,6 +578,15 @@ a{text-decoration:none;color:inherit}
     if(b)return b;
     return{known:false,approved:false};
   }
+  async function refreshAdminRole(user){
+    currentAdminRole='user';
+    if(!sb||!user||!user.id)return currentAdminRole;
+    try{
+      var r=await sb.from('user_roles').select('role').eq('user_id',user.id).maybeSingle();
+      if(r&&r.data&&String(r.data.role||'').toLowerCase()==='admin')currentAdminRole='admin';
+    }catch(_e){}
+    return currentAdminRole;
+  }
   var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
   var filledAnswers=0;
   if(profile&&Array.isArray(profile.answers)){
@@ -606,6 +623,11 @@ a{text-decoration:none;color:inherit}
   }
   setHubSettingsCollapsed(true);
   closeHubDock();
+  if(adminPill){
+    adminPill.onclick=function(){
+      openAppWithAuth('admin.html');
+    };
+  }
   if(hubPill){
     hubPill.onclick=function(){
       var open=!!(hubDock&&hubDock.classList.contains('open'));
@@ -749,9 +771,13 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
+    await refreshAdminRole(user);
     var approval={known:false,approved:false};
     if(user)approval=await getOwnAiApproval(user);
     updateHubHealthUi(user,approval);
+    if(adminPill){
+      adminPill.style.display=(user&&currentAdminRole==='admin')?'inline-flex':'none';
+    }
     if(user){
       var em=String(user.email||'').trim();
       if(hubAuthState){

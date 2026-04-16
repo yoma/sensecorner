@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="16-04-2026 15:59">
+<meta name="fs-build" content="16-04-2026 16:11">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -1400,7 +1400,6 @@ function startFullAppTour(){
     startQuickHelpTour(true);
   },450);
 }
-var _promptCenterKey='advice_core';
 var _renderHealthBusy=false;
 
 // Segment modal state
@@ -1584,60 +1583,9 @@ async function refreshAdminRoleFromSupabase(){
     S.adminRole='user';
   }
 }
-function getPromptOverrides(){
-  var raw=getScopedStorage('ds_prompt_overrides','{}')||'{}';
-  try{
-    var obj=JSON.parse(raw);
-    return obj&&typeof obj==='object'?obj:{};
-  }catch(e){return{};}
-}
-function setPromptOverrides(map){
-  setScopedStorage('ds_prompt_overrides',JSON.stringify(map||{}));
-}
 function getPromptText(key){
   var k=String(key||'').trim();
-  var ov=getPromptOverrides();
-  var custom=String(ov[k]||'').trim();
-  if(custom)return custom;
   return String(PROMPT_DEFAULTS[k]||'').trim();
-}
-function getPromptDefaultText(key){
-  return String(PROMPT_DEFAULTS[String(key||'').trim()]||'').trim();
-}
-function getPromptDiffHtml(key){
-  var base=getPromptDefaultText(key);
-  var cur=getPromptText(key);
-  if(!base||cur===base){
-    return '<div style="font-size:12px;color:#2E7D32;background:#F0FFF4;border:1px solid #CFEAD6;border-radius:10px;padding:10px 12px">Geen verschil met standaardprompt.</div>';
-  }
-  var a=base.split('\n');
-  var b=cur.split('\n');
-  var max=Math.max(a.length,b.length);
-  var rows=[];
-  for(var i=0;i<max;i++){
-    var av=(a[i]||'');
-    var bv=(b[i]||'');
-    if(av===bv){
-      rows.push('<div style="font-size:11px;color:#7f8790;padding:2px 6px">  '+escHTML(bv||'')+'</div>');
-      continue;
-    }
-    if(av){
-      rows.push('<div style="font-size:11px;color:#8D2C2C;background:#FFF3F3;padding:3px 6px;border-left:3px solid #E9A8A8">- '+escHTML(av)+'</div>');
-    }
-    if(bv){
-      rows.push('<div style="font-size:11px;color:#1B5E20;background:#F1FBF3;padding:3px 6px;border-left:3px solid #9DD7A8">+ '+escHTML(bv)+'</div>');
-    }
-  }
-  return '<div style="border:1px solid var(--b);border-radius:10px;overflow:auto;max-height:220px;background:#fff">'+rows.join('')+'</div>';
-}
-function setPromptText(key,val){
-  var k=String(key||'').trim();
-  if(!k)return;
-  var ov=getPromptOverrides();
-  var v=String(val||'').trim();
-  if(v)ov[k]=v;
-  else delete ov[k];
-  setPromptOverrides(ov);
 }
 function ensureRenderHealthy(source){
   if(_renderHealthBusy)return;
@@ -3931,21 +3879,13 @@ function _goScreenBody(sc){
   var cardEl=document.getElementById('helpTourCard');
   if(shadeEl)shadeEl.style.display='none';
   if(cardEl)cardEl.style.display='none';
-  if(sc==='promptcenter'&&isAdminUser()){
-    window.location.href='admin.html';
-    return;
-  }
   if(sc==='planner'){
     toast('Plan samen is niet beschikbaar in FamilySense.');
     sc='home';
   }
   // Protect screens when not authenticated
-  if(!S.user && ['senses','own','vertel','compare','dossier','notifications','promptcenter'].includes(sc)){
+  if(!S.user && ['senses','own','vertel','compare','dossier','notifications'].includes(sc)){
     sc='login';
-  }
-  if(sc==='promptcenter'&&!isAdminUser()){
-    sc='settings';
-    toast('Alleen admin heeft toegang tot Prompt Center.');
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
   if(sc==='own' && S.user){
@@ -3959,7 +3899,7 @@ function _goScreenBody(sc){
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',promptcenter:'Prompt Center'};
+  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
   var titleText=T[sc]||sc;
   if(sc==='dossier'&&S.viewDossier)titleText=dn(S.viewDossier);
   document.getElementById('pgTitle').textContent=titleText;
@@ -3974,7 +3914,7 @@ function _goScreenBody(sc){
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
   ['home','senses','own','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications,promptcenter:rPromptCenter};
+  var screens={home:rHome,senses:rSenses,own:rOWN,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -8194,87 +8134,6 @@ function renderSettingsTile(icon,title,sub,action){
     +'</span></button>';
 }
 
-function rPromptCenter(el){
-  if(!isAdminUser()){
-    el.innerHTML='<div style="padding:24px;color:#7A2A2A">Geen toegang.</div>';
-    return;
-  }
-  var defs=[
-    {k:'advice_core',title:'Advies prompt',sub:'Kernprompt voor advies in dossiers'},
-    {k:'tone_honest',title:'Tone eerlijk',sub:'Toon instructie voor eerlijke standaardstijl'},
-    {k:'tone_strict',title:'Tone streng',sub:'Toon instructie voor strenge adviesstijl'},
-    {k:'compare_core',title:'Vergelijk-prompt',sub:'Vergelijken van dossiers (familiedynamiek)'},
-    {k:'photo_analysis_core',title:'Fotoanalyse prompt',sub:'Prompt voor visuele foto-analyse'}
-  ];
-  var key=defs.some(function(x){return x.k===_promptCenterKey;})?_promptCenterKey:defs[0].k;
-  _promptCenterKey=key;
-  var cur=defs.filter(function(x){return x.k===key;})[0]||defs[0];
-  var txt=getPromptText(key);
-  var ov=getPromptOverrides();
-  var isCustom=!!String(ov[key]||'').trim();
-  var diffHtml=getPromptDiffHtml(key);
-  function escA(v){
-    return String(v||'')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
-  el.innerHTML='<div style="padding:18px 16px 30px">'
-    +'<div style="font-size:12px;color:#8a8f97;margin-bottom:10px">Admin-only overzicht van system prompts. Wijzigingen zijn live na opslaan.</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
-    +defs.map(function(d){
-      var on=d.k===key;
-      return '<button class="'+(on?'btn-r':'coach-save-other')+'" style="'+(on?'max-width:220px;padding:8px 10px;font-size:12px':'font-size:12px;padding:7px 9px')+'" onclick="_promptCenterKey=\''+d.k+'\';goScreen(\'promptcenter\')">'+d.title+'</button>';
-    }).join('')
-    +'</div>'
-    +'<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px">'
-    +'<div style="font-size:14px;font-weight:800;color:#333">'+cur.title+'</div>'
-    +'<div style="font-size:12px;color:#7f8790;margin:3px 0 10px">'+cur.sub+'</div>'
-    +'<div style="font-size:12px;color:'+(isCustom?'#A55B00':'#2E7D32')+';margin:-2px 0 10px">'+(isCustom?'Actieve versie: aangepast':'Actieve versie: standaard')+'</div>'
-    +'<textarea id="promptCenterText" class="form-input" style="min-height:280px;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45">'+escA(txt)+'</textarea>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-    +'<button type="button" class="btn-r" id="btnPromptCenterSave" style="max-width:180px;padding:9px 12px" onclick="savePromptCenterCurrent()">Opslaan</button>'
-    +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="resetPromptCenterCurrent()">Reset standaard</button>'
-    +'<button class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="copyPromptCenterCurrent()">Kopieer prompt</button>'
-    +'</div></div></div>';
-  var host=document.createElement('div');
-  host.style.cssText='margin:10px 16px 0';
-  host.innerHTML='<div style="font-size:12px;font-weight:800;color:#444;margin-bottom:6px">Verschil met standaard</div>'+diffHtml;
-  el.appendChild(host);
-}
-function savePromptCenterCurrent(){
-  if(!isAdminUser())return;
-  var ta=document.getElementById('promptCenterText');
-  if(!ta){toast('Prompt veld niet gevonden.');return;}
-  var v=String(ta.value||'').trim();
-  if(v.length<60){toast('Prompt is te kort.');return;}
-  var btn=document.getElementById('btnPromptCenterSave');
-  setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
-  try{
-    setPromptText(_promptCenterKey,v);
-    toast('✅ Prompt opgeslagen');
-  }finally{
-    setButtonSaveBusy(btn,false);
-  }
-}
-function resetPromptCenterCurrent(){
-  if(!isAdminUser())return;
-  var ov=getPromptOverrides();
-  delete ov[_promptCenterKey];
-  setPromptOverrides(ov);
-  goScreen('promptcenter');
-  toast('Standaardprompt hersteld');
-}
-function copyPromptCenterCurrent(){
-  var ta=document.getElementById('promptCenterText');
-  if(!ta){toast('Geen prompt om te kopieren.');return;}
-  ta.select();
-  document.execCommand('copy');
-  toast('Prompt gekopieerd');
-}
-
 function rSettings(el){
   var usageMode=getUsageMode();
   var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
@@ -8282,7 +8141,7 @@ function rSettings(el){
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
   if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
-  var adminTile=isAdminUser()?renderSettingsTile('🛠️','Sense Admin','AI-toegang + centraal beheer (admin)','sense-admin'):'';
+  var adminTile='';
   var extraHtml=''
     +renderSettingsTile('🔔','Meldingen','Notificaties beheren','notifications')
     +renderSettingsTile('🏠','Open Hub-instellingen','Algemene instellingen in SenseCorner','hub-settings')
@@ -8349,11 +8208,6 @@ async function exportAllData(){
 }
 
 function settingsAction(action){
-  if(action==='sense-admin'){
-    if(!isAdminUser()){toast('Geen toegang.');return;}
-    window.location.href='admin.html';
-    return;
-  }
   if(action==='hub-settings'){window.location.href='sensecorner.html';return;}
   if(action==='quick-tour'){startFullAppTour();return;}
   if(action==='help-reset'){resetAllHelpPopups();return;}
