@@ -268,12 +268,7 @@ a{text-decoration:none;color:inherit}
       <button id="hubSettingsToggle" class="hub-settings-toggle" type="button">Inklappen</button>
     </div>
     <div class="hub-settings-body">
-      <div class="hub-settings-sub">Eén centrale API-key en accountflow voor al je Sense-apps. App-specifieke keuzes beheer je in elke app apart.</div>
-      <div class="hub-settings-row">
-        <input id="hubApiKeyField" class="hub-input" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off">
-        <button id="hubApiSaveBtn" class="hub-save" type="button">Opslaan</button>
-      </div>
-      <div id="hubApiState" class="hub-state"></div>
+      <div class="hub-settings-sub">Eén centrale accountflow voor al je Sense-apps.</div>
       <div class="hub-auth">
         <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
         <div class="hub-auth-row">
@@ -461,9 +456,6 @@ a{text-decoration:none;color:inherit}
   var ownBadge=document.getElementById('ownBadge');
   var ringIcon=document.getElementById('ringIcon');
   var headerOwnPhoto=document.getElementById('headerOwnPhoto');
-  var hubApiField=document.getElementById('hubApiKeyField');
-  var hubApiSaveBtn=document.getElementById('hubApiSaveBtn');
-  var hubApiState=document.getElementById('hubApiState');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
   var hubHealthPill=document.getElementById('hubHealthPill');
@@ -509,8 +501,9 @@ a{text-decoration:none;color:inherit}
       hubSettingsToggle.textContent='Inklappen';
     }
   }
-  function updateHubHealthUi(user,hasApiKey){
-    var isOk=!!user&&!!hasApiKey;
+  function updateHubHealthUi(user,approval){
+    var isApproved=!!(approval&&approval.approved);
+    var isOk=!!user&&isApproved;
     if(hubSettingsCard){
       hubSettingsCard.classList.remove('ok','warn');
       hubSettingsCard.classList.add(isOk?'ok':'warn');
@@ -520,13 +513,32 @@ a{text-decoration:none;color:inherit}
       hubHealthPill.classList.add(isOk?'ok':'warn');
       if(isOk){
         var email=String((user&&user.email)||'').trim();
-        hubHealthPill.textContent='✓ Aangemeld'+(email?' als '+email:'');
+        hubHealthPill.textContent='✓ AI toegang actief'+(email?' voor '+email:'');
+      }else if(user){
+        hubHealthPill.textContent='⏳ Wacht op AI approval';
       }else if(!user){
         hubHealthPill.textContent='⚠ Log in nodig';
-      }else{
-        hubHealthPill.textContent='⚠ API key nodig';
       }
     }
+  }
+  async function getOwnAiApproval(user){
+    if(!sb||!user||!user.id)return{known:false,approved:false};
+    async function readFromTable(tbl){
+      var r=await sb.from(tbl).select('ai_enabled,approved_at').eq('user_id',user.id).maybeSingle();
+      if(!r||!r.error){
+        if(!r||!r.data)return{known:true,approved:false};
+        return{known:true,approved:!!r.data.ai_enabled,approvedAt:String(r.data.approved_at||'').trim()};
+      }
+      var msg=String(r.error.message||'');
+      if(/relation|does not exist|42P01|schema cache/i.test(msg))return null;
+      if(/No rows|not found|JSON object|0 rows|PGRST116/i.test(msg))return{known:true,approved:false};
+      return null;
+    }
+    var a=await readFromTable('user_ai_access');
+    if(a)return a;
+    var b=await readFromTable('ai_access');
+    if(b)return b;
+    return{known:false,approved:false};
   }
   var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
   var filledAnswers=0;
@@ -562,34 +574,11 @@ a{text-decoration:none;color:inherit}
     ringFg.style.strokeDashoffset=offset;
     miniBar.style.width=pct+'%';
   }
-  function renderHubApiState(msg){
-    if(hubApiState)hubApiState.textContent=msg;
-  }
-  var existingHubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
-  if(hubApiField)hubApiField.value=existingHubKey;
-  renderHubApiState(existingHubKey?'API key actief voor alle apps.':'Nog geen API key ingesteld.');
-  setHubSettingsCollapsed(!!existingHubKey);
+  setHubSettingsCollapsed(false);
   if(hubSettingsToggle){
     hubSettingsToggle.onclick=function(){
       var isCollapsed=hubSettingsCard&&hubSettingsCard.classList.contains('collapsed');
       setHubSettingsCollapsed(!isCollapsed);
-    };
-  }
-  if(hubApiSaveBtn){
-    hubApiSaveBtn.onclick=function(){
-      var v=String((hubApiField&&hubApiField.value)||'').trim();
-      if(v){
-        localStorage.setItem('anthropic_api_key',v);
-        localStorage.setItem('ds_ak',v);
-        renderHubApiState('Opgeslagen. DateSense en FamilySense gebruiken nu deze key.');
-        setHubSettingsCollapsed(true);
-      }else{
-        localStorage.removeItem('anthropic_api_key');
-        localStorage.removeItem('ds_ak');
-        renderHubApiState('API key verwijderd.');
-        setHubSettingsCollapsed(false);
-      }
-      refreshAuthUi();
     };
   }
 
@@ -797,18 +786,25 @@ a{text-decoration:none;color:inherit}
   async function refreshAuthUi(){
     var user=await getCurrentUser();
     await refreshAdminRole(user);
-    var hasApiKey=String(localStorage.getItem('anthropic_api_key')||'').trim().length>0;
-    updateHubHealthUi(user,hasApiKey);
+    var approval={known:false,approved:false};
+    if(user)approval=await getOwnAiApproval(user);
+    updateHubHealthUi(user,approval);
     if(adminAiPanel){
       adminAiPanel.style.display=(user&&currentAdminRole==='admin')?'block':'none';
     }
     if(user){
       var em=String(user.email||'').trim();
-      if(hubAuthState)hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
+      if(hubAuthState){
+        if(approval.approved){
+          hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang goedgekeurd, je kan de apps gebruiken.';
+        }else{
+          hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang wacht op approval.';
+        }
+      }
       if(hubLoginBtn)hubLoginBtn.style.display='none';
       if(hubRegisterBtn)hubRegisterBtn.style.display='none';
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
-      setHubSettingsCollapsed(hasApiKey);
+      setHubSettingsCollapsed(false);
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='block';
       if(hubAccountWrap)hubAccountWrap.style.display='block';
       if(hubRoepnaamField){
