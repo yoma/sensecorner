@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="15-04-2026 14:30">
+<meta name="fs-build" content="16-04-2026 15:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -1367,6 +1367,7 @@ var _profileModalFor='OWN Sense';
 var _goScreenReqId=0;
 var _profileUploadBusy=false;
 var _photoAnalysisBusy={};
+var _lastSavePDiag=null;
 var _analysisPhotoFor='OWN Sense';
 var _analysisUploadBusy=false;
 var _loginInFlight=false;
@@ -2340,6 +2341,15 @@ function withTimeout(promise,ms,msg){
       setTimeout(function(){reject(new Error(msg||('Timeout na '+ms+'ms')));},ms);
     })
   ]);
+}
+function formatSavePDiag(diag){
+  if(!diag)return'';
+  var ms=diag.totalMs!=null?String(diag.totalMs)+'ms':'?';
+  var att=diag.attempt!=null?String(diag.attempt):'?';
+  var code=String(diag.code||'').trim();
+  var part='saveP '+(diag.ok?'ok':'fail')+' in '+ms+' (poging '+att+')';
+  if(code)part+=' · code '+code;
+  return part;
 }
 
 function parseFirstJSONObject(txt){
@@ -3656,6 +3666,7 @@ async function ensureP(name){
 async function saveP(name,props,count,categories,summary,meta){
   if(!S.user)return;
   sync('s');
+  var startedAt=Date.now();
   var propsToSave={...props,_v:1};
   // ALTIJD categories meegeven — nooit overschrijven met leeg object
   // Gebruik: meegegeven categories > huidige in memory > bestaande in propsToSave
@@ -3677,7 +3688,9 @@ async function saveP(name,props,count,categories,summary,meta){
   var _upsert={user_id:S.user.id,name,props:propsToSave,bericht_count:count,last_active:new Date().toISOString()};
   if(summary)_upsert.summary=summary;
   var lastErr=null;
+  _lastSavePDiag=null;
   for(var attempt=1;attempt<=3;attempt++){
+    var attemptStarted=Date.now();
     try{
       var res=await withTimeout(
         sb.from('sense_profiles').upsert(_upsert,{onConflict:'user_id,name'}),
@@ -3685,6 +3698,8 @@ async function saveP(name,props,count,categories,summary,meta){
         'Opslaan naar database duurt te lang.'
       );
       if(res&&res.error)throw new Error(res.error.message||'Profiel opslaan mislukt');
+      _lastSavePDiag={ok:true,attempt:attempt,totalMs:(Date.now()-startedAt),attemptMs:(Date.now()-attemptStarted),name:name};
+      console.info('[FamilySense][saveP] ok',_lastSavePDiag);
       if(S.pdata[name]){
         S.pdata[name].props=props;
         S.pdata[name].count=count;
@@ -3701,11 +3716,17 @@ async function saveP(name,props,count,categories,summary,meta){
       return;
     }catch(e){
       lastErr=e;
+      var em=String((e&&e.message)||e||'');
+      var ec=(e&&e.code)?String(e.code):'';
+      _lastSavePDiag={ok:false,attempt:attempt,totalMs:(Date.now()-startedAt),attemptMs:(Date.now()-attemptStarted),name:name,code:ec,message:em};
+      console.warn('[FamilySense][saveP] fail attempt '+attempt+' for '+name,_lastSavePDiag);
       if(attempt<3)await new Promise(function(r){setTimeout(r,380*attempt);});
     }
   }
   sync('e');
-  throw new Error((lastErr&&lastErr.message?String(lastErr.message):'')||'Profiel opslaan mislukt na 3 pogingen. Controleer verbinding en probeer opnieuw.');
+  var diagTxt=formatSavePDiag(_lastSavePDiag);
+  var baseErr=(lastErr&&lastErr.message?String(lastErr.message):'')||'Profiel opslaan mislukt na 3 pogingen. Controleer verbinding en probeer opnieuw.';
+  throw new Error(baseErr+(diagTxt?' ('+diagTxt+')':''));
 }
 
 // Berichten per dossier opslaan/laden (gefilterd op profile_name!)
@@ -3900,6 +3921,10 @@ function _goScreenBody(sc){
   var cardEl=document.getElementById('helpTourCard');
   if(shadeEl)shadeEl.style.display='none';
   if(cardEl)cardEl.style.display='none';
+  if(sc==='promptcenter'&&isAdminUser()){
+    window.location.href='admin.html';
+    return;
+  }
   if(sc==='planner'){
     toast('Plan samen is niet beschikbaar in FamilySense.');
     sc='home';
@@ -4529,7 +4554,8 @@ async function handleProfilePhotoInput(input){
   }catch(e){
     console.warn('handleProfilePhotoInput error:',e);
     if(status)status.textContent='Upload mislukt';
-    toast(e&&e.message?e.message:'Foto upload mislukt');
+    var diagPhoto=formatSavePDiag(_lastSavePDiag);
+    toast((e&&e.message?e.message:'Foto upload mislukt')+(diagPhoto?' ['+diagPhoto+']':''));
   }finally{
     if(inp)inp.value='';
     _profileUploadBusy=false;
@@ -4589,7 +4615,8 @@ async function saveProfileMetaForm(){
     toast('✅ Profielgegevens opgeslagen');
   }catch(e){
     console.error('saveProfileMetaForm',e);
-    toast(e&&e.message?e.message:'Profiel opslaan mislukt.');
+    var diagProfile=formatSavePDiag(_lastSavePDiag);
+    toast((e&&e.message?e.message:'Profiel opslaan mislukt.')+(diagProfile?' ['+diagProfile+']':''));
   }finally{
     setButtonSaveBusy(btn,false);
   }
@@ -8259,7 +8286,7 @@ function rSettings(el){
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
   if(contacts.indexOf(focusName)===-1)focusName=contacts[0]||'';
-  var adminTile=isAdminUser()?renderSettingsTile('🛠️','Prompt Center','Bekijk en finetune system prompts','prompt-center'):'';
+  var adminTile=isAdminUser()?renderSettingsTile('🛠️','Sense Admin','AI-toegang + centraal beheer (admin)','sense-admin'):'';
   var extraHtml=''
     +renderSettingsTile('🔔','Meldingen','Notificaties beheren','notifications')
     +renderSettingsTile('🏠','Open Hub-instellingen','Algemene instellingen in SenseCorner','hub-settings')
@@ -8326,9 +8353,9 @@ async function exportAllData(){
 }
 
 function settingsAction(action){
-  if(action==='prompt-center'){
+  if(action==='sense-admin'){
     if(!isAdminUser()){toast('Geen toegang.');return;}
-    goScreen('promptcenter');
+    window.location.href='admin.html';
     return;
   }
   if(action==='hub-settings'){window.location.href='sensecorner.html';return;}

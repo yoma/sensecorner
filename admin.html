@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#AE0000">
+<meta name="admin-build" content="16-04-2026 15:28">
+<title>Sense Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --r:#AE0000;--rl:#FFF3F3;--rd:#8A0000;
+  --t:#1A1A1A;--m:#6B7280;--s:#9CA3AF;
+  --b:#E5E7EB;--bg:#F5F6F9;--card:#FFFFFF;
+  --green:#1E7E34;--greenl:#F0FBF1;
+  --radius:16px;--shadow:0 2px 16px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:860px;margin:0 auto;padding:24px 16px 56px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px;padding:0 2px}
+.logo-text{font-family:'Lora',serif;font-size:20px;font-weight:800;letter-spacing:-.01em}
+.logo-sub{margin-top:6px;font-size:13px;color:var(--m);line-height:1.55;max-width:52ch}
+.header-actions{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
+.linkbtn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.linkbtn.primary{background:var(--r);border-color:var(--r);color:#fff}
+.panel{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
+.panel h2{font-size:13px;font-weight:900;color:#2A313A;margin-bottom:6px}
+.panel p{font-size:12px;color:var(--m);line-height:1.55;margin-bottom:10px}
+.subtle{font-size:12px;color:#6B7280;line-height:1.45}
+.notice{padding:12px;border-radius:14px;border:1px solid #F6C7C7;background:#FFF4F4;color:#9B1C1C;font-size:13px;font-weight:700;line-height:1.45}
+.placeholder{border:1px dashed #D6DAE2;background:#FAFBFC;border-radius:14px;padding:12px}
+.placeholder h3{font-size:12px;font-weight:900;color:#2A313A;margin-bottom:6px}
+.placeholder p{font-size:12px;color:#6B7280;line-height:1.55;margin:0}
+.admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.admin-refresh-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.admin-state{font-size:12px;color:#6B7280;margin-bottom:8px}
+.admin-list{display:flex;flex-direction:column;gap:8px}
+.admin-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid #E5E7EB;border-radius:12px;background:#fff}
+.admin-row-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.admin-email{font-size:13px;font-weight:800;color:#1F2937;word-break:break-all}
+.admin-meta{font-size:11px;color:#6B7280}
+.admin-pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:900}
+.admin-pill.ok{background:#ECFDF3;color:#136D2F;border:1px solid #B7E4C7}
+.admin-pill.warn{background:#FFF4F4;color:#9B1C1C;border:1px solid #F6C7C7}
+.admin-action-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
+.admin-action-btn.revoke{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
+.footer{margin-top:28px;text-align:center;font-size:12px;color:var(--s);line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="header" role="banner">
+    <div>
+      <div class="logo-text">Sense Admin</div>
+      <div class="logo-sub">Centraal beheer (start met AI-toegang). Prompts en Claude-toon komen hierna in vaste secties — nu nog placeholders.</div>
+    </div>
+    <div class="header-actions">
+      <a class="linkbtn" href="sensecorner.html">← Terug naar SenseCorner</a>
+      <a class="linkbtn primary" href="sensecorner.html">Hub openen</a>
+    </div>
+  </header>
+
+  <div id="adminGate" class="notice" style="display:none"></div>
+
+  <section id="adminAiPanel" class="panel" aria-label="Admin AI toegang" style="display:none">
+    <div class="admin-panel-head">
+      <h2 style="margin:0">AI-toegang beheren</h2>
+      <button id="adminAiRefreshBtn" class="admin-refresh-btn" type="button">Vernieuwen</button>
+    </div>
+    <p>Nieuwe gebruikers staan standaard op wacht. Keur per account AI-toegang goed of trek die terug.</p>
+    <div id="adminAiState" class="admin-state">Laden…</div>
+    <div id="adminAiList" class="admin-list"></div>
+  </section>
+
+  <section class="panel" aria-label="Claude toon placeholder">
+    <h2>Claude-toon (placeholder)</h2>
+    <p>Hier komt straks een vaste UI om standaardtoon / strengheid / grenzen centraal te beheren (los van individuele app-schermen).</p>
+    <div class="placeholder" role="status">
+      <h3>Nog niet geïmplementeerd</h3>
+      <p>Deze sectie is bewust leeg gelaten in sprint 1 — enkel routing + AI-toegang verhuist nu naar deze pagina.</p>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Prompts placeholder">
+    <h2>Prompts (placeholder)</h2>
+    <p>Hier komen straks de system prompts en varianten (bv. DateSense vs FamilySense) gegroepeerd, met veilige editor-flow.</p>
+    <div class="placeholder" role="status">
+      <h3>Nog niet geïmplementeerd</h3>
+      <p>Gebruik voorlopig je bestaande tooling buiten de app, tot deze sectie is gemigreerd.</p>
+    </div>
+  </section>
+
+  <footer class="footer" role="contentinfo">Sense Admin · prototype · alleen voor beheerdersaccounts</footer>
+</div>
+
+<script>
+(function(){
+  var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
+  var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+  var sb=null;
+  try{
+    if(window.supabase&&window.supabase.createClient){
+      sb=window.supabase.createClient(SURL,SKEY);
+    }
+  }catch(_e){}
+
+  var adminGate=document.getElementById('adminGate');
+  var adminAiPanel=document.getElementById('adminAiPanel');
+  var adminAiRefreshBtn=document.getElementById('adminAiRefreshBtn');
+  var adminAiState=document.getElementById('adminAiState');
+  var adminAiList=document.getElementById('adminAiList');
+
+  function setGate(msg){
+    if(!adminGate)return;
+    adminGate.style.display='block';
+    adminGate.textContent=msg||'';
+  }
+
+  async function getCurrentUser(){
+    if(!sb)return null;
+    try{
+      var res=await sb.auth.getSession();
+      return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
+    }catch(_e){return null;}
+  }
+
+  async function isAdminUser(user){
+    if(!sb||!user||!user.id)return false;
+    try{
+      var r=await sb.from('user_roles').select('role').eq('user_id',user.id).maybeSingle();
+      return !!(r&&r.data&&String(r.data.role||'').toLowerCase()==='admin');
+    }catch(_e){
+      return false;
+    }
+  }
+
+  function setAdminAiState(msg,isErr){
+    if(!adminAiState)return;
+    adminAiState.textContent=msg||'';
+    adminAiState.style.color=isErr?'#B42318':'#6B7280';
+  }
+
+  function fmtDateTime(iso){
+    if(!iso)return'';
+    var dt=new Date(iso);
+    if(isNaN(dt.getTime()))return'';
+    return dt.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})
+      +' '+dt.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  function renderAdminAiRows(rows){
+    if(!adminAiList)return;
+    if(!rows||!rows.length){
+      adminAiList.innerHTML='<div class="subtle">Nog geen gebruikers gevonden.</div>';
+      return;
+    }
+    adminAiList.innerHTML=rows.map(function(r){
+      var email=String(r.email||'').trim()||('user '+String(r.user_id||'').slice(0,8));
+      var enabled=!!r.ai_enabled;
+      var statusHtml=enabled
+        ?'<span class="admin-pill ok">✓ AI actief</span>'
+        :'<span class="admin-pill warn">⏳ Wacht op approval</span>';
+      var btnHtml=enabled
+        ?'<button class="admin-action-btn revoke" type="button" data-user="'+String(r.user_id||'')+'" data-enable="0">Revoke</button>'
+        :'<button class="admin-action-btn approve" type="button" data-user="'+String(r.user_id||'')+'" data-enable="1">Approve</button>';
+      var meta=enabled
+        ?('Goedgekeurd: '+(fmtDateTime(r.approved_at)||'onbekend'))
+        :('Aangemaakt: '+(fmtDateTime(r.created_at)||'onbekend'));
+      return '<div class="admin-row">'
+        +'<div class="admin-row-main"><div class="admin-email">'+email+'</div><div class="admin-meta">'+meta+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+statusHtml+btnHtml+'</div>'
+        +'</div>';
+    }).join('');
+
+    Array.prototype.slice.call(adminAiList.querySelectorAll('[data-user][data-enable]')).forEach(function(btn){
+      btn.addEventListener('click',async function(){
+        var uid=String(btn.getAttribute('data-user')||'').trim();
+        var enable=String(btn.getAttribute('data-enable')||'')==='1';
+        if(!uid)return;
+        btn.disabled=true;
+        setAdminAiState('Opslaan…',false);
+        try{
+          var rs=await sb.rpc('admin_set_ai_access',{p_user_id:uid,p_enabled:enable});
+          if(rs&&rs.error)throw new Error(rs.error.message||'Opslaan mislukt');
+          setAdminAiState(enable?'AI toegang goedgekeurd.':'AI toegang ingetrokken.',false);
+          await loadAdminAiPanel();
+        }catch(e){
+          setAdminAiState((e&&e.message)||'Opslaan mislukt.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      });
+    });
+  }
+
+  async function loadAdminAiPanel(){
+    if(!sb||!adminAiPanel)return;
+    setAdminAiState('Laden…',false);
+    if(adminAiList)adminAiList.innerHTML='';
+    try{
+      var rs=await sb.rpc('admin_list_ai_access');
+      if(rs&&rs.error)throw new Error(rs.error.message||'Admin lijst laden mislukt');
+      renderAdminAiRows(Array.isArray(rs&&rs.data)?rs.data:[]);
+      setAdminAiState('Klik Approve/Revoke om toegang te beheren.',false);
+    }catch(e){
+      setAdminAiState((e&&e.message)||'Laden mislukt.',true);
+      if(adminAiList)adminAiList.innerHTML='<div class="subtle">Geen data geladen.</div>';
+    }
+  }
+
+  async function init(){
+    if(!sb){
+      setGate('Supabase client niet beschikbaar. Controleer je netwerk of blokkeerders.');
+      return;
+    }
+    var user=await getCurrentUser();
+    if(!user){
+      setGate('Je bent niet ingelogd. Log eerst in via SenseCorner Hub, en open daarna opnieuw deze pagina.');
+      return;
+    }
+    var ok=await isAdminUser(user);
+    if(!ok){
+      setGate('Geen admin-rechten voor dit account.');
+      return;
+    }
+    if(adminAiPanel)adminAiPanel.style.display='block';
+    await loadAdminAiPanel();
+    if(adminAiRefreshBtn){
+      adminAiRefreshBtn.onclick=function(){loadAdminAiPanel();};
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

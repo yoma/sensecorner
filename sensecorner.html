@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="sc-build" content="15-04-2026 18:00">
+<meta name="sc-build" content="16-04-2026 15:28">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -43,7 +43,30 @@ a{text-decoration:none;color:inherit}
   font-style:italic;
   letter-spacing:.01em;
 }
-.header-right{font-size:12px;color:var(--s)}
+.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;font-size:12px;color:var(--s)}
+.hub-pill-btn{
+  display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 11px;
+  border:1px solid #F6C7C7;background:#FFF4F4;color:#9B1C1C;font-size:11px;font-weight:800;
+  cursor:pointer;font-family:inherit;line-height:1;transition:transform .12s ease, box-shadow .18s ease, background .2s ease, border-color .2s ease;
+}
+.hub-pill-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(174,0,0,.12)}
+.hub-pill-btn:active{transform:translateY(1px)}
+.hub-pill-btn.ok{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
+.hub-pill-btn.warn{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
+.hub-pill-ico{display:inline-flex;width:16px;height:16px;border-radius:999px;background:rgba(255,255,255,.65);align-items:center;justify-content:center;font-size:11px;line-height:1}
+.hub-dock-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);opacity:0;visibility:hidden;transition:opacity .2s ease, visibility .2s ease;z-index:900}
+.hub-dock-backdrop.show{opacity:1;visibility:visible}
+.hub-dock{position:fixed;inset:0;pointer-events:none;z-index:901;display:flex;justify-content:flex-end;align-items:stretch;padding:10px 0 10px 10px}
+.hub-dock-panel{
+  pointer-events:auto;width:min(420px,calc(100vw - 18px));max-height:calc(100vh - 20px);
+  background:var(--bg);border:1px solid rgba(0,0,0,.08);border-radius:18px 0 0 18px;
+  box-shadow:-10px 0 40px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden;
+  transform:translateX(104%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.hub-dock.open .hub-dock-panel{transform:translateX(0)}
+.hub-dock-scroll{flex:1;min-height:0;overflow:auto;padding:12px 12px 4px}
+.hub-dock-foot{padding:10px 12px 12px;border-top:1px dashed #E6E8ED;background:linear-gradient(180deg,rgba(255,255,255,.65),#fff)}
+.hub-dock-close{width:100%;border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:12px;padding:9px 10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
 
 /* Hero */
 .hero{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:22px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.05),0 8px 30px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden;position:relative}
@@ -80,15 +103,12 @@ a{text-decoration:none;color:inherit}
 }
 .hero-import-title{font-size:12px;font-weight:800;color:#9A2F2F;margin-bottom:4px}
 .hero-import-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:8px}
-.hub-settings{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
+.hub-settings{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:0}
 .hub-settings.ok{border-color:#B7E4C7;box-shadow:0 1px 8px rgba(30,126,52,.08)}
 .hub-settings.warn{border-color:#F6C7C7;box-shadow:0 1px 8px rgba(174,0,0,.08)}
 .hub-settings-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
 .hub-settings-title-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .hub-settings-title{font-size:13px;font-weight:800;color:#2A313A}
-.hub-health-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}
-.hub-health-pill.ok{background:#ECFDF3;color:#136D2F;border:1px solid #B7E4C7}
-.hub-health-pill.warn{background:#FFF4F4;color:#9B1C1C;border:1px solid #F6C7C7}
 .hub-settings-toggle{border:1px solid #D9DEE5;background:#fff;color:#4B5563;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .hub-settings-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
 .hub-settings-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -103,23 +123,6 @@ a{text-decoration:none;color:inherit}
 .hub-auth-state{font-size:12px;color:#4B5563;line-height:1.45}
 .hub-auth-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
 .hub-auth-btn.primary{background:var(--r);border-color:var(--r);color:#fff}
-.admin-panel{background:var(--card);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 6px rgba(0,0,0,.04);margin-bottom:12px}
-.admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.admin-panel-title{font-size:13px;font-weight:800;color:#2A313A}
-.admin-panel-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:10px}
-.admin-refresh-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
-.admin-state{font-size:12px;color:#6B7280;margin-bottom:8px}
-.admin-list{display:flex;flex-direction:column;gap:8px}
-.admin-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid #E5E7EB;border-radius:12px;background:#fff}
-.admin-row-main{min-width:0;display:flex;flex-direction:column;gap:3px}
-.admin-email{font-size:13px;font-weight:700;color:#1F2937;word-break:break-all}
-.admin-meta{font-size:11px;color:#6B7280}
-.admin-pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800}
-.admin-pill.ok{background:#ECFDF3;color:#136D2F;border:1px solid #B7E4C7}
-.admin-pill.warn{background:#FFF4F4;color:#9B1C1C;border:1px solid #F6C7C7}
-.admin-action-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
-.admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
-.admin-action-btn.revoke{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
 .auth-overlay{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
 .auth-overlay.show{display:flex}
 .auth-modal{width:min(440px,100%);background:#fff;border-radius:14px;border:1px solid #E5E7EB;box-shadow:0 20px 45px rgba(0,0,0,.2);padding:16px}
@@ -215,7 +218,13 @@ a{text-decoration:none;color:inherit}
         <div class="logo-sub">Jouw plek voor gevoel, inzicht en groei</div>
       </div>
     </div>
-    <div class="header-right" id="headerDate"></div>
+    <div class="header-right">
+      <button type="button" id="hubPill" class="hub-pill-btn warn" aria-expanded="false" aria-controls="hubDockPanel">
+        <span class="hub-pill-ico" aria-hidden="true">⚙</span>
+        <span id="hubPillText">Hub</span>
+      </button>
+      <div id="headerDate"></div>
+    </div>
   </header>
 
   <!-- Hero -->
@@ -259,58 +268,57 @@ a{text-decoration:none;color:inherit}
     </div>
   </section>
 
-  <section id="hubSettingsCard" class="hub-settings" aria-label="Hub instellingen">
-    <div class="hub-settings-head">
-      <div class="hub-settings-title-wrap">
-        <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
-        <div id="hubHealthPill" class="hub-health-pill warn">⚠ Actie nodig</div>
+  <div id="hubDockBackdrop" class="hub-dock-backdrop" aria-hidden="true"></div>
+  <div id="hubDock" class="hub-dock" aria-hidden="true">
+    <div id="hubDockPanel" class="hub-dock-panel" role="dialog" aria-modal="true" aria-label="Hub instellingen">
+      <div class="hub-dock-scroll">
+        <section id="hubSettingsCard" class="hub-settings" aria-label="Hub instellingen">
+          <div class="hub-settings-head">
+            <div class="hub-settings-title-wrap">
+              <div class="hub-settings-title">Hub-instellingen (algemeen)</div>
+            </div>
+            <button id="hubSettingsToggle" class="hub-settings-toggle" type="button">Inklappen</button>
+          </div>
+          <div class="hub-settings-body">
+            <div class="hub-settings-sub">Eén centrale accountflow voor al je Sense-apps.</div>
+            <div class="hub-auth">
+              <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
+              <div class="hub-auth-row">
+                <button id="hubLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
+                <button id="hubRegisterBtn" class="hub-auth-btn" type="button">Account aanmaken</button>
+                <button id="hubLogoutBtn" class="hub-auth-btn" type="button" style="display:none">Uitloggen</button>
+              </div>
+              <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
+            </div>
+            <div id="hubRoepnaamWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
+              <div class="hub-settings-sub" style="margin-bottom:8px">Roepnaam: zo spreken Sensei en de AI je aan in WhatsApp en in alle Sense-apps.</div>
+              <div class="hub-settings-row">
+                <input id="hubRoepnaamField" class="hub-input" type="text" maxlength="80" placeholder="Je roepnaam" autocomplete="nickname" aria-label="Roepnaam">
+                <button id="hubRoepnaamSave" class="hub-save" type="button">Opslaan</button>
+              </div>
+              <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
+            </div>
+            <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
+              <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">WhatsApp (optioneel)</div>
+              <div class="hub-settings-sub" style="margin-bottom:6px">Vul je gsm in om WhatsApp te gebruiken.</div>
+              <div class="hub-settings-row">
+                <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon account WhatsApp">
+                <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
+              </div>
+              <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
+              <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">Vul je gsm in om WhatsApp Sensei te activeren. (Praat /chat en geef je dossierkeuze mee voor bewaring)</div>
+              <div style="margin-top:10px">
+                <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-      <button id="hubSettingsToggle" class="hub-settings-toggle" type="button">Inklappen</button>
+      <div class="hub-dock-foot">
+        <button type="button" id="hubDockCloseBtn" class="hub-dock-close">Sluiten</button>
+      </div>
     </div>
-    <div class="hub-settings-body">
-      <div class="hub-settings-sub">Eén centrale accountflow voor al je Sense-apps.</div>
-      <div class="hub-auth">
-        <div class="hub-settings-sub" style="margin-bottom:8px">Hub-account (centraal): log hier 1x in voor toegang tot alle actieve Sense-apps.</div>
-        <div class="hub-auth-row">
-          <button id="hubLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
-          <button id="hubRegisterBtn" class="hub-auth-btn" type="button">Account aanmaken</button>
-          <button id="hubLogoutBtn" class="hub-auth-btn" type="button" style="display:none">Uitloggen</button>
-        </div>
-        <div id="hubAuthState" class="hub-auth-state" style="margin-top:8px">Sessie controleren…</div>
-      </div>
-      <div id="hubRoepnaamWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
-        <div class="hub-settings-sub" style="margin-bottom:8px">Roepnaam: zo spreken Sensei en de AI je aan in WhatsApp en in alle Sense-apps.</div>
-        <div class="hub-settings-row">
-          <input id="hubRoepnaamField" class="hub-input" type="text" maxlength="80" placeholder="Je roepnaam" autocomplete="nickname" aria-label="Roepnaam">
-          <button id="hubRoepnaamSave" class="hub-save" type="button">Opslaan</button>
-        </div>
-        <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
-      </div>
-      <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
-        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">WhatsApp (optioneel)</div>
-        <div class="hub-settings-sub" style="margin-bottom:6px">Vul je gsm in om WhatsApp te gebruiken.</div>
-        <div class="hub-settings-row">
-          <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon account WhatsApp">
-          <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
-        </div>
-        <div id="hubPhoneState" class="hub-state" style="margin-top:6px"></div>
-        <div class="hub-settings-sub" style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.45">Vul je gsm in om WhatsApp Sensei te activeren. (Praat /chat en geef je dossierkeuze mee voor bewaring)</div>
-        <div style="margin-top:10px">
-          <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="adminAiPanel" class="admin-panel" aria-label="Admin AI toegang" style="display:none">
-    <div class="admin-panel-head">
-      <div class="admin-panel-title">Admin · AI toegang beheren</div>
-      <button id="adminAiRefreshBtn" class="admin-refresh-btn" type="button">Vernieuwen</button>
-    </div>
-    <div class="admin-panel-sub">Nieuwe users staan standaard op wacht. Keur hier per gebruiker AI-toegang goed of trek die terug in.</div>
-    <div id="adminAiState" class="admin-state">Laden…</div>
-    <div id="adminAiList" class="admin-list"></div>
-  </section>
+  </div>
 
   <!-- App grid -->
   <p class="section-label">Sense Apps</p>
@@ -436,7 +444,7 @@ a{text-decoration:none;color:inherit}
   var d=new Date();
   var days=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 15-04-2026 14:30';
+  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 16-04-2026 15:28';
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30
@@ -458,7 +466,11 @@ a{text-decoration:none;color:inherit}
   var headerOwnPhoto=document.getElementById('headerOwnPhoto');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
-  var hubHealthPill=document.getElementById('hubHealthPill');
+  var hubPill=document.getElementById('hubPill');
+  var hubPillText=document.getElementById('hubPillText');
+  var hubDock=document.getElementById('hubDock');
+  var hubDockBackdrop=document.getElementById('hubDockBackdrop');
+  var hubDockCloseBtn=document.getElementById('hubDockCloseBtn');
   var hubAuthState=document.getElementById('hubAuthState');
   var hubRoepnaamWrap=document.getElementById('hubRoepnaamWrap');
   var hubRoepnaamField=document.getElementById('hubRoepnaamField');
@@ -486,11 +498,6 @@ a{text-decoration:none;color:inherit}
   var authPwToggleBtn=document.getElementById('authPwToggleBtn');
   var authForgotBtn=document.getElementById('authForgotBtn');
   var authCloseBtn=document.getElementById('authCloseBtn');
-  var adminAiPanel=document.getElementById('adminAiPanel');
-  var adminAiRefreshBtn=document.getElementById('adminAiRefreshBtn');
-  var adminAiState=document.getElementById('adminAiState');
-  var adminAiList=document.getElementById('adminAiList');
-  var currentAdminRole='user';
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
     if(collapsed){
@@ -508,18 +515,41 @@ a{text-decoration:none;color:inherit}
       hubSettingsCard.classList.remove('ok','warn');
       hubSettingsCard.classList.add(isOk?'ok':'warn');
     }
-    if(hubHealthPill){
-      hubHealthPill.classList.remove('ok','warn');
-      hubHealthPill.classList.add(isOk?'ok':'warn');
+    if(hubPill){
+      hubPill.classList.remove('ok','warn');
+      hubPill.classList.add(isOk?'ok':'warn');
+    }
+    if(hubPillText){
       if(isOk){
         var email=String((user&&user.email)||'').trim();
-        hubHealthPill.textContent='✓ AI toegang actief'+(email?' voor '+email:'');
+        hubPillText.textContent='✓ AI actief'+(email?' · '+email:'');
       }else if(user){
-        hubHealthPill.textContent='⏳ Wacht op AI approval';
-      }else if(!user){
-        hubHealthPill.textContent='⚠ Log in nodig';
+        hubPillText.textContent='⏳ Wacht op AI approval';
+      }else{
+        hubPillText.textContent='⚠ Log in (Hub)';
       }
     }
+  }
+  function openHubDock(){
+    if(hubDock)hubDock.classList.add('open');
+    if(hubDockBackdrop)hubDockBackdrop.classList.add('show');
+    if(hubDock){
+      hubDock.setAttribute('aria-hidden','false');
+      hubDock.style.pointerEvents='auto';
+    }
+    if(hubDockBackdrop)hubDockBackdrop.setAttribute('aria-hidden','false');
+    if(hubPill)hubPill.setAttribute('aria-expanded','true');
+  }
+  function closeHubDock(){
+    if(hubDock)hubDock.classList.remove('open');
+    if(hubDockBackdrop)hubDockBackdrop.classList.remove('show');
+    if(hubDock){
+      hubDock.setAttribute('aria-hidden','true');
+      hubDock.style.pointerEvents='none';
+    }
+    if(hubDockBackdrop)hubDockBackdrop.setAttribute('aria-hidden','true');
+    if(hubPill)hubPill.setAttribute('aria-expanded','false');
+    if(hubPill)hubPill.focus();
   }
   async function getOwnAiApproval(user){
     if(!sb||!user||!user.id)return{known:false,approved:false};
@@ -574,7 +604,24 @@ a{text-decoration:none;color:inherit}
     ringFg.style.strokeDashoffset=offset;
     miniBar.style.width=pct+'%';
   }
-  setHubSettingsCollapsed(false);
+  setHubSettingsCollapsed(true);
+  closeHubDock();
+  if(hubPill){
+    hubPill.onclick=function(){
+      var open=!!(hubDock&&hubDock.classList.contains('open'));
+      if(open)closeHubDock();
+      else openHubDock();
+    };
+  }
+  if(hubDockBackdrop){
+    hubDockBackdrop.onclick=function(){closeHubDock();};
+  }
+  if(hubDockCloseBtn){
+    hubDockCloseBtn.onclick=function(){closeHubDock();};
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closeHubDock();
+  });
   if(hubSettingsToggle){
     hubSettingsToggle.onclick=function(){
       var isCollapsed=hubSettingsCard&&hubSettingsCard.classList.contains('collapsed');
@@ -624,89 +671,6 @@ a{text-decoration:none;color:inherit}
       var res=await sb.auth.getSession();
       return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
     }catch(_e){return null;}
-  }
-  function setAdminAiState(msg,isErr){
-    if(!adminAiState)return;
-    adminAiState.textContent=msg||'';
-    adminAiState.style.color=isErr?'#B42318':'#6B7280';
-  }
-  function fmtDateTime(iso){
-    if(!iso)return'';
-    var dt=new Date(iso);
-    if(isNaN(dt.getTime()))return'';
-    return dt.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})
-      +' '+dt.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
-  }
-  async function refreshAdminRole(user){
-    currentAdminRole='user';
-    if(!sb||!user||!user.id)return currentAdminRole;
-    try{
-      var r=await sb.from('user_roles').select('role').eq('user_id',user.id).maybeSingle();
-      if(r&&r.data&&String(r.data.role||'').toLowerCase()==='admin')currentAdminRole='admin';
-    }catch(_e){}
-    return currentAdminRole;
-  }
-  function renderAdminAiRows(rows){
-    if(!adminAiList)return;
-    if(!rows||!rows.length){
-      adminAiList.innerHTML='<div class="subtle">Nog geen gebruikers gevonden.</div>';
-      return;
-    }
-    adminAiList.innerHTML=rows.map(function(r){
-      var email=String(r.email||'').trim()||('user '+String(r.user_id||'').slice(0,8));
-      var enabled=!!r.ai_enabled;
-      var statusHtml=enabled
-        ?'<span class="admin-pill ok">✓ AI actief</span>'
-        :'<span class="admin-pill warn">⏳ Wacht op approval</span>';
-      var btnHtml=enabled
-        ?'<button class="admin-action-btn revoke" type="button" data-user="'+String(r.user_id||'')+'" data-enable="0">Revoke</button>'
-        :'<button class="admin-action-btn approve" type="button" data-user="'+String(r.user_id||'')+'" data-enable="1">Approve</button>';
-      var meta=enabled
-        ?('Goedgekeurd: '+(fmtDateTime(r.approved_at)||'onbekend'))
-        :('Aangemaakt: '+(fmtDateTime(r.created_at)||'onbekend'));
-      return '<div class="admin-row">'
-        +'<div class="admin-row-main"><div class="admin-email">'+email+'</div><div class="admin-meta">'+meta+'</div></div>'
-        +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+statusHtml+btnHtml+'</div>'
-        +'</div>';
-    }).join('');
-    Array.prototype.slice.call(adminAiList.querySelectorAll('[data-user][data-enable]')).forEach(function(btn){
-      btn.addEventListener('click',async function(){
-        var uid=String(btn.getAttribute('data-user')||'').trim();
-        var enable=String(btn.getAttribute('data-enable')||'')==='1';
-        if(!uid)return;
-        btn.disabled=true;
-        setAdminAiState('Opslaan…',false);
-        try{
-          var rs=await sb.rpc('admin_set_ai_access',{p_user_id:uid,p_enabled:enable});
-          if(rs&&rs.error)throw new Error(rs.error.message||'Opslaan mislukt');
-          setAdminAiState(enable?'AI toegang goedgekeurd.':'AI toegang ingetrokken.',false);
-          await loadAdminAiPanel();
-        }catch(e){
-          setAdminAiState((e&&e.message)||'Opslaan mislukt.',true);
-        }finally{
-          btn.disabled=false;
-        }
-      });
-    });
-  }
-  async function loadAdminAiPanel(){
-    if(!adminAiPanel||currentAdminRole!=='admin'||!sb)return;
-    setAdminAiState('Laden…',false);
-    if(adminAiList)adminAiList.innerHTML='';
-    try{
-      var rs=await sb.rpc('admin_list_ai_access');
-      if(rs&&rs.error)throw new Error(rs.error.message||'Admin lijst laden mislukt');
-      renderAdminAiRows(Array.isArray(rs&&rs.data)?rs.data:[]);
-      setAdminAiState('Klik Approve/Revoke om toegang te beheren.',false);
-    }catch(e){
-      setAdminAiState((e&&e.message)||'Laden mislukt.',true);
-      if(adminAiList)adminAiList.innerHTML='<div class="subtle">Geen data geladen.</div>';
-    }
-  }
-  function escHTML(s){
-    var d=document.createElement('div');
-    d.textContent=String(s==null?'':s);
-    return d.innerHTML;
   }
   function setHubRoepnaamState(msg,isErr){
     if(!hubRoepnaamState)return;
@@ -785,13 +749,9 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
-    await refreshAdminRole(user);
     var approval={known:false,approved:false};
     if(user)approval=await getOwnAiApproval(user);
     updateHubHealthUi(user,approval);
-    if(adminAiPanel){
-      adminAiPanel.style.display=(user&&currentAdminRole==='admin')?'block':'none';
-    }
     if(user){
       var em=String(user.email||'').trim();
       if(hubAuthState){
@@ -804,7 +764,6 @@ a{text-decoration:none;color:inherit}
       if(hubLoginBtn)hubLoginBtn.style.display='none';
       if(hubRegisterBtn)hubRegisterBtn.style.display='none';
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
-      setHubSettingsCollapsed(false);
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='block';
       if(hubAccountWrap)hubAccountWrap.style.display='block';
       if(hubRoepnaamField){
@@ -819,16 +778,12 @@ a{text-decoration:none;color:inherit}
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
       if(hubRegisterBtn)hubRegisterBtn.style.display='inline-flex';
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
-      setHubSettingsCollapsed(false);
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='none';
       if(hubAccountWrap)hubAccountWrap.style.display='none';
       if(hubRoepnaamField)hubRoepnaamField.value='';
       if(hubPhoneField)hubPhoneField.value='';
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
-    }
-    if(user&&currentAdminRole==='admin'){
-      await loadAdminAiPanel();
     }
     return user;
   }
@@ -919,6 +874,7 @@ a{text-decoration:none;color:inherit}
   if(hubLogoutBtn)hubLogoutBtn.onclick=async function(){
     try{
       if(sb)await sb.auth.signOut();
+      closeHubDock();
       await refreshAuthUi();
       setAuthMsg('Je bent uitgelogd.');
     }catch(_e){
@@ -1073,9 +1029,6 @@ a{text-decoration:none;color:inherit}
       if(rr&&rr.error){setAuthMsg(rr.error.message||'Reset-link kon niet verstuurd worden.',true);return;}
       setAuthMsg('Reset-link verzonden. Check je mailbox.');
     }catch(_e){setAuthMsg('Reset-link kon niet verstuurd worden.',true);}
-  };
-  if(adminAiRefreshBtn)adminAiRefreshBtn.onclick=function(){
-    loadAdminAiPanel();
   };
   await refreshAuthUi();
   try{
