@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#AE0000">
-<meta name="admin-build" content="16-04-2026 16:05">
+<meta name="admin-build" content="16-04-2026 16:11">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -53,6 +53,16 @@ a{color:inherit}
 .prompt-card h3{font-size:12px;font-weight:900;color:#2A313A;margin-bottom:6px}
 .prompt-card textarea{width:100%;min-height:110px;border:1px solid #D9DEE5;border-radius:10px;padding:10px;font:inherit;font-size:12px;line-height:1.45;background:#FAFBFC;color:#2A313A;resize:vertical}
 .prompt-note{font-size:12px;color:#7f8790;margin:-2px 0 10px}
+.prompt-controls{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.prompt-save-btn{border:1px solid var(--r);background:var(--r);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.prompt-save-btn:disabled{opacity:.7;cursor:wait}
+.prompt-save-state{font-size:12px;color:#6B7280}
+.collapsible{padding:0;overflow:hidden}
+.collapsible-head{padding:12px 14px;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.collapsible-head::-webkit-details-marker{display:none}
+.collapsible-head h2{margin:0}
+.collapsible-body{padding:0 14px 14px}
+.collapse-kicker{font-size:11px;color:#6B7280;font-weight:700}
 .footer{margin-top:28px;text-align:center;font-size:12px;color:var(--s);line-height:1.8}
 </style>
 </head>
@@ -81,17 +91,35 @@ a{color:inherit}
     <div id="adminAiList" class="admin-list"></div>
   </section>
 
-  <section class="panel" aria-label="DateSense instellingen">
-    <h2>DateSense · AI instellingen</h2>
-    <p>Huidige actieve basisstijl en prompts uit DateSense (nu centraal zichtbaar). Bewerken volgt in volgende sprint.</p>
-    <div id="dateSensePromptGrid" class="prompt-grid"></div>
-  </section>
+  <details class="panel collapsible" aria-label="DateSense instellingen">
+    <summary class="collapsible-head">
+      <h2>DateSense · AI instellingen</h2>
+      <span class="collapse-kicker">Inklappen/uitklappen</span>
+    </summary>
+    <div class="collapsible-body">
+      <p>Specifieke DateSense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <div id="dateSensePromptGrid" class="prompt-grid"></div>
+      <div class="prompt-controls">
+        <button id="saveDatePromptsBtn" type="button" class="prompt-save-btn">Opslaan DateSense</button>
+        <div id="saveDatePromptsState" class="prompt-save-state"></div>
+      </div>
+    </div>
+  </details>
 
-  <section class="panel" aria-label="FamilySense instellingen">
-    <h2>FamilySense · AI instellingen</h2>
-    <p>Huidige actieve basisstijl en prompts uit FamilySense (nu centraal zichtbaar). Bewerken volgt in volgende sprint.</p>
-    <div id="familySensePromptGrid" class="prompt-grid"></div>
-  </section>
+  <details class="panel collapsible" aria-label="FamilySense instellingen">
+    <summary class="collapsible-head">
+      <h2>FamilySense · AI instellingen</h2>
+      <span class="collapse-kicker">Inklappen/uitklappen</span>
+    </summary>
+    <div class="collapsible-body">
+      <p>Specifieke FamilySense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <div id="familySensePromptGrid" class="prompt-grid"></div>
+      <div class="prompt-controls">
+        <button id="saveFamilyPromptsBtn" type="button" class="prompt-save-btn">Opslaan FamilySense</button>
+        <div id="saveFamilyPromptsState" class="prompt-save-state"></div>
+      </div>
+    </div>
+  </details>
 
   <footer class="footer" role="contentinfo">Sense Admin · prototype · alleen voor beheerdersaccounts</footer>
 </div>
@@ -114,6 +142,10 @@ a{color:inherit}
   var adminAiList=document.getElementById('adminAiList');
   var dateSensePromptGrid=document.getElementById('dateSensePromptGrid');
   var familySensePromptGrid=document.getElementById('familySensePromptGrid');
+  var saveDatePromptsBtn=document.getElementById('saveDatePromptsBtn');
+  var saveFamilyPromptsBtn=document.getElementById('saveFamilyPromptsBtn');
+  var saveDatePromptsState=document.getElementById('saveDatePromptsState');
+  var saveFamilyPromptsState=document.getElementById('saveFamilyPromptsState');
 
   var DATE_PROMPTS={
     advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Geen bullets en geen extra kopjes. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
@@ -140,7 +172,7 @@ a{color:inherit}
     return d.innerHTML;
   }
 
-  function renderPromptGrid(mount,prompts,note){
+  function renderPromptGrid(mount,prompts,note,appKey){
     if(!mount)return;
     var keys=Object.keys(prompts||{});
     if(!keys.length){
@@ -152,7 +184,7 @@ a{color:inherit}
       return '<div class="prompt-card">'
         +'<h3>'+escHTML(key)+'</h3>'
         +noteHtml
-        +'<textarea readonly>'+escHTML(String(prompts[key]||''))+'</textarea>'
+        +'<textarea data-app="'+escHTML(appKey||'')+'" data-prompt-key="'+escHTML(key)+'">'+escHTML(String(prompts[key]||''))+'</textarea>'
         +'</div>';
     }).join('');
   }
@@ -173,6 +205,49 @@ a{color:inherit}
       }catch(_e){}
     }
     return{};
+  }
+  async function loadSavedPromptSet(storageKey){
+    if(!sb)return null;
+    try{
+      var rs=await sb.from('app_admin_settings').select('value').eq('key',storageKey).maybeSingle();
+      if(rs&&rs.error)throw new Error(rs.error.message||'Laden mislukt');
+      var v=rs&&rs.data&&rs.data.value&&typeof rs.data.value==='object'?rs.data.value:null;
+      return v;
+    }catch(e){
+      console.warn('loadSavedPromptSet',storageKey,e);
+      return null;
+    }
+  }
+  function collectPromptGrid(mount){
+    var out={};
+    if(!mount)return out;
+    Array.prototype.slice.call(mount.querySelectorAll('textarea[data-prompt-key]')).forEach(function(ta){
+      var k=String(ta.getAttribute('data-prompt-key')||'').trim();
+      if(!k)return;
+      out[k]=String(ta.value||'').trim();
+    });
+    return out;
+  }
+  function setSaveState(el,msg,isErr){
+    if(!el)return;
+    el.textContent=msg||'';
+    el.style.color=isErr?'#B42318':'#6B7280';
+  }
+  async function savePromptSet(storageKey,appKey,mount,stateEl,btn,user){
+    if(!sb||!user||!user.id)return;
+    var payload=collectPromptGrid(mount);
+    btn.disabled=true;
+    setSaveState(stateEl,'Opslaan…',false);
+    try{
+      var body={key:storageKey,app:appKey,value:payload,updated_by:user.id,updated_at:new Date().toISOString()};
+      var up=await sb.from('app_admin_settings').upsert(body,{onConflict:'key'});
+      if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+      setSaveState(stateEl,'Opgeslagen.',false);
+    }catch(e){
+      setSaveState(stateEl,(e&&e.message)||'Opslaan mislukt.',true);
+    }finally{
+      btn.disabled=false;
+    }
   }
 
   function setGate(msg){
@@ -290,19 +365,33 @@ a{color:inherit}
     }
     if(adminAiPanel)adminAiPanel.style.display='block';
     var legacyOverrides=readLegacyPromptOverrides(user);
+    var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
+    var savedFamilyPrompts=await loadSavedPromptSet('prompts_familysense');
     var legacyKeys=Object.keys(legacyOverrides);
     var hasLegacy=legacyKeys.length>0;
     var datePrompts=Object.assign({},DATE_PROMPTS);
     var familyPrompts=Object.assign({},FAMILY_PROMPTS);
+    if(savedDatePrompts&&typeof savedDatePrompts==='object')datePrompts=Object.assign({},datePrompts,savedDatePrompts);
+    if(savedFamilyPrompts&&typeof savedFamilyPrompts==='object')familyPrompts=Object.assign({},familyPrompts,savedFamilyPrompts);
     legacyKeys.forEach(function(k){
       var v=String(legacyOverrides[k]||'').trim();
       if(!v)return;
-      if(Object.prototype.hasOwnProperty.call(datePrompts,k))datePrompts[k]=v;
-      if(Object.prototype.hasOwnProperty.call(familyPrompts,k))familyPrompts[k]=v;
+      if(!savedDatePrompts&&Object.prototype.hasOwnProperty.call(datePrompts,k))datePrompts[k]=v;
+      if(!savedFamilyPrompts&&Object.prototype.hasOwnProperty.call(familyPrompts,k))familyPrompts[k]=v;
     });
-    var note=hasLegacy?'Toont opgeslagen legacy-overrides uit je browser (indien aanwezig), anders app-defaults.':'Toont app-defaults (geen legacy override gevonden).';
-    renderPromptGrid(dateSensePromptGrid,datePrompts,note);
-    renderPromptGrid(familySensePromptGrid,familyPrompts,note);
+    var note='Bron: centrale admin settings'+(hasLegacy?' (fallback naar legacy browser-overrides als er nog niets centraal staat).':'.');
+    renderPromptGrid(dateSensePromptGrid,datePrompts,note,'datesense');
+    renderPromptGrid(familySensePromptGrid,familyPrompts,note,'familysense');
+    if(saveDatePromptsBtn){
+      saveDatePromptsBtn.onclick=function(){
+        savePromptSet('prompts_datesense','datesense',dateSensePromptGrid,saveDatePromptsState,saveDatePromptsBtn,user);
+      };
+    }
+    if(saveFamilyPromptsBtn){
+      saveFamilyPromptsBtn.onclick=function(){
+        savePromptSet('prompts_familysense','familysense',familySensePromptGrid,saveFamilyPromptsState,saveFamilyPromptsBtn,user);
+      };
+    }
     await loadAdminAiPanel();
     if(adminAiRefreshBtn){
       adminAiRefreshBtn.onclick=function(){loadAdminAiPanel();};
