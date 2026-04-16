@@ -1342,6 +1342,7 @@ const LEGACY_FAMILIE_ROL_LABELS={
 var S={
   user:null,
   adminRole:'user',
+  // Backward-compat: legacy flows checken op truthy apiKey, terwijl AI via server-side gateway loopt.
   apiKey:localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'',
   adviceTone:'eerlijk',
   screen:'home',prev:'home',
@@ -3350,6 +3351,7 @@ async function init(){
     var session=sessionRes&&sessionRes.data&&sessionRes.data.session;
     if(session){
       S.user=session.user;
+      if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       initSessie(); // Na auth — sessie aanmaken
@@ -3366,10 +3368,12 @@ async function init(){
   sb.auth.onAuthStateChange(async(ev,ses)=>{
     if(ev==='SIGNED_IN'&&ses){
       S.user=ses.user;
+      if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       goScreen('home');
     } else if(ev==='SIGNED_OUT'){
+      S.apiKey='';
       applySignedOutClientState();
       redirectToSenseCornerAuth();
     }
@@ -8255,7 +8259,7 @@ function rSettings(el){
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data')
     +renderSettingsTile('🗑️','Wis alle dossiers','Verwijder alle familiedossiers definitief','wipe-dossiers');
 
-  var hubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
+  var hubKey='server-side';
   el.innerHTML=`<div style="padding:32px 20px">
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">FamilySense instellingen</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:12px">Algemene account- en API-instellingen beheer je centraal in SenseCorner Hub.</p>
@@ -8263,7 +8267,7 @@ function rSettings(el){
   <button type="button" class="coach-save-other" onclick="window.location.href='sensecorner.html'" style="font-size:13px;padding:8px 12px">🏠 Open Hub-instellingen</button>
   <button type="button" class="coach-save-other" onclick="openOwnSenseEntryPoint()" style="font-size:13px;padding:8px 12px">📥 Import beheren in OWN Sense</button>
 </div>
-<div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Hub API-key status: <strong>${hubKey?'actief':'niet ingesteld'}</strong>. FamilySense gebruikt automatisch dezelfde key.</div>
+<div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">AI draait via server-side Hub-config. Lokale API-key is niet nodig.</div>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:10px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: warm, direct en eerlijk — zonder scores of «aandachtspunten»-percentages.</div>
 <button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
@@ -8367,7 +8371,8 @@ async function saveSettings(){
   var btn=document.getElementById('btnSaveSettings');
   setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
   try{
-    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'').trim();
+    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+    if(!S.apiKey && S.user)S.apiKey='hub_server_managed';
     toast('✅ Instellingen opgeslagen');
     goScreen('settings');
   }catch(e){

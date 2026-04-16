@@ -1346,6 +1346,7 @@ const OWN_CATS=[
 var S={
   user:null,
   adminRole:'user',
+  // Backward-compat: veel legacy guards checken enkel op truthy apiKey, terwijl callAPI server-side via Supabase loopt.
   apiKey:localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'',
   adviceTone:'eerlijk',
   screen:'home',prev:'home',
@@ -3206,6 +3207,7 @@ async function init(){
     var {data:{session}}=await sb.auth.getSession();
     if(session){
       S.user=session.user;
+      if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       initSessie(); // Na auth — sessie aanmaken
@@ -3222,10 +3224,12 @@ async function init(){
   sb.auth.onAuthStateChange(async(ev,ses)=>{
     if(ev==='SIGNED_IN'&&ses){
       S.user=ses.user;
+      if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       goScreen('home');
     } else if(ev==='SIGNED_OUT'){
+      S.apiKey='';
       applySignedOutClientState();
       redirectToSenseCornerAuth();
     }
@@ -8644,7 +8648,7 @@ function rSettings(el){
     +renderSettingsTile('🔁','Hulp opnieuw tonen','Rondleiding + uitlegballonnetjes resetten','help-reset')
     +renderSettingsTile('👤','Mijn gegevens','Profielgegevens openen','my-data');
 
-  var hubKey=String(localStorage.getItem('anthropic_api_key')||'').trim();
+  var hubKey='server-side';
   el.innerHTML=`<div style="padding:32px 20px">
 <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">DateSense instellingen</div>
 <p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:12px">Algemene account- en API-instellingen beheer je centraal in SenseCorner Hub.</p>
@@ -8652,7 +8656,7 @@ function rSettings(el){
   <button type="button" class="coach-save-other" onclick="window.location.href='sensecorner.html'" style="font-size:13px;padding:8px 12px">🏠 Open Hub-instellingen</button>
   <button type="button" class="coach-save-other" onclick="openOwnSenseEntryPoint()" style="font-size:13px;padding:8px 12px">📥 Import beheren in OWN Sense</button>
 </div>
-<div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Hub API-key status: <strong>${hubKey?'actief':'niet ingesteld'}</strong>. DateSense gebruikt automatisch dezelfde key.</div>
+<div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">AI draait via server-side Hub-config. Lokale API-key is niet nodig.</div>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:10px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: standaard empathisch en eerlijk, met automatische verstrenging bij verhoogde red flags.</div>
 <div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Gebruiksmode</div>
 <select class="form-input" id="usageModeField" aria-label="Gebruiksmode">
@@ -8789,7 +8793,8 @@ async function saveSettings(){
       style:(document.getElementById('focusBoostStyleField')||{}).value||'',
       time:(document.getElementById('focusBoostTimeField')||{}).value||''
     };
-    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'').trim();
+    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+    if(!S.apiKey && S.user)S.apiKey='hub_server_managed';
     S.adviceTone='eerlijk';
     localStorage.removeItem('ds_advice_tone');
     setUsageMode(usage);
