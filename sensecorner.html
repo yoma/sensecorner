@@ -292,9 +292,8 @@ a{text-decoration:none;color:inherit}
         <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
       </div>
       <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #E6E8ED">
-        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">Account · gsm voor WhatsApp (optioneel)</div>
-        <div id="hubOwnPreview" class="hub-state" style="margin-bottom:10px;line-height:1.55;color:#374151"></div>
-        <div class="hub-settings-sub" style="margin-bottom:6px">Gsm alleen invullen als je WhatsApp wilt gebruiken (E.164, zelfde als in WhatsApp). Leeg laten = geen koppeling.</div>
+        <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:800;color:#2A313A">WhatsApp (optioneel)</div>
+        <div class="hub-settings-sub" style="margin-bottom:6px">Vul je gsm in om WhatsApp te gebruiken.</div>
         <div class="hub-settings-row">
           <input id="hubPhoneField" class="hub-input" type="tel" inputmode="tel" maxlength="20" placeholder="+32471234567" autocomplete="tel" aria-label="Telefoon account WhatsApp">
           <button id="hubPhoneSave" class="hub-save" type="button">Nummer opslaan</button>
@@ -474,7 +473,6 @@ a{text-decoration:none;color:inherit}
   var hubRoepnaamSave=document.getElementById('hubRoepnaamSave');
   var hubRoepnaamState=document.getElementById('hubRoepnaamState');
   var hubAccountWrap=document.getElementById('hubAccountWrap');
-  var hubOwnPreview=document.getElementById('hubOwnPreview');
   var hubPhoneField=document.getElementById('hubPhoneField');
   var hubPhoneSave=document.getElementById('hubPhoneSave');
   var hubPhoneState=document.getElementById('hubPhoneState');
@@ -757,44 +755,23 @@ a{text-decoration:none;color:inherit}
     return msg||'Opslaan mislukt.';
   }
   async function refreshHubOwnPreview(user){
-    if(!hubOwnPreview)return;
     if(!sb||!user||!user.id){
-      hubOwnPreview.textContent='';
       return;
     }
-    hubOwnPreview.textContent='Laden…';
     try{
-      var res=await sb.from('sense_profiles').select('props,user_id').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
-      if(res&&res.error)throw new Error(res.error.message||'Laden mislukt');
-      var row=res&&res.data;
-      var ap=await sb.from('account_phone').select('phone,updated_at,whatsapp_mirror_dossier,whatsapp_mirror_offer_dossier').eq('user_id',user.id).maybeSingle();
+      var ap=await sb.from('account_phone').select('phone').eq('user_id',user.id).maybeSingle();
       if(ap&&ap.error){
         var am=String(ap.error.message||'');
         if(/relation|does not exist|42P01/i.test(am)){
           throw new Error('Tabel account_phone ontbreekt. Voer het SQL-script sql/account_phone.sql uit in Supabase.');
         }
-        if(/whatsapp_mirror_dossier|whatsapp_mirror_offer_dossier|column|does not exist/i.test(am)){
-          ap=await sb.from('account_phone').select('phone,updated_at').eq('user_id',user.id).maybeSingle();
-        }else if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
+        if(!/No rows|not found|JSON object|0 rows|PGRST116/i.test(am))throw new Error(am||'account_phone laden mislukt');
       }
-      var p=(row&&row.props&&typeof row.props==='object')?row.props:{};
-      var pm=(p.meta&&typeof p.meta==='object')?p.meta:{};
-      var rn=String(p.roepnaam||pm.roepnaam||'').trim();
-      var dn=String(p.display_name||pm.display_name||p.full_name||pm.full_name||'').trim();
       var ph=String(ap&&ap.data&&ap.data.phone||'').trim();
-      var waD=String(ap&&ap.data&&ap.data.whatsapp_mirror_dossier||'').trim()||'OWN Sense';
-      var waOffer=String(ap&&ap.data&&ap.data.whatsapp_mirror_offer_dossier||'').trim();
       if(hubPhoneField)hubPhoneField.value=ph||'';
-      var bits=[];
-      bits.push('<strong>Account-e-mail:</strong> '+escHTML(String(user.email||'').trim()||'(leeg)'));
-      bits.push('<strong>Roepnaam / weergave in OWN Sense:</strong> '+(dn||rn?escHTML(dn||rn):'(leeg)'));
-      bits.push('<strong>Gsm in je account (WhatsApp):</strong> '+(ph?escHTML(ph):'<span style="color:#6B7280">niet ingesteld (optioneel)</span>'));
-      bits.push('<strong>WhatsApp-status:</strong> '+(ph?'actief op dit nummer':'niet actief (vul gsm in)'));
-      bits.push('<strong>Huidig WhatsApp-dossier:</strong> '+escHTML(waD));
-      if(waOffer)bits.push('<strong>Openstaande vraag (WhatsApp):</strong> wacht op je keuze in chat voor «'+escHTML(waOffer)+'»');
-      hubOwnPreview.innerHTML=bits.join('<br>');
+      // Compact houden: alleen input en statusmeldingen tonen, geen technische/extra previewregels.
     }catch(e){
-      hubOwnPreview.textContent=(e&&e.message)||'Kon OWN Sense niet laden.';
+      console.warn('refreshHubOwnPreview', (e&&e.message)||e);
     }
   }
   async function persistRoepnaamToOwnSenseProfile(uid,val){
@@ -850,7 +827,6 @@ a{text-decoration:none;color:inherit}
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='none';
       if(hubAccountWrap)hubAccountWrap.style.display='none';
       if(hubRoepnaamField)hubRoepnaamField.value='';
-      if(hubOwnPreview)hubOwnPreview.textContent='';
       if(hubPhoneField)hubPhoneField.value='';
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
