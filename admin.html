@@ -48,6 +48,11 @@ a{color:inherit}
 .admin-action-btn{border:1px solid #D9DEE5;background:#fff;color:#2A313A;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
 .admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
 .admin-action-btn.revoke{background:#FFF4F4;border-color:#F6C7C7;color:#9B1C1C}
+.prompt-grid{display:grid;gap:10px}
+.prompt-card{border:1px solid #E5E7EB;border-radius:12px;padding:10px;background:#fff}
+.prompt-card h3{font-size:12px;font-weight:900;color:#2A313A;margin-bottom:6px}
+.prompt-card textarea{width:100%;min-height:110px;border:1px solid #D9DEE5;border-radius:10px;padding:10px;font:inherit;font-size:12px;line-height:1.45;background:#FAFBFC;color:#2A313A;resize:vertical}
+.prompt-note{font-size:12px;color:#7f8790;margin:-2px 0 10px}
 .footer{margin-top:28px;text-align:center;font-size:12px;color:var(--s);line-height:1.8}
 </style>
 </head>
@@ -76,22 +81,16 @@ a{color:inherit}
     <div id="adminAiList" class="admin-list"></div>
   </section>
 
-  <section class="panel" aria-label="DateSense instellingen placeholder">
-    <h2>DateSense · AI instellingen (placeholder)</h2>
-    <p>Specifieke AI-regels voor DateSense: toon, grenzen, prompt-varianten en eventuele risicomodulatie.</p>
-    <div class="placeholder" role="status">
-      <h3>Nog niet geïmplementeerd</h3>
-      <p>Voorzien als aparte sectie zodat DateSense-instellingen los beheerd kunnen worden van FamilySense.</p>
-    </div>
+  <section class="panel" aria-label="DateSense instellingen">
+    <h2>DateSense · AI instellingen</h2>
+    <p>Huidige actieve basisstijl en prompts uit DateSense (nu centraal zichtbaar). Bewerken volgt in volgende sprint.</p>
+    <div id="dateSensePromptGrid" class="prompt-grid"></div>
   </section>
 
-  <section class="panel" aria-label="FamilySense instellingen placeholder">
-    <h2>FamilySense · AI instellingen (placeholder)</h2>
-    <p>Specifieke AI-regels voor FamilySense: warmere toon, gezinscontext en app-specifieke prompts.</p>
-    <div class="placeholder" role="status">
-      <h3>Nog niet geïmplementeerd</h3>
-      <p>Deze sectie blijft bewust klaarstaan voor de volgende sprint met FamilySense-specifieke controls.</p>
-    </div>
+  <section class="panel" aria-label="FamilySense instellingen">
+    <h2>FamilySense · AI instellingen</h2>
+    <p>Huidige actieve basisstijl en prompts uit FamilySense (nu centraal zichtbaar). Bewerken volgt in volgende sprint.</p>
+    <div id="familySensePromptGrid" class="prompt-grid"></div>
   </section>
 
   <footer class="footer" role="contentinfo">Sense Admin · prototype · alleen voor beheerdersaccounts</footer>
@@ -113,6 +112,68 @@ a{color:inherit}
   var adminAiRefreshBtn=document.getElementById('adminAiRefreshBtn');
   var adminAiState=document.getElementById('adminAiState');
   var adminAiList=document.getElementById('adminAiList');
+  var dateSensePromptGrid=document.getElementById('dateSensePromptGrid');
+  var familySensePromptGrid=document.getElementById('familySensePromptGrid');
+
+  var DATE_PROMPTS={
+    advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Geen bullets en geen extra kopjes. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
+    tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
+    tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
+    tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
+    planner_core:'Je bent DateSensei. Geef exact 1 Nederlands planvoorstel. Schrijf warm, volwassen, vloeiend en premium. GEEN virtuele of symbolische voorstellen. Gebruik herkenbare buurten/pleinen/straten/kaaien/stationsomgevingen (geen vage "in de buurt van"). Formaat strikt: deze labels op aparte regels: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+    planner_fallback:'Je bent DateSensei. Geef exact 1 creatief, concreet en haalbaar plan in het Nederlands. Geen virtuele voorstellen. Gebruik hetzelfde strikte label-formaat: Titel:, Waarom dit past:, Hoe het eruitziet:, Praktisch:, Beste moment:, Voorbereiding:, Mooiste extra:, Let op:.',
+    compare_core:'Je bent DateSensei. Vergelijk 2-3 dossiers side-by-side. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|), geen score-rijen. Herhaal GEEN percentages/eigenschappen die al in de tabel erboven staan; verwijs er kort naar. Gebruik OOK recente context en vermijd feitelijke fouten over wat al gebeurd is. Structuur exact zo: "Conclusie:" (1 korte alinea), "Waarom:" (2-4 bullets), "Aanbeveling:" (1 concrete volgende stap). Max 6 zinnen totaal. Nederlands.',
+    photo_analysis_core:'Je bent DateSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
+  };
+  var FAMILY_PROMPTS={
+    advice_core:'Je bent FamilySensei — een warme, directe familievriend met inhoudelijke kennis. Je advies is evidence-informed: je baseert je op algemeen erkende inzichten uit opvoeding, communicatie en gezinsdynamiek (zoals je die in boeken of officiele richtlijnen terugvindt), maar je legt alles uit in heel eenvoudige, niet-technische taal. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Noem geen pseudo-bronnen of verzonnen studies; als iets onzeker is, benoem dat eerlijk en blijf praktisch. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Maximaal 8 zinnen. Geen gestructureerde regels zoals AANDACHTSPUNTEN: of ACTIES:.',
+    tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
+    tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
+    tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
+    compare_core:'Je bent FamilySensei. Analyseer de dossiers en geef concrete, praktische adviezen over de familiedynamiek en hoe de gebruiker beter kan omgaan met de genoemde personen. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea over de dynamiek), "Aandachtspunten:" (2-3 bullets met concrete observaties), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
+    photo_analysis_core:'Je bent FamilySensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
+  };
+
+  function escHTML(s){
+    var d=document.createElement('div');
+    d.textContent=String(s==null?'':s);
+    return d.innerHTML;
+  }
+
+  function renderPromptGrid(mount,prompts,note){
+    if(!mount)return;
+    var keys=Object.keys(prompts||{});
+    if(!keys.length){
+      mount.innerHTML='<div class="subtle">Geen promptdata gevonden.</div>';
+      return;
+    }
+    var noteHtml=note?'<div class="prompt-note">'+escHTML(note)+'</div>':'';
+    mount.innerHTML=keys.map(function(key){
+      return '<div class="prompt-card">'
+        +'<h3>'+escHTML(key)+'</h3>'
+        +noteHtml
+        +'<textarea readonly>'+escHTML(String(prompts[key]||''))+'</textarea>'
+        +'</div>';
+    }).join('');
+  }
+
+  function readLegacyPromptOverrides(user){
+    if(!user)return{};
+    var candidates=[
+      'ds_prompt_overrides::'+String(user.id||''),
+      'ds_prompt_overrides::'+String(user.email||''),
+      'ds_prompt_overrides::guest'
+    ];
+    for(var i=0;i<candidates.length;i++){
+      var raw=localStorage.getItem(candidates[i]);
+      if(!raw)continue;
+      try{
+        var obj=JSON.parse(raw);
+        if(obj&&typeof obj==='object')return obj;
+      }catch(_e){}
+    }
+    return{};
+  }
 
   function setGate(msg){
     if(!adminGate)return;
@@ -228,6 +289,20 @@ a{color:inherit}
       return;
     }
     if(adminAiPanel)adminAiPanel.style.display='block';
+    var legacyOverrides=readLegacyPromptOverrides(user);
+    var legacyKeys=Object.keys(legacyOverrides);
+    var hasLegacy=legacyKeys.length>0;
+    var datePrompts=Object.assign({},DATE_PROMPTS);
+    var familyPrompts=Object.assign({},FAMILY_PROMPTS);
+    legacyKeys.forEach(function(k){
+      var v=String(legacyOverrides[k]||'').trim();
+      if(!v)return;
+      if(Object.prototype.hasOwnProperty.call(datePrompts,k))datePrompts[k]=v;
+      if(Object.prototype.hasOwnProperty.call(familyPrompts,k))familyPrompts[k]=v;
+    });
+    var note=hasLegacy?'Toont opgeslagen legacy-overrides uit je browser (indien aanwezig), anders app-defaults.':'Toont app-defaults (geen legacy override gevonden).';
+    renderPromptGrid(dateSensePromptGrid,datePrompts,note);
+    renderPromptGrid(familySensePromptGrid,familyPrompts,note);
     await loadAdminAiPanel();
     if(adminAiRefreshBtn){
       adminAiRefreshBtn.onclick=function(){loadAdminAiPanel();};
