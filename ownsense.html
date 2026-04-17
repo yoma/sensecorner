@@ -3,21 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="17-04-2026 20:11">
+<meta name="theme-color" content="#6B8E6F">
+<meta name="os-build" content="17-04-2026 21:00">
 <title>OWN Sense HUB</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 :root{
-  --accent:#B11F1F;
-  --accent-soft:#FAEAEA;
-  --bg:#F7F5F2;
-  --text:#1E1E1E;
-  --muted:#6E7177;
-  --border:rgba(40,40,40,.16);
-  --white:#FFFFFF;
+  /* SenseCorner design Pad A — tokens (design/SenseCorner_designbrief_cursorprompt_v2.md) */
+  --cream:#F2E8D5;
+  --chocolade:#3D2F1F;
+  --warm-bruin:#8A7560;
+  --ivoor:#FFFFFF;
+  --sage-donker:#6B8E6F;
+  --sage-medium:#A5B894;
+  --sage-licht:#C8D4B5;
+  --zand-medium:#D9C9A8;
+  --zand-licht:#E4D7B8;
+  --date-donker:#BA5654;
+  --date-medium:#D68E8C;
+  --date-licht:#E8BBB9;
+  --family-donker:#7D6AAB;
+  --family-medium:#AEA0C9;
+  --family-licht:#D0C7DF;
+  --app-donker:var(--sage-donker);
+  --app-medium:var(--sage-medium);
+  --app-licht:var(--sage-licht);
+  --radius-card:18px;
+  --radius-card-lg:22px;
+  --font-sans:'DM Sans',system-ui,sans-serif;
+  --font-serif:'Lora',Georgia,serif;
+  /* Legacy namen — mappen op het nieuwe palet zodat bestaande CSS blijft werken */
+  --accent:var(--app-donker);
+  --accent-soft:rgba(107,142,111,.14);
+  --bg:var(--cream);
+  --text:var(--chocolade);
+  --muted:var(--warm-bruin);
+  --border:rgba(61,47,31,.14);
+  --white:var(--ivoor);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 /* Mobiel (iOS Safari): display:none + programmatic .click() opent vaak geen kiezer. */
@@ -35,27 +59,48 @@
 }
 html,body{
   height:100%;
-  font-family:'DM Sans',sans-serif;
+  font-family:var(--font-sans);
   background:var(--bg);
   color:var(--text);
   -webkit-font-smoothing:antialiased;
 }
 .app{
-  max-width:760px;
+  position:relative;
+  max-width:420px;
   margin:0 auto;
   min-height:100%;
-  padding:0 14px 28px;
+  padding:0 22px 28px;
+  z-index:1;
 }
+/* Achtergrond-rimpel (max. 1 set = 3 ringen) — hoek rechtsboven */
+.sc-rimpel-bg{
+  position:fixed;
+  top:0;
+  right:max(0px,calc(50% - 210px));
+  width:200px;
+  height:200px;
+  pointer-events:none;
+  z-index:0;
+}
+.sc-rimpel-bg .sc-rimpel{
+  position:absolute;
+  border-radius:50%;
+  right:0;
+  top:0;
+}
+.sc-rimpel-bg .sc-rimpel--a{width:200px;height:200px;background:var(--app-licht);transform:translate(36%,-54%);}
+.sc-rimpel-bg .sc-rimpel--b{width:184px;height:184px;background:var(--app-medium);transform:translate(40%,-50%);}
+.sc-rimpel-bg .sc-rimpel--c{width:164px;height:164px;background:var(--app-donker);transform:translate(44%,-46%);}
 .topbar{
   position:sticky;
   top:0;
   z-index:20;
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
-  background:rgba(247,245,242,.78);
-  border-bottom:0.5px solid rgba(35,35,35,.14);
-  margin:0 -14px;
-  padding:14px 14px 0;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  background:rgba(242,232,213,.88);
+  border-bottom:0.5px solid var(--border);
+  margin:0 -22px;
+  padding:14px 22px 0;
 }
 .top-row{
   display:grid;
@@ -65,21 +110,23 @@ html,body{
 }
 .top-title{
   text-align:center;
-  font-family:'Lora',serif;
+  font-family:var(--font-serif);
   font-size:20px;
+  font-weight:600;
   letter-spacing:-.02em;
+  color:var(--chocolade);
 }
 .hub-badge{
   justify-self:end;
   display:inline-flex;
   align-items:center;
   border-radius:999px;
-  border:0.5px solid #E2B0B0;
-  background:var(--accent-soft);
-  color:var(--accent);
-  font-size:11px;
-  font-weight:800;
-  letter-spacing:.08em;
+  border:0.5px solid rgba(107,142,111,.35);
+  background:rgba(200,212,181,.35);
+  color:var(--chocolade);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:.1em;
   text-transform:uppercase;
   padding:6px 10px;
 }
@@ -92,35 +139,36 @@ html,body{
 .quick-nav-btn{
   border:0.5px solid var(--border);
   border-radius:999px;
-  background:#FFFFFFC9;
-  color:#5C6068;
+  background:rgba(255,255,255,.88);
+  color:var(--warm-bruin);
   font:inherit;
   font-size:11px;
-  font-weight:700;
-  padding:5px 10px;
+  font-weight:500;
+  padding:6px 11px;
   cursor:pointer;
 }
 .tabs{
   display:flex;
-  gap:8px;
+  gap:6px;
   padding:12px 0 10px;
 }
 .tab-btn{
   flex:1;
   border:0.5px solid var(--border);
-  border-radius:12px 12px 0 0;
-  background:#FFFFFFB8;
-  color:#4A4E55;
+  border-radius:14px 14px 0 0;
+  background:rgba(255,255,255,.72);
+  color:var(--warm-bruin);
   font:inherit;
-  font-size:14px;
-  font-weight:700;
-  padding:10px 8px;
+  font-size:13px;
+  font-weight:500;
+  padding:10px 6px;
   cursor:pointer;
 }
 .tab-btn.active{
-  color:var(--accent);
-  background:var(--white);
-  border-color:#E9C3BF;
+  color:var(--app-donker);
+  background:var(--ivoor);
+  border-color:rgba(107,142,111,.4);
+  font-weight:600;
 }
 .onboarding-shell{
   margin-top:14px;
@@ -153,8 +201,9 @@ html,body{
   font-weight:700;
   cursor:pointer;
 }
-.btn-primary{background:var(--accent);color:#fff}
-.btn-muted{background:#F0EEEA;color:#4F545C}
+.btn-primary{background:var(--chocolade);color:var(--cream)}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-muted{background:rgba(255,255,255,.75);color:var(--chocolade);border:0.5px solid var(--border)}
 .tab-panel{display:none;padding-top:14px}
 .tab-panel.active{display:block}
 .card{
@@ -165,9 +214,11 @@ html,body{
   margin-bottom:12px;
 }
 .card h3{
-  font-family:'Lora',serif;
-  font-size:19px;
+  font-family:var(--font-serif);
+  font-size:18px;
+  font-weight:600;
   margin-bottom:10px;
+  color:var(--chocolade);
 }
 .placeholder{
   font-size:14px;
@@ -181,23 +232,23 @@ html,body{
 }
 .avatar{
   width:60px;height:60px;border-radius:50%;
-  background:#EFE8E6;border:0.5px solid #DDCBC7;
+  background:var(--chocolade);border:none;
   display:flex;align-items:center;justify-content:center;
-  overflow:hidden;font-weight:800;color:#7D3A32;
+  overflow:hidden;font-weight:500;color:var(--cream);
 }
 .avatar img{width:100%;height:100%;object-fit:cover}
 .avatar.has-photo{cursor:zoom-in}
-.hero-title{font-size:18px;font-weight:800}
+.hero-title{font-size:17px;font-weight:600;color:var(--chocolade)}
 .hero-sub{font-size:12px;color:var(--muted);margin-top:2px}
 .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.chip{padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700;border:0.5px solid #E7C7C2;background:#FFF8F7;color:#B24537}
+.chip{padding:5px 9px;border-radius:999px;font-size:11px;font-weight:500;border:0.5px solid rgba(107,142,111,.35);background:rgba(200,212,181,.25);color:var(--chocolade)}
 .field{width:100%;border:0.5px solid #D9CFCB;border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;margin-top:10px}
 .field-readonly{background:#FAFAFA;color:#4F545C;cursor:default;line-height:1.4}
 .subtle{font-size:12px;color:var(--muted)}
 .bar-row{margin:9px 0}
 .bar-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
 .bar-track{height:7px;background:#EFEAE7;border-radius:999px;overflow:hidden}
-.bar-fill{height:100%;background:var(--accent);border-radius:999px}
+.bar-fill{height:100%;background:var(--app-donker);border-radius:999px}
 .qcat{
   border:0.5px solid #E1D5D2;border-radius:14px;padding:11px;margin-top:10px;
 }
@@ -275,7 +326,7 @@ html,body{
   border:0.5px solid #DEC8C4;border-radius:999px;background:#fff;padding:6px 10px;white-space:nowrap;
   font-size:12px;font-weight:700;cursor:pointer;color:#6B4E49;
 }
-.pill.active{background:#FCECEA;color:#B24134;border-color:#E7B9B1}
+.pill.active{background:rgba(200,212,181,.35);color:var(--chocolade);border-color:rgba(107,142,111,.45)}
 .ins-card{
   border:0.5px solid #E3D8D5;border-radius:14px;background:#fff;padding:12px;margin-top:10px;
 }
@@ -296,7 +347,7 @@ html,body{
 .mini-fill{height:100%;background:#B74D3F;border-radius:999px}
 .new-dot{
   display:inline-flex;align-items:center;justify-content:center;
-  min-width:18px;height:18px;border-radius:999px;background:#B11F1F;color:#fff;font-size:10px;font-weight:800;margin-left:6px;
+  min-width:18px;height:18px;border-radius:999px;background:var(--app-donker);color:var(--cream);font-size:10px;font-weight:600;margin-left:6px;
 }
 .img-preview-overlay{position:fixed;inset:0;background:rgba(10,12,16,.72);display:none;align-items:center;justify-content:center;z-index:2300;padding:20px}
 .img-preview-overlay.show{display:flex}
@@ -318,24 +369,38 @@ html,body{
 }
 .import-tabs{display:flex;gap:6px}
 .import-tab{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fafbfc;font-size:12px;font-weight:700;cursor:pointer}
-.import-tab.active{background:var(--accent-soft);border-color:#E7B9B1;color:var(--accent)}
+.import-tab.active{background:rgba(200,212,181,.35);border-color:rgba(107,142,111,.4);color:var(--app-donker)}
 .import-help{font-size:12px;line-height:1.55;color:#50555D;border:0.5px solid var(--border);border-radius:10px;background:#F8F7F5;padding:10px}
-.import-review-label{font-size:11px;font-weight:800;color:#7A2A21;margin:9px 0 4px}
+.import-review-label{font-size:11px;font-weight:600;color:var(--warm-bruin);margin:9px 0 4px;letter-spacing:.02em}
 .import-review-ta{width:100%;min-height:56px;border:0.5px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;resize:vertical}
 .import-status{font-size:12px;color:#6E7177;line-height:1.45;min-height:18px}
 .import-status.err{color:#9F2A20}
-.mij-summary{font-family:'Lora',serif;font-size:17px;line-height:1.7;color:#3A3E45}
+.ai-text{
+  font-family:var(--font-serif);
+  font-style:italic;
+  font-weight:400;
+  line-height:1.55;
+  color:var(--chocolade);
+}
+.micro-label{
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.4px;
+  text-transform:uppercase;
+  color:var(--warm-bruin);
+}
+.mij-summary{font-family:var(--font-serif);font-size:16px;font-style:italic;font-weight:400;line-height:1.55;color:var(--chocolade)}
 .pending-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#FFF0DC;border:1px solid #F0C78D;color:#A24F0A;font-size:12px;font-weight:800;cursor:pointer}
 .dim-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid #E6DCD7;background:#FAF8F6;font-size:11px;font-weight:700;color:#6F737B;margin:4px 6px 0 0}
 .cat-open{border:1px solid #E8D7D2;border-radius:12px;padding:10px 12px;background:#FFFEFD}
 .cat-open h4{font-size:14px;margin-bottom:8px}
-.cat-open p{font-family:'Lora',serif;font-size:15px;line-height:1.65;color:#3A3E44;white-space:pre-wrap}
+.cat-open p{font-family:var(--font-serif);font-size:15px;line-height:1.65;color:var(--chocolade);white-space:pre-wrap}
 .sticky-cta-wrap{position:sticky;bottom:12px;z-index:22;padding:8px 0 2px}
-.sticky-cta-btn{width:100%;border:none;border-radius:14px;padding:13px 14px;background:var(--accent);color:#fff;font:inherit;font-size:15px;font-weight:800;box-shadow:0 10px 24px rgba(177,31,31,.24);cursor:pointer}
+.sticky-cta-btn{width:100%;border:none;border-radius:14px;padding:13px 14px;background:var(--chocolade);color:var(--cream);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
 .insight-item{border:1px solid #E9DEDA;border-radius:12px;padding:11px;background:#fff;margin-top:9px}
 .insight-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.insight-level{display:inline-flex;padding:4px 8px;border-radius:999px;background:#FFF3F1;border:1px solid #F1CCC5;color:#9A3025;font-size:10px;font-weight:800;text-transform:uppercase}
-.insights-intro{border-radius:16px;border:1px solid rgba(177,31,31,.14);background:linear-gradient(140deg,#fff 0%,#fff8f7 55%,#fff 100%);padding:14px 16px;margin-bottom:2px;box-shadow:0 4px 20px rgba(90,40,35,.05)}
+.insight-level{display:inline-flex;padding:4px 8px;border-radius:999px;background:rgba(200,212,181,.35);border:1px solid rgba(107,142,111,.35);color:var(--chocolade);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.insights-intro{border-radius:16px;border:1px solid rgba(107,142,111,.2);background:linear-gradient(140deg,var(--ivoor) 0%,rgba(200,212,181,.2) 55%,var(--ivoor) 100%);padding:14px 16px;margin-bottom:2px;box-shadow:0 4px 20px rgba(74,58,42,.06)}
 .insights-intro h3{margin-bottom:6px}
 .insights-grid{display:grid;gap:14px;margin-top:12px}
 .insight-v2-card{display:flex;border-radius:16px;border:1px solid rgba(40,40,40,.08);background:linear-gradient(165deg,#fff 0%,#fffbf9 100%);box-shadow:0 8px 26px rgba(45,30,28,.07);overflow:hidden;min-height:0}
@@ -361,7 +426,7 @@ html,body{
 .growth-item-when{font-size:12px;color:#73666a;font-weight:600;line-height:1.35;flex:1;min-width:0}
 .growth-item-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
 .growth-pill{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.02em;border:1px solid transparent;line-height:1.2;white-space:nowrap}
-.growth-pill--own{background:#FFF3F1;border-color:#F1CCC5;color:#9A3025}
+.growth-pill--own{background:rgba(200,212,181,.4);border-color:rgba(107,142,111,.4);color:var(--chocolade)}
 .growth-pill--ds{background:#E8F0FC;border-color:#B8CCE8;color:#174a96}
 .growth-pill--fs{background:#E6F5ED;border-color:#A8D4B8;color:#126738}
 .growth-pill--chat{background:#f0f2f5;border-color:#d5dce3;color:#4b5563}
@@ -378,11 +443,12 @@ html,body{
 </head>
 <body>
 <main class="app">
+  <div class="sc-rimpel-bg" aria-hidden="true"><span class="sc-rimpel sc-rimpel--a"></span><span class="sc-rimpel sc-rimpel--b"></span><span class="sc-rimpel sc-rimpel--c"></span></div>
   <header class="topbar">
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 20:11</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 21:00</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -581,6 +647,8 @@ var senseProfileScopeByName={};
 var ownFacts=[];
 var ownInsights=[];
 var ownPhotos=[];
+/** Laatst bekende props.meta van sense_profiles (OWN Sense); voor merge bij save zonder veld te verliezen. */
+var __ownSensePropsMetaCache={};
 /** slot -> tijdelijke signed URL voor preview (own-photos bucket, private). */
 var ownPhotoSignedBySlot={};
 var ownGrowthEvents=[];
@@ -762,7 +830,7 @@ function flashOwnsenseMessage(msg,isError){
   d.setAttribute('role','status');
   var err=!!isError;
   d.style.cssText='position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:99999;padding:12px 14px;border-radius:12px;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 10px 32px rgba(0,0,0,.18);'
-    +(err?'background:#FFF5F5;border:1px solid #FFD6D6;color:#7A2A2A;':'background:#F0FAF3;border:1px solid #B8DFC8;color:#1a4d2e;');
+    +(err?'background:rgba(232,187,185,.28);border:1px solid rgba(186,86,84,.38);color:var(--chocolade);':'background:rgba(200,212,181,.35);border:1px solid rgba(107,142,111,.45);color:var(--chocolade);');
   d.textContent=String(msg||'');
   document.body.appendChild(d);
   setTimeout(function(){try{var x=document.getElementById(id);if(x)x.remove();}catch(_e2){}},5200);
@@ -1298,6 +1366,44 @@ function _arrayBufferToBase64Chunks(ab){
   return btoa(binary);
 }
 
+/** Zelfde JSON-pad als DateSense `photo_analysis_core` / `analyseerFotoVoorDossier`. */
+var OWN_PHOTO_ANALYSIS_SYS='Je bent DateSensei Vision (zelfde opdracht als in DateSense). Analyseer de foto-indruk op warmte, uitstraling en dating-relevante signalen: openheid van blik, glimlach, energie, verzorging, benaderbaarheid. Geen inventaris van achtergrond (bomen, gebouwen, weer) tenzij dat direct draagt aan de menselijke indruk. Geef ENKEL geldig JSON zonder markdown. Formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk, Nederlands"}';
+
+function parseFirstJSONObject(txt){
+  var s=String(txt||'').trim();
+  try{return JSON.parse(s);}catch(e){}
+  var st=s.indexOf('{');
+  var en=s.lastIndexOf('}');
+  if(st>=0&&en>st){
+    try{return JSON.parse(s.substring(st,en+1));}catch(e2){}
+  }
+  return null;
+}
+function normalizePhotoAnalysis(obj){
+  var o=obj||{};
+  function n(v){
+    var x=parseInt(v,10);
+    if(isNaN(x))x=50;
+    return Math.max(0,Math.min(100,x));
+  }
+  return{
+    openheid:n(o.openheid),
+    glimlach:n(o.glimlach),
+    energie:n(o.energie),
+    verzorging:n(o.verzorging),
+    benaderbaarheid:n(o.benaderbaarheid),
+    mood:String(o.mood||'Neutraal').trim(),
+    summary:String(o.summary||'').trim()
+  };
+}
+function formatOwnPhotoAnalysisForStore(pa){
+  pa=pa||{};
+  var line1='Openheid '+pa.openheid+'/100 · Glimlach '+pa.glimlach+'/100 · Energie '+pa.energie+'/100 · Verzorging '+pa.verzorging+'/100 · Benaderbaarheid '+pa.benaderbaarheid+'/100';
+  var line2='Sfeer: '+pa.mood;
+  var sum=pa.summary?String(pa.summary):'';
+  return cleanAiProseForStore([line1,line2,'',sum].join('\n'));
+}
+
 /** Haal foto uit Storage met user-JWT; geen signed URL naar Claude (die kan die URL niet openen). */
 async function ownPhotoPathToVisionUserContent(client,storagePath){
   var path=String(storagePath||'').trim();
@@ -1313,9 +1419,12 @@ async function ownPhotoPathToVisionUserContent(client,storagePath){
   if(media==='image/jpg')media='image/jpeg';
   var ab=await blob.arrayBuffer();
   var b64=_arrayBufferToBase64Chunks(ab);
+  var userTxt='Analyseer deze profielfoto op een warme, niet-oordelende manier. Geef ALLEEN JSON met exact deze keys: '
+    +'openheid (0-100), glimlach (0-100), energie (0-100), verzorging (0-100), benaderbaarheid (0-100), '
+    +'mood (korte tekst), summary (max 2 zinnen in het Nederlands). Geen scène-inventaris; focus op warmte, karakteruitstraling en benaderbaarheid zoals in DateSense.';
   return[
     {type:'image',source:{type:'base64',media_type:media,data:b64}},
-    {type:'text',text:'Beschrijf wat deze foto vertelt over de persoon: lichaamstaal, energie, hoe de persoon zich toont. Geen score, alleen observaties. 2-3 zinnen. Geen em dash; gebruik komma\'s of punten. Antwoord in het Nederlands.'}
+    {type:'text',text:userTxt}
   ];
 }
 
@@ -1324,7 +1433,6 @@ async function analyzeOwnPhotoSlot(slot){
   if(!row||!row.storage_path)return;
   var client=initSupabase();
   if(!client)return;
-  var sys='Je helpt bij een korte, respectvolle foto-impressie. Antwoord enkel met de observaties in platte tekst (geen JSON).';
   var userContent;
   try{
     userContent=await ownPhotoPathToVisionUserContent(client,row.storage_path);
@@ -1339,10 +1447,40 @@ async function analyzeOwnPhotoSlot(slot){
     }
     return;
   }
-  var analysis=cleanAiProseForStore(String(await callAnthropicJson(sys,userContent,380)||'').trim());
-  if(!analysis)return;
+  var raw=String(await callAnthropicJson(OWN_PHOTO_ANALYSIS_SYS,userContent,520,90000,{raw:true})||'').trim();
+  var parsed=parseFirstJSONObject(raw);
+  var analysis='';
+  if(parsed){
+    analysis=formatOwnPhotoAnalysisForStore(normalizePhotoAnalysis(parsed));
+  }
+  if(!analysis){
+    analysis=cleanAiProseForStore(raw);
+    if(analysis.length<30)return;
+  }
   await client.from('own_photos').update({ai_analysis:analysis}).eq('id',row.id);
   row.ai_analysis=analysis;
+  try{saveHubState();}catch(_sh){}
+}
+
+async function reanalyzeOwnPhotoSlot(slot){
+  var s=parseInt(slot,10);
+  if(isNaN(s)||s<2||s>5)return;
+  var pr=getOwnPhotoSlot(s);
+  if(!pr||!pr.storage_path){
+    flashOwnsenseMessage('Geen opgeslagen foto in dit slot.',true);
+    return;
+  }
+  window.__ownsenseSlotReanalyzeBusy=s;
+  renderFotosTab();
+  try{
+    await analyzeOwnPhotoSlot(s);
+    flashOwnsenseMessage('Observaties bijgewerkt voor slot '+s+'.',false);
+  }catch(e){
+    flashOwnsenseMessage(String(e&&e.message?e.message:'Analyse mislukt.'),true);
+  }finally{
+    window.__ownsenseSlotReanalyzeBusy=0;
+    renderFotosTab();
+  }
 }
 
 async function computePhotoPatterns(){
@@ -1352,8 +1490,8 @@ async function computePhotoPatterns(){
   try{
     var analyses=ownPhotos.map(function(p){return String(p.ai_analysis||'').trim();}).filter(Boolean);
     var sys='Wat valt op over deze beelden en observaties heen? Welke rode draad zie je in zelfpresentatie, energie, sfeer? 1-2 alineas. Als er weinig input is, blijf voorzichtig en kort. Geen em dash; gebruik komma\'s of punten. Geen markdown-koppen of --- lijnen.';
-    var usr='Per-foto observaties (indien aanwezig):\n'+(analyses.length?analyses.join('\n\n'):'(nog geen per-foto analyse, dat mag)')+'\n\n'
-      +'Let op: er worden geen ruwe foto-urls meegestuurd (de AI kan die niet betrouwbaar openen). Werk enkel met de tekst hierboven. Als dat te weinig is, geef korte tips om foto\'s toe te voegen en per-slot analyse af te wachten.';
+    var usr='Per-foto analyse (DateSense-stijl: scores + sfeer + korte samenvatting per slot, geen ruwe foto-urls):\n'+(analyses.length?analyses.join('\n\n'):'(nog geen per-foto analyse, dat mag)')+'\n\n'
+      +'Werk enkel met de tekst hierboven. Als dat te weinig is, geef korte tips om foto\'s toe te voegen en per-slot analyse af te wachten.';
     var out=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,520,120000)||'').trim());
     if(!out){
       window.__photoPatternLastStatus='Geen bruikbaar antwoord van de AI. Probeer later opnieuw.';
@@ -1381,6 +1519,7 @@ function renderFotosTab(){
     5:'Een foto van jaren geleden'
   };
   var html='<h3>Foto\'s</h3><div class="photo-slot-grid">';
+  var slotAnalysesBelow=[];
   for(var slot=1;slot<=5;slot++){
     var row=getOwnPhotoSlot(slot);
     var label=slot===1?'Profielfoto':'Slot '+slot;
@@ -1388,17 +1527,40 @@ function renderFotosTab(){
     if(slot===1)displayUrl=hubState.photo_url||'';
     else displayUrl=ownPhotoSignedBySlot[slot]||'';
     html+='<div class="photo-slot"><div class="photo-slot-title">'+label+(slot===1?' (read-only)':'')+'</div>';
-    if(displayUrl){
-      html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
-    }else if(row&&row.storage_path){
-      html+='<div class="subtle">Foto opgeslagen · even geduld, preview wordt geladen…</div><button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Vervang foto</button>';
+    if(slot===1){
+      if(displayUrl)html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
+      else html+='<div class="subtle">Zelfde als je profielfoto op Mij (read-only).</div>';
     }else{
-      html+='<div class="subtle">'+escHTML(hints[slot]||'Upload foto')+'</div>'+(slot===1?'':'<button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Upload</button>');
+      if(displayUrl)html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
+      else if(row&&row.storage_path)html+='<div class="subtle">Foto opgeslagen · preview wordt geladen…</div>';
+      else html+='<div class="subtle">'+escHTML(hints[slot]||'Upload foto')+'</div><button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Upload</button>';
+      var hasSaved=!!(row&&row.storage_path)||!!displayUrl;
+      if(hasSaved){
+        var reBusy=window.__ownsenseSlotReanalyzeBusy===slot;
+        html+='<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">';
+        html+='<button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Vervang foto</button>';
+        if(row&&row.storage_path){
+          html+='<button class="btn btn-muted btn-small" type="button" '+(reBusy?'disabled ':'')+'onclick="reanalyzeOwnPhotoSlot('+slot+')">'+(reBusy?'Bezig…':'Analyseer opnieuw')+'</button>';
+        }
+        html+='</div>';
+      }
     }
-    if(row&&row.ai_analysis)html+='<div style="margin-top:8px;font-family:\'Lora\',serif;font-size:13px;line-height:1.55">'+escHTML(row.ai_analysis)+'</div>';
+    if(slot>=2&&row&&String(row.ai_analysis||'').trim())slotAnalysesBelow.push({label:label,text:String(row.ai_analysis||'').trim()});
     html+='</div>';
   }
   html+='</div>';
+  if(slotAnalysesBelow.length){
+    html+='<div class="photo-analyses-below" style="margin-top:18px;padding-top:14px;border-top:1px solid #E7DBD6">';
+    html+='<div style="font-size:12px;font-weight:800;color:#6A4A43;margin-bottom:6px;letter-spacing:.02em">Observaties per slot</div>';
+    html+='<p class="subtle" style="margin-bottom:10px;font-size:12px;line-height:1.45">Zelfde insteek als DateSense: warmte, karakteruitstraling en benaderbaarheid. Geen catalogus van wat er op de foto staat.</p>';
+    slotAnalysesBelow.forEach(function(item){
+      html+='<div style="margin-top:12px;padding:10px 12px;border:1px solid #E9DEDA;border-radius:12px;background:#fff">';
+      html+='<div style="font-size:11px;font-weight:600;color:var(--chocolade);margin-bottom:6px">'+escHTML(item.label)+'</div>';
+      html+='<div style="font-family:\'Lora\',Georgia,serif;font-size:13px;line-height:1.55;white-space:pre-wrap">'+escHTML(item.text)+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
   slotsEl.innerHTML=html;
   var photoStat='';
   if(window.__ownsensePhotoPatternBusy){
@@ -1733,8 +1895,23 @@ async function loadOwnFromSupabase(){
       hubState.ai_summary_general=String(row.ai_summary_general||hubState.ai_summary_general||'');
       hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
       hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
+      __ownSensePropsMetaCache=Object.assign({},pm);
     }
   }catch(e){}
+}
+
+function buildOwnHubMirrorForMeta(){
+  var slots=(ownPhotos||[]).slice().sort(function(a,b){return (parseInt(a.slot,10)||0)-(parseInt(b.slot,10)||0);}).map(function(r){
+    return{slot:parseInt(r.slot,10)||0,ai_analysis:String(r.ai_analysis||'').trim()};
+  }).filter(function(x){return x.slot>=2&&x.slot<=5&&x.ai_analysis;});
+  var per=hubState.ai_summary_per_app&&typeof hubState.ai_summary_per_app==='object'?hubState.ai_summary_per_app:{};
+  return{
+    own_hub_photo_slots:slots,
+    own_hub_foto_patroon:String(hubState.foto_patroon_text||'').substring(0,12000),
+    own_hub_ai_summary_general:String(hubState.ai_summary_general||'').substring(0,12000),
+    own_hub_ai_summary_per_app:per,
+    own_hub_mirror_at:new Date().toISOString()
+  };
 }
 
 async function loadSenseProfileScopesForUser(userId){
@@ -1803,11 +1980,11 @@ async function saveOwnToSupabase(){
       foto_paths:hubState.photo_paths||[],
       foto_analyse:hubState.foto_analyse
     };
-    propsOut.meta=Object.assign({},(propsOut.meta&&typeof propsOut.meta==='object')?propsOut.meta:{},{
+    propsOut.meta=Object.assign({},__ownSensePropsMetaCache,{
       roepnaam:cleanName||'',
       display_name:cleanName||'',
       full_name:cleanName||''
-    });
+    },buildOwnHubMirrorForMeta());
     PK.forEach(function(k){propsOut[k]=hubState.props[k]||0;});
     var payload={
       user_id:user.id,
@@ -1834,6 +2011,7 @@ async function saveOwnToSupabase(){
     };
     var up=await client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'});
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+    __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
     if(cleanName){
       try{
         await client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}});
@@ -2257,7 +2435,7 @@ function aiShortErr(msg,max){
   var n=max||240;
   return s.length>n?s.substring(0,n-1)+'…':s;
 }
-async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs){
+async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs,opts){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
   var sess=await withTimeout(
@@ -2305,6 +2483,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     if(!String(txt||'').trim()&&j&&j.content&&j.content[0]&&j.content[0].text)txt=String(j.content[0].text||'');
     txt=String(txt||'').trim();
     if(!txt)throw new Error('Leeg AI antwoord ontvangen.');
+    if(opts&&opts.raw)return txt;
     return cleanAiProseForStore(txt);
   }catch(e){
     if(e&&e.name==='AbortError'){
