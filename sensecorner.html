@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="17-04-2026 22:34">
+<meta name="sc-build" content="17-04-2026 23:08">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -378,6 +378,11 @@ a{text-decoration:none;color:inherit}
           <span class="own-status-text" id="statusText">Nog niet gestart</span>
           <span class="own-status-pct" id="statusPct"></span>
         </div>
+        <div class="own-hero-bar-wrap" id="ownHeroBarWrap" style="display:none;margin-top:10px;width:100%;max-width:320px" aria-hidden="true">
+          <div style="height:6px;border-radius:999px;background:rgba(61,47,31,.12);overflow:hidden">
+            <div id="ownHeroBarFill" style="height:100%;width:0%;background:var(--r);border-radius:999px;transition:width .45s ease"></div>
+          </div>
+        </div>
 
         <div class="cta-row" id="ctaRow">
           <a class="btn btn-primary" href="ownsense.html" id="btnMain" data-app-link="ownsense.html">
@@ -564,7 +569,7 @@ a{text-decoration:none;color:inherit}
   document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+(_scB?' · BUILD '+_scB:'');
 
   /* ── OWN Sense status ophalen ── */
-  var CIRCUMFERENCE=2*Math.PI*30; // r=30
+  var CIRCUMFERENCE=2*Math.PI*30; // r=30 — expliciet dasharray voor betrouwbare ring op mobiel (Safari)
   var raw=localStorage.getItem('ownsense_profile_v1');
   var profile=null;
   try{if(raw)profile=JSON.parse(raw);}catch(_e){}
@@ -720,14 +725,52 @@ a{text-decoration:none;color:inherit}
       ownPhotoUrl=String(profile.photo_urls[0]||'').trim();
     }
   }
+  function isDirectlyLoadableImageUrl(u){
+    return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
+  }
+  async function resolveOwnPhotoForHeader(url){
+    url=String(url||'').trim();
+    if(!url||!headerOwnPhoto)return;
+    if(isDirectlyLoadableImageUrl(url)){
+      headerOwnPhoto.src=url;
+      headerOwnPhoto.style.display='block';
+      headerOwnPhoto.onerror=function(){headerOwnPhoto.style.display='none';};
+      return;
+    }
+    if(!sb){return;}
+    try{
+      var sign=await sb.storage.from('own-photos').createSignedUrl(url.replace(/^\/+/,''),60*60*24*30);
+      var su=sign&&sign.data&&sign.data.signedUrl;
+      if(su){
+        headerOwnPhoto.src=su;
+        headerOwnPhoto.style.display='block';
+        headerOwnPhoto.onerror=function(){headerOwnPhoto.style.display='none';};
+      }
+    }catch(_e){}
+  }
   if(headerOwnPhoto&&ownPhotoUrl){
-    headerOwnPhoto.src=ownPhotoUrl;
-    headerOwnPhoto.style.display='block';
+    resolveOwnPhotoForHeader(ownPhotoUrl);
   }
 
   function setRing(pct){
-    var offset=CIRCUMFERENCE*(1-pct/100);
-    ringFg.style.strokeDashoffset=offset;
+    if(!ringFg)return;
+    var p=Math.max(0,Math.min(100,Number(pct)||0));
+    var offset=CIRCUMFERENCE*(1-p/100);
+    ringFg.style.strokeDasharray=String(CIRCUMFERENCE);
+    ringFg.style.strokeDashoffset=String(offset);
+  }
+  function setRingAndBar(pct){
+    setRing(pct);
+    var bw=document.getElementById('ownHeroBarWrap');
+    var bf=document.getElementById('ownHeroBarFill');
+    if(bw&&bf){
+      bw.style.display='block';
+      bf.style.width=Math.max(0,Math.min(100,Number(pct)||0))+'%';
+    }
+  }
+  function hideOwnHeroBar(){
+    var bw=document.getElementById('ownHeroBarWrap');
+    if(bw)bw.style.display='none';
   }
   setHubSettingsCollapsed(false);
   closeHubDock();
@@ -934,6 +977,7 @@ a{text-decoration:none;color:inherit}
 
   try{
     if(!profile){
+      hideOwnHeroBar();
       setRing(0);
       dot.className='own-status-dot';
       statusText.textContent='Nog niet gestart';
@@ -941,7 +985,7 @@ a{text-decoration:none;color:inherit}
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
       var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
-      setTimeout(function(){setRing(pct);},200);
+      setTimeout(function(){setRingAndBar(pct);},200);
       dot.className='own-status-dot done';
       statusText.textContent='Je profiel is actief ('+pct+'% ingevuld)';
       statusPct.textContent='';
@@ -950,7 +994,7 @@ a{text-decoration:none;color:inherit}
       btnMain.textContent='Open OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
     } else if(profile.status==='skipped'){
-      setTimeout(function(){setRing(10);},200);
+      setTimeout(function(){setRingAndBar(10);},200);
       dot.className='own-status-dot';
       statusText.textContent='Overgeslagen, kan later';
       statusPct.textContent='';
@@ -958,7 +1002,7 @@ a{text-decoration:none;color:inherit}
     } else {
       var filled=filledAnswers;
       var pct=Math.round((filled/totalQ)*80);
-      setTimeout(function(){setRing(pct);},200);
+      setTimeout(function(){setRingAndBar(pct);},200);
       dot.className='own-status-dot active';
       statusText.textContent='Bezig ('+(filled||0)+'/'+totalQ+' vragen)';
       statusPct.textContent=pct+'%';

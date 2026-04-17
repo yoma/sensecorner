@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-04-2026 22:34">
+<meta name="fs-build" content="17-04-2026 23:42">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -387,11 +387,16 @@ a:focus-visible,
 .aa.g{background:var(--g);color:#555;border:1px solid var(--b)}
 
 /* Typing indicator */
+.typing-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:min(100%,340px)}
 .typing{display:flex;align-items:center;gap:6px;padding:14px 16px;background:var(--rl);border:1px solid rgba(125,106,171,.28);border-radius:16px;width:fit-content}
+.typing-hint{font-size:12px;font-weight:650;color:#5c4d6e;line-height:1.4;padding:0 4px 2px}
 .typing span{width:8px;height:8px;border-radius:4px;background:var(--r);animation:bnc .9s infinite}
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
 @keyframes bnc{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
+.tl-load-card{max-width:340px;margin:24px auto;padding:22px 20px;text-align:center;background:rgba(255,255,255,.78);border:1px solid rgba(125,106,171,.22);border-radius:16px;box-shadow:0 4px 20px rgba(74,61,102,.07)}
+.tl-load-spin{width:38px;height:38px;margin:0 auto;border:3px solid rgba(125,106,171,.22);border-top-color:var(--r);border-radius:50%;animation:spin .8s linear infinite}
+#tlLoadHint{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;background:rgba(125,106,171,.1);border:1px solid rgba(125,106,171,.24);font-size:13px;color:#4a3d66;line-height:1.5;text-align:left}
 .advice-loading{background:linear-gradient(180deg,#fff,rgba(245,243,250,.95));border:1px solid rgba(125,106,171,.22);border-radius:16px;padding:16px 16px 14px;box-shadow:0 6px 18px rgba(74,58,42,.06)}
 .advice-loading-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .advice-loading-spinner{width:18px;height:18px;border:2px solid #F4D7CC;border-top-color:#7D6AAB;border-radius:50%;animation:spin .9s linear infinite;flex-shrink:0}
@@ -565,7 +570,7 @@ a:focus-visible,
 .sess-del:hover{color:#2d3136;background:#e6eaf0}
 
 /* ══ COACH CHAT UI ══ */
-.coach-save-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
+.coach-save-bar{position:relative;z-index:2;display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
 .coach-save-bar-done{flex-wrap:nowrap;justify-content:space-between}
 .coach-save-bar-done .coach-save-lbl{flex:1;min-width:0}
 .coach-save-switch-btn{flex-shrink:0;width:38px;height:38px;padding:0;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--t);font-size:18px;line-height:1;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -855,7 +860,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 22:34</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 23:42</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1032,7 +1037,7 @@ a:focus-visible,
       <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
       <span>Senses</span>
     </button>
-    <button class="tab" id="tab-own" onclick="openOwnSenseEntryPoint()" title="OWN Sense">
+    <button type="button" class="tab" id="tab-own" onclick="(window.openOwnSenseEntryPoint||openOwnSenseEntryPoint)()" title="OWN Sense">
       <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
       <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
@@ -1361,7 +1366,7 @@ const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 const PROMPT_DEFAULTS={
-  advice_core:'Je bent FamilySensei — een warme, directe familievriend met inhoudelijke kennis. Je advies is evidence-informed: je baseert je op algemeen erkende inzichten uit opvoeding, communicatie en gezinsdynamiek (zoals je die in boeken of officiele richtlijnen terugvindt), maar je legt alles uit in heel eenvoudige, niet-technische taal. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Noem geen pseudo-bronnen of verzonnen studies; als iets onzeker is, benoem dat eerlijk en blijf praktisch. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Maximaal 8 zinnen. Geen gestructureerde regels zoals AANDACHTSPUNTEN: of ACTIES:.',
+  advice_core:'Je bent FamilySensei — een warme, directe familievriend met inhoudelijke kennis. Je advies is evidence-informed: je baseert je op algemeen erkende inzichten uit opvoeding, communicatie en gezinsdynamiek (zoals je die in boeken of officiele richtlijnen terugvindt), maar je legt alles uit in heel eenvoudige, niet-technische taal. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Noem geen pseudo-bronnen of verzonnen studies; als iets onzeker is, benoem dat eerlijk en blijf praktisch. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen vloeiend advies zonder aparte kopregels zoals AANDACHTSPUNTEN: of Inzicht:. Sluit daarna af met exact één aparte regel (zonder tekst erna) in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg of met drie stukken gescheiden door | — gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin. Geen extra tekst vóór of na de ACTIES-regel.',
   tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
@@ -2245,6 +2250,39 @@ function renderTextareaVoiceRow(id,placeholder,value,oninput){
     +'</div>';
 }
 
+/** Verwijdert model-echo van de echte opslaan-knoppen (anders lijken het «dode» menu’s). */
+function stripVertelOpslagEchoFromAiText(t){
+  var s=String(t==null?'':t).replace(/\r\n?/g,'\n');
+  s=s.replace(/\s*Ja\s*[·•]\s*Altijd in dit gesprek\s*[·•]\s*Ander dossier\s*[·•]\s*Negeer\s*/gi,' ');
+  s=s.replace(/\s*Nee\s*[·•]\s*Altijd in dit gesprek\s*[·•]\s*Ander dossier\s*[·•]\s*Negeer\s*/gi,' ');
+  s=s.replace(/(?:^|\n)[ \t]*💾[^\n]*(?:\n[ \t]*(?:[-*•✅❌📁📂]|\d+[\).\]]\s*)[^\n]*){0,8}/gi,'\n');
+  s=s.split('\n').map(function(line){
+    var l=String(line||'').trim();
+    if(!l)return'';
+    if(/^💾/.test(l))return'';
+    if(/wil je dit\b/i.test(l)&&/bewaren/i.test(l))return'';
+    if(/\bbewaren\b/i.test(l)&&/\?/.test(l)&&(/\bdossier\b/i.test(l)||/\bsense\b/i.test(l)))return'';
+    if(l.length<72&&/^([-*•]|\d+[\).\]]\s+)(✅\s*)?(bevestigen|ander dossier|(negeren|negeer))\b/i.test(l))return'';
+    if(l.length<72&&/^([✅❌📁📂])\s*(bevestigen|ander dossier|(negeren|negeer))\b/i.test(l))return'';
+    if(/ja\s*[·•,]\s*altijd in dit gesprek\s*[·•,]\s*ander dossier\s*[·•,]\s*negeer/i.test(l))return'';
+    if(l.length<160&&/altijd in dit gesprek/i.test(l)&&/ander dossier/i.test(l)&&/negeer/i.test(l)&&/[·•]/.test(l))return'';
+    return line;
+  }).filter(Boolean).join('\n');
+  return s.replace(/\n{3,}/g,'\n\n').replace(/[ \t]{2,}/g,' ').trim();
+}
+/** Haalt onhandige «, roepnaam,» midden in een zin weg (alleen voor de bekende roepnaam uit profiel). */
+function stripAwkwardMidSentenceRoepnaam(txt){
+  var n=String(getUserHoofdNaam()||'').trim();
+  if(n.length<2)return String(txt==null?'':txt);
+  var esc=n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  var t=String(txt==null?'':txt);
+  t=t.replace(new RegExp(',\\s*'+esc+'\\s*,','g'),',');
+  t=t.replace(new RegExp(',\\s*'+esc+'(?=[.…!?])','g'),'');
+  t=t.replace(new RegExp(',\\s*'+esc+'(?=\\.\\s*[A-Za-zÀ-ÿ])','g'),'.');
+  t=t.replace(new RegExp(',\\s*'+esc+'(?=\\s+(?:je|jij|jou|we|ons)\\b)','gi'),'');
+  t=t.replace(new RegExp('\\*\\*'+esc+'\\*\\*','gi'),'');
+  return t.replace(/\s+([.,!?])/g,'$1').replace(/\s{2,}/g,' ').trim();
+}
 function formatAiRichText(txt){
   var raw=String(txt==null?'':txt).replace(/\\n/g,'\n').trim();
   if(!raw)return'';
@@ -2310,7 +2348,7 @@ function replaceEmDashes(s){
   return String(s==null?'':s).replace(/\u2014/g,',').replace(/—/g,',');
 }
 function formatAiCard(txt){
-  var inner=formatAiRichText(replaceEmDashes(txt));
+  var inner=formatAiRichText(replaceEmDashes(stripAwkwardMidSentenceRoepnaam(stripVertelOpslagEchoFromAiText(txt))));
   if(!inner)return'';
   return '<div class="ai-rich-card">'+inner+'</div>';
 }
@@ -2411,6 +2449,41 @@ async function getStorageObjectUrl(bucket,path){
   }catch(_e){}
   var pub=sb.storage.from(bucket).getPublicUrl(path);
   return (pub&&pub.data&&pub.data.publicUrl)||'';
+}
+function isDirectlyLoadableImageUrl(u){
+  return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
+}
+async function hydrateOwnSensePhotoMetaFromStorage(){
+  if(!sb||!S||!S.user)return;
+  var cell=S.pdata&&S.pdata['OWN Sense'];
+  if(!cell||!cell.meta)return;
+  var m=cell.meta;
+  async function signIfPath(v){
+    var s=String(v||'').trim();
+    if(!s)return'';
+    if(isDirectlyLoadableImageUrl(s))return s;
+    return await getStorageObjectUrl('own-photos',s.replace(/^\/+/,''));
+  }
+  try{
+    if(String(m.photo_url||'').trim()&&!isDirectlyLoadableImageUrl(m.photo_url)){
+      var u=await signIfPath(m.photo_url);
+      if(u)m.photo_url=u;
+      else delete m.photo_url;
+    }
+    if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
+      var next=[];
+      for(var i=0;i<m.foto_urls.length;i++){
+        var raw=m.foto_urls[i];
+        if(isDirectlyLoadableImageUrl(raw))next.push(String(raw).trim());
+        else{
+          var su=await signIfPath(raw);
+          if(su)next.push(su);
+        }
+      }
+      m.foto_urls=next;
+      if(!String(m.photo_url||'').trim()&&next.length)m.photo_url=next[0];
+    }
+  }catch(e){console.warn('hydrateOwnSensePhotoMetaFromStorage',e);}
 }
 
 function parseFirstJSONObject(txt){
@@ -2535,10 +2608,17 @@ function renderOwnAvatar(){
   var wrap=document.getElementById('ownAvatarWrap');
   if(!wrap)return;
   var ownMeta=getMetaFor('OWN Sense');
+  var fallbackSvg='<svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg>';
   if(ownMeta.photo_url){
-    wrap.innerHTML='<img src="'+escHTML(ownMeta.photo_url)+'" alt="OWN foto" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+    wrap.textContent='';
+    var im=document.createElement('img');
+    im.src=String(ownMeta.photo_url||'').trim();
+    im.alt='OWN foto';
+    im.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:inherit';
+    im.onerror=function(){wrap.innerHTML=fallbackSvg;};
+    wrap.appendChild(im);
   }else{
-    wrap.innerHTML='<svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg>';
+    wrap.innerHTML=fallbackSvg;
   }
 }
 
@@ -3671,6 +3751,7 @@ async function loadAll(){
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
+  try{await hydrateOwnSensePhotoMetaFromStorage();}catch(e){console.warn('OWN foto-urls',e);}
 }
 
 /** Herstelt oude gemixte scope-data voor family-dossiers (fs verplicht, ds eruit). */
@@ -4159,8 +4240,8 @@ async function prepareOwnsenseHandoff(){
     var meta=own.meta||{};
     var msgs=[];
     try{
-      msgs=await loadMsgs('OWN Sense',{limit:180,asc:false});
-    }catch(_e){}
+      msgs=await withTimeout(loadMsgs('OWN Sense',{limit:180,asc:false}),4500,'ownsense-handoff-msgs');
+    }catch(_e){msgs=[];}
     localStorage.setItem('ownsense_handoff_v1',JSON.stringify({
       at:new Date().toISOString(),
       source:'familysense',
@@ -4174,8 +4255,13 @@ async function prepareOwnsenseHandoff(){
   }catch(_err){}
 }
 function ownSenseShowAsInAppDossier(){return false;}
+var _ownSenseHubNav=false;
 async function openOwnSenseEntryPoint(){
-  await prepareOwnsenseHandoff();
+  if(_ownSenseHubNav)return;
+  _ownSenseHubNav=true;
+  try{
+    await withTimeout(prepareOwnsenseHandoff(),6500,'ownsense-handoff').catch(function(e){console.warn('prepareOwnsenseHandoff',e);});
+  }catch(e){console.warn('openOwnSenseEntryPoint',e);}
   window.location.href=ownSenseHubUrl();
 }
 function computeDossierMatchSummary(name){
@@ -4210,12 +4296,15 @@ function getSensesCardMatchHtml(name,opts){
     var dossierHint=ownSenseShowAsInAppDossier()
       ?'<div style="font-size:10px;color:#1B5E20;margin-top:6px;line-height:1.35">Compleet — tik opent je <strong>dossier</strong> (tijdlijn, foto, profiel, advies). Voor de hub met 11 diepte-vragen: knop bovenaan het <strong>Profiel</strong>-tabblad.</div>'
       :'<div style="font-size:10px;color:#8a8f97;margin-top:6px;line-height:1.35">Nog niet compleet — tik opent de <strong>OWN Sense-hub</strong> om verder te gaan.</div>';
+    var barPct=total>0?Math.max(0,Math.min(100,Math.round((100*filled)/total))):0;
+    var barRow='<div style="margin-top:8px;height:5px;background:rgba(61,47,31,.1);border-radius:3px;overflow:hidden" aria-hidden="true">'
+      +'<div style="height:100%;width:'+barPct+'%;background:var(--r);border-radius:3px;transition:width .4s ease"></div></div>';
     return'<div style="'+top+'">'
       +'<div style="font-size:10px;color:#8a8f97;margin-bottom:4px">Profiel</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
       +'<span style="font-size:13px;font-weight:700;color:#333">'+filled+'/'+total+' ingevuld</span>'
       +(incomplete?'<span style="font-size:10px;font-weight:600;color:#B00020">Nog niet volledig</span>':'<span style="font-size:10px;color:#1B5E20">Klaar ✓</span>')
-      +'</div>'+dossierHint+'</div>';
+      +'</div>'+barRow+dossierHint+'</div>';
   }
   var d=S.pdata[name]||{};
   var fr=getContactRolBadgeText(d.meta);
@@ -6731,7 +6820,7 @@ function rSenses(el){
 <div class="srow srow-own-card" onclick="openOwnSenseEntryPoint()">
   <div class="srow-dossier-main">
   <div class="srow-dossier-top">
-  ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0"/>':'<div class="sdot" style="background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
+  ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b);flex-shrink:0" onerror="this.style.display=\'none\';if(this.nextElementSibling)this.nextElementSibling.style.display=\'block\'"/><div class="sdot" style="display:none;width:22px;height:22px;border-radius:11px;background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>':'<div class="sdot" style="width:22px;height:22px;border-radius:11px;background:'+SEG_DOT_COLORS[0]+';flex-shrink:0;margin-top:6px"></div>'}
   <div class="srow-dossier-titleblock">
   <div class="srow-dossier-title">OWN Sense Hub</div>
   <div class="srow-dossier-meta">Read-only profiel in FamilySense · beheer in OWN Sense</div>
@@ -6906,6 +6995,7 @@ async function rDossier(el){
   var tabs='<div class="dossier-tabs-wrap dtabs-scroll"><div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" data-dtab="overzicht" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" data-dtab="tijdlijn" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
+    +'<div class="dtab '+(vt==="foto"?"active":"")+'" data-dtab="foto" onclick="switchTab(\'foto\')">Foto<span class="dtab-badge" id="dtabBadgeFoto" aria-hidden="true"></span></div>'
     +'<div class="dtab '+(vt==="profiel"?"active":"")+'" data-dtab="profiel" onclick="switchTab(\'profiel\')">Profiel<span class="dtab-badge" id="dtabBadgeProfiel" aria-hidden="true"></span></div>'
     +'<div class="dtab '+(vt==="advies"?"active":"")+'" data-dtab="advies" onclick="switchTab(\'advies\')">Advies<span class="dtab-badge" id="dtabBadgeAdvies" aria-hidden="true"></span></div>'
     +'</div>'
@@ -7032,6 +7122,30 @@ function buildContactCategoryPreviewRows(d,dossierName){
   html+='</div>';
   html+='<p style="font-size:11px;color:#8a8f97;margin:0 0 4px;line-height:1.45">Invulvakjes bewerk je op tab <strong>Profiel</strong>; hier zie je per thema de voortgang.</p>';
   return html;
+}
+
+var _tlLoadHintSeq=0;
+var _tlLoadHintTimers=[];
+function clearTimelineLoadHints(){
+  _tlLoadHintTimers.forEach(function(id){try{clearTimeout(id);}catch(_e){}});
+  _tlLoadHintTimers=[];
+}
+/** Tijdlijn-tab: extra uitleg na enkele seconden (Supabase/netwerk — niet volledig te voorkomen). */
+function startTimelineLoadHints(coachName){
+  clearTimelineLoadHints();
+  var seq=++_tlLoadHintSeq;
+  var coach=String(coachName||'Sensei');
+  function arm(ms,text){
+    _tlLoadHintTimers.push(setTimeout(function(){
+      if(seq!==_tlLoadHintSeq)return;
+      var el=document.getElementById('tlLoadHint');
+      if(!el)return;
+      el.style.display='block';
+      el.textContent=text;
+    },ms));
+  }
+  arm(5500,coach+' heeft het even druk met ophalen — meestal is het zo klaar. Blijf gerust even op dit scherm.');
+  arm(12000,'Nog steeds bezig… Soms antwoordt het netwerk of de database traag. Geen zorgen: zodra het kan, staat je tijdlijn hier. Je mag ook even weg en straks terugkomen.');
 }
 
 async function loadTab(name,tab,d){
@@ -7165,7 +7279,13 @@ async function loadTab(name,tab,d){
     }
   }
   else if(tab==='tijdlijn'){
-    cont.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Tijdlijn laden...</div>';
+    cont.innerHTML='<div class="tl-load-card" role="status" aria-live="polite">'
+      +'<div class="tl-load-spin" aria-hidden="true"></div>'
+      +'<div style="font-size:15px;font-weight:800;color:#4a3d66;margin-top:14px;letter-spacing:.02em">Tijdlijn laden</div>'
+      +'<p style="font-size:13px;color:#6b6478;line-height:1.55;margin:10px 0 0">Even geduld — we halen je berichten op bij de server.</p>'
+      +'<div id="tlLoadHint"></div>'
+      +'</div>';
+    startTimelineLoadHints('FamilySensei');
     // Gefilterd — alleen dit dossier!
     var msgs=[];
     var hasOlder=false;
@@ -7191,7 +7311,9 @@ async function loadTab(name,tab,d){
       if(lastErr)throw lastErr;
       hasOlder=(msgs&&msgs.length>tlLimit)&&tlLimit<1000;
       msgs=(msgs||[]).slice(0,tlLimit);
+      clearTimelineLoadHints();
     }catch(e){
+      clearTimelineLoadHints();
       console.error('loadMsgs error:',e);
       var errHint='';
       var em=String(e&&e.message?e.message:'').toLowerCase();
@@ -7207,6 +7329,7 @@ async function loadTab(name,tab,d){
       return;
     }
     if(!msgs.length){
+      clearTimelineLoadHints();
       cont.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--m)">
         <div style="font-size:36px;margin-bottom:10px">📋</div>
         <p style="font-size:14px;line-height:1.6">Nog geen berichten voor <strong>${name}</strong>.<br>Ga naar Vertel om iets toe te voegen.</p>
@@ -7333,16 +7456,33 @@ async function loadTab(name,tab,d){
         +'</div>';
     }
     if(!isOwnPhoto){
-      var ownMeta2=((S.pdata['OWN Sense']||{}).meta)||{};
-      var ownPa2=ownMeta2.photo_analysis||null;
-      if(pa&&ownPa2){
-        html+='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#555;line-height:1.5">'
-          +'<strong>Foto-context</strong> — Jij en '+escHTML(dn(name))+' hebben allebei een fotoanalyse. Die dient als zachte visuele context voor de coach, zonder matchpercentages.'
-          +'</div>';
+      var ownMetaCmp=((S.pdata['OWN Sense']||{}).meta)||{};
+      var ownPaCmp=ownMetaCmp.photo_analysis||null;
+      var dnSafe=escHTML(dn(name));
+      if(pa&&ownPaCmp){
+        var pm=computePhotoMatchPct(ownPaCmp,pa);
+        var br=buildPhotoMatchBreakdown(ownPaCmp,pa);
+        var mc=pm>=80?'#2E7D32':pm>=60?'#E07800':'#777';
+        function diffWord(d){return d<=12?'zeer klein':d<=24?'klein':d<=38?'matig':'groter';}
+        var bestTxt=br?br.best.map(function(r){return r.label+' (verschil '+diffWord(r.diff)+')';}).join(', '):'';
+        var worstTxt=br?br.worst.map(function(r){return r.label+' (verschil '+diffWord(r.diff)+')';}).join(', '):'';
+        var rowsTxt=br?br.rows.map(function(r){
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;color:#6a6f77;margin-top:3px"><span>'+r.label+'</span><span>jij '+r.a+'% · '+dnSafe+' '+r.b+'% ('+diffWord(r.diff)+')</span></div>';
+        }).join(''):'';
+        html+='<div class="ai-rich-card">'
+          +'<div class="ai-sec"><div class="ai-sec-title"><span>📷</span><span>OWN Sense vs '+dnSafe+'</span></div>'
+          +'<p class="ai-sec-text" style="font-size:12px;color:#666;margin-bottom:8px">Hier vergelijk je <strong>jouw</strong> foto-analyse (OWN Sense) met die van <strong>'+dnSafe+'</strong>. Puur visuele indruk op de foto’s — geen oordeel over wie iemand «echt» is.</p>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;color:#333;font-weight:700">Visuele nabijheid</span><span style="font-size:18px;font-weight:800;color:'+mc+'">'+pm+'%</span></div>'
+          +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+pm+'%;background:'+mc+'"></div></div>'
+          +'<p class="ai-sec-text" style="font-size:12px;color:#666">Indicatief op basis van open blik, glimlach, energie, verzorging en benaderbaarheid.</p>'
+          +(br?'<div style="font-size:12px;color:#555;line-height:1.5;margin-top:8px"><strong>Meest gelijkaardig:</strong> '+bestTxt+'<br><strong>Meeste visuele afstand:</strong> '+worstTxt+'</div>':'')
+          +(rowsTxt?'<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e3e6eb">'+rowsTxt+'</div>':'')
+          +'<p class="ai-sec-text" style="font-size:11px;color:#8a8f97">Voor echte gezinscontext blijven profiel, tijdlijn en Vertel leidend; dit blok is enkel zachte visuele context voor de coach.</p>'
+          +'</div></div>';
       } else {
         html+='<div style="background:rgba(208,199,223,.28);border:1px solid rgba(125,106,171,.32);border-radius:12px;padding:12px 14px;color:#4A3D66;font-size:13px">'
-          +'<strong>⚠️ Foto-context onvolledig</strong><br>'
-          +'Als zowel <strong>OWN Sense</strong> als dit dossier een fotoanalyse hebben, krijgt de coach rijkere visuele context (zonder scores).'
+          +'<strong>⚠️ Vergelijking OWN Sense vs '+dnSafe+'</strong><br>'
+          +'Verschijnt zodra <strong>OWN Sense</strong> én <strong>'+dnSafe+'</strong> een fotoanalyse hebben (tab Foto in beide dossiers).'
           +'</div>';
       }
     }
@@ -7569,8 +7709,8 @@ async function genAdvies(name,forced){
   var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
   var toneInstr=getPromptText('tone_honest');
   var modeInstruction=isOwnAdv
-    ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten en 1-2 concrete volgende stappen (geen gestructureerde ACTIES:-regels).'
-    :'Geef op basis van dit dossier over '+dn(name)+' concrete, praktische adviezen: wat werkt al, waar zit de uitdaging, 1-2 volgende stappen. Geen scores of percentages.';
+    ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten en 1-2 concrete volgende stappen in de vrije tekst; sluit af met de verplichte ACTIES-regel (2 of 3 stappen voor jezelf).'
+    :'Geef op basis van dit dossier over '+dn(name)+' concrete, praktische adviezen in de vrije tekst: wat werkt al, waar zit de uitdaging, volgende stappen; sluit af met de verplichte ACTIES-regel (2 of 3 gezins- of communicatiestappen). Geen scores of percentages.';
   var relationshipGuard=name!=='OWN Sense'
     ?'Respecteer de familierelatie. Geef GEEN romantisch-georiënteerd of dating-advies. Geef advies dat past bij gezins- en familiedynamiek.'
     :'';
@@ -7588,6 +7728,9 @@ async function genAdvies(name,forced){
     var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
     var tsTime=nowTs.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
     var ts='Gegenereerd op '+tsDate+' om '+tsTime;
+    var actMatch=String(t||'').match(/ACTIES:\s*([\s\S]*)/i);
+    var actiesRaw=actMatch&&actMatch[1]?String(actMatch[1]).trim():'';
+    var actiesTxt=actiesRaw.split(/\r?\n/)[0].trim();
     var adviesTxt=String(t||'')
       .replace(/AANDACHTSPUNTEN:[^\n]*/ig,'')
       .replace(/ACTIES:[\s\S]*/ig,'')
@@ -7604,7 +7747,20 @@ async function genAdvies(name,forced){
     var actiesContainer=document.getElementById('actiesContainer');
     var actiesHtmlForCache='';
     if(actiesContainer){
-      actiesContainer.innerHTML='';
+      if(actiesTxt){
+        var acties=actiesTxt.split('|').map(function(a){return a.trim().split(';');}).filter(function(a){return a.length>=3;});
+        if(acties.length){
+          actiesContainer.innerHTML=renderActiesHtml(name,acties);
+          actiesHtmlForCache=actiesContainer.innerHTML;
+        }else{
+          actiesContainer.innerHTML='<div style="margin-top:8px;padding:12px 14px;background:#fafbfc;border:1px dashed #e2e4e8;border-radius:12px;font-size:13px;color:#6b7280;line-height:1.5">Geen geldige acties herkend in dit antwoord. Tik op <strong>Update uw advies</strong> om opnieuw te genereren — het model moet de regel <code style="font-size:11px">ACTIES:emoji;Titel;Uitleg|…</code> exact volgen.</div>';
+          actiesHtmlForCache='';
+        }
+      }else{
+        actiesContainer.innerHTML='<div style="margin-top:8px;padding:12px 14px;background:#fafbfc;border:1px dashed #e2e4e8;border-radius:12px;font-size:13px;color:#6b7280;line-height:1.5">Er ontbrak een <strong>ACTIES:</strong>-regel in dit antwoord. Tik op <strong>Update uw advies</strong> om opnieuw te proberen.</div>';
+        actiesHtmlForCache='';
+      }
+      hydrateActieItems(name);
     }
     // Cache opslaan met count en timestamp
     if(!S.adviesCache)S.adviesCache={};
@@ -8593,6 +8749,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
     });
     clearTimeout(timer);
     timer=null;
+    // Lees response-body met ruimere marge dan de fetch-timeout (trage edge / grote payloads).
     var readMs=Math.min(120000,Math.max(10000,timeoutMs-4000));
     var raw=await withTimeout(res.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).');
     var data;
@@ -9167,13 +9324,47 @@ function addMsg(role,html,opts){
   S.vertelMsgs.push({role,html,ctxLabel:ctxLabel||''});
 }
 
+var _typSlowHintTimers=[];
+function clearTypingSlowHintTimers(){
+  while(_typSlowHintTimers.length){
+    try{clearTimeout(_typSlowHintTimers.pop());}catch(_e){}
+  }
+}
+/** Vriendelijke tekst onder de stippen als een AI-call merkbaar lang duurt (netwerk / zware context). */
+function startTypingSlowHints(){
+  clearTypingSlowHintTimers();
+  function arm(ms,text){
+    var id=setTimeout(function(){
+      var typ=document.getElementById('typ');
+      if(!typ)return;
+      var wrap=typ.querySelector('.typing-wrap');
+      if(!wrap)return;
+      var hint=wrap.querySelector('.typing-hint');
+      if(!hint){
+        hint=document.createElement('div');
+        hint.className='typing-hint';
+        wrap.appendChild(hint);
+      }
+      hint.textContent=text;
+      try{typ.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(_e){}
+    },ms);
+    _typSlowHintTimers.push(id);
+  }
+  arm(9000,'Sensei heeft even wat meer tijd nodig…');
+  arm(20000,'Nog bezig — soms duurt het net iets langer door het netwerk of een grotere context.');
+}
 function showT(){
   var ca=document.getElementById('chatArea');if(!ca)return;
+  clearTypingSlowHintTimers();
   var d=document.createElement('div');d.className='msg-ai';d.id='typ';
-  d.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+  d.innerHTML='<div class="typing-wrap"><div class="typing" aria-busy="true" aria-live="polite"><span></span><span></span><span></span></div></div>';
   ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
+  startTypingSlowHints();
 }
-function hideT(){var t=document.getElementById('typ');if(t)t.remove();}
+function hideT(){
+  clearTypingSlowHintTimers();
+  var t=document.getElementById('typ');if(t)t.remove();
+}
 
 function quickFill(){
   var ex=[
@@ -9728,8 +9919,11 @@ async function sendMsg(){
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
     +' Gebruik geen lange gedachtestreep (—); gebruik een komma of punt.'
+    +' ROEPNAAM: Gebruik de roepnaam van de gebruiker spaarzaam (liefst 0×); hooguit 1× per antwoord en nooit geforceerd midden in een zin vlak na een komma. Spreek hem/haar bij voorkeur met «je»/«jij» aan.'
     +' Als de gebruiker iets vertelt over een familielid: korte empathische reactie, eventueel een praktische tip, maximaal 1 verdiepende vraag. Geen oordeel, geen scores.'
-    +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het coach-antwoord verschijnt een opslaanstrook (bevestigen, ander dossier kiezen, negeren) of een melding dat het al automatisch bij een dossier staat of vast «in dit gesprek» is gekozen. Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar die strook of melding. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
+    +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» — dat botst met de echte UI en oogt als kapotte knoppen.'
+    +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
+    +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
     +' CONTEXT: '+coachCtxFinal;
 
 
@@ -9748,7 +9942,14 @@ async function sendMsg(){
     }
     messages.push({role:'user',content:txtForAI});
     var gesprekFocus=forcedDossier||S.vertelGesprekDossier||S.vertelFrom;
+    var opslagVastNote='';
+    if(forcedDossier){
+      opslagVastNote='\nLET OP OPSLAG: Deze sessie schrijft automatisch naar dossier «'+dn(forcedDossier)+'». Neem géén extra bewaarvraag of pseudo-menu in je antwoordtekst; dat hoort bij de vaste melding onder je tekst.\n';
+    }else if(S.vertelSessionStickyDossier){
+      opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» — notities gaan vast naar dossier «'+dn(S.vertelSessionStickyDossier)+'». Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
+    }
     var fullSys=sys
+      +opslagVastNote
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
@@ -9763,7 +9964,7 @@ async function sendMsg(){
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
-    var raw=await callAPI(fullSys,messages,400);
+    var raw=await callAPI(fullSys,messages,400,55000);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}
@@ -11693,6 +11894,7 @@ setBuildTag();
 // Expliciet op window: sommige omgevingen (extensies, enterprise browsers) zien geen globale functies in inline onclick
 try{
   window.goScreen=goScreen;
+  window.openOwnSenseEntryPoint=openOwnSenseEntryPoint;
   window.goBack=goBack;
   window.switchTab=switchTab;
   window.viewDossier=viewDossier;
@@ -11764,7 +11966,6 @@ setTimeout(function(){
     [
       ['tab-home','home'],
       ['tab-senses','senses'],
-      ['tab-own','own'],
       ['tab-vertel','vertel']
     ].forEach(function(pair){
       var el=document.getElementById(pair[0]);
