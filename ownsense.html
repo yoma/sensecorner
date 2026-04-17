@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="17-04-2026 13:59">
+<meta name="os-build" content="17-04-2026 14:21">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -336,7 +336,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 13:59</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 14:21</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -386,6 +386,7 @@ html,body{
 
     <section class="tab-panel" id="tab-bron" aria-label="Bron tab">
       <article class="card" id="sourceCard"></article>
+      <article class="card" id="questionsCard"></article>
     </section>
   </section>
 </main>
@@ -613,15 +614,51 @@ function getPendingFacts(){
 }
 
 function categoryLongText(catId){
-  if(catId==='algemeen')return String(hubState.algemeen_text||'').trim();
+  if(catId==='algemeen'){
+    var ag=String(hubState.algemeen_text||'').trim();
+    if(ag)return ag;
+    var ia=String(hubState.insight_all||'').trim();
+    if(ia)return ia;
+    var parts=[];
+    OWN_CATS.forEach(function(c){
+      var cc=hubState.categories&&hubState.categories[c.id]?hubState.categories[c.id]:{};
+      ['a0','a1','a2','a3'].forEach(function(k){
+        var v=String(cc[k]||'').trim();
+        if(v)parts.push(v);
+      });
+    });
+    return parts.join('\n\n');
+  }
   var c=hubState.categories&&hubState.categories[catId]?hubState.categories[catId]:{};
   var lines=['a0','a1','a2','a3'].map(function(k){return String(c[k]||'').trim();}).filter(Boolean);
   return lines.join('\n\n');
 }
 
-function dimLabelByFactsCount(n){
-  if(n<=2)return 'leeg';
-  if(n<=7)return 'in opbouw';
+function legacyUnitsForCategory(catId){
+  var c=hubState.categories&&hubState.categories[catId]?hubState.categories[catId]:{};
+  var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>6;}).length;
+  var chars=categoryLongText(catId).length;
+  return filled*2+Math.min(6,Math.floor(chars/380));
+}
+
+function legacyUnitsAlgemeenBucket(){
+  var u=0;
+  var ag=String(hubState.algemeen_text||'').trim();
+  if(ag.length)u+=3;
+  if(String(hubState.insight_all||'').trim().length)u+=2;
+  OWN_CATS.forEach(function(c){u+=legacyUnitsForCategory(c.id);});
+  return Math.min(18,u);
+}
+
+function dimensionDepthScore(catId){
+  var facts=getAcceptedFactsByCategory(catId).length*3;
+  if(catId==='algemeen')return facts+legacyUnitsAlgemeenBucket();
+  return facts+legacyUnitsForCategory(catId);
+}
+
+function dimLabelFromDepth(score){
+  if(score<=2)return 'leeg';
+  if(score<=9)return 'in opbouw';
   return 'rijk';
 }
 
@@ -671,12 +708,14 @@ function renderMijTab(){
   var richCount=0;
   var pills='';
   dims.forEach(function(d){
-    var accepted=getAcceptedFactsByCategory(d).length;
-    var label=dimLabelByFactsCount(accepted);
+    var sc=dimensionDepthScore(d);
+    var label=dimLabelFromDepth(sc);
     if(label!=='leeg')richCount++;
     pills+='<span class="dim-pill">'+d+' · '+label+'</span>';
   });
-  progressEl.innerHTML='<h3>Voortgang</h3><p class="placeholder">OwnSense kent jou in '+richCount+' van 5 dimensies'+(richCount<5?' — er is nog verdieping mogelijk.':' — je profiel is rijk gevuld.')+'</p><div style="margin-top:6px">'+pills+'</div>';
+  progressEl.innerHTML='<h3>Voortgang</h3><p class="placeholder">OwnSense kent jou in '+richCount+' van 5 dimensies'+(richCount<5?' — er is nog verdieping mogelijk.':' — je profiel is rijk gevuld.')+'</p>'
+    +'<p class="subtle" style="margin-top:8px;line-height:1.55">Dit meet je <strong>bestaande vragenlijst</strong> (tab Bron) plus <strong>geaccepteerde feiten</strong> uit de database. Suggesties uit andere apps verschijnen eerst in de review — tot je ze accepteert, houden we ze buiten deze meter.</p>'
+    +'<div style="margin-top:8px">'+pills+'</div>';
 
   var cats=[
     {id:'karakter',label:'Karakter'},
@@ -685,9 +724,10 @@ function renderMijTab(){
     {id:'gevoels',label:'Gevoelswereld'},
     {id:'algemeen',label:'Algemeen'}
   ];
-  catsEl.innerHTML='<h3>Categorieen</h3>'+cats.map(function(c){
+  catsEl.innerHTML='<h3>Categorieen</h3><p class="subtle" style="margin-bottom:10px;line-height:1.55">Dit is je leesbare profieltekst per domein. Wil je iets wijzigen? Gebruik tab <strong>Bron</strong> (vragenlijsten) of tik op <strong>Vertel</strong> hieronder.</p>'
+    +cats.map(function(c){
     var txt=categoryLongText(c.id);
-    return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p>'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
+    return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p style="white-space:pre-wrap">'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
   }).join('')+'<div class="sticky-cta-wrap"><button class="sticky-cta-btn" type="button" onclick="openOwnVertelModal()">Vertel iets over jezelf</button></div>';
 }
 
@@ -951,29 +991,81 @@ async function createInsight(level,scope,theme){
   }
 }
 
+function pickPerAppInsightText(key){
+  var m=hubState.ai_summary_per_app||{};
+  var k=String(key||'').toLowerCase();
+  return String(m[k]||m[key]||'').trim();
+}
+
+function insightCardHtml(title,badge,text,updatedIso){
+  var body=String(text||'').trim();
+  var t=body?escHTML(body):'<span class="subtle">Nog geen AI-inzicht voor dit spoor. Tik op «Ververs alle inzichten».</span>';
+  var when=updatedIso?fmtDateTime(updatedIso):'nog niet berekend';
+  return '<div class="insight-item" style="margin-top:0">'
+    +'<div class="insight-item-head"><div><div style="font-size:14px;font-weight:800">'+escHTML(title)+'</div>'
+    +'<span class="insight-level" style="margin-top:4px;display:inline-flex">'+escHTML(badge)+'</span></div>'
+    +'<span class="subtle">'+when+'</span></div>'
+    +'<div style="margin-top:8px;font-family:\'Lora\',serif;line-height:1.65;white-space:pre-wrap">'+t+'</div>'
+    +'</div>';
+}
+
+async function refreshAllAppInsights(){
+  var st=document.getElementById('insightRefreshStatus');
+  if(st)st.textContent='Bezig met herberekenen… (kan ±1 minuut duren).';
+  try{
+    await recomputeAllInsightsAuto();
+    if(st)st.textContent='Klaar — opgeslagen in je profiel.';
+  }catch(e){
+    if(st)st.textContent='Mislukt: '+((e&&e.message)?String(e.message):'onbekend');
+  }
+  renderInzichtenV2();
+  renderMijTab();
+}
+
 function renderInzichtenV2(){
   var createEl=document.getElementById('insightsCreateCard');
   var listEl=document.getElementById('insightsCard');
   if(!createEl||!listEl)return;
-  createEl.innerHTML='<h3>Nieuw inzicht genereren</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn btn-primary btn-small" type="button" onclick="generateGeneralInsight()">Algemeen</button>'
-    +'<button class="btn btn-muted btn-small" type="button" onclick="generatePerAppInsight()">Per levensgebied</button>'
-    +'<button class="btn btn-muted btn-small" type="button" onclick="generateSpecificInsight()">Specifiek thema</button>'
+  createEl.innerHTML='<h3>Inzichten (AI per app)</h3>'
+    +'<p class="subtle" style="line-height:1.55;margin-top:6px">Vier vaste sporen: <strong>alle apps</strong>, <strong>DateSense</strong>, <strong>FamilySense</strong> en <strong>OWN-intern</strong>. '
+    +'Ze worden automatisch opgebouwd uit je berichtenarchief — je hoeft hier niets te «bedenken». Gebruik onderaan de knop om alles te verversen.</p>'
+    +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="refreshAllAppInsights()">Ververs alle inzichten (AI)</button></div>'
+    +'<div id="insightRefreshStatus" class="subtle" style="margin-top:6px"></div>'
+    +'<details style="margin-top:12px"><summary class="subtle" style="cursor:pointer;font-weight:700">Geavanceerd (optioneel)</summary>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="generateGeneralInsight()">Extra samenvatting (DB)</button>'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="generatePerAppInsight()">Extra per app (DB)</button>'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="generateSpecificInsight()">Vrij thema (DB)</button>'
+    +'</div></details>';
+
+  var allText=insightTextByScope('all');
+  var dsText=insightTextByScope('ds')||pickPerAppInsightText('datesense');
+  var fsText=insightTextByScope('fs')||pickPerAppInsightText('familysense');
+  var ownText=insightTextByScope('gen')||String(hubState.ai_summary_general||'').trim();
+
+  var grid='<div style="display:grid;gap:10px;margin-top:12px">'
+    +insightCardHtml('Alle apps samen','ALGEMEEN',allText,(insightMeta.all&&insightMeta.all.updated_at)||hubState.last_insight_at)
+    +insightCardHtml('DateSense','APP · datesense',dsText,insightMeta.ds&&insightMeta.ds.updated_at)
+    +insightCardHtml('FamilySense','APP · familysense',fsText,insightMeta.fs&&insightMeta.fs.updated_at)
+    +insightCardHtml('OWN profiel (intern)','OWN',ownText,insightMeta.gen&&insightMeta.gen.updated_at)
     +'</div>';
-  if(!ownInsights.length){
-    listEl.innerHTML='<h3>Inzichten</h3><p class="placeholder">Nog geen inzichten. Genereer je eerste inzicht.</p>';
-    return;
+
+  var lib='';
+  if(ownInsights.length){
+    lib='<h3 style="margin-top:18px">Bibliotheek (extra opgeslagen inzichten)</h3><p class="subtle">Optioneel — notities uit eerdere experimenten.</p>'
+      +ownInsights.slice(0,30).map(function(it){
+        return '<div class="insight-item">'
+          +'<div class="insight-item-head"><span class="insight-level">'+escHTML(it.level||'')+(it.scope?(' · '+escHTML(it.scope)):'')+'</span><div>'
+          +'<button class="icon-btn" title="Bookmark" onclick="toggleInsightBookmark(\''+it.id+'\')">'+(it.bookmarked?'★':'☆')+'</button>'
+          +'<button class="icon-btn" title="Delen" onclick="shareInsight(\''+it.id+'\')">↗</button>'
+          +'<button class="icon-btn" title="Verwijder" onclick="deleteInsight(\''+it.id+'\')">🗑</button></div></div>'
+          +'<div class="subtle">'+fmtDateTime(it.created_at)+'</div>'
+          +'<div style="margin-top:8px;font-family:\'Lora\',serif;line-height:1.65;white-space:pre-wrap">'+escHTML(it.text||'')+'</div>'
+          +'</div>';
+      }).join('');
   }
-  listEl.innerHTML='<h3>Eerdere inzichten</h3>'+ownInsights.map(function(it){
-    return '<div class="insight-item">'
-      +'<div class="insight-item-head"><span class="insight-level">'+escHTML(it.level||'algemeen')+(it.scope?(' · '+escHTML(it.scope)):'')+'</span><div>'
-      +'<button class="icon-btn" title="Bookmark" onclick="toggleInsightBookmark(\''+it.id+'\')">'+(it.bookmarked?'★':'☆')+'</button>'
-      +'<button class="icon-btn" title="Delen" onclick="shareInsight(\''+it.id+'\')">↗</button>'
-      +'<button class="icon-btn" title="Verwijder" onclick="deleteInsight(\''+it.id+'\')">🗑</button></div></div>'
-      +'<div class="subtle">'+fmtDateTime(it.created_at)+'</div>'
-      +'<div style="margin-top:8px;font-family:\'Lora\',serif;line-height:1.65">'+escHTML(it.text||'')+'</div>'
-      +'</div>';
-  }).join('');
+
+  listEl.innerHTML=grid+lib;
 }
 
 async function generateGeneralInsight(){
@@ -1077,16 +1169,39 @@ async function analyzeOwnPhotoSlot(slot){
   row.ai_analysis=analysis;
 }
 
+async function collectSignedOwnPhotoUrls(){
+  var urls=[];
+  if(String(hubState.photo_url||'').trim())urls.push(String(hubState.photo_url).trim());
+  var client=initSupabase();
+  if(!client)return urls;
+  for(var s=2;s<=5;s++){
+    var row=getOwnPhotoSlot(s);
+    if(!row||!row.storage_path)continue;
+    try{
+      var signed=await client.storage.from('own-photos').createSignedUrl(String(row.storage_path),60*20);
+      var u=signed&&signed.data&&signed.data.signedUrl?String(signed.data.signedUrl):'';
+      if(u)urls.push(u);
+    }catch(_e){}
+  }
+  return urls;
+}
+
 async function computePhotoPatterns(){
+  var st=document.getElementById('photoPatternStatus');
+  if(st)st.textContent='Bezig met patroonanalyse…';
   var analyses=ownPhotos.map(function(p){return String(p.ai_analysis||'').trim();}).filter(Boolean);
-  if(!analyses.length)return;
-  var sys='Wat valt op over deze foto observaties heen? Welke rode draad zie je in zelfpresentatie, energie, sfeer? 1-2 alineas.';
-  var usr=analyses.join('\n\n');
-  var out=String(await callAnthropicJson(sys,usr,420)||'').trim();
-  if(!out)return;
+  var urls=await collectSignedOwnPhotoUrls();
+  var sys='Wat valt op over deze beelden en observaties heen? Welke rode draad zie je in zelfpresentatie, energie, sfeer? 1-2 alineas. Als er weinig input is, blijf voorzichtig en kort.';
+  var usr='Per-foto observaties (indien aanwezig):\n'+(analyses.length?analyses.join('\n\n'):'(nog geen per-foto analyse — dat mag)')+'\n\n'
+    +'Foto-urls (indien aanwezig):\n'+(urls.length?urls.join('\n'):'(geen extra foto-urls; gebruik enkel observaties of geef zachte tips om meer foto\'s toe te voegen)');
+  var out=String(await callAnthropicJson(sys,usr,520)||'').trim();
+  if(!out){
+    if(st)st.textContent='Geen antwoord van de AI. Probeer later opnieuw.';
+    return;
+  }
   hubState.foto_patroon_text=out;
   saveHubState();
-  await createInsight('specifiek','fotos','fotos');
+  if(st)st.textContent='Opgeslagen als patroon in je profiel.';
   renderFotosTab();
 }
 
@@ -1119,21 +1234,30 @@ function renderFotosTab(){
   }
   html+='</div>';
   slotsEl.innerHTML=html;
-  patternEl.innerHTML='<h3>Patronen</h3><div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="computePhotoPatterns()">Bereken patronen over alle foto\'s</button></div>';
-}
-
-function monthKey(iso){
-  try{
-    var d=new Date(iso);
-    return d.toLocaleDateString('nl-BE',{month:'long',year:'numeric'});
-  }catch(_e){return 'Onbekend';}
+  patternEl.innerHTML='<h3>Patronen</h3>'
+    +'<p class="subtle" style="line-height:1.55;margin-bottom:8px">Je mag dit al proberen met 1 foto of zelfs zonder per-foto analyse: de AI gebruikt dan vooral je profielfoto en korte tips. Ideaal is wel minstens 2–3 beelden.</p>'
+    +'<div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div>'
+    +'<div id="photoPatternStatus" class="subtle" style="margin-top:8px"></div>'
+    +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="computePhotoPatterns()">Bereken patronen (nu)</button></div>';
 }
 
 function renderGroeiTab(){
   var el=document.getElementById('growthCard');
   if(!el)return;
+  var arch=ownTimeline.filter(isRelevantOwnTimelineEntry).slice(0,14);
   if(!ownGrowthEvents.length){
-    el.innerHTML='<h3>Groei</h3><p class="placeholder">Hier zie je hoe OwnSense jou steeds beter leert kennen. Begin met iets te vertellen.</p>';
+    var archHtml='';
+    if(arch.length){
+      archHtml='<h4 style="margin-top:14px;font-size:14px">Archief (automatisch uit je OWN Sense berichten)</h4>'
+        +'<p class="subtle" style="margin-bottom:8px">Formele mijlpalen verschijnen hier zodra er gebeurtenissen zijn (import, geaccepteerde feiten, …). Ondertussen tonen we je recente eigen berichten.</p>'
+        +arch.map(function(m){
+          var src=detectSourceFromMsg(m);
+          var icon=src==='ds'?'💬':(src==='fs'?'🏠':'🧠');
+          var raw=stripHtml(m.html||m.content||'').slice(0,220);
+          return '<div class="growth-item"><div class="subtle">'+fmtDateTime(m.created_at)+' · '+icon+' archief</div><div style="margin-top:6px">'+escHTML(raw)+(raw.length>=220?'…':'')+'</div></div>';
+        }).join('');
+    }
+    el.innerHTML='<h3>Groei</h3><p class="placeholder">Hier tonen we mijlpalen (imports, geaccepteerde feiten, profielherschrijvingen, …). Die ontstaan pas na acties in OwnSense of gekoppelde apps.</p>'+archHtml;
     return;
   }
   var grouped={};
@@ -1142,7 +1266,7 @@ function renderGroeiTab(){
     if(!grouped[k])grouped[k]=[];
     grouped[k].push(g);
   });
-  var out='<h3>Groei</h3>';
+  var out='<h3>Groei</h3><p class="subtle" style="margin-bottom:10px">Chronologische mijlpalen. Tik op een import in tab Bron om meer context te zien.</p>';
   Object.keys(grouped).forEach(function(k){
     out+='<div class="month-label">'+escHTML(k)+'</div>';
     grouped[k].forEach(function(g){
@@ -1150,6 +1274,13 @@ function renderGroeiTab(){
       out+='<div class="growth-item"><div class="subtle">'+fmtDate(g.created_at)+' · '+icon+' '+escHTML(g.source_app||'ownsense')+'</div><div style="margin-top:6px">'+escHTML(g.summary||'')+'</div></div>';
     });
   });
+  if(arch.length){
+    out+='<h4 style="margin-top:18px;font-size:14px">Recent archief</h4><p class="subtle" style="margin-bottom:8px">Laatste eigen berichten in OWN Sense (niet hetzelfde als formele mijlpalen).</p>'
+      +arch.slice(0,6).map(function(m){
+        var raw=stripHtml(m.html||m.content||'').slice(0,160);
+        return '<div class="growth-item"><div class="subtle">'+fmtDateTime(m.created_at)+'</div><div style="margin-top:6px">'+escHTML(raw)+(raw.length>=160?'…':'')+'</div></div>';
+      }).join('');
+  }
   el.innerHTML=out;
 }
 
@@ -1163,6 +1294,9 @@ function renderBronTab(){
     +'</div><div style="margin-top:12px">'+(importRows.length?importRows.map(function(r){
       return '<div class="growth-item"><div class="subtle">'+fmtDateTime(r.created_at)+'</div><div>'+escHTML(r.summary||'Import')+'</div></div>';
     }).join(''):'<div class="placeholder">Nog geen imports uitgevoerd.</div>')+'</div>';
+  try{
+    if(typeof renderQuestions==='function')renderQuestions();
+  }catch(_e){}
 }
 function initQuickNav(){
   try{
@@ -1182,6 +1316,25 @@ function initQuickNav(){
   if(cornerBtn){
     cornerBtn.onclick=function(){window.location.href='sensecorner.html';};
   }
+}
+
+function applyUrlTabBoot(){
+  try{
+    var qp=new URLSearchParams(window.location.search||'');
+    var tab=String(qp.get('tab')||'').toLowerCase().trim();
+    if(!tab){
+      var h=String(window.location.hash||'').replace(/^#/,'').toLowerCase().trim();
+      if(['mij','inzichten','fotos','groei','bron'].indexOf(h)>=0)tab=h;
+    }
+    if(['mij','inzichten','fotos','groei','bron'].indexOf(tab)>=0){
+      activateTab(tab);
+    }
+    if(String(qp.get('import')||'')==='1'){
+      setTimeout(function(){
+        try{if(typeof openAiImportModal==='function')openAiImportModal();}catch(_e){}
+      },420);
+    }
+  }catch(_e){}
 }
 
 function initSupabase(){
@@ -2264,10 +2417,10 @@ async function recomputeInsight(scope,isAuto){
     insightMeta[scope].tags=[];
     insightMeta[scope].updated_at=new Date().toISOString();
     saveHubState();
-    renderInsightsTab();
+    renderInzichtenV2();
     return;
   }
-  if(!isAuto)renderInsightsTab('Herberekenen...');
+  if(!isAuto)renderInzichtenV2();
   try{
     var out=String(await callAnthropicJson('',buildInsightPrompt(scope,rows),850)||'').trim();
     setInsightTextByScope(scope,out);
@@ -2290,7 +2443,7 @@ async function recomputeInsight(scope,isAuto){
     insightMeta[scope].updated_at=new Date().toISOString();
     saveHubState();
   }
-  renderInsightsTab();
+  renderInzichtenV2();
 }
 
 async function recomputeAllInsightsAuto(){
@@ -2319,62 +2472,8 @@ function scopeBadgeClass(scope){
   return'scope-all';
 }
 
-function renderInsightsTab(statusText){
-  var el=document.getElementById('insightsCard');
-  if(!el)return;
-  var diff=Math.max(0,ownTimeline.length-(hubState.last_insight_count||0));
-  var banner='Auto-update actief · '+(diff>=5?'achtergrond herberekening nodig (+5 drempel bereikt)':'up-to-date');
-  if(statusText)banner=statusText;
-  var scopes=['all','ds','fs','gen'];
-  var pills='<div class="pill-row">'+scopes.map(function(s){
-    return '<button class="pill'+(activeInsightScope===s?' active':'')+'" data-scope="'+s+'">'+scopeLabel(s)+'</button>';
-  }).join('')+'</div>';
-  var txt=insightTextByScope(activeInsightScope)||'Nog geen inzicht berekend.';
-  var tags=(insightMeta[activeInsightScope]&&insightMeta[activeInsightScope].tags)||extractTags(txt);
-  var upAt=(insightMeta[activeInsightScope]&&insightMeta[activeInsightScope].updated_at)||hubState.last_insight_at;
-  var deltas=topDeltas();
-  var evo='';
-  if(deltas.length){
-    evo='<h3 style="margin-top:14px">Evolutie</h3><p class="subtle">Grootste verandering sinds laatste inzichten-snapshot.</p>';
-    deltas.forEach(function(d){
-      var sign=d.delta>0?'↑ +'+d.delta+'%':(d.delta<0?'↓ '+d.delta+'%':'→ stabiel');
-      evo+='<div class="delta-row"><span class="subtle">'+d.label+'</span>'
-        +'<div class="mini-track"><div class="mini-fill" style="width:'+Math.max(0,Math.min(100,d.cur))+'%"></div></div>'
-        +'<strong style="font-size:12px">'+sign+'</strong></div>';
-    });
-  }else{
-    evo='<h3 style="margin-top:14px">Evolutie</h3><p class="subtle">Nog geen betrouwbare evolutie: vul eerst vragen/foto/tijdlijn aan.</p>';
-  }
-
-  el.innerHTML=''
-    +'<h3>Inzichten</h3>'
-    +'<div class="status-banner">'+banner+'</div>'
-    +pills
-    +'<div class="ins-card">'
-    +'<div class="ins-head"><div class="ins-title">OWN Sensei reflectie</div>'
-    +'<span class="scope-badge '+scopeBadgeClass(activeInsightScope)+'">'+scopeLabel(activeInsightScope)+'</span></div>'
-    +'<div class="ins-time">'+(upAt?fmtDateTime(upAt):'nog niet berekend')+'</div>'
-    +'<div class="ins-body">'+txt.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'
-    +'<div class="tags">'+(tags.length?tags.map(function(t){return'<span class="tag">'+t+'</span>';}).join(''):'<span class="subtle">Geen tags</span>')+'</div>'
-    +'<div class="ins-actions">'
-    +'<button class="btn btn-primary btn-small" id="recomputeNowBtn" type="button">Herbereken nu</button>'
-    +'<button class="btn btn-muted btn-small" id="saveInsightBtn" type="button">Bewaar</button>'
-    +'</div></div>'
-    +evo;
-
-  el.querySelectorAll('[data-scope]').forEach(function(b){
-    b.addEventListener('click',function(){
-      activeInsightScope=b.getAttribute('data-scope');
-      renderInsightsTab();
-    });
-  });
-  document.getElementById('recomputeNowBtn').addEventListener('click',function(){
-    recomputeInsight(activeInsightScope,false);
-  });
-  document.getElementById('saveInsightBtn').addEventListener('click',function(){
-    saveHubState();
-    renderInsightsTab('Inzicht opgeslagen.');
-  });
+function renderInsightsTab(){
+  renderInzichtenV2();
 }
 
 function renderProfileTab(){
@@ -2399,6 +2498,7 @@ Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]).finally(functi
   renderFotosTab();
   renderGroeiTab();
   renderBronTab();
+  applyUrlTabBoot();
 });
 
 document.getElementById('photoPicker').addEventListener('change',async function(e){
