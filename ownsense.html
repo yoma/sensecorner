@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="17-04-2026 19:52">
+<meta name="os-build" content="17-04-2026 20:11">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -20,6 +20,19 @@
   --white:#FFFFFF;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+/* Mobiel (iOS Safari): display:none + programmatic .click() opent vaak geen kiezer. */
+.os-file-input-hidden{
+  position:fixed;
+  left:0;
+  top:0;
+  width:2px;
+  height:2px;
+  opacity:0.02;
+  overflow:hidden;
+  margin:0;
+  padding:0;
+  border:0;
+}
 html,body{
   height:100%;
   font-family:'DM Sans',sans-serif;
@@ -369,7 +382,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 19:52</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 20:11</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -458,9 +471,9 @@ html,body{
     </div>
   </div>
 </div>
-<input id="photoPicker" type="file" accept="image/*" style="display:none">
-<input id="aiImportFileInput" type="file" accept=".zip,application/zip,.json,application/json" style="display:none" onchange="handleAiImportFile(this)">
-<input id="ownPhotoSlotPicker" type="file" accept="image/*" style="display:none">
+<input id="photoPicker" type="file" accept="image/*" class="os-file-input-hidden" aria-hidden="true">
+<input id="aiImportFileInput" type="file" accept=".zip,application/zip,.json,application/json" class="os-file-input-hidden" aria-hidden="true" onchange="handleAiImportFile(this)">
+<input id="ownPhotoSlotPicker" type="file" accept="image/*" class="os-file-input-hidden" aria-hidden="true">
 
 <div class="import-modal" id="reviewFactsModal" aria-hidden="true">
   <div class="import-modal-bg" onclick="closeReviewFactsModal()"></div>
@@ -568,6 +581,8 @@ var senseProfileScopeByName={};
 var ownFacts=[];
 var ownInsights=[];
 var ownPhotos=[];
+/** slot -> tijdelijke signed URL voor preview (own-photos bucket, private). */
+var ownPhotoSignedBySlot={};
 var ownGrowthEvents=[];
 var AUTO_ACCEPT_THRESHOLD=0.85;
 var insightMeta={
@@ -602,7 +617,10 @@ function activateTab(tabId){
   });
   if(tabId==='mij')renderMijTab();
   if(tabId==='inzichten')renderInzichtenV2();
-  if(tabId==='fotos')renderFotosTab();
+  if(tabId==='fotos'){
+    renderFotosTab();
+    refreshOwnPhotoSlotPreviews().then(function(){renderFotosTab();}).catch(function(){renderFotosTab();});
+  }
   if(tabId==='groei')renderGroeiTab();
   if(tabId==='bron')renderBronTab();
 }
@@ -713,6 +731,41 @@ async function loadOwnBrainTables(){
     var growthRes=await client.from('own_growth_events').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(400);
     if(growthRes&&Array.isArray(growthRes.data))ownGrowthEvents=growthRes.data;
   }catch(_e){}
+}
+
+async function refreshOwnPhotoSlotPreviews(){
+  ownPhotoSignedBySlot={};
+  var client=initSupabase();
+  if(!client||!ownPhotos.length)return;
+  var ttl=60*60*24*30;
+  for(var i=0;i<ownPhotos.length;i++){
+    var row=ownPhotos[i];
+    var slot=parseInt(row.slot,10);
+    var path=String(row.storage_path||'').trim();
+    if(!path||isNaN(slot))continue;
+    try{
+      var s=await client.storage.from('own-photos').createSignedUrl(path,ttl);
+      var u=s&&s.data&&s.data.signedUrl?String(s.data.signedUrl):'';
+      if(u)ownPhotoSignedBySlot[slot]=u;
+    }catch(_e){}
+  }
+}
+
+function flashOwnsenseMessage(msg,isError){
+  var id='osFlashMsg';
+  try{
+    var old=document.getElementById(id);
+    if(old)old.remove();
+  }catch(_e){}
+  var d=document.createElement('div');
+  d.id=id;
+  d.setAttribute('role','status');
+  var err=!!isError;
+  d.style.cssText='position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:99999;padding:12px 14px;border-radius:12px;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 10px 32px rgba(0,0,0,.18);'
+    +(err?'background:#FFF5F5;border:1px solid #FFD6D6;color:#7A2A2A;':'background:#F0FAF3;border:1px solid #B8DFC8;color:#1a4d2e;');
+  d.textContent=String(msg||'');
+  document.body.appendChild(d);
+  setTimeout(function(){try{var x=document.getElementById(id);if(x)x.remove();}catch(_e2){}},5200);
 }
 
 async function addGrowthEvent(eventType,summary,sourceApp,sourceDossier,refId){
@@ -1154,43 +1207,84 @@ function getOwnPhotoSlot(slot){
 
 async function uploadOwnPhotoToStorage(file,slot){
   var client=initSupabase();
-  if(!client||!file)return null;
+  if(!client||!file)return{path:'',url:'',error:'Geen verbinding of geen bestand.'};
   var auth=await client.auth.getUser();
   var user=auth&&auth.data&&auth.data.user;
-  if(!user)return null;
+  if(!user)return{path:'',url:'',error:'Je bent niet ingelogd.'};
   var ext=(file.name&&file.name.split('.').pop()?file.name.split('.').pop():'jpg').toLowerCase();
+  if(ext.length>8)ext='jpg';
   var path=user.id+'/slot_'+slot+'_'+Date.now()+'.'+ext;
   var up=await client.storage.from('own-photos').upload(path,file,{upsert:true,contentType:file.type||'image/jpeg'});
-  if(up&&up.error)return null;
+  if(up&&up.error)return{path:'',url:'',error:String(up.error.message||'Upload naar opslag mislukt.')};
   var signed=await client.storage.from('own-photos').createSignedUrl(path,60*60*24*30);
-  return {path:path,url:signed&&signed.data&&signed.data.signedUrl?signed.data.signedUrl:''};
+  var url=signed&&signed.data&&signed.data.signedUrl?String(signed.data.signedUrl):'';
+  if(signed&&signed.error&&!url)return{path:path,url:'',error:String(signed.error.message||'Signed URL mislukt.')};
+  return{path:path,url:url,error:''};
 }
 
 function openPhotoSlotPicker(slot){
   _pendingOwnPhotoSlot=slot;
   var input=document.getElementById('ownPhotoSlotPicker');
-  if(input)input.click();
+  if(!input)return;
+  try{
+    if(typeof input.showPicker==='function')input.showPicker();
+    else input.click();
+  }catch(_e){
+    try{input.click();}catch(_e2){flashOwnsenseMessage('Kon bestandkiezer niet openen. Probeer opnieuw of een andere browser.',true);}
+  }
 }
 
 async function handleOwnPhotoSlotPicked(file){
-  if(!file||!_pendingOwnPhotoSlot)return;
   var slot=_pendingOwnPhotoSlot;
-  var uploaded=await uploadOwnPhotoToStorage(file,slot);
-  if(!uploaded||!uploaded.path)return;
-  var client=initSupabase();
-  if(!client)return;
-  var auth=await client.auth.getUser();
-  var user=auth&&auth.data&&auth.data.user;
-  if(!user)return;
-  var payload={user_id:user.id,slot:slot,storage_path:uploaded.path};
-  var up=await client.from('own_photos').upsert(payload,{onConflict:'user_id,slot'}).select('*').maybeSingle();
-  if(up&&up.data){
-    ownPhotos=ownPhotos.filter(function(p){return parseInt(p.slot,10)!==slot;});
-    ownPhotos.push(up.data);
-    ownPhotos.sort(function(a,b){return (a.slot||0)-(b.slot||0);});
-    await analyzeOwnPhotoSlot(slot);
-    await addGrowthEvent('photo_analyzed','Foto geupload en geanalyseerd (slot '+slot+')','ownsense','OWN Sense',up.data.id);
-    renderFotosTab();
+  if(!file||!slot){
+    _pendingOwnPhotoSlot=0;
+    return;
+  }
+  try{
+    var uploaded=await uploadOwnPhotoToStorage(file,slot);
+    if(uploaded.error){
+      flashOwnsenseMessage(uploaded.error,true);
+      return;
+    }
+    if(!uploaded.path){
+      flashOwnsenseMessage('Upload mislukt. Controleer je verbinding en probeer opnieuw.',true);
+      return;
+    }
+    var client=initSupabase();
+    if(!client){
+      flashOwnsenseMessage('Geen verbinding met de hub.',true);
+      return;
+    }
+    var auth=await client.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user){
+      flashOwnsenseMessage('Je bent niet ingelogd.',true);
+      return;
+    }
+    var payload={user_id:user.id,slot:slot,storage_path:uploaded.path};
+    var up=await client.from('own_photos').upsert(payload,{onConflict:'user_id,slot'}).select('*').maybeSingle();
+    if(up&&up.error){
+      flashOwnsenseMessage('Opslaan in dossier: '+String(up.error.message||'onbekend'),true);
+      return;
+    }
+    if(up&&up.data){
+      ownPhotos=ownPhotos.filter(function(p){return parseInt(p.slot,10)!==slot;});
+      ownPhotos.push(up.data);
+      ownPhotos.sort(function(a,b){return (a.slot||0)-(b.slot||0);});
+      if(uploaded.url)ownPhotoSignedBySlot[slot]=uploaded.url;
+      else await refreshOwnPhotoSlotPreviews();
+      renderFotosTab();
+      await analyzeOwnPhotoSlot(slot);
+      await addGrowthEvent('photo_analyzed','Foto geupload en geanalyseerd (slot '+slot+')','ownsense','OWN Sense',up.data.id);
+      renderFotosTab();
+      flashOwnsenseMessage('Foto opgeslagen (slot '+slot+').',false);
+    }else{
+      flashOwnsenseMessage('Opslaan mislukt: geen bevestiging van de server.',true);
+    }
+  }catch(e){
+    flashOwnsenseMessage(String(e&&e.message?e.message:'Onbekende fout bij upload.'),true);
+  }finally{
+    _pendingOwnPhotoSlot=0;
   }
 }
 
@@ -1292,11 +1386,12 @@ function renderFotosTab(){
     var label=slot===1?'Profielfoto':'Slot '+slot;
     var displayUrl='';
     if(slot===1)displayUrl=hubState.photo_url||'';
+    else displayUrl=ownPhotoSignedBySlot[slot]||'';
     html+='<div class="photo-slot"><div class="photo-slot-title">'+label+(slot===1?' (read-only)':'')+'</div>';
     if(displayUrl){
       html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
     }else if(row&&row.storage_path){
-      html+='<div class="subtle">Foto opgeslagen</div><button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Vervang foto</button>';
+      html+='<div class="subtle">Foto opgeslagen · even geduld, preview wordt geladen…</div><button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Vervang foto</button>';
     }else{
       html+='<div class="subtle">'+escHTML(hints[slot]||'Upload foto')+'</div>'+(slot===1?'':'<button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Upload</button>');
     }
@@ -1569,7 +1664,10 @@ async function refreshSignedPhotoUrls(){
     }
   }
   hubState.photo_urls=fresh.filter(Boolean);
-  if(hubState.photo_urls.length&&!hubState.photo_url)hubState.photo_url=hubState.photo_urls[0];
+  if(hubState.photo_urls.length){
+    if(hubState.photo_paths.length)hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
+    else if(!hubState.photo_url)hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
+  }
 }
 
 function displayNameFromAuthUser(user){
@@ -2715,10 +2813,14 @@ loadOwnFromSupabase()
 Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]).finally(function(){
   renderMijTab();
   renderInzichtenV2();
-  renderFotosTab();
   renderGroeiTab();
   renderBronTab();
+  return refreshOwnPhotoSlotPreviews();
+}).then(function(){
+  renderFotosTab();
   applyUrlTabBoot();
+}).catch(function(){
+  try{renderFotosTab();applyUrlTabBoot();}catch(_e){}
 });
 
 document.getElementById('photoPicker').addEventListener('change',async function(e){
@@ -2755,7 +2857,7 @@ document.getElementById('photoPicker').addEventListener('change',async function(
 document.getElementById('ownPhotoSlotPicker').addEventListener('change',async function(e){
   var file=e.target.files&&e.target.files[0];
   if(file){
-    try{await handleOwnPhotoSlotPicked(file);}catch(_e){}
+    try{await handleOwnPhotoSlotPicked(file);}catch(err){flashOwnsenseMessage(String(err&&err.message?err.message:err),true);}
   }
   e.target.value='';
 });
