@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="17-04-2026 21:39">
+<meta name="ds-build" content="17-04-2026 21:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -178,14 +178,28 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 
 /* Nav — altijd boven dossier-dock (z-index) zodat tikken op tabs betrouwbaar blijft */
 .nav{background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:16px 0 4px;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease}
 .tab.active{color:var(--r)}
-.tab.active::before{
-  content:'';position:absolute;top:4px;left:50%;transform:translateX(-50%);
-  width:6px;height:6px;border-radius:50%;background:var(--r);
-  box-shadow:0 0 0 5px rgba(232,187,185,.26),0 0 0 11px rgba(214,142,140,.14),0 0 0 19px rgba(186,86,84,.07);
+/* Nav-tab rimpel = kleurenschaal 72:58:44 (+ chocolade-kern), compact */
+.nav-tab-rimpel{
+  position:absolute;top:1px;left:50%;transform:translateX(-50%);
+  width:22px;height:22px;pointer-events:none;z-index:1;
+  opacity:0;transition:opacity .18s ease;
 }
-.tab-badge{position:absolute;top:1px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--r);box-shadow:0 0 0 2px #fff;pointer-events:none;display:none}
+.tab.active .nav-tab-rimpel{opacity:1}
+.nav-tab-rimpel > span{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  border-radius:50%;
+}
+.nav-tab-rimpel > span:nth-child(1){width:100%;height:100%;background:var(--date-licht)}
+.nav-tab-rimpel > span:nth-child(2){width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--date-medium)}
+.nav-tab-rimpel > span:nth-child(3){width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--date-donker)}
+.tab.active .nav-tab-rimpel::after{
+  content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:calc(100% * 24 / 72);height:calc(100% * 24 / 72);min-width:6px;min-height:6px;
+  border-radius:50%;background:var(--chocolade);z-index:2;
+}
+.tab-badge{position:absolute;top:1px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--r);box-shadow:0 0 0 2px #fff;pointer-events:none;display:none;z-index:3}
 .tab-badge.show{display:block}
 .tab svg{width:23px;height:23px}
 .tab span{font-size:var(--fs-xs);font-weight:600}
@@ -231,10 +245,10 @@ a:focus-visible,
   outline-offset:2px;
 }
 
-/* Mic + rimpel-ensemble (DateSense: donker → medium → licht naar buiten) */
+/* Mic + rimpel — design/sensecorner_kleurenschalen_finaal.html (72:58:44 + chocolade 24) */
 .mic-wrap{
   position:relative;display:flex;align-items:center;justify-content:center;
-  width:min(100%,168px);height:168px;margin:14px auto 18px;
+  width:168px;height:168px;margin:14px auto 18px;
   --mic-d:var(--date-donker);--mic-m:var(--date-medium);--mic-l:var(--date-licht);
 }
 .mic-wrap--sm{width:124px;height:124px;margin:12px auto}
@@ -242,21 +256,21 @@ a:focus-visible,
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   border-radius:50%;pointer-events:none;box-sizing:border-box;border:none;
 }
-.mic-wrap .mic-ripple:nth-child(1){width:144px;height:144px;background:rgba(232,187,185,.24)}
-.mic-wrap .mic-ripple:nth-child(2){width:118px;height:118px;background:rgba(214,142,140,.2)}
-.mic-wrap .mic-ripple:nth-child(3){width:96px;height:96px;background:rgba(186,86,84,.14)}
-.mic-wrap--sm .mic-ripple:nth-child(1){width:112px;height:112px}
-.mic-wrap--sm .mic-ripple:nth-child(2){width:94px;height:94px}
-.mic-wrap--sm .mic-ripple:nth-child(3){width:78px;height:78px}
+.mic-wrap .mic-ripple:nth-child(1){width:100%;height:100%;background:var(--mic-l)}
+.mic-wrap .mic-ripple:nth-child(2){width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--mic-m)}
+.mic-wrap .mic-ripple:nth-child(3){width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--mic-d)}
 .mic-btn{
   position:relative;z-index:2;
-  width:120px;height:120px;border-radius:60px;
-  background:linear-gradient(145deg,#BA5654,#8E4548);
+  width:max(48px,calc(100% * 24 / 72));height:max(48px,calc(100% * 24 / 72));
+  border-radius:50%;
+  background:var(--chocolade);
   display:flex;align-items:center;justify-content:center;margin:0;
-  cursor:pointer;border:none;box-shadow:0 10px 30px rgba(186,86,84,.32);
+  cursor:pointer;border:none;box-shadow:0 10px 28px rgba(61,47,31,.22);
+  color:var(--cream);
 }
+.mic-btn svg{stroke:var(--cream)}
 .mic-btn:active{transform:scale(.97)}
-.mic-btn.sm{width:80px;height:80px;border-radius:40px;box-shadow:0 8px 22px rgba(186,86,84,.26)}
+.mic-btn.sm{width:max(44px,calc(100% * 24 / 72));height:max(44px,calc(100% * 24 / 72));box-shadow:0 8px 20px rgba(61,47,31,.18)}
 
 /* Senses lijst */
 .srow{display:flex;align-items:center;gap:12px;padding:15px 14px;border:1px solid var(--b);border-radius:var(--rad-md);cursor:pointer;margin-bottom:12px;background:#fff;box-shadow:0 2px 8px rgba(20,20,20,.04)}
@@ -686,11 +700,7 @@ a:focus-visible,
   .build-tag-top{padding:6px 8px;font-size:11px;max-width:min(100%,160px)}
   .build-user-top{font-size:11px;max-width:min(100%,180px)}
   .main{padding-bottom:2px}
-  .mic-wrap{width:148px;height:152px;margin:10px auto 12px}
-  .mic-wrap .mic-ripple:nth-child(1){width:136px;height:136px}
-  .mic-wrap .mic-ripple:nth-child(2){width:114px;height:114px}
-  .mic-wrap .mic-ripple:nth-child(3){width:92px;height:92px}
-  .mic-btn{width:104px;height:104px;border-radius:52px;box-shadow:0 8px 22px rgba(186,86,84,.24)}
+  .mic-wrap{width:148px;height:148px;margin:10px auto 12px}
   .home-shell{padding:16px 14px 28px}
   .home-greeting{font-size:14px;margin-bottom:14px}
   .home-notes{max-width:none;margin-top:18px}
@@ -909,7 +919,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 17-04-2026 21:39</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 17-04-2026 21:55</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -978,10 +988,10 @@ a:focus-visible,
     <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
       <defs><clipPath id="dsCornerTrClip"><rect width="220" height="220"/></clipPath></defs>
       <g clip-path="url(#dsCornerTrClip)">
-        <circle cx="220" cy="0" r="208" fill="var(--date-licht)" fill-opacity="0.2"/>
-        <circle cx="220" cy="0" r="172" fill="var(--date-medium)" fill-opacity="0.16"/>
-        <circle cx="220" cy="0" r="138" fill="var(--date-donker)" fill-opacity="0.1"/>
-        <circle cx="220" cy="0" r="108" fill="var(--date-licht)" fill-opacity="0.14"/>
+        <circle cx="220" cy="0" r="220" fill="var(--date-licht)" fill-opacity="0.75"/>
+        <circle cx="220" cy="0" r="177.22" fill="var(--date-medium)" fill-opacity="0.78"/>
+        <circle cx="220" cy="0" r="134.44" fill="var(--date-donker)" fill-opacity="0.82"/>
+        <circle cx="220" cy="0" r="73.33" fill="var(--chocolade)" fill-opacity="0.12"/>
       </g>
     </svg>
   </div>
@@ -989,10 +999,10 @@ a:focus-visible,
     <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
       <defs><clipPath id="dsCornerBlClip"><rect width="220" height="220"/></clipPath></defs>
       <g clip-path="url(#dsCornerBlClip)">
-        <circle cx="0" cy="220" r="205" fill="var(--zand-medium)" fill-opacity="0.18"/>
-        <circle cx="0" cy="220" r="168" fill="var(--zand-licht)" fill-opacity="0.24"/>
-        <circle cx="0" cy="220" r="130" fill="var(--zand-medium)" fill-opacity="0.12"/>
-        <circle cx="0" cy="220" r="96" fill="#E8DAC4" fill-opacity="0.2"/>
+        <circle cx="0" cy="220" r="220" fill="var(--zand-licht)" fill-opacity="0.7"/>
+        <circle cx="0" cy="220" r="177.22" fill="var(--zand-medium)" fill-opacity="0.55"/>
+        <circle cx="0" cy="220" r="134.44" fill="#D4C4A5" fill-opacity="0.45"/>
+        <circle cx="0" cy="220" r="73.33" fill="var(--chocolade)" fill-opacity="0.08"/>
       </g>
     </svg>
   </div>
@@ -1071,19 +1081,23 @@ a:focus-visible,
   <!-- Bottom nav -->
   <div class="nav">
     <button class="tab active" id="tab-home" onclick="goScreen('home')">
+      <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg><span>Home</span>
     </button>
     <button class="tab" id="tab-senses" onclick="goScreen('senses')" title="Mijn Senses">
+      <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="tab-badge" id="tabBadgeSenses" aria-hidden="true"></span>
       <span>Senses</span>
     </button>
     <button class="tab" id="tab-own" onclick="openOwnSenseEntryPoint()" title="OWN Sense">
+      <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v2h16v-2c0-1.5-3-4-8-4z"/></svg>
       <span class="tab-badge" id="tabBadgeOwn" aria-hidden="true"></span>
       <span>OwnSense</span>
     </button>
     <button class="tab" id="tab-vertel" onclick="goScreen('vertel')">
+      <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg><span>Vertel</span>
     </button>
 
