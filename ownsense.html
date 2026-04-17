@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="17-04-2026 23:08">
+<meta name="os-build" content="18-04-2026 00:28">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -597,7 +597,7 @@ body{isolation:isolate}
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 23:08</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 00:28</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -762,6 +762,17 @@ var APP_CATS=[
   ]}
 ];
 var ALL_CATS=OWN_CATS.concat(APP_CATS);
+/** Query `?cat=datesense_focus|familysense_focus`: toon die lijst altijd + spring er naartoe na load. */
+var urlBootFocusCat='';
+function refreshBootFocusCatFromUrl(){
+  urlBootFocusCat='';
+  try{
+    var qp=new URLSearchParams(window.location.search||'');
+    var c=String(qp.get('cat')||'').trim();
+    if(APP_CATS.some(function(x){return x.id===c;}))urlBootFocusCat=c;
+  }catch(_e){}
+}
+refreshBootFocusCatFromUrl();
 
 var HUB_KEY='ownsense_hub_profile_v2';
 var HANDOFF_KEY='ownsense_handoff_v1';
@@ -1815,8 +1826,10 @@ function initQuickNav(){
 
 function applyUrlTabBoot(){
   try{
+    refreshBootFocusCatFromUrl();
     var qp=new URLSearchParams(window.location.search||'');
     var tab=String(qp.get('tab')||'').toLowerCase().trim();
+    if(urlBootFocusCat)tab='bron';
     if(!tab){
       var h=String(window.location.hash||'').replace(/^#/,'').toLowerCase().trim();
       if(['mij','inzichten','fotos','groei','bron'].indexOf(h)>=0)tab=h;
@@ -1824,11 +1837,27 @@ function applyUrlTabBoot(){
     if(['mij','inzichten','fotos','groei','bron'].indexOf(tab)>=0){
       activateTab(tab);
     }
+    if(urlBootFocusCat){
+      setTimeout(function(){try{focusBootQuestionCategory();}catch(_e){}},60);
+      setTimeout(function(){try{focusBootQuestionCategory();}catch(_e){}},380);
+    }
     if(String(qp.get('import')||'')==='1'){
       setTimeout(function(){
         try{if(typeof openAiImportModal==='function')openAiImportModal();}catch(_e){}
       },420);
     }
+  }catch(_e){}
+}
+
+function focusBootQuestionCategory(){
+  if(!urlBootFocusCat)return;
+  try{
+    activateTab('bron');
+    if(typeof renderBronTab==='function')renderBronTab();
+    var el=document.getElementById('cat-'+urlBootFocusCat);
+    if(!el)return;
+    el.classList.add('open');
+    el.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(_e){}
 }
 
@@ -2893,6 +2922,10 @@ function renderQuestions(){
       var active=appMessageCount(cat.app)>=1;
       if(active||hasAnswersInCat(cat.id))list.push(cat);
     });
+    if(urlBootFocusCat){
+      var forced=APP_CATS.find(function(c){return c.id===urlBootFocusCat;});
+      if(forced&&!list.some(function(c){return c.id===forced.id;}))list.push(forced);
+    }
     return list;
   }
   var el=document.getElementById('questionsCard');

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-04-2026 00:18">
+<meta name="fs-build" content="18-04-2026 00:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -832,6 +832,9 @@ a:focus-visible,
 .app-depth-hint-wrap.app-depth-hint--senses{margin:8px 0 6px}
 .app-depth-hint-wrap.app-depth-hint--home{margin:8px 0 14px;width:100%;max-width:100%}
 .app-depth-hint{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 10px;font-size:11px;line-height:1.4;color:#5c6470;background:#f7f8fa;border:1px solid #e4e6eb;border-radius:8px}
+.app-depth-hint.app-depth-hint--open{color:var(--app-donker);background:linear-gradient(180deg,#fff 0%,var(--app-licht) 100%);border:1px solid var(--app-medium)}
+.app-depth-hint--open .app-depth-hint-txt{color:var(--app-donker);font-weight:600}
+.app-depth-hint--open .app-depth-hint-link{color:var(--app-donker)}
 .app-depth-hint--ownprofiel{margin:0 0 12px}
 .app-depth-hint-txt{flex:1;min-width:0}
 .app-depth-hint.app-depth-hint--done{padding:4px 9px;font-size:10px;line-height:1.35;color:#6a7179;background:rgba(248,249,251,.92);border:1px solid rgba(228,230,235,.85);border-radius:6px;gap:0}
@@ -887,7 +890,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 18-04-2026 00:18</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 18-04-2026 00:28</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1470,9 +1473,9 @@ function renderOwnAppDepthHintHtml(opt){
       +'<span class="app-depth-hint-txt">Diepgaande '+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'-vragen in OWN Sense: ingevuld ✓</span>'
       +'</div>';
   }
-  return'<div class="'+cls+'" role="note">'
-    +'<span class="app-depth-hint-txt">Optioneel — scherpere context: vul in <strong>OWN Sense</strong> de diepgaande '+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'-vragen ('+st.filled+'/'+st.total+', '+st.pct+'%).</span> '
-    +'<button type="button" class="app-depth-hint-link" onclick="(window.openOwnSenseEntryPoint||openOwnSenseEntryPoint)()">OWN Sense</button>'
+  return'<div class="'+cls+' app-depth-hint--open" role="note">'
+    +'<span class="app-depth-hint-txt">Voor <strong>scherper en concreter advies</strong> in deze app: vul in <strong>OWN Sense</strong> de diepgaande '+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'-vragen verder aan ('+st.filled+'/'+st.total+', '+st.pct+'%).</span> '
+    +'<button type="button" class="app-depth-hint-link" onclick="(window.openOwnSenseEntryPoint||openOwnSenseEntryPoint)({cat:\''+OWN_APP_DEPTH_CAT.id+'\'})">Naar OWN Sense</button>'
     +'</div>';
 }
 function refreshOwnAppDepthHintMounts(){
@@ -4296,8 +4299,13 @@ function getProfielProgressCounts(dossierName){
   return{filled:filled,total:total,pct:total?Math.round(filled/total*100):0};
 }
 /** OWN Sense: alle coach-categorieën + basis-meta volledig → gedrag als gewoon dossier in de app (anders → ownsense.html hub). */
-function ownSenseHubUrl(){
-  return 'ownsense.html?returnTo='+encodeURIComponent('familysense.html');
+function ownSenseHubUrl(opt){
+  opt=opt||{};
+  var base='ownsense.html?returnTo='+encodeURIComponent('familysense.html');
+  if(opt.cat==='familysense_focus'){
+    base+='&tab=bron&cat='+encodeURIComponent('familysense_focus');
+  }
+  return base;
 }
 async function prepareOwnsenseHandoff(){
   try{
@@ -4321,13 +4329,13 @@ async function prepareOwnsenseHandoff(){
 }
 function ownSenseShowAsInAppDossier(){return false;}
 var _ownSenseHubNav=false;
-async function openOwnSenseEntryPoint(){
+async function openOwnSenseEntryPoint(opt){
   if(_ownSenseHubNav)return;
   _ownSenseHubNav=true;
   try{
     await withTimeout(prepareOwnsenseHandoff(),6500,'ownsense-handoff').catch(function(e){console.warn('prepareOwnsenseHandoff',e);});
   }catch(e){console.warn('openOwnSenseEntryPoint',e);}
-  window.location.href=ownSenseHubUrl();
+  window.location.href=ownSenseHubUrl(opt);
 }
 function computeDossierMatchSummary(name){
   var isOwn=name==='OWN Sense';
