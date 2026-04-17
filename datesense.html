@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="16-04-2026 16:11">
+<meta name="ds-build" content="17-04-2026 13:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -841,7 +841,7 @@ a:focus-visible,
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 15-04-2026 14:30</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 17-04-2026 13:59</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -8979,6 +8979,81 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   }
 }
 
+const AUTO_ACCEPT_THRESHOLD=0.85;
+
+function _wordOverlapScore(a,b){
+  var wa=String(a||'').toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function(x){return x.length>2;});
+  var wb=String(b||'').toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function(x){return x.length>2;});
+  if(!wa.length||!wb.length)return 0;
+  var set={}; wa.forEach(function(w){set[w]=1;});
+  var hit=0; wb.forEach(function(w){if(set[w])hit++;});
+  return hit/Math.max(wa.length,wb.length);
+}
+
+async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessionId){
+  try{
+    if(!sb||!userText)return;
+    var auth=await sb.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user)return;
+    var profRes=await sb.from('sense_profiles').select('props,algemeen_text').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
+    var profileBrief=JSON.stringify((profRes&&profRes.data&&profRes.data.props)||{}).substring(0,1800);
+    var sys='Je analyseert een gebruikersbericht uit DateSense en het lopende OwnSense-profiel. Geef enkel een JSON-array met 0-3 feiten over de gebruiker zelf. Velden: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 volzin), confidence (0-1).';
+    var usr='Bericht:\n'+String(userText).substring(0,2200)+'\n\nLopend OwnSense profiel:\n'+profileBrief;
+    var raw=await callAPI(sys,[{role:'user',content:usr}],420,14000);
+    var clean=String(raw||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+    var arr=safeJsonParse(clean);
+    if(!Array.isArray(arr)||!arr.length)return;
+    for(var i=0;i<arr.length;i++){
+      var f=arr[i]||{};
+      var cat=String(f.category||'algemeen').trim();
+      if(['karakter','interesses','relatie','gevoels','algemeen'].indexOf(cat)<0)cat='algemeen';
+      var factText=String(f.fact_text||'').trim();
+      if(!factText)continue;
+      var conf=Math.max(0,Math.min(1,parseFloat(f.confidence)));
+      if(isNaN(conf))conf=0.55;
+      var status='pending';
+      if(conf>=AUTO_ACCEPT_THRESHOLD&&f.subcategory){
+        try{
+          var existing=await sb.from('own_facts')
+            .select('fact_text')
+            .eq('user_id',user.id)
+            .eq('status','accepted')
+            .eq('subcategory',String(f.subcategory))
+            .limit(20);
+          var rows=Array.isArray(existing&&existing.data)?existing.data:[];
+          var conflict=rows.some(function(r){return _wordOverlapScore(r.fact_text,factText)>0.5;});
+          if(!conflict)status='accepted';
+        }catch(_e){}
+      }
+      var ins=await sb.from('own_facts').insert({
+        user_id:user.id,
+        category:cat,
+        subcategory:f.subcategory?String(f.subcategory):null,
+        fact_text:factText,
+        source_app:'datesense',
+        source_dossier:sourceDossier||null,
+        source_session_id:sourceSessionId||null,
+        confidence:conf,
+        status:status
+      }).select('*').maybeSingle();
+      var row=ins&&ins.data;
+      if(row&&status==='accepted'){
+        await sb.from('own_growth_events').insert({
+          user_id:user.id,
+          event_type:'fact_accepted',
+          summary:'Auto-aanvulling uit DateSense: '+factText.substring(0,140),
+          source_app:'datesense',
+          source_dossier:sourceDossier||null,
+          ref_id:row.id
+        });
+      }
+    }
+  }catch(e){
+    console.warn('own fact extract background failed',e);
+  }
+}
+
 // ══ OWN Sense: import ChatGPT / Claude export ═════════════════════
 var _AI_IMPORT_SYS='Je bent een persoonlijkheidsanalist. Analyseer de volgende berichten van een gebruiker en destilleer daaruit een persoonlijk profiel. Focus op: waarden, persoonlijkheid, communicatiestijl, wat ze zoeken in een partner, hoe ze omgaan met emoties, hun levensstijl. Geef het resultaat terug als JSON met de velden: waarden, persoonlijkheid, communicatiestijl, zoektInPartner, emotioneleStijl, levensstijl, overige. Elk veld is een korte beschrijvende tekst.';
 var _AI_IMPORT_KEYS=['waarden','persoonlijkheid','communicatiestijl','zoektInPartner','emotioneleStijl','levensstijl','overige'];
@@ -10031,6 +10106,7 @@ async function sendMsg(){
         aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),5000,'sessie-msg-timeout');
       }
     }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
+    void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
     try{
       var sidLive=S.currentSessionId;
       if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){

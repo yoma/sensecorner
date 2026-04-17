@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="15-04-2026 14:30">
+<meta name="os-build" content="17-04-2026 13:59">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -310,6 +310,24 @@ html,body{
 .import-review-ta{width:100%;min-height:56px;border:0.5px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;resize:vertical}
 .import-status{font-size:12px;color:#6E7177;line-height:1.45;min-height:18px}
 .import-status.err{color:#9F2A20}
+.mij-summary{font-family:'Lora',serif;font-size:17px;line-height:1.7;color:#3A3E45}
+.pending-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#FFF0DC;border:1px solid #F0C78D;color:#A24F0A;font-size:12px;font-weight:800;cursor:pointer}
+.dim-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid #E6DCD7;background:#FAF8F6;font-size:11px;font-weight:700;color:#6F737B;margin:4px 6px 0 0}
+.cat-open{border:1px solid #E8D7D2;border-radius:12px;padding:10px 12px;background:#FFFEFD}
+.cat-open h4{font-size:14px;margin-bottom:8px}
+.cat-open p{font-family:'Lora',serif;font-size:15px;line-height:1.65;color:#3A3E44;white-space:pre-wrap}
+.sticky-cta-wrap{position:sticky;bottom:12px;z-index:22;padding:8px 0 2px}
+.sticky-cta-btn{width:100%;border:none;border-radius:14px;padding:13px 14px;background:var(--accent);color:#fff;font:inherit;font-size:15px;font-weight:800;box-shadow:0 10px 24px rgba(177,31,31,.24);cursor:pointer}
+.insight-item{border:1px solid #E9DEDA;border-radius:12px;padding:11px;background:#fff;margin-top:9px}
+.insight-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.insight-level{display:inline-flex;padding:4px 8px;border-radius:999px;background:#FFF3F1;border:1px solid #F1CCC5;color:#9A3025;font-size:10px;font-weight:800;text-transform:uppercase}
+.icon-btn{border:none;background:transparent;cursor:pointer;font-size:16px}
+.photo-slot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.photo-slot{border:1px dashed #D9C8C3;border-radius:12px;padding:10px;background:#FFFEFD}
+.photo-slot-title{font-size:12px;font-weight:800;color:#6A4A43;margin-bottom:6px}
+.photo-slot img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;border:1px solid #E2D5D0}
+.growth-item{border:1px solid #E7DBD6;border-radius:12px;background:#fff;padding:10px;margin-top:8px}
+.source-list{display:grid;gap:8px}
 </style>
 </head>
 <body>
@@ -318,7 +336,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 15-04-2026 14:30</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 13:59</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -326,9 +344,11 @@ html,body{
       <button type="button" class="quick-nav-btn" id="cornerBtn">SenseCorner</button>
     </div>
     <nav class="tabs" aria-label="OWN Sense tabs">
-      <button class="tab-btn active" type="button" data-tab="profiel">Profiel</button>
-      <button class="tab-btn" type="button" data-tab="tijdlijn">Tijdlijn</button>
+      <button class="tab-btn active" type="button" data-tab="mij">Mij</button>
       <button class="tab-btn" type="button" data-tab="inzichten">Inzichten</button>
+      <button class="tab-btn" type="button" data-tab="fotos">Foto's</button>
+      <button class="tab-btn" type="button" data-tab="groei">Groei</button>
+      <button class="tab-btn" type="button" data-tab="bron">Bron</button>
     </nav>
   </header>
 
@@ -343,20 +363,29 @@ html,body{
   </section>
 
   <section id="hubShell">
-    <section class="tab-panel active" id="tab-profiel" aria-label="Profiel tab">
-      <article class="card" id="importCard"></article>
-      <article class="card" id="heroCard"></article>
-      <article class="card" id="propsCard"></article>
-      <article class="card" id="photoCard"></article>
-      <article class="card" id="questionsCard"></article>
-    </section>
-
-    <section class="tab-panel" id="tab-tijdlijn" aria-label="Tijdlijn tab">
-      <article class="card" id="timelineCard"></article>
+    <section class="tab-panel active" id="tab-mij" aria-label="Mij tab">
+      <article class="card" id="mijTopCard"></article>
+      <article class="card" id="mijHeroCard"></article>
+      <article class="card" id="mijProgressCard"></article>
+      <article class="card" id="mijCategoriesCard"></article>
     </section>
 
     <section class="tab-panel" id="tab-inzichten" aria-label="Inzichten tab">
+      <article class="card" id="insightsCreateCard"></article>
       <article class="card" id="insightsCard"></article>
+    </section>
+
+    <section class="tab-panel" id="tab-fotos" aria-label="Foto tab">
+      <article class="card" id="photosSlotsCard"></article>
+      <article class="card" id="photosPatternCard"></article>
+    </section>
+
+    <section class="tab-panel" id="tab-groei" aria-label="Groei tab">
+      <article class="card" id="growthCard"></article>
+    </section>
+
+    <section class="tab-panel" id="tab-bron" aria-label="Bron tab">
+      <article class="card" id="sourceCard"></article>
     </section>
   </section>
 </main>
@@ -397,6 +426,33 @@ html,body{
 </div>
 <input id="photoPicker" type="file" accept="image/*" style="display:none">
 <input id="aiImportFileInput" type="file" accept=".zip,application/zip,.json,application/json" style="display:none" onchange="handleAiImportFile(this)">
+<input id="ownPhotoSlotPicker" type="file" accept="image/*" style="display:none">
+
+<div class="import-modal" id="reviewFactsModal" aria-hidden="true">
+  <div class="import-modal-bg" onclick="closeReviewFactsModal()"></div>
+  <div class="import-modal-sheet">
+    <div style="font-size:16px;font-weight:800">Nieuwe aanvullingen beoordelen</div>
+    <div class="subtle">Accepteer, wijzig of weiger voorgestelde feiten voor je OwnSense-profiel.</div>
+    <div id="reviewFactsList" style="overflow:auto;max-height:56vh"></div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-muted" onclick="closeReviewFactsModal()">Sluiten</button>
+    </div>
+  </div>
+</div>
+
+<div class="import-modal" id="ownVertelModal" aria-hidden="true">
+  <div class="import-modal-bg" onclick="closeOwnVertelModal()"></div>
+  <div class="import-modal-sheet">
+    <div style="font-size:16px;font-weight:800">Vertel iets over jezelf</div>
+    <div class="subtle">Deze input wordt vertaald naar OwnSense feiten en profielverrijking.</div>
+    <textarea id="ownVertelInput" class="free-own-text" placeholder="Wat speelt er vandaag in jou?"></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn btn-primary" onclick="submitOwnVertel()">Opslaan en verwerken</button>
+      <button type="button" class="btn btn-muted" onclick="closeOwnVertelModal()">Sluiten</button>
+    </div>
+    <div id="ownVertelStatus" class="import-status"></div>
+  </div>
+</div>
 
 <script>
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -467,9 +523,18 @@ var hubState={
   insight_gen:'',
   last_insight_count:0,
   last_insight_at:'',
-  insight_scores_snap:{}
+  insight_scores_snap:{},
+  algemeen_text:'',
+  ai_summary_general:'',
+  ai_summary_per_app:{},
+  foto_patroon_text:''
 };
 var ownTimeline=[];
+var ownFacts=[];
+var ownInsights=[];
+var ownPhotos=[];
+var ownGrowthEvents=[];
+var AUTO_ACCEPT_THRESHOLD=0.85;
 var insightMeta={
   all:{tags:[],updated_at:''},
   ds:{tags:[],updated_at:''},
@@ -486,9 +551,11 @@ ALL_CATS.forEach(function(c){
 
 var tabButtons=document.querySelectorAll('[data-tab]');
 var panels={
-  profiel:document.getElementById('tab-profiel'),
-  tijdlijn:document.getElementById('tab-tijdlijn'),
-  inzichten:document.getElementById('tab-inzichten')
+  mij:document.getElementById('tab-mij'),
+  inzichten:document.getElementById('tab-inzichten'),
+  fotos:document.getElementById('tab-fotos'),
+  groei:document.getElementById('tab-groei'),
+  bron:document.getElementById('tab-bron')
 };
 
 function activateTab(tabId){
@@ -496,8 +563,13 @@ function activateTab(tabId){
     btn.classList.toggle('active',btn.getAttribute('data-tab')===tabId);
   });
   Object.keys(panels).forEach(function(k){
-    panels[k].classList.toggle('active',k===tabId);
+    if(panels[k])panels[k].classList.toggle('active',k===tabId);
   });
+  if(tabId==='mij')renderMijTab();
+  if(tabId==='inzichten')renderInzichtenV2();
+  if(tabId==='fotos')renderFotosTab();
+  if(tabId==='groei')renderGroeiTab();
+  if(tabId==='bron')renderBronTab();
 }
 
 tabButtons.forEach(function(btn){
@@ -530,6 +602,567 @@ function mergeMirrorEntriesIntoCategories(entries){
       }
     });
   });
+}
+
+function getAcceptedFactsByCategory(category){
+  return ownFacts.filter(function(f){return f&&f.status==='accepted'&&f.category===category;});
+}
+
+function getPendingFacts(){
+  return ownFacts.filter(function(f){return f&&f.status==='pending';});
+}
+
+function categoryLongText(catId){
+  if(catId==='algemeen')return String(hubState.algemeen_text||'').trim();
+  var c=hubState.categories&&hubState.categories[catId]?hubState.categories[catId]:{};
+  var lines=['a0','a1','a2','a3'].map(function(k){return String(c[k]||'').trim();}).filter(Boolean);
+  return lines.join('\n\n');
+}
+
+function dimLabelByFactsCount(n){
+  if(n<=2)return 'leeg';
+  if(n<=7)return 'in opbouw';
+  return 'rijk';
+}
+
+async function loadOwnBrainTables(){
+  var client=initSupabase();
+  if(!client)return;
+  try{
+    var auth=await client.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user)return;
+    var uid=user.id;
+    var factsRes=await client.from('own_facts').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(300);
+    if(factsRes&&Array.isArray(factsRes.data))ownFacts=factsRes.data;
+    var insightsRes=await client.from('own_insights').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(200);
+    if(insightsRes&&Array.isArray(insightsRes.data))ownInsights=insightsRes.data;
+    var photosRes=await client.from('own_photos').select('*').eq('user_id',uid).order('slot',{ascending:true});
+    if(photosRes&&Array.isArray(photosRes.data))ownPhotos=photosRes.data;
+    var growthRes=await client.from('own_growth_events').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(400);
+    if(growthRes&&Array.isArray(growthRes.data))ownGrowthEvents=growthRes.data;
+  }catch(_e){}
+}
+
+async function addGrowthEvent(eventType,summary,sourceApp,sourceDossier,refId){
+  var client=initSupabase();
+  if(!client)return;
+  try{
+    var auth=await client.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user)return;
+    var payload={user_id:user.id,event_type:eventType,summary:summary||'',source_app:sourceApp||null,source_dossier:sourceDossier||null,ref_id:refId||null};
+    var r=await client.from('own_growth_events').insert(payload).select('*').maybeSingle();
+    if(r&&r.data)ownGrowthEvents.unshift(r.data);
+  }catch(_e){}
+}
+
+function renderMijTab(){
+  var topEl=document.getElementById('mijTopCard');
+  var heroEl=document.getElementById('mijHeroCard');
+  var progressEl=document.getElementById('mijProgressCard');
+  var catsEl=document.getElementById('mijCategoriesCard');
+  if(!topEl||!heroEl||!progressEl||!catsEl)return;
+  var pending=getPendingFacts().length;
+  topEl.innerHTML='<h3>Mij</h3><div class="hero"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="Profielfoto">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
+  heroEl.innerHTML='<h3>Profielsamenvatting</h3><div class="mij-summary">'+escHTML(hubState.ai_summary_general||'Nog geen algemene samenvatting. Klik op Vernieuw om je eerste OwnSense-profieltekst te genereren.')+'</div><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="generateGeneralInsight()">Vernieuw</button></div>';
+
+  var dims=['karakter','interesses','relatie','gevoels','algemeen'];
+  var richCount=0;
+  var pills='';
+  dims.forEach(function(d){
+    var accepted=getAcceptedFactsByCategory(d).length;
+    var label=dimLabelByFactsCount(accepted);
+    if(label!=='leeg')richCount++;
+    pills+='<span class="dim-pill">'+d+' · '+label+'</span>';
+  });
+  progressEl.innerHTML='<h3>Voortgang</h3><p class="placeholder">OwnSense kent jou in '+richCount+' van 5 dimensies'+(richCount<5?' — er is nog verdieping mogelijk.':' — je profiel is rijk gevuld.')+'</p><div style="margin-top:6px">'+pills+'</div>';
+
+  var cats=[
+    {id:'karakter',label:'Karakter'},
+    {id:'interesses',label:'Interesses'},
+    {id:'relatie',label:'Relatie'},
+    {id:'gevoels',label:'Gevoelswereld'},
+    {id:'algemeen',label:'Algemeen'}
+  ];
+  catsEl.innerHTML='<h3>Categorieen</h3>'+cats.map(function(c){
+    var txt=categoryLongText(c.id);
+    return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p>'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
+  }).join('')+'<div class="sticky-cta-wrap"><button class="sticky-cta-btn" type="button" onclick="openOwnVertelModal()">Vertel iets over jezelf</button></div>';
+}
+
+function openOwnVertelModal(){
+  var m=document.getElementById('ownVertelModal');
+  if(!m)return;
+  m.classList.add('show');
+  m.setAttribute('aria-hidden','false');
+}
+function closeOwnVertelModal(){
+  var m=document.getElementById('ownVertelModal');
+  if(!m)return;
+  m.classList.remove('show');
+  m.setAttribute('aria-hidden','true');
+}
+
+async function submitOwnVertel(){
+  var ta=document.getElementById('ownVertelInput');
+  var st=document.getElementById('ownVertelStatus');
+  var txt=String(ta&&ta.value||'').trim();
+  if(!txt){if(st){st.textContent='Vertel eerst iets om op te slaan.';st.classList.add('err');}return;}
+  if(st){st.classList.remove('err');st.textContent='Verwerken...';}
+  try{
+    await extractOwnFactsFromMessage(txt,{source_app:'ownsense',source_dossier:'OWN Sense',source_session_id:null});
+    await addGrowthEvent('import','Nieuwe OwnSense-invoer verwerkt uit Vertel','ownsense','OWN Sense',null);
+    if(ta)ta.value='';
+    if(st)st.textContent='Opgeslagen. Bekijk je aanvullingen via de badge bovenaan.';
+    await loadOwnBrainTables();
+    renderMijTab();
+  }catch(_e){
+    if(st){st.classList.add('err');st.textContent='Verwerken mislukt. Probeer opnieuw.';}
+  }
+}
+
+function openReviewFactsModal(){
+  var m=document.getElementById('reviewFactsModal');
+  if(!m)return;
+  m.classList.add('show');
+  m.setAttribute('aria-hidden','false');
+  renderReviewFacts();
+}
+function closeReviewFactsModal(){
+  var m=document.getElementById('reviewFactsModal');
+  if(!m)return;
+  m.classList.remove('show');
+  m.setAttribute('aria-hidden','true');
+}
+
+function renderReviewFacts(){
+  var el=document.getElementById('reviewFactsList');
+  if(!el)return;
+  var pending=getPendingFacts();
+  if(!pending.length){
+    el.innerHTML='<div class="placeholder" style="padding:10px 0">Geen pending aanvullingen.</div>';
+    return;
+  }
+  el.innerHTML=pending.map(function(f){
+    return '<div class="insight-item">'
+      +'<div class="insight-item-head"><span class="insight-level">'+escHTML(f.category)+(f.subcategory?(' > '+escHTML(f.subcategory)):'')+'</span><span class="subtle">'+fmtDate(f.created_at)+'</span></div>'
+      +'<div style="font-family:\'Lora\',serif;font-size:15px;line-height:1.6;margin-top:8px">'+escHTML(f.fact_text||'')+'</div>'
+      +'<div class="subtle" style="margin-top:6px">uit '+escHTML(f.source_app||'onbekend')+(f.source_dossier?(' · '+escHTML(f.source_dossier)):'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-primary btn-small" type="button" onclick="acceptOwnFact(\''+escHTML(f.id)+'\')">Accepteer</button>'
+      +'<button class="btn btn-muted btn-small" type="button" onclick="editOwnFact(\''+escHTML(f.id)+'\')">Wijzig</button>'
+      +'<button class="btn btn-muted btn-small" type="button" onclick="rejectOwnFact(\''+escHTML(f.id)+'\')">Weiger</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+async function updateOwnFactStatus(factId,newStatus,newText){
+  var client=initSupabase();
+  if(!client)return null;
+  try{
+    var payload={status:newStatus,updated_at:new Date().toISOString()};
+    if(typeof newText==='string')payload.fact_text=newText;
+    var r=await client.from('own_facts').update(payload).eq('id',factId).select('*').maybeSingle();
+    if(r&&r.data){
+      var idx=ownFacts.findIndex(function(x){return x.id===factId;});
+      if(idx>=0)ownFacts[idx]=r.data;
+      return r.data;
+    }
+  }catch(_e){}
+  return null;
+}
+
+async function acceptOwnFact(factId){
+  var fact=ownFacts.find(function(f){return f.id===factId;});
+  if(!fact)return;
+  var updated=await updateOwnFactStatus(factId,'accepted');
+  if(updated){
+    await mergeFactIntoProfile(updated.category,updated.fact_text);
+    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+  }
+}
+
+async function editOwnFact(factId){
+  var fact=ownFacts.find(function(f){return f.id===factId;});
+  if(!fact)return;
+  var edited=window.prompt('Pas de fact-zin aan:',fact.fact_text||'');
+  if(edited==null)return;
+  var txt=String(edited||'').trim();
+  if(!txt)return;
+  var updated=await updateOwnFactStatus(factId,'accepted',txt);
+  if(updated){
+    await mergeFactIntoProfile(updated.category,updated.fact_text);
+    await addGrowthEvent('fact_accepted','Fact aangepast en geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+  }
+}
+
+async function rejectOwnFact(factId){
+  var updated=await updateOwnFactStatus(factId,'rejected');
+  if(updated){
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+  }
+}
+
+async function mergeFactIntoProfile(category,newFact){
+  var current=categoryLongText(category);
+  var sys='Je krijgt de huidige profieltekst van categorie '+category+' en een nieuw feit. Herschrijf de profieltekst zodat het nieuwe feit naadloos geintegreerd is. Geen opsomming. Tweede persoon, vloeiende volzinnen, max 200 woorden.';
+  var usr='Huidige tekst:\n'+(current||'(leeg)')+'\n\nNieuw feit:\n'+newFact;
+  var merged=String(await callAnthropicJson(sys,usr,520)||'').trim();
+  if(!merged)return;
+  if(category==='algemeen'){
+    hubState.algemeen_text=merged;
+  }else{
+    if(!hubState.categories[category])hubState.categories[category]={a0:'',a1:'',a2:'',a3:''};
+    hubState.categories[category].a0=merged;
+    hubState.categories[category].a1='';
+    hubState.categories[category].a2='';
+    hubState.categories[category].a3='';
+  }
+  saveHubState();
+  await addGrowthEvent('profile_rewritten','Profieltekst herschreven voor '+category,'ownsense','OWN Sense',null);
+}
+
+function tokenizeOverlapScore(a,b){
+  var wa=String(a||'').toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function(x){return x.length>2;});
+  var wb=String(b||'').toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function(x){return x.length>2;});
+  if(!wa.length||!wb.length)return 0;
+  var set={}; wa.forEach(function(w){set[w]=1;});
+  var hit=0; wb.forEach(function(w){if(set[w])hit++;});
+  return hit/Math.max(wa.length,wb.length);
+}
+
+function hasConflictWithAcceptedFact(fact){
+  if(!fact||!fact.subcategory)return false;
+  var acc=ownFacts.filter(function(x){return x.status==='accepted'&&x.subcategory===fact.subcategory;});
+  return acc.some(function(x){return tokenizeOverlapScore(x.fact_text,fact.fact_text)>0.5;});
+}
+
+async function insertOwnFactRow(row){
+  var client=initSupabase();
+  if(!client)return null;
+  try{
+    var r=await client.from('own_facts').insert(row).select('*').maybeSingle();
+    if(r&&r.data){
+      ownFacts.unshift(r.data);
+      return r.data;
+    }
+  }catch(_e){}
+  return null;
+}
+
+async function extractOwnFactsFromMessage(message,meta){
+  var txt=String(message||'').trim();
+  if(!txt)return;
+  var profileCompact=JSON.stringify({
+    karakter:categoryLongText('karakter').slice(0,800),
+    interesses:categoryLongText('interesses').slice(0,800),
+    relatie:categoryLongText('relatie').slice(0,800),
+    gevoels:categoryLongText('gevoels').slice(0,800),
+    algemeen:categoryLongText('algemeen').slice(0,800)
+  });
+  var sys='Je analyseert een gebruikersbericht. Geef alleen JSON-array met 0-3 feiten over de gebruiker zelf. Velden: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 volzin in derde persoon), confidence (0-1).';
+  var usr='Gebruikersbericht:\n'+txt.slice(0,2200)+'\n\nLopend OwnSense profiel:\n'+profileCompact;
+  var raw=String(await callAnthropicJson(sys,usr,420)||'').trim();
+  var clean=raw.replace(/```json/gi,'').replace(/```/g,'').trim();
+  var arr=safeJsonParse(clean);
+  if(!Array.isArray(arr))return;
+  var client=initSupabase();
+  if(!client)return;
+  var auth=await client.auth.getUser();
+  var user=auth&&auth.data&&auth.data.user;
+  if(!user)return;
+  for(var i=0;i<arr.length;i++){
+    var f=arr[i]||{};
+    var cat=String(f.category||'algemeen').trim();
+    if(['karakter','interesses','relatie','gevoels','algemeen'].indexOf(cat)<0)cat='algemeen';
+    var factText=String(f.fact_text||'').trim();
+    if(!factText)continue;
+    var conf=Math.max(0,Math.min(1,parseFloat(f.confidence)));
+    if(isNaN(conf))conf=0.55;
+    var row={
+      user_id:user.id,
+      category:cat,
+      subcategory:f.subcategory?String(f.subcategory).trim():null,
+      fact_text:factText,
+      source_app:String(meta&&meta.source_app||'ownsense'),
+      source_dossier:meta&&meta.source_dossier?String(meta.source_dossier):null,
+      source_session_id:meta&&meta.source_session_id?meta.source_session_id:null,
+      confidence:conf,
+      status:'pending'
+    };
+    if(conf>=AUTO_ACCEPT_THRESHOLD&&!hasConflictWithAcceptedFact(row)){
+      row.status='accepted';
+    }
+    var inserted=await insertOwnFactRow(row);
+    if(inserted&&inserted.status==='accepted'){
+      await mergeFactIntoProfile(inserted.category,inserted.fact_text);
+      await addGrowthEvent('fact_accepted','Auto-accepted fact uit '+row.source_app,row.source_app,row.source_dossier,inserted.id);
+    }
+  }
+}
+
+function acceptedFactsCompact(limit){
+  var arr=ownFacts.filter(function(f){return f.status==='accepted';}).slice(0,limit||80).map(function(f){
+    return {category:f.category,subcategory:f.subcategory||null,fact_text:f.fact_text,confidence:f.confidence};
+  });
+  return arr;
+}
+
+async function createInsight(level,scope,theme){
+  var sys='';
+  var userPayload='';
+  if(level==='algemeen'){
+    sys='Schrijf een warme, nauwkeurige profielsamenvatting in 1 alinea (max 120 woorden). Tweede persoon, vloeiende volzinnen.';
+    userPayload=JSON.stringify({profile:hubState,accepted_facts:acceptedFactsCompact(80)});
+  }else if(level==='per_app'){
+    sys='Beschrijf in 1 alinea hoe deze persoon zich gedraagt binnen '+scope+'. Tweede persoon, max 150 woorden, vloeiende volzinnen.';
+    userPayload=JSON.stringify({profile:hubState,scope:scope,accepted_facts:acceptedFactsCompact(120)});
+  }else{
+    sys='Beschrijf in 1 alinea hoe deze persoon omgaat met thema: '+theme+'. Tweede persoon, max 150 woorden, vloeiende volzinnen. Als te weinig data: zeg dat eerlijk.';
+    userPayload=JSON.stringify({profile:hubState,theme:theme,accepted_facts:acceptedFactsCompact(160)});
+  }
+  var text=String(await callAnthropicJson(sys,userPayload,650)||'').trim();
+  if(!text)return;
+  var client=initSupabase();
+  if(!client)return;
+  var auth=await client.auth.getUser();
+  var user=auth&&auth.data&&auth.data.user;
+  if(!user)return;
+  var row={user_id:user.id,level:level,scope:scope||null,text:text,bookmarked:false};
+  var ins=await client.from('own_insights').insert(row).select('*').maybeSingle();
+  if(ins&&ins.data){
+    ownInsights.unshift(ins.data);
+    if(level==='algemeen')hubState.ai_summary_general=text;
+    if(level==='per_app'){
+      if(!hubState.ai_summary_per_app||typeof hubState.ai_summary_per_app!=='object')hubState.ai_summary_per_app={};
+      hubState.ai_summary_per_app[String(scope||'algemeen').toLowerCase()]=text;
+    }
+    saveHubState();
+    await addGrowthEvent('insight_generated','Nieuw inzicht gegenereerd ('+level+')','ownsense','OWN Sense',ins.data.id);
+  }
+}
+
+function renderInzichtenV2(){
+  var createEl=document.getElementById('insightsCreateCard');
+  var listEl=document.getElementById('insightsCard');
+  if(!createEl||!listEl)return;
+  createEl.innerHTML='<h3>Nieuw inzicht genereren</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-small" type="button" onclick="generateGeneralInsight()">Algemeen</button>'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="generatePerAppInsight()">Per levensgebied</button>'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="generateSpecificInsight()">Specifiek thema</button>'
+    +'</div>';
+  if(!ownInsights.length){
+    listEl.innerHTML='<h3>Inzichten</h3><p class="placeholder">Nog geen inzichten. Genereer je eerste inzicht.</p>';
+    return;
+  }
+  listEl.innerHTML='<h3>Eerdere inzichten</h3>'+ownInsights.map(function(it){
+    return '<div class="insight-item">'
+      +'<div class="insight-item-head"><span class="insight-level">'+escHTML(it.level||'algemeen')+(it.scope?(' · '+escHTML(it.scope)):'')+'</span><div>'
+      +'<button class="icon-btn" title="Bookmark" onclick="toggleInsightBookmark(\''+it.id+'\')">'+(it.bookmarked?'★':'☆')+'</button>'
+      +'<button class="icon-btn" title="Delen" onclick="shareInsight(\''+it.id+'\')">↗</button>'
+      +'<button class="icon-btn" title="Verwijder" onclick="deleteInsight(\''+it.id+'\')">🗑</button></div></div>'
+      +'<div class="subtle">'+fmtDateTime(it.created_at)+'</div>'
+      +'<div style="margin-top:8px;font-family:\'Lora\',serif;line-height:1.65">'+escHTML(it.text||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+async function generateGeneralInsight(){
+  await createInsight('algemeen',null,null);
+  renderMijTab();
+  renderInzichtenV2();
+}
+async function generatePerAppInsight(){
+  var app=window.prompt('Kies levensgebied/app (datesense/familysense):','datesense');
+  if(!app)return;
+  await createInsight('per_app',String(app).toLowerCase(),null);
+  renderInzichtenV2();
+}
+async function generateSpecificInsight(){
+  var theme=window.prompt('Beschrijf het thema:','Mijn conflictstijl');
+  if(!theme)return;
+  await createInsight('specifiek',String(theme).trim(),String(theme).trim());
+  renderInzichtenV2();
+}
+async function toggleInsightBookmark(id){
+  var client=initSupabase();
+  var row=ownInsights.find(function(x){return x.id===id;});
+  if(!client||!row)return;
+  var next=!row.bookmarked;
+  await client.from('own_insights').update({bookmarked:next}).eq('id',id);
+  row.bookmarked=next;
+  renderInzichtenV2();
+}
+function shareInsight(id){
+  var row=ownInsights.find(function(x){return x.id===id;});
+  if(!row)return;
+  window.location.href='mailto:?subject=OwnSense inzicht&body='+encodeURIComponent(row.text||'');
+}
+async function deleteInsight(id){
+  var client=initSupabase();
+  if(!client)return;
+  await client.from('own_insights').delete().eq('id',id);
+  ownInsights=ownInsights.filter(function(x){return x.id!==id;});
+  renderInzichtenV2();
+}
+
+var _pendingOwnPhotoSlot=0;
+function getOwnPhotoSlot(slot){
+  return ownPhotos.find(function(p){return parseInt(p.slot,10)===slot;})||null;
+}
+
+async function uploadOwnPhotoToStorage(file,slot){
+  var client=initSupabase();
+  if(!client||!file)return null;
+  var auth=await client.auth.getUser();
+  var user=auth&&auth.data&&auth.data.user;
+  if(!user)return null;
+  var ext=(file.name&&file.name.split('.').pop()?file.name.split('.').pop():'jpg').toLowerCase();
+  var path=user.id+'/slot_'+slot+'_'+Date.now()+'.'+ext;
+  var up=await client.storage.from('own-photos').upload(path,file,{upsert:true,contentType:file.type||'image/jpeg'});
+  if(up&&up.error)return null;
+  var signed=await client.storage.from('own-photos').createSignedUrl(path,60*60*24*30);
+  return {path:path,url:signed&&signed.data&&signed.data.signedUrl?signed.data.signedUrl:''};
+}
+
+function openPhotoSlotPicker(slot){
+  _pendingOwnPhotoSlot=slot;
+  var input=document.getElementById('ownPhotoSlotPicker');
+  if(input)input.click();
+}
+
+async function handleOwnPhotoSlotPicked(file){
+  if(!file||!_pendingOwnPhotoSlot)return;
+  var slot=_pendingOwnPhotoSlot;
+  var uploaded=await uploadOwnPhotoToStorage(file,slot);
+  if(!uploaded||!uploaded.path)return;
+  var client=initSupabase();
+  if(!client)return;
+  var auth=await client.auth.getUser();
+  var user=auth&&auth.data&&auth.data.user;
+  if(!user)return;
+  var payload={user_id:user.id,slot:slot,storage_path:uploaded.path};
+  var up=await client.from('own_photos').upsert(payload,{onConflict:'user_id,slot'}).select('*').maybeSingle();
+  if(up&&up.data){
+    ownPhotos=ownPhotos.filter(function(p){return parseInt(p.slot,10)!==slot;});
+    ownPhotos.push(up.data);
+    ownPhotos.sort(function(a,b){return (a.slot||0)-(b.slot||0);});
+    await analyzeOwnPhotoSlot(slot);
+    await addGrowthEvent('photo_analyzed','Foto geupload en geanalyseerd (slot '+slot+')','ownsense','OWN Sense',up.data.id);
+    renderFotosTab();
+  }
+}
+
+async function analyzeOwnPhotoSlot(slot){
+  var row=getOwnPhotoSlot(slot);
+  if(!row)return;
+  var client=initSupabase();
+  if(!client)return;
+  var signed=await client.storage.from('own-photos').createSignedUrl(row.storage_path,60*20);
+  var url=signed&&signed.data&&signed.data.signedUrl?signed.data.signedUrl:'';
+  var sys='Beschrijf wat deze foto vertelt over de persoon: lichaamstaal, energie, hoe de persoon zich toont. Geen score, alleen observaties. 2-3 zinnen.';
+  var usr='Foto URL:\n'+url;
+  var analysis=String(await callAnthropicJson(sys,usr,260)||'').trim();
+  if(!analysis)return;
+  await client.from('own_photos').update({ai_analysis:analysis}).eq('id',row.id);
+  row.ai_analysis=analysis;
+}
+
+async function computePhotoPatterns(){
+  var analyses=ownPhotos.map(function(p){return String(p.ai_analysis||'').trim();}).filter(Boolean);
+  if(!analyses.length)return;
+  var sys='Wat valt op over deze foto observaties heen? Welke rode draad zie je in zelfpresentatie, energie, sfeer? 1-2 alineas.';
+  var usr=analyses.join('\n\n');
+  var out=String(await callAnthropicJson(sys,usr,420)||'').trim();
+  if(!out)return;
+  hubState.foto_patroon_text=out;
+  saveHubState();
+  await createInsight('specifiek','fotos','fotos');
+  renderFotosTab();
+}
+
+function renderFotosTab(){
+  var slotsEl=document.getElementById('photosSlotsCard');
+  var patternEl=document.getElementById('photosPatternCard');
+  if(!slotsEl||!patternEl)return;
+  var hints={
+    2:'Een foto waarin je je echt jezelf voelt',
+    3:'Een foto in actie of hobby',
+    4:'Een foto met geliefden / dichtbij',
+    5:'Een foto van jaren geleden'
+  };
+  var html='<h3>Foto\'s</h3><div class="photo-slot-grid">';
+  for(var slot=1;slot<=5;slot++){
+    var row=getOwnPhotoSlot(slot);
+    var label=slot===1?'Profielfoto':'Slot '+slot;
+    var displayUrl='';
+    if(slot===1)displayUrl=hubState.photo_url||'';
+    html+='<div class="photo-slot"><div class="photo-slot-title">'+label+(slot===1?' (read-only)':'')+'</div>';
+    if(displayUrl){
+      html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
+    }else if(row&&row.storage_path){
+      html+='<div class="subtle">Foto opgeslagen</div><button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Vervang foto</button>';
+    }else{
+      html+='<div class="subtle">'+escHTML(hints[slot]||'Upload foto')+'</div>'+(slot===1?'':'<button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker('+slot+')">Upload</button>');
+    }
+    if(row&&row.ai_analysis)html+='<div style="margin-top:8px;font-family:\'Lora\',serif;font-size:13px;line-height:1.55">'+escHTML(row.ai_analysis)+'</div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  slotsEl.innerHTML=html;
+  patternEl.innerHTML='<h3>Patronen</h3><div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="computePhotoPatterns()">Bereken patronen over alle foto\'s</button></div>';
+}
+
+function monthKey(iso){
+  try{
+    var d=new Date(iso);
+    return d.toLocaleDateString('nl-BE',{month:'long',year:'numeric'});
+  }catch(_e){return 'Onbekend';}
+}
+
+function renderGroeiTab(){
+  var el=document.getElementById('growthCard');
+  if(!el)return;
+  if(!ownGrowthEvents.length){
+    el.innerHTML='<h3>Groei</h3><p class="placeholder">Hier zie je hoe OwnSense jou steeds beter leert kennen. Begin met iets te vertellen.</p>';
+    return;
+  }
+  var grouped={};
+  ownGrowthEvents.forEach(function(g){
+    var k=monthKey(g.created_at);
+    if(!grouped[k])grouped[k]=[];
+    grouped[k].push(g);
+  });
+  var out='<h3>Groei</h3>';
+  Object.keys(grouped).forEach(function(k){
+    out+='<div class="month-label">'+escHTML(k)+'</div>';
+    grouped[k].forEach(function(g){
+      var icon=g.source_app==='datesense'?'💬':(g.source_app==='familysense'?'🏠':'🧠');
+      out+='<div class="growth-item"><div class="subtle">'+fmtDate(g.created_at)+' · '+icon+' '+escHTML(g.source_app||'ownsense')+'</div><div style="margin-top:6px">'+escHTML(g.summary||'')+'</div></div>';
+    });
+  });
+  el.innerHTML=out;
+}
+
+function renderBronTab(){
+  var el=document.getElementById('sourceCard');
+  if(!el)return;
+  var importRows=ownGrowthEvents.filter(function(g){return g.event_type==='import';}).slice(0,20);
+  el.innerHTML='<h3>Bron</h3><div class="source-list">'
+    +'<button class="btn btn-primary btn-small" type="button" onclick="openAiImportModal()">Chat-export importeren</button>'
+    +'<button class="btn btn-muted btn-small" type="button" disabled>WhatsApp import (binnenkort)</button>'
+    +'</div><div style="margin-top:12px">'+(importRows.length?importRows.map(function(r){
+      return '<div class="growth-item"><div class="subtle">'+fmtDateTime(r.created_at)+'</div><div>'+escHTML(r.summary||'Import')+'</div></div>';
+    }).join(''):'<div class="placeholder">Nog geen imports uitgevoerd.</div>')+'</div>';
 }
 function initQuickNav(){
   try{
@@ -716,6 +1349,10 @@ async function loadOwnFromSupabase(){
       hubState.last_insight_count=parseInt(row.last_insight_count,10)||0;
       hubState.last_insight_at=String(row.last_insight_at||hubState.last_insight_at||'');
       hubState.insight_scores_snap=(row.insight_scores_snap&&typeof row.insight_scores_snap==='object')?row.insight_scores_snap:(hubState.insight_scores_snap||{});
+      hubState.algemeen_text=String(row.algemeen_text||hubState.algemeen_text||'');
+      hubState.ai_summary_general=String(row.ai_summary_general||hubState.ai_summary_general||'');
+      hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
+      hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
     }
   }catch(e){}
 }
@@ -789,7 +1426,12 @@ async function saveOwnToSupabase(){
       insight_gen:hubState.insight_gen||null,
       last_insight_count:parseInt(hubState.last_insight_count,10)||0,
       last_insight_at:hubState.last_insight_at||null,
-      insight_scores_snap:hubState.insight_scores_snap||{}
+      insight_scores_snap:hubState.insight_scores_snap||{},
+      algemeen_text:hubState.algemeen_text||'',
+      ai_summary_general:hubState.ai_summary_general||'',
+      ai_summary_per_app:hubState.ai_summary_per_app||{},
+      last_summary_at:new Date().toISOString(),
+      foto_patroon_text:hubState.foto_patroon_text||''
     };
     var up=await client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'});
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
@@ -884,6 +1526,10 @@ function loadHubState(){
   hubState.last_insight_count=parseInt(hubState.last_insight_count,10)||0;
   hubState.last_insight_at=String(hubState.last_insight_at||'');
   if(!hubState.insight_scores_snap||typeof hubState.insight_scores_snap!=='object')hubState.insight_scores_snap={};
+  hubState.algemeen_text=String(hubState.algemeen_text||'');
+  hubState.ai_summary_general=String(hubState.ai_summary_general||'');
+  if(!hubState.ai_summary_per_app||typeof hubState.ai_summary_per_app!=='object')hubState.ai_summary_per_app={};
+  hubState.foto_patroon_text=String(hubState.foto_patroon_text||'');
 }
 
 function saveHubState(){
@@ -1732,11 +2378,7 @@ function renderInsightsTab(statusText){
 }
 
 function renderProfileTab(){
-  renderImportCard();
-  renderHero();
-  renderProps();
-  renderPhotoSection();
-  renderQuestions();
+  renderMijTab();
 }
 
 // Stap 2: nog zonder Supabase-check, met lokale fallback.
@@ -1749,15 +2391,14 @@ loadHubState();
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
   .finally(function(){
-    renderProfileTab();
+    renderMijTab();
   });
-loadOwnTimelineFromSupabase().finally(function(){
-  renderTimelineTab();
-  renderInsightsTab();
-  var diff=Math.max(0,ownTimeline.length-(hubState.last_insight_count||0));
-  if(diff>=5){
-    recomputeAllInsightsAuto();
-  }
+Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]).finally(function(){
+  renderMijTab();
+  renderInzichtenV2();
+  renderFotosTab();
+  renderGroeiTab();
+  renderBronTab();
 });
 
 document.getElementById('photoPicker').addEventListener('change',async function(e){
@@ -1791,13 +2432,21 @@ document.getElementById('photoPicker').addEventListener('change',async function(
   e.target.value='';
 });
 
+document.getElementById('ownPhotoSlotPicker').addEventListener('change',async function(e){
+  var file=e.target.files&&e.target.files[0];
+  if(file){
+    try{await handleOwnPhotoSlotPicked(file);}catch(_e){}
+  }
+  e.target.value='';
+});
+
 var insightTabBtn=document.querySelector('[data-tab="inzichten"]');
 if(insightTabBtn){
   insightTabBtn.addEventListener('click',function(){
     hasNewInsightBadge=false;
     var b=document.getElementById('insightNewDot');
     if(b)b.style.display='none';
-    renderInsightsTab();
+    renderInzichtenV2();
   });
   if(!document.getElementById('insightNewDot')){
     var dot=document.createElement('span');
