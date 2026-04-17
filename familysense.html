@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-04-2026 13:59">
+<meta name="fs-build" content="17-04-2026 16:30">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
@@ -778,7 +778,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 13:59</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 16:30</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -3722,6 +3722,14 @@ async function loadMsgs(pn,opt){
   return data||[];
 }
 
+/** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen — advies moet de recentste zien. */
+async function loadMsgsRecentChronological(pn,limit){
+  var cap=Math.max(1,Math.min(1000,parseInt(limit||120,10)));
+  var batch=await loadMsgs(pn,{limit:cap,asc:false});
+  var arr=batch||[];
+  return arr.slice().reverse();
+}
+
 function downloadTextFileBase(filename,text){
   var blob=new Blob([text],{type:'text/plain;charset=utf-8'});
   var a=document.createElement('a');
@@ -3737,6 +3745,28 @@ function downloadTextFileBase(filename,text){
 
 function stripTagsPlainExport(html){
   return String(html==null?'':html).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+}
+
+/** Platte tekst van recente gebruikersberichten in Vertel; laatste user-turn weglaten (die zit al in de API-messages). */
+function buildVertelRecentUserDigest(vertelMsgs,maxMsgs,maxChars){
+  var arr=vertelMsgs||[];
+  if(arr.length&&arr[arr.length-1].role==='user'){
+    arr=arr.slice(0,-1);
+  }
+  var cap=typeof maxMsgs==='number'?maxMsgs:8;
+  var users=arr.filter(function(m){return m.role==='user';}).slice(-cap);
+  var parts=[];
+  var total=0;
+  var maxC=typeof maxChars==='number'?maxChars:1000;
+  for(var i=0;i<users.length;i++){
+    var t=stripTagsPlainExport(users[i].html||'').replace(/\s+/g,' ').trim();
+    if(t.length<6)continue;
+    if(t.length>220)t=t.substring(0,220)+'…';
+    if(total+t.length+3>maxC)break;
+    parts.push(t);
+    total+=t.length+3;
+  }
+  return parts.join(' | ');
 }
 
 async function exportDossierTimelineTxt(dossierName){
@@ -7092,7 +7122,9 @@ async function loadTab(name,tab,d){
       var dd=(dObj&&!isNaN(dObj.getTime()))?dObj.toLocaleDateString('nl-BE',_tlDateOpts):'';
       var ds=dd&&dd!==lastDate?(lastDate=dd,'<div class="hdate">'+escHTML(dd)+'</div>'):'';
       var isU=m.role==='user';
-      var txt=isU?escTL(m.html):(m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,180)+(m.html.length>200?'...':''));
+      var plain=stripTagsPlainExport(m.html||'');
+      var preview=isU?(plain.length>800?plain.substring(0,800)+'…':plain):(plain.length>220?plain.substring(0,220)+'…':plain);
+      var txt=escTL(preview);
       var msgId=m.id||'';
       var timeLbl=(dObj&&!isNaN(dObj.getTime()))?dObj.toLocaleTimeString('nl-BE',_tlTimeOpts):'—';
       return ds+'<div class="tl-item">'
@@ -7319,7 +7351,7 @@ function buildAdviceContextPayload(name,d,msgs){
   var meta=(d&&d.meta)||{};
   var famRel=getContactRolBadgeText(meta);
   var summary=String((d&&d.summary)||'').trim();
-  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,320));
+  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,900));
   var catSnips=[];
   if(d&&d.categories){
     Object.values(d.categories).forEach(function(cat){
@@ -7330,16 +7362,23 @@ function buildAdviceContextPayload(name,d,msgs){
     });
   }
   if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,6).join(' | ').substring(0,900));
-  var recentFacts=(msgs||[])
+  var userTexts=(msgs||[])
     .filter(function(m){return m.role==='user';})
-    .map(function(m){return String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
-    .filter(Boolean)
-    .slice(-8)
-    .map(function(t){return '- '+t.substring(0,180);});
-  if(recentFacts.length)lines.push('Recente signalen:\n'+recentFacts.join('\n'));
+    .map(function(m){return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();})
+    .filter(Boolean);
+  if(userTexts.length>20){
+    var early=userTexts.slice(0,4).map(function(t){return '- '+t.substring(0,200);});
+    lines.push('Langere tijdlijn — oudste kern uit dit venster:\n'+early.join('\n'));
+  }
+  var recentFacts=userTexts.slice(-16).map(function(t){return '- '+t.substring(0,220);});
+  if(recentFacts.length)lines.push('Recente signalen (chronologisch, onderaan het nieuwst):\n'+recentFacts.join('\n'));
   var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
   if(name!=='OWN Sense'&&famRel)payload+='\nRol in je gezin: '+famRel;
   if(lines.length)payload+='\n'+lines.join('\n');
+  var maxPayload=42000;
+  if(payload.length>maxPayload){
+    payload=payload.substring(0,maxPayload)+'\n\n[Context ingekort voor stabiele AI-koppeling; je volledige tijdlijn blijft in het dossier.]';
+  }
   return payload;
 }
 function dossierHasAdviceInput(name){
@@ -7382,7 +7421,7 @@ async function genAdvies(name,forced){
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{
-    msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
+    msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
   }catch(e){
     msgs=[];
   }
@@ -7502,7 +7541,7 @@ async function genAdviesOnderbouwd(name){
     }
     var msgs=[];
     try{
-      msgs=await withTimeout(loadMsgs(name,{limit:36,asc:true}),6500,'Berichten laden duurde te lang.');
+      msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
     }catch(_e){msgs=[];}
     var cache=(S.adviesCache&&S.adviesCache[name])||{};
     var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -8163,6 +8202,14 @@ function rSettings(el){
 </div>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">AI draait via server-side Hub-config. Lokale API-key is niet nodig.</div>
 <div style="font-size:13px;color:#666;line-height:1.6;margin-top:10px;padding:10px 12px;background:#F8F9FA;border:1px solid var(--b);border-radius:10px">Adviesstijl is centraal beheerd: warm, direct en eerlijk — zonder scores of «aandachtspunten»-percentages.</div>
+<div style="font-size:15px;font-weight:700;color:var(--t);margin:18px 0 8px">Automatische dossier-samenvatting</div>
+<p style="font-size:12px;color:#777;line-height:1.5;margin:0 0 10px">Familiedossiers: na het opslaan van tijdlijnberichten wordt op de achtergrond de korte dossier-samenvatting vernieuwd. Eerste opslag triggert altijd; daarna volgens de frequentie hieronder (hoger = minder AI).</p>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:6px">
+  <label for="dossierSummaryEverySlider" style="font-size:13px;color:#444;white-space:nowrap">Frequentie</label>
+  <input type="range" id="dossierSummaryEverySlider" min="1" max="24" step="1" value="${getDossierSummaryRefreshEvery()}" style="flex:1;min-width:160px;max-width:300px" aria-label="Aantal opgeslagen berichten tussen samenvatting-updates" />
+  <span id="dossierSummaryEveryLbl" style="font-size:13px;font-weight:700;color:var(--r);min-width:140px"></span>
+</div>
+<p style="font-size:11px;color:#8a8f97;margin:0 0 12px">Waarde 1 = na elke opslag. Standaard 8.</p>
 <button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>
 <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--b)">
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Dossiers</div>
@@ -8178,6 +8225,17 @@ function rSettings(el){
   <div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:8px">Extra's</div>
   <div class="g2">${extraHtml}</div>
 </div></div>`;
+  var sumSl=document.getElementById('dossierSummaryEverySlider');
+  var sumLb=document.getElementById('dossierSummaryEveryLbl');
+  if(sumSl&&sumLb){
+    function updSummaryEveryLbl(){
+      var v=Math.max(1,Math.min(24,parseInt(sumSl.value,10)||8));
+      sumLb.textContent=v===1?'Elk opgeslagen bericht':'Elke '+v+' opgeslagen berichten';
+      try{sumSl.setAttribute('aria-valuenow',String(v));}catch(_e){}
+    }
+    sumSl.oninput=updSummaryEveryLbl;
+    updSummaryEveryLbl();
+  }
 }
 
 async function exportAllData(){
@@ -8262,6 +8320,11 @@ async function saveSettings(){
   try{
     S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
     if(!S.apiKey && S.user)S.apiKey='hub_server_managed';
+    var sumSl=document.getElementById('dossierSummaryEverySlider');
+    if(sumSl){
+      var sv=Math.max(1,Math.min(24,parseInt(sumSl.value,10)||DOSSIER_SUMMARY_REFRESH_DEFAULT));
+      localStorage.setItem(DOSSIER_SUMMARY_LS_KEY,String(sv));
+    }
     toast('✅ Instellingen opgeslagen');
     goScreen('settings');
   }catch(e){
@@ -8370,7 +8433,11 @@ function getEffectiveAnthropicKey(){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
-  var sess=await sb.auth.getSession();
+  var sess=await withTimeout(
+    sb.auth.getSession(),
+    15000,
+    'Sessie laden duurt te lang (netwerk). Vernieuw de pagina of log opnieuw in via SenseCorner.'
+  );
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
@@ -8388,7 +8455,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
     });
     clearTimeout(timer);
     timer=null;
-    var readMs=Math.min(25000,Math.max(6000,Math.floor(timeoutMs*0.65)));
+    var readMs=Math.min(120000,Math.max(10000,timeoutMs-4000));
     var raw=await withTimeout(res.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).');
     var data;
     try{
@@ -9505,7 +9572,7 @@ async function sendMsg(){
 
   // Bouw gespreksgeschiedenis — strip HTML tags en beperk lengte
   var history=[];
-  (S.vertelMsgs||[]).slice(-4).forEach(function(m){
+  (S.vertelMsgs||[]).slice(-12).forEach(function(m){
     var tekst=m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     if(tekst.length>300)tekst=tekst.substring(0,300);
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
@@ -9523,7 +9590,8 @@ async function sendMsg(){
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
     +' Gebruik geen lange gedachtestreep (—); gebruik een komma of punt.'
-    +' Als de gebruiker iets vertelt over een familielid, sla dan de essentie op in het juiste dossier. Geef daarna een korte, empathische reactie en een praktisch inzicht of tip over de situatie. Stel eventueel 1 verdiepende vraag. Geen oordeel, geen scores.'
+    +' Als de gebruiker iets vertelt over een familielid: korte empathische reactie, eventueel een praktische tip, maximaal 1 verdiepende vraag. Geen oordeel, geen scores.'
+    +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het coach-antwoord verschijnt een opslaanstrook (bevestigen, ander dossier kiezen, negeren) of een melding dat het al automatisch bij een dossier staat of vast «in dit gesprek» is gekozen. Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar die strook of melding. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' CONTEXT: '+coachCtxFinal;
 
 
@@ -9546,6 +9614,10 @@ async function sendMsg(){
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
+    var vertelUserDigest=buildVertelRecentUserDigest(S.vertelMsgs,8,1000);
+    if(vertelUserDigest){
+      fullSys+='\nRECENTE GEBRUIKER-INPUT UIT DIT VERTEL-GESPREK (kan meerdere personen raken; neem dit mee, ook wanneer het actieve dossier of de gespreksfocus wisselt):\n'+vertelUserDigest+'\n';
+    }
     if(hadAdviceCtx){
       fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder.';
     }
@@ -9677,6 +9749,12 @@ async function bevestigAlles(){
       updateContactCategories(dossier,samengevat);
     }
   }
+
+  Object.keys(perDossier).forEach(function(dnm){
+    if(dnm==='OWN Sense')return;
+    var c=(S.pdata[dnm]||{}).count||0;
+    void scheduleDossierSummaryIfNeeded(dnm,c);
+  });
 
   window._pendingSegmenten=null;
 
@@ -9905,6 +9983,9 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
   // Herbereken eigenschappen op basis van alle nieuwe data
   herbereken(dosName);
   updateContactCategories(dosName,chunks.join(' ').substring(0,3000));
+  if(dosName&&dosName!=='OWN Sense'){
+    void scheduleDossierSummaryIfNeeded(dosName,(S.pdata[dosName]||{}).count||0,{force:true});
+  }
 
   var progEl=document.getElementById('wa-progress');
   if(progEl){
@@ -10487,49 +10568,131 @@ async function handleImgFile(input){
   input.value='';
 }
 
-// ══ Auto-samenvatting per dossier ════════════════════════════════
+// ══ Auto-samenvatting per dossier (batch: elke N opslagen + merge met vorige) ══
+// Triggert bij elke tijdlijn-opslag (Vertel, segmenten, import, …) — alle app-routes, niet alleen WhatsApp.
+var DOSSIER_SUMMARY_REFRESH_DEFAULT=8;
+var DOSSIER_SUMMARY_LS_KEY='fs_dossier_summary_every';
+function getDossierSummaryRefreshEvery(){
+  var raw=parseInt(localStorage.getItem(DOSSIER_SUMMARY_LS_KEY)||'',10);
+  if(isNaN(raw)||raw<1)raw=DOSSIER_SUMMARY_REFRESH_DEFAULT;
+  if(raw>24)raw=24;
+  return raw;
+}
+var _dossierSummaryInflight={};
 
-async function updateDossierSummary(dosName){
-  if(!S.apiKey||dosName==='OWN Sense')return;
-  var d=S.pdata[dosName]||{props:{},count:0,categories:{},summary:''};
-
-  // Verzamel alle beschikbare info
-  var infoLines=[];
-  if(d.categories){
-    Object.values(d.categories).forEach(function(cat){
-      Object.values(cat||{}).forEach(function(v){if((v||'').trim())infoLines.push(v.trim());});
-    });
+function buildDossierAutoSummaryContextBlock(dosName,d){
+  var lines=[];
+  var meta=(d&&d.meta)||{};
+  var fr=getContactRolBadgeText(meta);
+  if(fr)lines.push('Rol in gezin: '+fr);
+  var stage=getDossierStage(dosName);
+  if(stage)lines.push('Gezins-fase/rol-type: '+stageLabel(stage));
+  var mAge=calcAgeFromBirthdate(meta.birthdate)||meta.age||'';
+  var profBits=[meta.roepnaam,meta.display_name,mAge?('leeftijd '+mAge):'',meta.city].filter(Boolean);
+  if(profBits.length)lines.push('Profiel (app): '+profBits.join(', ').substring(0,340));
+  if(meta.photo_analysis&&meta.photo_analysis.summary){
+    lines.push('Foto-indruk (app): '+String(meta.photo_analysis.summary).replace(/\s+/g,' ').substring(0,260));
   }
-
-  // Haal laatste 10 berichten op
-  var msgs=[];
-  try{
-    var {data}=await sb.from('sense_messages')
-      .select('html').eq('user_id',S.user.id).eq('profile_name',dosName)
-      .eq('role','user').order('created_at',{ascending:false}).limit(10);
-    if(data)msgs=data.map(function(m){return m.html.replace(/<[^>]*>/g,' ').trim();}).filter(function(t){return t.length>5;});
-  }catch(e){}
-
-  if(!infoLines.length&&!msgs.length)return;
-
-  var allInfo=infoLines.concat(msgs).join(' | ').substring(0,1500);
-
-  try{
-    var sys='Maak een compacte samenvatting van max 5 sleutelpunten over deze persoon.'
-      +' Gebruik korte zinnen of keywords. Geen opsomming met bullets, gewoon komma-gescheiden.'
-      +' Focus op: karakter, gedrag, status contact, opvallende dingen, jouw gevoel erbij.'
-      +' Max 150 woorden. Nederlands.';
-    var raw=await callAPI(sys,[{role:'user',content:'Info over '+dn(dosName)+': '+allInfo}],200);
-    if(raw&&raw.trim()){
-      d.summary=raw.trim();
-      S.pdata[dosName]=d;
-      // Sla op in Supabase
-      await saveP(dosName,d.props,d.count,d.categories,d.summary);
-      // Update context cache
-      if(!S._ctxMsgs)S._ctxMsgs={};
-      S._ctxMsgs[dosName+'_summary']=raw.trim();
+  var props=d&&d.props;
+  if(props&&typeof props==='object'){
+    var ps=[];
+    for(var i=0;i<PK.length;i++){
+      var v=props[PK[i]];
+      if(typeof v==='number'&&v>0)ps.push(PL[i]+':'+v+'%');
     }
-  }catch(e){console.warn('updateDossierSummary error:',e);}
+    if(ps.length)lines.push('Eigenschappen: '+ps.join(', ').substring(0,240));
+  }
+  var rf=meta.red_flags;
+  if(rf&&typeof rf.score==='number'&&rf.score>=35){
+    var rs=(rf.reasons||[]).slice(0,2).join(' · ');
+    lines.push('Aandacht (app): '+rf.score+'%'+(rs?(' — '+rs):''));
+  }
+  return lines.join('\n');
+}
+
+function scheduleDossierSummaryIfNeeded(dosName,newCount,opts){
+  opts=opts||{};
+  if(!dosName||dosName==='OWN Sense')return Promise.resolve();
+  if(!S.apiKey)return Promise.resolve();
+  var force=!!opts.force;
+  var n=getDossierSummaryRefreshEvery();
+  if(!force){
+    if(n<1)return Promise.resolve();
+    var c=parseInt(newCount,10)||0;
+    if(c<=0)return Promise.resolve();
+    if(c!==1&&(c%n)!==0)return Promise.resolve();
+  }
+  return refreshDossierSummaryAI(dosName).catch(function(e){console.warn('refreshDossierSummaryAI',dosName,e);});
+}
+
+async function refreshDossierSummaryAI(dosName){
+  if(!S.apiKey||!dosName||dosName==='OWN Sense')return;
+  if(_dossierSummaryInflight[dosName])return;
+  _dossierSummaryInflight[dosName]=true;
+  try{
+    var d=S.pdata[dosName]||{props:{...DP},count:0,categories:{},summary:'',meta:{}};
+    var infoLines=[];
+    if(d.categories){
+      Object.values(d.categories).forEach(function(cat){
+        Object.values(cat||{}).forEach(function(v){if((v||'').trim())infoLines.push(String(v).trim());});
+      });
+    }
+    var msgLines=[];
+    try{
+      var res=await sb.from('sense_messages')
+        .select('html')
+        .eq('user_id',S.user.id)
+        .eq('profile_name',dosName)
+        .eq('role','user')
+        .order('created_at',{ascending:false})
+        .limit(60);
+      var data=res&&res.data;
+      if(data&&data.length){
+        msgLines=data.map(function(m){return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();}).filter(function(t){return t.length>5;});
+        msgLines=msgLines.slice().reverse();
+      }
+    }catch(e){}
+
+    var timelineBundle=msgLines.join('\n---\n');
+    if(timelineBundle.length>14000){
+      timelineBundle=timelineBundle.substring(timelineBundle.length-14000);
+    }
+    var prev=String(d.summary||'').trim();
+    var extras=buildDossierAutoSummaryContextBlock(dosName,d).trim();
+    if(!infoLines.length&&!timelineBundle&&!extras)return;
+
+    var parts=[];
+    if(prev){
+      parts.push('Bestaande dossier-samenvatting (werk bij, laat verouderde details vallen):\n'+prev.substring(0,1400));
+    }
+    if(extras){
+      parts.push('Dossier-info uit de app (profiel, rol, scores, foto-indruk; niet enkel chat):\n'+extras.substring(0,2400));
+    }
+    if(infoLines.length){
+      parts.push('Invulvakjes / kernnotities:\n'+infoLines.join(' | ').substring(0,2200));
+    }
+    if(timelineBundle){
+      parts.push('Tijdlijn (alle opgeslagen user-berichten uit de app, chronologisch):\n'+timelineBundle);
+    }
+    var userBlock=parts.join('\n\n');
+
+    var sys='Je werkt voor FamilySense. Schrijf ÉÉn compacte dossier-samenvatting over '+dn(dosName)+' en de gezinsdynamiek met de gebruiker.'
+      +' Gebruik tijdlijn én profiel/rol/eigenschappen uit de input; dat is allemaal actuele app-data.'
+      +' Verwerk feiten en gevoel; laat ruis weg. Maximaal 130 woorden, doorlopende tekst of korte alinea\'s, geen bulletlijsten.'
+      +' Nederlands. Geen meta-commentaar.';
+
+    var raw=await callAPI(sys,[{role:'user',content:userBlock}],520,52000);
+    if(raw&&String(raw).trim()){
+      d.summary=String(raw).trim().substring(0,4000);
+      S.pdata[dosName]=d;
+      await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
+      if(!S._ctxMsgs)S._ctxMsgs={};
+      S._ctxMsgs[dosName+'_summary']=d.summary;
+      try{toast('Samenvatting bijgewerkt');}catch(_te){}
+    }
+  }finally{
+    delete _dossierSummaryInflight[dosName];
+  }
 }
 
 // ══ Coach Context ════════════════════════════════════════════════
@@ -11346,8 +11509,11 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
       await updateOwnSenseCategoriesFromVertel(tekst);
       var _ownT=(tekst||'').replace(/<[^>]*>/g,' ').trim();
       if(!ownSenseVertelRichEnoughForCategoryAI(_ownT))await updateEigenschappenAI(dossier,tekst);
-      updateDossierSummary(dossier).catch(function(e){console.warn('updateDossierSummary OWN Sense',e);});
-    }else{updateContactCategories(dossier,tekst);herbereken(dossier);updateDossierSummary(dossier);}
+    }else{
+      updateContactCategories(dossier,tekst);
+      herbereken(dossier);
+      void scheduleDossierSummaryIfNeeded(dossier,pd.count);
+    }
     rDrawer();
     if(sid&&window._saveData)delete window._saveData[sid];
     S.vertelGesprekDossier=dossier;

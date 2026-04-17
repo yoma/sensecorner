@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="17-04-2026 17:12">
+<meta name="os-build" content="17-04-2026 16:30">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -360,7 +360,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 17:12</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 16:30</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -418,7 +418,7 @@ html,body{
   <div class="import-modal-bg" onclick="closeAiImportModal()"></div>
   <div class="import-modal-sheet">
     <div style="font-size:16px;font-weight:800">OWN Sense vullen via chat-export</div>
-    <div class="subtle">Upload ChatGPT ZIP of Claude JSON, bekijk de voorgestelde tekst en sla op in je OWN-profiel.</div>
+    <div class="subtle">ZIP (ChatGPT) of JSON (Claude), controleren, opslaan in OWN.</div>
     <div id="aiImportStepUpload">
       <div class="import-tabs">
         <button type="button" class="import-tab active" id="aiImportTabGpt" onclick="switchAiImportTab('chatgpt')">ChatGPT</button>
@@ -434,9 +434,9 @@ html,body{
         <button type="button" class="btn btn-primary" onclick="document.getElementById('aiImportFileInput').click()">Bestand kiezen</button>
       </div>
     </div>
-    <div id="aiImportStepLoading" style="display:none" class="subtle">Je profiel wordt opgebouwd… even geduld.</div>
+    <div id="aiImportStepLoading" style="display:none" class="subtle">Even geduld…</div>
     <div id="aiImportStepReview" style="display:none;overflow:auto">
-      <div class="subtle">Controleer en pas aan. Bij opslaan wordt dit samengevoegd met bestaande OWN-tekst.</div>
+      <div class="subtle">Aanpassen mag. Opslaan = samenvoegen met bestaande OWN-tekst.</div>
       <div id="aiImportReviewFields"></div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button type="button" class="btn btn-primary" id="aiImportSaveBtn" onclick="confirmAiImportSave()">Opslaan in OWN Sense</button>
@@ -457,7 +457,7 @@ html,body{
   <div class="import-modal-bg" onclick="closeReviewFactsModal()"></div>
   <div class="import-modal-sheet">
     <div style="font-size:16px;font-weight:800">Nieuwe aanvullingen beoordelen</div>
-    <div class="subtle">Accepteer, wijzig of weiger voorgestelde feiten voor je OwnSense-profiel.</div>
+    <div class="subtle">Feiten: goedkeuren, aanpassen of weigeren.</div>
     <div id="reviewFactsList" style="overflow:auto;max-height:56vh"></div>
     <div style="display:flex;gap:8px">
       <button type="button" class="btn btn-muted" onclick="closeReviewFactsModal()">Sluiten</button>
@@ -469,7 +469,7 @@ html,body{
   <div class="import-modal-bg" onclick="closeOwnVertelModal()"></div>
   <div class="import-modal-sheet">
     <div style="font-size:16px;font-weight:800">Vertel iets over jezelf</div>
-    <div class="subtle">Deze input wordt vertaald naar OwnSense feiten en profielverrijking.</div>
+    <div class="subtle">Wordt feiten + profielvoorstel (jij keurt).</div>
     <textarea id="ownVertelInput" class="free-own-text" placeholder="Wat speelt er vandaag in jou?"></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn btn-primary" onclick="submitOwnVertel()">Opslaan en verwerken</button>
@@ -555,6 +555,7 @@ var hubState={
   foto_patroon_text:''
 };
 var ownTimeline=[];
+var senseProfileScopeByName={};
 var ownFacts=[];
 var ownInsights=[];
 var ownPhotos=[];
@@ -726,7 +727,7 @@ function renderMijTab(){
   if(!topEl||!heroEl||!progressEl||!catsEl)return;
   var pending=getPendingFacts().length;
   topEl.innerHTML='<h3>Mij</h3><div class="hero"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="Profielfoto">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
-  heroEl.innerHTML='<h3>Profielsamenvatting</h3><div class="mij-summary">'+escHTML(hubState.ai_summary_general||'Nog geen algemene samenvatting. Klik op Vernieuw om je eerste OwnSense-profieltekst te genereren.')+'</div><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="generateGeneralInsight()">Vernieuw</button></div>';
+  heroEl.innerHTML='<h3>Profielsamenvatting</h3><div class="mij-summary">'+escHTML(hubState.ai_summary_general||'Nog geen samenvatting. Tik Vernieuw.')+'</div><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" onclick="generateGeneralInsight()">Vernieuw</button></div>';
 
   var dims=['karakter','interesses','relatie','gevoels','algemeen'];
   var richCount=0;
@@ -737,8 +738,8 @@ function renderMijTab(){
     if(label!=='leeg')richCount++;
     pills+='<span class="dim-pill">'+d+' · '+label+'</span>';
   });
-  progressEl.innerHTML='<h3>Voortgang</h3><p class="placeholder">OwnSense kent jou in '+richCount+' van 5 dimensies'+(richCount<5?'. Er is nog verdieping mogelijk.':'. Je profiel is rijk gevuld.')+'</p>'
-    +'<p class="subtle" style="margin-top:8px;line-height:1.55">Dit meet je <strong>bestaande vragenlijst</strong> (tab Invullen) plus <strong>geaccepteerde feiten</strong> uit de database. Suggesties uit andere apps verschijnen eerst in de review; tot je ze accepteert, houden we ze buiten deze meter.</p>'
+  progressEl.innerHTML='<h3>Voortgang</h3><p class="placeholder">'+richCount+'/5 domeinen hebben al inhoud'+(richCount<5?' (meer kan altijd).':'.')+'</p>'
+    +'<p class="subtle" style="margin-top:6px">Op basis van je lijsten (tab Invullen) en feiten die je <strong>accepteert</strong>. Pending uit apps telt pas na je OK.</p>'
     +'<div style="margin-top:8px">'+pills+'</div>';
 
   var cats=[
@@ -748,7 +749,7 @@ function renderMijTab(){
     {id:'gevoels',label:'Gevoelswereld'},
     {id:'algemeen',label:'Algemeen'}
   ];
-  catsEl.innerHTML='<h3>Categorieen</h3><p class="subtle" style="margin-bottom:10px;line-height:1.55">Dit is je leesbare profieltekst per domein. Wil je iets wijzigen? Gebruik tab <strong>Invullen</strong> (vragenlijsten) of tik op <strong>Vertel</strong> hieronder.</p>'
+  catsEl.innerHTML='<h3>Categorieen</h3><p class="subtle" style="margin-bottom:8px">Tekst per domein. Zelf: tab <strong>Invullen</strong> of <strong>Vertel</strong>. Vult ook <strong>automatisch</strong> mee als je DateSense of FamilySense gebruikt.</p>'
     +cats.map(function(c){
     var txt=categoryLongText(c.id);
     return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p style="white-space:pre-wrap">'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
@@ -1026,7 +1027,7 @@ function insightCardHtml(title,badge,text,updatedIso,scopeKey){
   if(['all','ds','fs','gen'].indexOf(sk)<0)sk='all';
   var body=String(text||'').trim();
   var display=cleanInsightCardProse(body);
-  var t=display?escHTML(display):'<span class="subtle">Nog geen AI-inzicht voor dit spoor. Tik op «Ververs alle inzichten».</span>';
+  var t=display?escHTML(display):'<span class="subtle">Nog geen inzicht. Rode knop: verversen.</span>';
   var when=updatedIso?fmtDateTime(updatedIso):'nog niet berekend';
   var tags=((insightMeta[sk]&&insightMeta[sk].tags)||[]).slice(0,8).map(function(x){return String(x||'').trim();}).filter(Boolean);
   var tagRow='';
@@ -1073,8 +1074,7 @@ function renderInzichtenV2(){
     window.__insightRefreshNote='';
   }
   createEl.innerHTML='<div class="insights-intro"><h3>Inzichten (AI per app)</h3>'
-    +'<p class="subtle" style="line-height:1.55;margin-top:6px">Vier vaste sporen: <strong>alle apps</strong>, <strong>DateSense</strong>, <strong>FamilySense</strong> en <strong>OWN-intern</strong>. '
-    +'Ze worden automatisch opgebouwd uit je <strong>OWN Sense-berichtenarchief</strong> (tab Groei / tijdlijn). Gegevens in andere tabellen tellen pas mee als ze in dit archief landen. Gebruik onderaan de knop om alles te verversen.</p></div>'
+    +'<p class="subtle" style="margin-top:6px">Vier korte AI-teksten (totaal, DateSense, FamilySense, OWN). Bron: je berichten in <strong>alle</strong> Sense-dossiers. Rode knop: alles opnieuw.</p></div>'
     +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsenseInsightBusy?'disabled ':'')+'onclick="refreshAllAppInsights()">Ververs alle inzichten (AI)</button></div>'
     +'<div id="insightRefreshStatus" class="subtle" style="margin-top:6px">'+insightStat+'</div>'
     +'<details style="margin-top:12px"><summary class="subtle" style="cursor:pointer;font-weight:700">Geavanceerd (optioneel)</summary>'
@@ -1280,7 +1280,7 @@ function renderFotosTab(){
     window.__photoPatternLastStatus='';
   }
   patternEl.innerHTML='<h3>Patronen</h3>'
-    +'<p class="subtle" style="line-height:1.55;margin-bottom:8px">Je mag dit al proberen met 1 foto of zelfs zonder per-foto analyse: de AI gebruikt dan vooral je profielfoto en korte tips. Ideaal is wel minstens 2–3 beelden.</p>'
+    +'<p class="subtle" style="margin-bottom:6px">Werkt al met 1 foto; rijker met 2–3 beelden.</p>'
     +'<div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div>'
     +'<div id="photoPatternStatus" class="subtle" style="margin-top:8px">'+photoStat+'</div>'
     +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsensePhotoPatternBusy?'disabled ':'')+'onclick="computePhotoPatterns()">Bereken patronen (nu)</button></div>';
@@ -1293,8 +1293,8 @@ function renderGroeiTab(){
   if(!ownGrowthEvents.length){
     var archHtml='';
     if(arch.length){
-      archHtml='<h4 style="margin-top:14px;font-size:14px">Archief (eigen berichten, nieuwste eerst)</h4>'
-        +'<p class="subtle" style="margin-bottom:8px">Ruwe chatfragmenten, zie uitleg hierboven. Geen vervanging voor mijlpalen.</p>'
+      archHtml='<h4 style="margin-top:14px;font-size:14px">Recent uit je chat</h4>'
+        +'<p class="subtle" style="margin-bottom:6px">Recente chat, nieuwste eerst.</p>'
         +arch.map(function(m){
           var src=detectSourceFromMsg(m);
           var icon=src==='ds'?'💬':(src==='fs'?'🏠':'🧠');
@@ -1303,8 +1303,8 @@ function renderGroeiTab(){
         }).join('');
     }
     el.innerHTML='<h3>Groei</h3>'
-      +'<p class="placeholder" style="margin-bottom:10px"><strong>Mijlpalen</strong> zijn korte gebeurtenissen (bv. import gelukt, feit geaccepteerd, foto geanalyseerd). Die verschijnen in de lijst zodra het systeem ze registreert.</p>'
-      +'<p class="subtle" style="line-height:1.55;margin-bottom:8px"><strong>Archief</strong> hieronder zijn losse fragmenten uit je OWN Sense-chat, handig als leidraad, maar <em>niet</em> hetzelfde als een mijlpaal. Zonder geregistreerde gebeurtenissen tonen we dit archief tijdelijk als «vulling».</p>'
+      +'<p class="placeholder" style="margin-bottom:8px"><strong>Logboek</strong> van acties (import, feiten, foto, …). Vult vanzelf.</p>'
+      +'<p class="subtle" style="margin-bottom:6px">Leeg logboek? Hieronder <strong>recente chat</strong>.</p>'
       +archHtml;
     return;
   }
@@ -1314,7 +1314,7 @@ function renderGroeiTab(){
     if(!grouped[k])grouped[k]=[];
     grouped[k].push(g);
   });
-  var out='<h3>Groei</h3><p class="subtle" style="margin-bottom:10px"><strong>Mijlpalen</strong> (hieronder) zijn bevestigde gebeurtenissen. Onderaan kun je nog steeds <strong>archieffragmenten</strong> zien; dat is bewust iets anders.</p>';
+  var out='<h3>Groei</h3><p class="subtle" style="margin-bottom:8px"><strong>Logboek</strong> hieronder; onderaan eventueel <strong>recente chat</strong>.</p>';
   Object.keys(grouped).forEach(function(k){
     out+='<div class="month-label">'+escHTML(k)+'</div>';
     grouped[k].forEach(function(g){
@@ -1323,7 +1323,7 @@ function renderGroeiTab(){
     });
   });
   if(arch.length){
-    out+='<h4 style="margin-top:18px;font-size:14px">Recent archief</h4><p class="subtle" style="margin-bottom:8px">Laatste eigen berichten in OWN Sense (niet hetzelfde als formele mijlpalen).</p>'
+    out+='<h4 style="margin-top:16px;font-size:14px">Recente chat</h4><p class="subtle" style="margin-bottom:6px">Kort houvast naast het logboek.</p>'
       +arch.slice(0,6).map(function(m){
         var raw=stripHtml(m.html||m.content||'').slice(0,160);
         return '<div class="growth-item"><div class="subtle">'+fmtDateTime(m.created_at)+'</div><div style="margin-top:6px">'+escHTML(raw)+(raw.length>=160?'…':'')+'</div></div>';
@@ -1337,7 +1337,7 @@ function renderBronTab(){
   if(!el)return;
   var importRows=ownGrowthEvents.filter(function(g){return g.event_type==='import';}).slice(0,20);
   el.innerHTML='<h3>Invullen</h3>'
-    +'<p class="subtle" style="line-height:1.55;margin-bottom:10px">Tab <strong>Mij</strong> toont je profiel en voortgang. Hier beheer je <strong>waar die info vandaan komt</strong>: chat-imports en de vragenlijsten (onder dit blok). Zo blijft «wie ben ik» gescheiden van «hoe vul ik het aan».</p>'
+    +'<p class="subtle" style="margin-bottom:8px"><strong>Mij</strong> = profiel. Hier: <strong>imports</strong> + <strong>vragenlijsten</strong> (blok eronder).</p>'
     +'<div class="source-list">'
     +'<button class="btn btn-primary btn-small" type="button" onclick="openAiImportModal()">Chat-export importeren</button>'
     +'<button class="btn btn-muted btn-small" type="button" disabled>WhatsApp import (binnenkort)</button>'
@@ -1404,13 +1404,31 @@ function stripHtml(s){
 }
 
 function detectSourceFromMsg(msg){
+  var pn=String(msg.profile_name||msg.dossier||'').trim();
+  var lk=pn.toLowerCase();
+  var mapped=lk?senseProfileScopeByName[lk]:'';
+  if(mapped==='ds'||mapped==='fs'||mapped==='gen')return mapped;
+  if(lk==='own sense')return'gen';
+
   var explicit=String(msg.app_source||msg.source_app||msg.app||'').toLowerCase();
   if(explicit.indexOf('date')>=0)return'ds';
   if(explicit.indexOf('family')>=0||explicit.indexOf('gezin')>=0)return'fs';
   if(explicit.indexOf('own')>=0)return'gen';
-  var t=(stripHtml(msg.html||msg.content||'')+' '+explicit).toLowerCase();
-  if(t.indexOf('datesense')>=0||t.indexOf('date')>=0)return'ds';
-  if(t.indexOf('familysense')>=0||t.indexOf('family')>=0||t.indexOf('gezin')>=0)return'fs';
+
+  var t=(stripHtml(msg.html||msg.content||'')+' '+explicit+' '+lk).toLowerCase();
+  if(t.indexOf('familysense')>=0||t.indexOf('family sense')>=0)return'fs';
+  if(t.indexOf('datesense')>=0)return'ds';
+  if(/gezin|\bfamily\b|familie|ouders|kinderen/.test(t))return'fs';
+  if(/dating|relatie|partner|romantiek|liefdes|date\b/.test(t))return'ds';
+
+  if(mapped==='mix'){
+    if(/gezin|famil|kind|ouder|thuis/.test(t))return'fs';
+    return'ds';
+  }
+  if(mapped==='unknown'&&lk&&lk!=='own sense'){
+    if(/gezin|famil|kind|ouder/.test(t))return'fs';
+    if(/dating|relatie|partner|romant/.test(t))return'ds';
+  }
   return'gen';
 }
 function isRelevantOwnTimelineEntry(msg){
@@ -1560,6 +1578,33 @@ async function loadOwnFromSupabase(){
   }catch(e){}
 }
 
+async function loadSenseProfileScopesForUser(userId){
+  senseProfileScopeByName={};
+  var client=initSupabase();
+  if(!client||!userId)return;
+  try{
+    var res=await client.from('sense_profiles').select('name,props').eq('user_id',userId);
+    if(res&&res.error)return;
+    var rows=Array.isArray(res&&res.data)?res.data:[];
+    rows.forEach(function(row){
+      var nm=String(row.name||'').trim();
+      if(!nm)return;
+      var lk=nm.toLowerCase();
+      if(lk==='own sense'){
+        senseProfileScopeByName[lk]='gen';
+        return;
+      }
+      var props=row.props&&typeof row.props==='object'?row.props:{};
+      var meta=props.meta&&typeof props.meta==='object'?props.meta:{};
+      var scopes=Array.isArray(meta.app_scope)?meta.app_scope.map(function(s){return String(s||'').toLowerCase();}):[];
+      if(scopes.indexOf('fs')>=0&&scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='mix';
+      else if(scopes.indexOf('fs')>=0)senseProfileScopeByName[lk]='fs';
+      else if(scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='ds';
+      else senseProfileScopeByName[lk]='unknown';
+    });
+  }catch(_e){}
+}
+
 async function loadOwnTimelineFromSupabase(){
   var client=initSupabase();
   if(!client)return;
@@ -1567,22 +1612,14 @@ async function loadOwnTimelineFromSupabase(){
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
     if(!user)return;
-    async function fetchBy(field){
-      var q=client.from('sense_messages')
-        .select('*')
-        .eq('user_id',user.id)
-        .eq(field,'OWN Sense')
-        .order('created_at',{ascending:false})
-        .limit(500);
-      var res=await q;
-      if(res&&res.error)throw new Error(res.error.message||'timeline fetch failed');
-      return Array.isArray(res&&res.data)?res.data:[];
-    }
-    var rows=[];
-    try{rows=await fetchBy('profile_name');}catch(_e){}
-    if(!rows.length){
-      try{rows=await fetchBy('dossier');}catch(_e2){}
-    }
+    await loadSenseProfileScopesForUser(user.id);
+    var res=await client.from('sense_messages')
+      .select('*')
+      .eq('user_id',user.id)
+      .order('created_at',{ascending:false})
+      .limit(1000);
+    if(res&&res.error)throw new Error(res.error.message||'timeline fetch failed');
+    var rows=Array.isArray(res&&res.data)?res.data:[];
     if(rows.length||!ownTimeline.length)ownTimeline=rows;
     renderTimelineTab();
   }catch(e){}
@@ -1803,8 +1840,8 @@ function renderHero(){
     +'<div class="hero-sub">Persoonlijk dossier · actief</div></div></div>'
     +'<div class="chip-row"><span class="chip">OWN Sense</span><span class="chip">DateSense</span><span class="chip">FamilySense</span></div>'
     +'<div class="field field-readonly" id="nameDisplay" aria-readonly="true">'+(hubState.display_name?escHTML(String(hubState.display_name).trim()):'(nog geen naam)')+'</div>'
-    +'<div class="subtle" style="margin-top:6px">Naam uit je SenseCorner-account (ingesteld bij registratie). Wijzig via <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a> indien nodig.</div>'
-    +'<div class="subtle" style="margin-top:10px;line-height:1.5">WhatsApp-koppeling: gsm staat in je <strong>account</strong> in SenseCorner (optioneel), niet in dit dossier. Open <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a> → Account · gsm voor WhatsApp.</div>'
+    +'<div class="subtle" style="margin-top:6px">Naam uit SenseCorner. Aanpassen: <a href="sensecorner.html" style="color:#8A3B32;font-weight:700">SenseCorner</a>.</div>'
+    +'<div class="subtle" style="margin-top:8px">WhatsApp-gsm: SenseCorner → Account (niet hier).</div>'
     +'<div class="save-row"><span class="subtle">Laatst aangepast: '+fmtDate(hubState.updated_at)+'</span>'
     +'<span class="save-ind" id="saveIndicator"></span></div>';
 }
@@ -1850,11 +1887,11 @@ function renderImportCard(){
   el.innerHTML=''
     +'<div class="import-hub-box">'
     +'<div class="import-hub-title"><span>📥</span><span>Importeer je ChatGPT- of Claude-geschiedenis</span></div>'
-    +'<div class="import-hub-text">Import uit je chats vult je OWN-profiel centraal aan. DateSense en FamilySense lezen daarna dezelfde basis, met minder herhaling en meer consistentie.</div>'
+    +'<div class="import-hub-text">Chat-import vult OWN centraal; DateSense en FamilySense gebruiken dezelfde basis.</div>'
     +'<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #E7C7C2">'
     +'<div style="font-size:12px;font-weight:800;color:#8E2B20;margin-bottom:6px">Of vertel gewoon vrij over jezelf</div>'
     +'<textarea id="ownFreeTextInput" class="free-own-text" placeholder="Schrijf in je eigen woorden over wie je bent, wat je belangrijk vindt, wat je zoekt, hoe je communiceert, wat je energie geeft of kost..."></textarea>'
-    +'<div class="subtle" style="margin-top:6px">AI doet een voorstel per profielvak. Jij controleert en past aan voor het opgeslagen wordt.</div>'
+    +'<div class="subtle" style="margin-top:6px">AI stelt voor; jij keurt goed voor opslaan.</div>'
     +'</div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
     +'<button class="btn btn-primary" type="button" onclick="openAiImportModal()">Start import</button>'
@@ -2064,7 +2101,11 @@ function aiShortErr(msg,max){
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
-  var sess=await client.auth.getSession();
+  var sess=await withTimeout(
+    client.auth.getSession(),
+    15000,
+    'Sessie laden duurt te lang (netwerk). Vernieuw of log opnieuw in via SenseCorner.'
+  );
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var timeoutMs=typeof customTimeoutMs==='number'&&customTimeoutMs>0?customTimeoutMs:90000;
@@ -2084,7 +2125,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     });
     clearTimeout(outerTimer);
     outerTimer=null;
-    var readMs=Math.min(35000,Math.max(8000,Math.floor(timeoutMs*0.5)));
+    var readMs=Math.min(120000,Math.max(10000,timeoutMs-4000));
     var raw=await withTimeout(r.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).');
     var j;
     try{
@@ -2270,7 +2311,7 @@ async function confirmAiImportSave(){
 function renderProps(){
   var hasData=calcPropsFromCategories();
   var el=document.getElementById('propsCard');
-  var bars='<h3>Eigenschappen</h3><p class="subtle">'+(hasData?'Automatisch afgeleid uit je vragenlijst-antwoorden.':'Nog geen profielinput gevonden. Vul vragen in of laad eerst data via Date/FamilySense.')+'</p>';
+  var bars='<h3>Eigenschappen</h3><p class="subtle">'+(hasData?'Afgeleid uit je lijstantwoorden.':'Nog leeg: tab Invullen of werk even in DateSense/FamilySense.')+'</p>';
   PK.forEach(function(k,i){
     var v=Math.max(0,Math.min(100,parseInt(hubState.props[k],10)||0));
     bars+='<div class="bar-row"><div class="bar-head"><span>'+PL[i]+'</span><strong>'+v+'%</strong></div>'
@@ -2316,7 +2357,7 @@ function renderPhotoSection(){
     :'<span class="analysis-empty">Nog geen foto-analyse. Upload minstens 1 foto en klik op heranalyse.</span>';
   el.innerHTML=''
     +'<h3>Foto-sectie</h3>'
-    +'<p class="subtle">Max. 4 foto\'s. Wordt gebruikt als context voor DateSense-vergelijkingen.</p>'
+    +'<p class="subtle">Max. 4 foto\'s; o.a. context voor DateSense.</p>'
     +'<div class="photo-grid">'+grid+'</div>'
     +'<div class="photo-actions">'
     +'<button class="btn btn-muted btn-small" id="addPhotoBtn" type="button">Foto toevoegen</button>'
@@ -2367,7 +2408,7 @@ function renderQuestions(){
     return list;
   }
   var el=document.getElementById('questionsCard');
-  var html='<h3>Vragenlijsten</h3><p class="subtle">Basisvragen altijd zichtbaar. App-specifieke vragen verschijnen alleen als je die app actief gebruikt.</p>';
+  var html='<h3>Vragenlijsten</h3><p class="subtle">Vaste vragen altijd zichtbaar; app-vragen als die app actief is.</p>';
   visibleCats().forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
     var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>0;}).length;
@@ -2420,14 +2461,14 @@ function renderTimelineTab(){
   filtered.forEach(function(m){appSet[detectSourceFromMsg(m)]=1;});
   var appCount=Object.keys(appSet).length||0;
 
-  var html='<h3>Tijdlijn</h3><p class="subtle">Berichten over jezelf uit alle apps, dossier: OWN Sense.</p>'
+  var html='<h3>Tijdlijn</h3><p class="subtle">Eigen berichten uit al je Sense-dossiers, nieuwste eerst.</p>'
     +'<div class="stats-row" style="margin-top:10px">'
     +'<div class="stat"><div class="stat-k">Totaal berichten</div><div class="stat-v">'+total+'</div></div>'
     +'<div class="stat"><div class="stat-k">Actieve apps</div><div class="stat-v">'+appCount+'</div></div>'
     +'</div>';
 
   if(!total){
-    html+='<p class="placeholder" style="margin-top:12px">Nog geen OWN Sense berichten gevonden.</p>';
+    html+='<p class="placeholder" style="margin-top:12px">Nog geen berichten gevonden in je Sense-dossiers.</p>';
     el.innerHTML=html;
     return;
   }
@@ -2514,11 +2555,16 @@ function snapshotScores(){
 
 function buildInsightPrompt(scope,rows){
   var txtRows=rows.slice(0,300).map(function(m){
-    return '- '+stripHtml(m.html||m.content||'').slice(0,220);
+    var doss=String(m.profile_name||m.dossier||'').trim().slice(0,32);
+    var line=stripHtml(m.html||m.content||'').slice(0,200);
+    return '- '+(doss?'['+doss+'] ':'')+line;
   }).join('\n');
   var scopeHint=scope==='all'?'':(' Begin met één zin die expliciet verwijst naar '+scopeLabel(scope)+' (niet hetzelfde openingsakkoord als voor «alle apps»). Herhaal geen algemene profielzin die even goed voor een andere scope zou kunnen.');
+  var datasetHint=scope==='all'
+    ?'Onderstaande regels komen uit verschillende Sense-dossiers (DateSense, FamilySense, OWN Sense), door de gebruiker geschreven. '
+    :'Onderstaande regels zijn al gefilterd op '+scopeLabel(scope)+' en kunnen uit meerdere dossiers binnen die app komen. ';
   return 'Je bent OWN Sensei. Schrijf een persoonlijk inzicht in het Nederlands voor scope "'
-    +scopeLabel(scope)+'". Gebruik 2-3 korte paragrafen, menselijk en concreet.'+scopeHint+' '
+    +scopeLabel(scope)+'". '+datasetHint+'Gebruik 2-3 korte paragrafen, menselijk en concreet.'+scopeHint+' '
     +'Sluit af met "Tags: tag1, tag2, tag3". '
     +'Stijl: platte tekst, geen markdown (geen # koppen, geen --- lijnen). Gebruik nooit de typografische lange streep (em dash); gebruik komma\'s of punten. '
     +'Gebruik ook deze eigenschappen:\n<eigenschappen>\n'+JSON.stringify(snapshotScores())+'\n</eigenschappen>\n\n'
