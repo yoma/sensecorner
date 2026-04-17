@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#B11F1F">
-<meta name="os-build" content="17-04-2026 16:30">
+<meta name="os-build" content="17-04-2026 19:52">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -343,7 +343,16 @@ html,body{
 .photo-slot{border:1px dashed #D9C8C3;border-radius:12px;padding:10px;background:#FFFEFD}
 .photo-slot-title{font-size:12px;font-weight:800;color:#6A4A43;margin-bottom:6px}
 .photo-slot img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;border:1px solid #E2D5D0}
-.growth-item{border:1px solid #E7DBD6;border-radius:12px;background:#fff;padding:10px;margin-top:8px}
+.growth-item{border:1px solid #E7DBD6;border-radius:12px;background:#fff;padding:12px 12px 11px;margin-top:8px}
+.growth-item-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;margin-bottom:8px}
+.growth-item-when{font-size:12px;color:#73666a;font-weight:600;line-height:1.35;flex:1;min-width:0}
+.growth-item-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.growth-pill{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.02em;border:1px solid transparent;line-height:1.2;white-space:nowrap}
+.growth-pill--own{background:#FFF3F1;border-color:#F1CCC5;color:#9A3025}
+.growth-pill--ds{background:#E8F0FC;border-color:#B8CCE8;color:#174a96}
+.growth-pill--fs{background:#E6F5ED;border-color:#A8D4B8;color:#126738}
+.growth-pill--chat{background:#f0f2f5;border-color:#d5dce3;color:#4b5563}
+.growth-pill--misc{background:#faf8f6;border-color:#E0D8D2;color:#5c4f4a}
 .source-list{display:grid;gap:8px}
 .os-inline-spin{
   width:14px;height:14px;border:2px solid #D9C8C3;border-top-color:var(--accent);border-radius:50%;
@@ -360,7 +369,7 @@ html,body{
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 17-04-2026 16:30</span>
+      <span class="hub-badge">HUB · BUILD 17-04-2026 19:52</span>
     </div>
     <div class="quick-nav">
       <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
@@ -371,7 +380,7 @@ html,body{
       <button class="tab-btn active" type="button" data-tab="mij">Mij</button>
       <button class="tab-btn" type="button" data-tab="inzichten">Inzichten</button>
       <button class="tab-btn" type="button" data-tab="fotos">Foto's</button>
-      <button class="tab-btn" type="button" data-tab="groei">Groei</button>
+      <button class="tab-btn" type="button" data-tab="groei" title="Logboek van acties en imports">Activiteit</button>
       <button class="tab-btn" type="button" data-tab="bron" title="Vragenlijsten, imports en chat-export">Invullen</button>
     </nav>
   </header>
@@ -404,7 +413,7 @@ html,body{
       <article class="card" id="photosPatternCard"></article>
     </section>
 
-    <section class="tab-panel" id="tab-groei" aria-label="Groei tab">
+    <section class="tab-panel" id="tab-groei" aria-label="Activiteit">
       <article class="card" id="growthCard"></article>
     </section>
 
@@ -1185,36 +1194,61 @@ async function handleOwnPhotoSlotPicked(file){
   }
 }
 
+function _arrayBufferToBase64Chunks(ab){
+  var bytes=new Uint8Array(ab);
+  var chunk=0x8000;
+  var binary='';
+  for(var i=0;i<bytes.length;i+=chunk){
+    binary+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+  }
+  return btoa(binary);
+}
+
+/** Haal foto uit Storage met user-JWT; geen signed URL naar Claude (die kan die URL niet openen). */
+async function ownPhotoPathToVisionUserContent(client,storagePath){
+  var path=String(storagePath||'').trim();
+  if(!client||!path)throw new Error('Geen fotopad.');
+  var dl=await client.storage.from('own-photos').download(path);
+  if(dl.error||!dl.data){
+    throw new Error((dl.error&&dl.error.message)?dl.error.message:'Download van foto mislukt.');
+  }
+  var blob=dl.data;
+  var maxB=4.5*1024*1024;
+  if(blob.size>maxB)throw new Error('Foto is te groot voor AI-analyse (max. ~4,5 MB).');
+  var media=blob.type&&/^image\//.test(blob.type)?blob.type:'image/jpeg';
+  if(media==='image/jpg')media='image/jpeg';
+  var ab=await blob.arrayBuffer();
+  var b64=_arrayBufferToBase64Chunks(ab);
+  return[
+    {type:'image',source:{type:'base64',media_type:media,data:b64}},
+    {type:'text',text:'Beschrijf wat deze foto vertelt over de persoon: lichaamstaal, energie, hoe de persoon zich toont. Geen score, alleen observaties. 2-3 zinnen. Geen em dash; gebruik komma\'s of punten. Antwoord in het Nederlands.'}
+  ];
+}
+
 async function analyzeOwnPhotoSlot(slot){
   var row=getOwnPhotoSlot(slot);
-  if(!row)return;
+  if(!row||!row.storage_path)return;
   var client=initSupabase();
   if(!client)return;
-  var signed=await client.storage.from('own-photos').createSignedUrl(row.storage_path,60*20);
-  var url=signed&&signed.data&&signed.data.signedUrl?signed.data.signedUrl:'';
-  var sys='Beschrijf wat deze foto vertelt over de persoon: lichaamstaal, energie, hoe de persoon zich toont. Geen score, alleen observaties. 2-3 zinnen. Geen em dash; gebruik komma\'s of punten.';
-  var usr='Foto URL:\n'+url;
-  var analysis=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,260)||'').trim());
+  var sys='Je helpt bij een korte, respectvolle foto-impressie. Antwoord enkel met de observaties in platte tekst (geen JSON).';
+  var userContent;
+  try{
+    userContent=await ownPhotoPathToVisionUserContent(client,row.storage_path);
+  }catch(e){
+    console.warn('analyzeOwnPhotoSlot vision prep',e);
+    var sysFallback='Beschrijf kort (2 zinnen) dat er geen beeld kon worden geladen voor analyse, en nodig uit om opnieuw te uploaden. Nederlands.';
+    var userContentFallback='Technische fout: '+String(e&&e.message?e.message:e)+'.';
+    var analysisFb=cleanAiProseForStore(String(await callAnthropicJson(sysFallback,userContentFallback,200)||'').trim());
+    if(analysisFb){
+      await client.from('own_photos').update({ai_analysis:analysisFb}).eq('id',row.id);
+      row.ai_analysis=analysisFb;
+    }
+    return;
+  }
+  var analysis=cleanAiProseForStore(String(await callAnthropicJson(sys,userContent,380)||'').trim());
   if(!analysis)return;
   await client.from('own_photos').update({ai_analysis:analysis}).eq('id',row.id);
   row.ai_analysis=analysis;
-}
-
-async function collectSignedOwnPhotoUrls(){
-  var urls=[];
-  if(String(hubState.photo_url||'').trim())urls.push(String(hubState.photo_url).trim());
-  var client=initSupabase();
-  if(!client)return urls;
-  for(var s=2;s<=5;s++){
-    var row=getOwnPhotoSlot(s);
-    if(!row||!row.storage_path)continue;
-    try{
-      var signed=await client.storage.from('own-photos').createSignedUrl(String(row.storage_path),60*20);
-      var u=signed&&signed.data&&signed.data.signedUrl?String(signed.data.signedUrl):'';
-      if(u)urls.push(u);
-    }catch(_e){}
-  }
-  return urls;
 }
 
 async function computePhotoPatterns(){
@@ -1223,10 +1257,9 @@ async function computePhotoPatterns(){
   renderFotosTab();
   try{
     var analyses=ownPhotos.map(function(p){return String(p.ai_analysis||'').trim();}).filter(Boolean);
-    var urls=await collectSignedOwnPhotoUrls();
     var sys='Wat valt op over deze beelden en observaties heen? Welke rode draad zie je in zelfpresentatie, energie, sfeer? 1-2 alineas. Als er weinig input is, blijf voorzichtig en kort. Geen em dash; gebruik komma\'s of punten. Geen markdown-koppen of --- lijnen.';
     var usr='Per-foto observaties (indien aanwezig):\n'+(analyses.length?analyses.join('\n\n'):'(nog geen per-foto analyse, dat mag)')+'\n\n'
-      +'Foto-urls (indien aanwezig):\n'+(urls.length?urls.join('\n'):'(geen extra foto-urls; gebruik enkel observaties of geef zachte tips om meer foto\'s toe te voegen)');
+      +'Let op: er worden geen ruwe foto-urls meegestuurd (de AI kan die niet betrouwbaar openen). Werk enkel met de tekst hierboven. Als dat te weinig is, geef korte tips om foto\'s toe te voegen en per-slot analyse af te wachten.';
     var out=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,520,120000)||'').trim());
     if(!out){
       window.__photoPatternLastStatus='Geen bruikbaar antwoord van de AI. Probeer later opnieuw.';
@@ -1294,17 +1327,18 @@ function renderGroeiTab(){
     var archHtml='';
     if(arch.length){
       archHtml='<h4 style="margin-top:14px;font-size:14px">Recent uit je chat</h4>'
-        +'<p class="subtle" style="margin-bottom:6px">Recente chat, nieuwste eerst.</p>'
+        +'<p class="subtle" style="margin-bottom:6px">Recente chat, nieuwste eerst. Bron per bericht.</p>'
         +arch.map(function(m){
-          var src=detectSourceFromMsg(m);
-          var icon=src==='ds'?'💬':(src==='fs'?'🏠':'🧠');
-          var raw=stripHtml(m.html||m.content||'').slice(0,220);
-          return '<div class="growth-item"><div class="subtle">'+fmtDateTime(m.created_at)+' · '+icon+' archief</div><div style="margin-top:6px">'+escHTML(raw)+(raw.length>=220?'…':'')+'</div></div>';
+          var full=stripHtml(m.html||m.content||'');
+          var raw=full.slice(0,220);
+          var gk=growthKeyFromTimelineDetect(detectSourceFromMsg(m));
+          var pills=growthPillsHtml(gk,{chatArchive:true});
+          return '<div class="growth-item"><div class="growth-item-head"><span class="growth-item-when">'+fmtDateTime(m.created_at)+'</span><span class="growth-item-pills">'+pills+'</span></div><div>'+escHTML(raw)+(full.length>220?'…':'')+'</div></div>';
         }).join('');
     }
-    el.innerHTML='<h3>Groei</h3>'
+    el.innerHTML='<h3>Activiteit</h3>'
       +'<p class="placeholder" style="margin-bottom:8px"><strong>Logboek</strong> van acties (import, feiten, foto, …). Vult vanzelf.</p>'
-      +'<p class="subtle" style="margin-bottom:6px">Leeg logboek? Hieronder <strong>recente chat</strong>.</p>'
+      +'<p class="subtle" style="margin-bottom:6px">Nog leeg? Hieronder <strong>recente chat</strong> met bron-pillen.</p>'
       +archHtml;
     return;
   }
@@ -1314,19 +1348,23 @@ function renderGroeiTab(){
     if(!grouped[k])grouped[k]=[];
     grouped[k].push(g);
   });
-  var out='<h3>Groei</h3><p class="subtle" style="margin-bottom:8px"><strong>Logboek</strong> hieronder; onderaan eventueel <strong>recente chat</strong>.</p>';
+  var out='<h3>Activiteit</h3><p class="subtle" style="margin-bottom:8px"><strong>Logboek</strong> hieronder (nieuwste bovenaan per maand); onderaan eventueel <strong>recente chat</strong>.</p>';
   Object.keys(grouped).forEach(function(k){
     out+='<div class="month-label">'+escHTML(k)+'</div>';
     grouped[k].forEach(function(g){
-      var icon=g.source_app==='datesense'?'💬':(g.source_app==='familysense'?'🏠':'🧠');
-      out+='<div class="growth-item"><div class="subtle">'+fmtDate(g.created_at)+' · '+icon+' '+escHTML(g.source_app||'ownsense')+'</div><div style="margin-top:6px">'+escHTML(g.summary||'')+'</div></div>';
+      var gk=growthKeyFromSourceApp(g.source_app);
+      var pills=growthPillsHtml(gk,{rawApp:g.source_app});
+      out+='<div class="growth-item"><div class="growth-item-head"><span class="growth-item-when">'+fmtDate(g.created_at)+'</span><span class="growth-item-pills">'+pills+'</span></div><div>'+escHTML(g.summary||'')+'</div></div>';
     });
   });
   if(arch.length){
-    out+='<h4 style="margin-top:16px;font-size:14px">Recente chat</h4><p class="subtle" style="margin-bottom:6px">Kort houvast naast het logboek.</p>'
+    out+='<h4 style="margin-top:16px;font-size:14px">Recente chat</h4><p class="subtle" style="margin-bottom:6px">Houvast naast het logboek; bron + chat-archief.</p>'
       +arch.slice(0,6).map(function(m){
-        var raw=stripHtml(m.html||m.content||'').slice(0,160);
-        return '<div class="growth-item"><div class="subtle">'+fmtDateTime(m.created_at)+'</div><div style="margin-top:6px">'+escHTML(raw)+(raw.length>=160?'…':'')+'</div></div>';
+        var full=stripHtml(m.html||m.content||'');
+        var raw=full.slice(0,160);
+        var gk=growthKeyFromTimelineDetect(detectSourceFromMsg(m));
+        var pills=growthPillsHtml(gk,{chatArchive:true});
+        return '<div class="growth-item"><div class="growth-item-head"><span class="growth-item-when">'+fmtDateTime(m.created_at)+'</span><span class="growth-item-pills">'+pills+'</span></div><div>'+escHTML(raw)+(full.length>160?'…':'')+'</div></div>';
       }).join('');
   }
   el.innerHTML=out;
@@ -1430,6 +1468,29 @@ function detectSourceFromMsg(msg){
     if(/dating|relatie|partner|romant/.test(t))return'ds';
   }
   return'gen';
+}
+function growthKeyFromSourceApp(app){
+  var s=String(app||'').toLowerCase().trim();
+  if(s==='datesense')return'ds';
+  if(s==='familysense')return'fs';
+  if(s==='ownsense'||!s)return'own';
+  return'misc';
+}
+function growthKeyFromTimelineDetect(d){
+  if(d==='ds')return'ds';
+  if(d==='fs')return'fs';
+  return'own';
+}
+function growthPillsHtml(key,opt){
+  opt=opt||{};
+  var rawApp=opt.rawApp?String(opt.rawApp).trim():'';
+  var main;
+  if(key==='ds')main='<span class="growth-pill growth-pill--ds">DateSense</span>';
+  else if(key==='fs')main='<span class="growth-pill growth-pill--fs">FamilySense</span>';
+  else if(key==='misc'&&rawApp)main='<span class="growth-pill growth-pill--misc">'+escHTML(rawApp.length>24?rawApp.slice(0,24)+'…':rawApp)+'</span>';
+  else main='<span class="growth-pill growth-pill--own">OWN Sense</span>';
+  var extra=opt.chatArchive?'<span class="growth-pill growth-pill--chat">Chat-archief</span>':'';
+  return main+extra;
 }
 function isRelevantOwnTimelineEntry(msg){
   var raw=stripHtml(msg&&((msg.html||msg.content||'')))||'';
@@ -2120,7 +2181,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
         'Content-Type':'application/json',
         'Authorization':'Bearer '+token
       },
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:userPrompt}]}),
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}] }),
       signal:controller.signal
     });
     clearTimeout(outerTimer);
