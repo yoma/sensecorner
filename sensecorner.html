@@ -2,9 +2,9 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="17-04-2026 21:00">
+<meta name="sc-build" content="17-04-2026 21:18">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -26,6 +26,12 @@
   --family-donker:#7D6AAB;
   --family-medium:#AEA0C9;
   --family-licht:#D0C7DF;
+  --friend-donker:#C8881F;
+  --friend-medium:#DDB062;
+  --friend-licht:#EBCF9B;
+  --self-donker:#4A6B50;
+  --self-medium:#8AA58F;
+  --self-licht:#BCCDC0;
   --app-donker:var(--sage-donker);
   --app-medium:var(--sage-medium);
   --app-licht:var(--sage-licht);
@@ -54,12 +60,12 @@
 html,body{min-height:100%;font-family:var(--font-sans);background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}
 a{text-decoration:none;color:inherit}
 
-/* Layout */
-.wrap{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:24px 22px 56px}
+/* Layout — mobiel eerst, vloeiend tot brede hub */
+.wrap{position:relative;z-index:1;width:100%;max-width:min(900px,100%);margin:0 auto;padding:clamp(14px,4vw,24px) clamp(12px,4vw,26px) clamp(40px,8vw,56px)}
 /* Hoek-rimpel (max. 1 set) — uitgelijnd met brede hub-kolom */
 .sc-rimpel-bg{
-  position:fixed;top:0;right:max(0px,calc(50% - 430px));
-  width:200px;height:200px;pointer-events:none;z-index:0;
+  position:fixed;top:0;right:max(0px,calc(50% - min(450px,50vw)));
+  width:min(200px,45vw);height:min(200px,45vw);pointer-events:none;z-index:0;
 }
 .sc-rimpel-bg .sc-rimpel{position:absolute;border-radius:50%;right:0;top:0;}
 .sc-rimpel-bg .sc-rimpel--a{width:200px;height:200px;background:var(--app-licht);transform:translate(36%,-54%);}
@@ -67,7 +73,13 @@ a{text-decoration:none;color:inherit}
 .sc-rimpel-bg .sc-rimpel--c{width:164px;height:164px;background:var(--app-donker);transform:translate(44%,-46%);}
 
 /* Header */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;padding:0 2px}
+.header{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:14px 12px;margin-bottom:clamp(18px,4vw,28px);padding:0 2px}
+.header .logo{flex:1 1 220px;min-width:0}
+.header-right{flex:1 1 180px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;font-size:12px;color:var(--s);min-width:0}
+@media (min-width:720px){
+  .header{flex-wrap:nowrap;align-items:center}
+  .header-right{flex:0 0 auto}
+}
 .logo{display:flex;align-items:center;gap:9px}
 .logo-mark{width:30px;height:30px;background:var(--r);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo-mark svg{width:16px;height:16px}
@@ -84,7 +96,6 @@ a{text-decoration:none;color:inherit}
   font-style:italic;
   letter-spacing:.01em;
 }
-.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;font-size:12px;color:var(--s)}
 .hub-pill-btn{
   display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 11px;
   border:1px solid rgba(107,142,111,.38);background:rgba(200,212,181,.28);color:var(--chocolade);font-size:11px;font-weight:600;
@@ -114,8 +125,14 @@ a{text-decoration:none;color:inherit}
 /* Hero */
 .hero{background:var(--card);border:1px solid var(--b);border-radius:22px;padding:22px;box-shadow:0 2px 10px rgba(74,58,42,.05),0 10px 28px rgba(74,58,42,.06);margin-bottom:12px;overflow:hidden;position:relative}
 .hero::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(107,142,111,.1) 0%,transparent 70%);pointer-events:none}
-.hero-inner{display:flex;align-items:flex-start;gap:22px}
-.hero-ring{flex-shrink:0;position:relative;width:72px;height:72px}
+.hero-inner{display:flex;align-items:flex-start;gap:clamp(14px,4vw,22px);flex-wrap:wrap}
+/* Hub / OWN: rimpel-ensemble rond voortgang (donker → medium → licht naar buiten) */
+.hero-ring-stack{position:relative;flex:0 0 auto;width:118px;height:118px;margin:0 auto;display:flex;align-items:center;justify-content:center}
+.hero-rip{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;box-sizing:border-box;border:2.5px solid transparent;opacity:.38}
+.hero-rip--l{width:112px;height:112px;border-color:var(--sage-licht)}
+.hero-rip--m{width:94px;height:94px;border-color:var(--sage-medium);opacity:.4}
+.hero-rip--d{width:78px;height:78px;border-color:var(--sage-donker);opacity:.44}
+.hero-ring-stack .hero-ring{position:relative;z-index:1;flex-shrink:0;width:72px;height:72px}
 .hero-ring svg{transform:rotate(-90deg)}
 .ring-bg{fill:none;stroke:rgba(61,47,31,.1);stroke-width:6}
 .ring-fg{fill:none;stroke:var(--r);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1);stroke-dasharray:188.5;stroke-dashoffset:188.5}
@@ -185,39 +202,73 @@ a{text-decoration:none;color:inherit}
 /* Section label */
 .section-label{font-size:11px;font-weight:700;color:var(--s);letter-spacing:.07em;text-transform:uppercase;margin:16px 0 10px 2px}
 
-/* App grid */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-/* Altijd zichtbaar: geen afhankelijkheid van JS (anders blijven kaarten onzichtbaar bij scriptfout). */
-.app-card{background:var(--card);border:1px solid var(--b);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:14px;transition:var(--transition);cursor:default;opacity:1;transform:translateY(0);box-shadow:0 2px 10px rgba(74,58,42,.05)}
+/* App grid — 1 kolom mobiel, 2 kolommen tablet+ */
+.grid{display:grid;grid-template-columns:1fr;gap:clamp(12px,3vw,18px)}
+@media (min-width:560px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Per app: CSS-variabelen = finale schaal (design/sensecorner_kleurenschalen_finaal.html) */
+.date-card{--card-d:var(--date-donker);--card-m:var(--date-medium);--card-l:var(--date-licht);}
+.self-card{--card-d:var(--self-donker);--card-m:var(--self-medium);--card-l:var(--self-licht);}
+.people-card{--card-d:var(--friend-donker);--card-m:var(--friend-medium);--card-l:var(--friend-licht);}
+.career-card{--card-d:var(--family-donker);--card-m:var(--family-medium);--card-l:var(--family-licht);}
+.app-card{
+  position:relative;
+  background:linear-gradient(165deg,var(--ivoor) 0%,rgba(255,255,255,.88) 48%,rgba(255,255,255,.72) 100%);
+  border:1px solid rgba(61,47,31,.1);
+  border-radius:20px;
+  padding:18px 16px 18px 20px;
+  display:flex;flex-direction:column;gap:14px;
+  transition:var(--transition);
+  cursor:default;
+  box-shadow:0 4px 18px rgba(61,47,31,.05);
+  overflow:hidden;
+}
+.app-card::before{
+  content:'';
+  position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 6px 6px 0;
+  background:linear-gradient(180deg,var(--card-d),var(--card-m));
+}
 .app-card.enter{animation:cardEnter .45s ease both}
 @keyframes cardEnter{from{opacity:.35;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .app-card.clickable{cursor:pointer}
-.app-card.clickable:hover{border-color:rgba(107,142,111,.35);box-shadow:0 8px 22px rgba(74,58,42,.08);transform:translateY(-2px)}
-.app-card.clickable:active{transform:translateY(1px)}
-.app-card.clickable:focus-visible{outline:3px solid rgba(107,142,111,.35);outline-offset:2px}
-.app-card.dimmed{opacity:.55}
+.app-card.clickable:hover{
+  transform:translateY(-3px);
+  border-color:rgba(61,47,31,.08);
+  box-shadow:0 14px 32px rgba(61,47,31,.09),0 0 0 1px rgba(255,255,255,.6) inset;
+}
+.app-card.clickable:hover::before{background:linear-gradient(180deg,var(--card-d),var(--card-l));}
+.app-card.clickable:active{transform:translateY(-1px)}
+.app-card.clickable:focus-visible{outline:3px solid var(--card-m);outline-offset:3px}
+.app-card.dimmed{opacity:.58}
 .app-card.dimmed.enter{animation:none}
-.app-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.app-icon svg{width:20px;height:20px}
-.app-head{display:flex;align-items:center;gap:10px}
-.app-name{font-family:var(--font-serif);font-size:16px;font-weight:700;letter-spacing:-.01em}
+/* Mini rimpel-ensemble op elke app-kaart (licht → medium → donker naar het midden) */
+.app-card-ripples{position:absolute;top:14px;right:12px;width:54px;height:54px;pointer-events:none;z-index:0}
+.app-card-ripples span{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  border-radius:50%;box-sizing:border-box;border:2px solid transparent;opacity:.36;
+}
+.app-card-ripples span:nth-child(1){width:52px;height:52px;border-color:var(--card-l)}
+.app-card-ripples span:nth-child(2){width:38px;height:38px;border-color:var(--card-m);opacity:.4}
+.app-card-ripples span:nth-child(3){width:26px;height:26px;border-color:var(--card-d);opacity:.48}
+.app-head,.app-desc,.app-footer{position:relative;z-index:1}
+.app-icon{
+  width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:linear-gradient(145deg,rgba(255,255,255,.95),color-mix(in srgb,var(--card-l) 55%,white));
+  border:1px solid color-mix(in srgb,var(--card-m) 35%,transparent);
+  box-shadow:0 2px 8px rgba(61,47,31,.05);
+}
+.app-icon svg{width:22px;height:22px;color:var(--card-d)}
+.app-head{display:flex;align-items:center;gap:12px}
+.app-name{font-family:var(--font-serif);font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--chocolade)}
 .app-desc{font-size:13px;color:var(--m);line-height:1.62;flex:1}
 .app-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}
-.badge-live{background:var(--greenl);color:var(--green)}
-.badge-proto{background:#EFF6FF;color:#1D4ED8}
-.badge-soon{background:var(--amberl);color:var(--amber)}
-.app-arrow{color:var(--s);transition:transform .2s}
-.app-card.clickable:hover .app-arrow{transform:translateX(3px)}
-
-.date-card .app-icon{background:rgba(232,187,185,.4)}
-.date-card .app-icon svg{color:var(--date-donker)}
-.self-card .app-icon{background:#F0FBF1}
-.self-card .app-icon svg{color:#1E7E34}
-.people-card .app-icon{background:rgba(208,199,223,.45)}
-.people-card .app-icon svg{color:var(--family-donker)}
-.career-card .app-icon{background:#FFFBEB}
-.career-card .app-icon svg{color:#92640A}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge-live{background:color-mix(in srgb,var(--date-licht) 55%,white);color:var(--date-donker);border:1px solid color-mix(in srgb,var(--date-medium) 40%,transparent)}
+.badge-proto{background:color-mix(in srgb,var(--family-licht) 50%,white);color:var(--family-donker);border:1px solid color-mix(in srgb,var(--family-medium) 35%,transparent)}
+.badge-soon{background:color-mix(in srgb,var(--friend-licht) 45%,white);color:var(--friend-donker);border:1px solid color-mix(in srgb,var(--friend-medium) 35%,transparent)}
+.app-arrow{color:var(--card-d);opacity:.55;transition:transform .2s,opacity .2s}
+.app-card.clickable:hover .app-arrow{transform:translateX(4px);opacity:.9}
 
 /* Footer */
 .footer{margin-top:38px;text-align:center;font-size:12px;color:var(--s);line-height:1.8}
@@ -227,8 +278,14 @@ a{text-decoration:none;color:inherit}
 .hero{animation:fadeUp .35s ease both}
 
 @media(max-width:520px){
-  .hero-inner{flex-direction:column;gap:12px}
-  .hero-ring{width:60px;height:60px}
+  .hero-inner{flex-direction:column;align-items:center;gap:12px}
+  .hero-body{width:100%;max-width:420px}
+  .hero-ring-stack{width:102px;height:102px}
+  .hero-rip--l{width:98px;height:98px}
+  .hero-rip--m{width:82px;height:82px}
+  .hero-rip--d{width:68px;height:68px}
+  .hero-ring-stack .hero-ring{width:60px;height:60px}
+  .hero-ring-stack .hero-ring svg{width:60px;height:60px}
   .hero-title{font-size:22px}
   .hero{padding:16px 14px 14px;margin-bottom:8px}
   .hero-sub{margin-bottom:10px}
@@ -272,14 +329,19 @@ a{text-decoration:none;color:inherit}
   <section class="hero" aria-label="OWN Sense status en start">
     <div class="hero-inner">
 
-      <!-- Progress ring -->
-      <div class="hero-ring" aria-hidden="true">
-        <svg width="72" height="72" viewBox="0 0 72 72">
-          <circle class="ring-bg" cx="36" cy="36" r="30"/>
-          <circle class="ring-fg" id="ringFg" cx="36" cy="36" r="30"/>
-        </svg>
-        <div class="ring-icon" id="ringIcon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <!-- Voortgang + rimpel-ensemble (sage, zoals OWN Sense-hub) -->
+      <div class="hero-ring-stack" aria-hidden="true">
+        <span class="hero-rip hero-rip--l"></span>
+        <span class="hero-rip hero-rip--m"></span>
+        <span class="hero-rip hero-rip--d"></span>
+        <div class="hero-ring">
+          <svg width="72" height="72" viewBox="0 0 72 72">
+            <circle class="ring-bg" cx="36" cy="36" r="30"/>
+            <circle class="ring-fg" id="ringFg" cx="36" cy="36" r="30"/>
+          </svg>
+          <div class="ring-icon" id="ringIcon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </div>
         </div>
       </div>
 
@@ -366,6 +428,7 @@ a{text-decoration:none;color:inherit}
   <section class="grid" aria-label="Beschikbare apps" role="list">
 
     <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-link="datesense.html">
+      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -380,6 +443,7 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card self-card dimmed" role="listitem" aria-label="SelfSense, binnenkort beschikbaar">
+      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c0 0-8-4-8-10a8 8 0 0 1 16 0c0 6-8 10-8 10z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="currentColor" stroke="none"/></svg>
@@ -393,6 +457,7 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card people-card dimmed" role="listitem" aria-label="FriendSense, binnenkort beschikbaar">
+      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M21 20c0-2.8-1.8-5-4-5"/></svg>
@@ -406,6 +471,7 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense, prototype beschikbaar" data-app-link="familysense.html">
+      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
         <div class="app-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11.5l9-7 9 7"/><path d="M5 10.5V20h14v-9.5"/><path d="M9 20v-5h6v5"/></svg>
@@ -470,7 +536,9 @@ a{text-decoration:none;color:inherit}
   var d=new Date();
   var days=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' · BUILD 17-04-2026 21:00';
+  var _scMeta=document.querySelector('meta[name="sc-build"]');
+  var _scB=_scMeta&&_scMeta.getAttribute('content')?_scMeta.getAttribute('content').trim():'';
+  document.getElementById('headerDate').textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+(_scB?' · BUILD '+_scB:'');
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30
