@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense — Jouw persoonlijke gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-04-2026 21:18">
+<meta name="fs-build" content="17-04-2026 21:39">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -29,6 +29,8 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
   --family-medium:#AEA0C9;
   --family-licht:#D0C7DF;
   --sage-donker:#6B8E6F;
+  --zand-medium:#D9C9A8;
+  --zand-licht:#E4D7B8;
   --app-donker:var(--family-donker);
   --app-medium:var(--family-medium);
   --app-licht:var(--family-licht);
@@ -50,6 +52,21 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 }
 
 .app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(208,199,223,.48) 0%,var(--cream) 150px,var(--cream) 100%);position:relative;overflow:hidden}
+/* Zachte hoek-rimpels (kwartcirkels) */
+.pad-corner{position:fixed;pointer-events:none;z-index:0;line-height:0}
+.pad-corner svg{display:block;width:100%;height:100%}
+.pad-corner--tr.pad-corner--fs{
+  top:0;right:0;
+  width:min(200px,42vw);height:min(200px,42vw);
+  padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);
+  box-sizing:content-box;
+}
+.pad-corner--bl.pad-corner--fs{
+  bottom:0;left:0;
+  width:min(220px,48vw);height:min(220px,48vw);
+  padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);
+  box-sizing:content-box;
+}
 
 /* Topbar */
 .topbar{display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(242,232,213,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 1px 0 rgba(61,47,31,.08)}
@@ -147,7 +164,11 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .nav{background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease}
 .tab.active{color:var(--r)}
-.tab.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:22px;height:3px;background:var(--r);border-radius:0 0 4px 4px}
+.tab.active::before{
+  content:'';position:absolute;top:4px;left:50%;transform:translateX(-50%);
+  width:6px;height:6px;border-radius:50%;background:var(--r);
+  box-shadow:0 0 0 5px rgba(208,199,223,.32),0 0 0 11px rgba(174,160,201,.18),0 0 0 19px rgba(125,106,171,.08);
+}
 .tab-badge{position:absolute;top:1px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--r);box-shadow:0 0 0 2px #fff;pointer-events:none;display:none}
 .tab-badge.show{display:block}
 .tab svg{width:23px;height:23px}
@@ -203,14 +224,14 @@ a:focus-visible,
 .mic-wrap--sm{width:124px;height:124px;margin:12px auto}
 .mic-ripple{
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  border-radius:50%;pointer-events:none;box-sizing:border-box;border:2.5px solid transparent;
+  border-radius:50%;pointer-events:none;box-sizing:border-box;border:none;
 }
-.mic-wrap .mic-ripple:nth-child(1){width:138px;height:138px;border-color:var(--mic-l);opacity:.34}
-.mic-wrap .mic-ripple:nth-child(2){width:116px;height:116px;border-color:var(--mic-m);opacity:.38}
-.mic-wrap .mic-ripple:nth-child(3){width:96px;height:96px;border-color:var(--mic-d);opacity:.42}
-.mic-wrap--sm .mic-ripple:nth-child(1){width:108px;height:108px}
-.mic-wrap--sm .mic-ripple:nth-child(2){width:92px;height:92px}
-.mic-wrap--sm .mic-ripple:nth-child(3){width:76px;height:76px}
+.mic-wrap .mic-ripple:nth-child(1){width:144px;height:144px;background:rgba(208,199,223,.28)}
+.mic-wrap .mic-ripple:nth-child(2){width:118px;height:118px;background:rgba(174,160,201,.22)}
+.mic-wrap .mic-ripple:nth-child(3){width:96px;height:96px;background:rgba(125,106,171,.14)}
+.mic-wrap--sm .mic-ripple:nth-child(1){width:112px;height:112px}
+.mic-wrap--sm .mic-ripple:nth-child(2){width:94px;height:94px}
+.mic-wrap--sm .mic-ripple:nth-child(3){width:78px;height:78px}
 .mic-btn{
   position:relative;z-index:2;
   width:120px;height:120px;border-radius:60px;
@@ -607,8 +628,8 @@ a:focus-visible,
   .build-user-top{font-size:11px;max-width:min(100%,180px)}
   .main{padding-bottom:2px}
   .mic-wrap{width:148px;height:152px;margin:10px auto 12px}
-  .mic-wrap .mic-ripple:nth-child(1){width:132px;height:132px}
-  .mic-wrap .mic-ripple:nth-child(2){width:112px;height:112px}
+  .mic-wrap .mic-ripple:nth-child(1){width:136px;height:136px}
+  .mic-wrap .mic-ripple:nth-child(2){width:114px;height:114px}
   .mic-wrap .mic-ripple:nth-child(3){width:92px;height:92px}
   .mic-btn{width:104px;height:104px;border-radius:52px;box-shadow:0 8px 22px rgba(125,106,171,.24)}
   .home-shell{padding:16px 14px 28px}
@@ -824,7 +845,7 @@ a:focus-visible,
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 21:18</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 17-04-2026 21:39</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -887,6 +908,28 @@ a:focus-visible,
 })();
 </script>
 <div class="app" id="app">
+  <div class="pad-corner pad-corner--tr pad-corner--fs" aria-hidden="true">
+    <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
+      <defs><clipPath id="fsCornerTrClip"><rect width="220" height="220"/></clipPath></defs>
+      <g clip-path="url(#fsCornerTrClip)">
+        <circle cx="220" cy="0" r="208" fill="var(--family-licht)" fill-opacity="0.22"/>
+        <circle cx="220" cy="0" r="172" fill="var(--family-medium)" fill-opacity="0.16"/>
+        <circle cx="220" cy="0" r="138" fill="var(--family-donker)" fill-opacity="0.1"/>
+        <circle cx="220" cy="0" r="108" fill="var(--family-licht)" fill-opacity="0.14"/>
+      </g>
+    </svg>
+  </div>
+  <div class="pad-corner pad-corner--bl pad-corner--fs" aria-hidden="true">
+    <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
+      <defs><clipPath id="fsCornerBlClip"><rect width="220" height="220"/></clipPath></defs>
+      <g clip-path="url(#fsCornerBlClip)">
+        <circle cx="0" cy="220" r="205" fill="var(--zand-medium)" fill-opacity="0.18"/>
+        <circle cx="0" cy="220" r="168" fill="var(--zand-licht)" fill-opacity="0.24"/>
+        <circle cx="0" cy="220" r="130" fill="var(--zand-medium)" fill-opacity="0.12"/>
+        <circle cx="0" cy="220" r="96" fill="#E8DAC4" fill-opacity="0.2"/>
+      </g>
+    </svg>
+  </div>
   <!-- Drawer overlay -->
   <div class="overlay" id="ovl" onclick="closeDrawer()"></div>
   <div class="drawer" id="drawer"><div class="dr-in" id="drIn"></div></div>
