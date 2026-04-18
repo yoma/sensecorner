@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 11:48">
+<meta name="sc-build" content="18-04-2026 11:56">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -166,7 +166,20 @@ a{text-decoration:none;color:inherit}
   font-style:italic;
 }
 @media(max-width:520px){
-  .hero-welcome{font-size:13px;margin-bottom:12px}
+  .hero-welcome{font-size:13px;margin-bottom:8px}
+}
+.hero-quote{
+  display:block;
+  font-size:13px;
+  line-height:1.55;
+  color:var(--warm-bruin);
+  margin:0 0 14px;
+  font-weight:500;
+  font-family:var(--font-serif);
+  font-style:italic;
+}
+@media(max-width:520px){
+  .hero-quote{font-size:12px;margin-bottom:12px}
 }
 .own-status-row{display:flex;align-items:center;gap:8px;margin-bottom:16px}
 .own-status-dot{width:8px;height:8px;border-radius:50%;background:var(--s);flex-shrink:0;transition:background .3s}
@@ -427,6 +440,7 @@ a{text-decoration:none;color:inherit}
         <h1 class="hero-title">Één profiel over jou.<br>Jouw leven. Jouw tempo.</h1>
         <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter de begeleiding in elke Sense-app.</p>
         <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
+        <p class="hero-quote" id="heroQuote" hidden aria-live="polite"></p>
 
         <div class="own-status-row">
           <div class="own-status-dot" id="statusDot"></div>
@@ -889,6 +903,45 @@ a{text-decoration:none;color:inherit}
 
   var RING_ICON_PERSON='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
   var heroWelcome=document.getElementById('heroWelcome');
+  var heroQuote=document.getElementById('heroQuote');
+  /* Vaste quotes in dit bestand (geen externe API). Keuze: kalenderdag + hash account + sessionStorage-spin;
+     spin bij eerste weergave als ingelogd; bij uitloggen spin wissen + vorige index in localStorage zodat
+     de volgende login (zelfde dag) een andere quote krijgt. */
+  var SC_QUOTE_SPIN_KEY='sc_quote_spin';
+  /** Laatst getoonde quote-index vóór uitloggen; alleen om volgende login een andere quote te forceren. */
+  var SC_QUOTE_PREV_KEY='sc_quote_prev_idx';
+  var SC_SENSE_QUOTES=[
+    'Voelen is geen zwakte — het is informatie.',
+    'Wat je raakt, wijst vaak waar je groeien wil.',
+    'Emoties lees je soms eerst in je lichaam dan in je hoofd.',
+    'Rust hoeft niet te wachten tot alles duidelijk is; soms mag iets gewoon gevoeld worden.',
+    'Klein voelen mag — je waarde verandert daardoor niet.',
+    'Weerstand is soms bescherming, geen obstakel.',
+    'Naast jezelf staan is ook een vorm van zorg.',
+    'Zachtheid naar jezelf toe opent vaak meer dan strengheid.',
+    'Wat je niet benoemt, blijft soms te zwaar alleen dragen.',
+    'Elke emotie vraagt eerst gezien te worden — pas daarna komt keuze.',
+    'Gevoel is geen afleiding van het echte werk — het ís vaak het werk.',
+    'Je hoeft niet altijd sterk te zijn; je mag echt zijn.',
+    'Inzicht begint waar je eerlijk wordt tegen jezelf.',
+    'Gevoel is geen storing — het is navigatie.',
+    'Wat je voelt, telt mee in je verhaal — ook als het moeilijk te vatten is.',
+    'Aandacht voor je innerlijk is geen luxe; het houdt je bij jezelf.'
+  ];
+  function senseCornerQuoteIndex(user){
+    var n=SC_SENSE_QUOTES.length;
+    var day=Math.floor(Date.now()/86400000);
+    var h=0;
+    if(user&&user.id){
+      for(var i=0;i<user.id.length;i++)h=(h*31+user.id.charCodeAt(i))>>>0;
+    }
+    var spin=0;
+    try{
+      var s=sessionStorage.getItem(SC_QUOTE_SPIN_KEY);
+      if(s)spin=parseInt(s,10)>>>0;
+    }catch(_e){}
+    return (day+h+spin)>>>0%n;
+  }
   function scTrimName(s){
     s=String(s==null?'':s).trim();
     if(!s)return'';
@@ -921,18 +974,48 @@ a{text-decoration:none;color:inherit}
     if(!user){
       heroWelcome.textContent='';
       heroWelcome.hidden=true;
+      if(heroQuote){
+        heroQuote.textContent='';
+        heroQuote.hidden=true;
+      }
       return;
     }
+    try{
+      if(!sessionStorage.getItem(SC_QUOTE_SPIN_KEY)){
+        var nQ=SC_SENSE_QUOTES.length;
+        var prevIdx=-1;
+        try{
+          var pRaw=localStorage.getItem(SC_QUOTE_PREV_KEY);
+          if(pRaw!==null&&pRaw!=='')prevIdx=parseInt(pRaw,10);
+        }catch(_e0){}
+        if(prevIdx>=0&&nQ>1){
+          var t=0;
+          while(t++<100){
+            sessionStorage.setItem(SC_QUOTE_SPIN_KEY,String(Math.floor(Math.random()*1e9)));
+            if(senseCornerQuoteIndex(user)!==prevIdx)break;
+          }
+        }else{
+          sessionStorage.setItem(SC_QUOTE_SPIN_KEY,String(Math.floor(Math.random()*1e9)));
+        }
+        try{localStorage.removeItem(SC_QUOTE_PREV_KEY);}catch(_e1){}
+      }
+    }catch(_e){}
     var nm=pickSenseCornerDisplayName(user);
     if(nm){
-      heroWelcome.textContent='Welkom terug op SenseCorner, '+nm+'. Hoe gaat het vandaag met jou?';
+      heroWelcome.textContent='Welkom terug op SenseCorner, '+nm+'.';
     }else{
-      heroWelcome.textContent='Welkom terug op SenseCorner. Hoe gaat het vandaag met jou?';
+      heroWelcome.textContent='Welkom terug op SenseCorner.';
     }
     heroWelcome.hidden=false;
+    if(heroQuote){
+      var qi=senseCornerQuoteIndex(user);
+      heroQuote.textContent='\u201C'+SC_SENSE_QUOTES[qi]+'\u201D';
+      heroQuote.hidden=false;
+    }
   }
   function applyGuestOwnHubHeroDom(){
     try{
+      try{sessionStorage.removeItem(SC_QUOTE_SPIN_KEY);}catch(_e2){}
       updateHeroWelcome(null);
       hideOwnHeroBar();
       setRing(0);
@@ -1251,6 +1334,12 @@ a{text-decoration:none;color:inherit}
   if(hubRegisterBtn)hubRegisterBtn.onclick=function(){openAuthModal('register','');};
   if(hubLogoutBtn)hubLogoutBtn.onclick=async function(){
     try{
+      var uOut=await getCurrentUser();
+      if(uOut){
+        try{
+          localStorage.setItem(SC_QUOTE_PREV_KEY,String(senseCornerQuoteIndex(uOut)));
+        }catch(_e){}
+      }
       if(sb)await sb.auth.signOut();
       closeHubDock();
       await refreshAuthUi();
