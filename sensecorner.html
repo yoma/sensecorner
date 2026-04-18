@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 10:38">
+<meta name="sc-build" content="18-04-2026 11:03">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -716,7 +716,61 @@ a{text-decoration:none;color:inherit}
   if(profile&&Array.isArray(profile.answers)){
     filledAnswers=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
   }
-  // Migratie: oude data kon "completed" opslaan zonder inhoud -> behandel als onvolledig.
+  /* Zelfde categorieën als ownsense.html — voorkomt PC vs mobile mismatch (localStorage ≠ server). */
+  var SC_OWN_CATS=[
+    {id:'karakter',prompts:[0,0,0,0]},
+    {id:'interesses',prompts:[0,0,0,0]},
+    {id:'relatie',prompts:[0,0,0,0]},
+    {id:'gevoels',prompts:[0,0,0,0]}
+  ];
+  var SC_APP_CATS=[
+    {id:'datesense_focus',prompts:[0,0,0,0]},
+    {id:'familysense_focus',prompts:[0,0,0,0]}
+  ];
+  var SC_ALL_CATS=SC_OWN_CATS.concat(SC_APP_CATS);
+  function countOwnSlotsFromCategories(cats){
+    cats=cats||{};
+    var filled=0,total=0;
+    SC_ALL_CATS.forEach(function(cat){
+      var catData=cats[cat.id]||{};
+      var n=cat.prompts.length;
+      for(var i=0;i<n;i++){
+        total++;
+        if(String(catData['a'+i]||'').trim())filled++;
+      }
+    });
+    return{filled:filled,total:total};
+  }
+  var userSession=await getCurrentUser();
+  if(userSession&&sb){
+    try{
+      var row=await sb.from('sense_profiles').select('props').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
+      if(row&&!row.error&&row.data&&row.data.props){
+        var pcats=(row.data.props&&row.data.props.categories)||{};
+        var sc=countOwnSlotsFromCategories(pcats);
+        if(sc.total>0){
+          if(sc.filled>filledAnswers)filledAnswers=sc.filled;
+          if(sc.total>totalQ)totalQ=sc.total;
+          if(profile&&profile.status==='skipped'&&sc.filled>0){
+            profile=Object.assign({},profile);
+            delete profile.status;
+          }
+          if(!profile&&sc.filled>0){
+            /* Zelfde regel als DateSense/FamilySense: ingevuld => completed (niet pas bij 100%). */
+            profile={status:'completed',totalQ:sc.total,answers:[]};
+          }else if(profile&&sc.filled>=sc.total&&sc.total>0){
+            profile.status='completed';
+          }
+        }
+      }
+    }catch(err){
+      console.warn('sensecorner OWN server sync',err&&err.message?err.message:err);
+    }
+  }
+  /* Hub/local parity: zolang er antwoorden zijn en niet bewust overgeslagen, toon "actief" zoals op PC. */
+  if(profile&&filledAnswers>0&&profile.status!=='skipped'){
+    profile.status='completed';
+  }
   if(profile&&profile.status==='completed'&&filledAnswers===0){
     profile.status='empty';
     profile.completionPct=0;
