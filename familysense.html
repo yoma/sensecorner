@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-04-2026 17:34">
+<meta name="fs-build" content="18-04-2026 21:47">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -3517,6 +3517,11 @@ function redirectToSenseCornerAuth(){
   var url='sensecorner.html?returnTo='+encodeURIComponent(target);
   window.location.href=url;
 }
+/** Na actief afmelden: landingspagina, niet opnieuw op de hub. */
+function redirectToLandingAfterSignOut(){
+  try{window.location.replace('index.html');}
+  catch(_e){window.location.href='index.html';}
+}
 async function handlePendingAuthFromUrl(){
   if(!sb)return;
   var hashParams=getAuthHashParams();
@@ -3601,7 +3606,7 @@ async function init(){
     } else if(ev==='SIGNED_OUT'){
       S.apiKey='';
       applySignedOutClientState();
-      redirectToSenseCornerAuth();
+      redirectToLandingAfterSignOut();
     }
   });
   document.addEventListener('visibilitychange',function(){
@@ -3760,7 +3765,7 @@ async function doSignOut(){
   }
   // Altijd lokaal afmelden + naar login - niet enkel vertrouwen op onAuthStateChange (kan uitblijven in sommige browsers/extensies).
   applySignedOutClientState();
-  redirectToSenseCornerAuth();
+  redirectToLandingAfterSignOut();
   toast('👋 Tot ziens!');
 }
 
