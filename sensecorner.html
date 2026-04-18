@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 11:26">
+<meta name="sc-build" content="18-04-2026 11:34">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -223,10 +223,22 @@ a{text-decoration:none;color:inherit}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 /* Per app: CSS-variabelen = finale schaal (design/sensecorner_kleurenschalen_finaal.html) */
-.date-card{--card-d:var(--date-donker);--card-m:var(--date-medium);--card-l:var(--date-licht);}
-.self-card{--card-d:var(--self-donker);--card-m:var(--self-medium);--card-l:var(--self-licht);}
-.people-card{--card-d:var(--friend-donker);--card-m:var(--friend-medium);--card-l:var(--friend-licht);}
-.career-card{--card-d:var(--family-donker);--card-m:var(--family-medium);--card-l:var(--family-licht);}
+.date-card{
+  --card-d:var(--date-donker);--card-m:var(--date-medium);--card-l:var(--date-licht);
+  --app-donker:var(--date-donker);--app-medium:var(--date-medium);--app-licht:var(--date-licht);
+}
+.self-card{
+  --card-d:var(--self-donker);--card-m:var(--self-medium);--card-l:var(--self-licht);
+  --app-donker:var(--self-donker);--app-medium:var(--self-medium);--app-licht:var(--self-licht);
+}
+.people-card{
+  --card-d:var(--friend-donker);--card-m:var(--friend-medium);--card-l:var(--friend-licht);
+  --app-donker:var(--friend-donker);--app-medium:var(--friend-medium);--app-licht:var(--friend-licht);
+}
+.career-card{
+  --card-d:var(--family-donker);--card-m:var(--family-medium);--card-l:var(--family-licht);
+  --app-donker:var(--family-donker);--app-medium:var(--family-medium);--app-licht:var(--family-licht);
+}
 .app-card{
   position:relative;
   background:linear-gradient(165deg,var(--ivoor) 0%,rgba(255,255,255,.88) 48%,rgba(255,255,255,.72) 100%);
@@ -257,23 +269,40 @@ a{text-decoration:none;color:inherit}
 .app-card.clickable:focus-visible{outline:3px solid var(--card-m);outline-offset:3px}
 .app-card.dimmed{opacity:.58}
 .app-card.dimmed.enter{animation:none}
-/* Mini rimpel op app-kaarten — zelfde verhouding, lagere dekking (rustiger dan vaste kleurvlakken) */
-.app-card-ripples{position:absolute;top:15px;right:13px;width:48px;height:48px;pointer-events:none;z-index:0}
-.app-card-ripples span{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  border-radius:50%;box-sizing:border-box;border:none;
-}
-.app-card-ripples span:nth-child(1){width:100%;height:100%;background:var(--card-l);opacity:.22}
-.app-card-ripples span:nth-child(2){width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--card-m);opacity:.17}
-.app-card-ripples span:nth-child(3){width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--card-d);opacity:.12}
 .app-head,.app-desc,.app-footer{position:relative;z-index:1}
-.app-icon{
-  width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  background:linear-gradient(145deg,rgba(255,255,255,.95),color-mix(in srgb,var(--card-l) 55%,white));
-  border:1px solid color-mix(in srgb,var(--card-m) 35%,transparent);
-  box-shadow:0 2px 8px rgba(61,47,31,.05);
+/* Icoon: 3 concentrische schijven (licht → medium → donker), icoon 16px in cream op kern */
+.app-icon-wrap{
+  position:relative;
+  width:56px;height:56px;
+  flex-shrink:0;
 }
-.app-icon svg{width:22px;height:22px;color:var(--card-d)}
+.app-rip{
+  position:absolute;
+  left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  pointer-events:none;
+  box-sizing:border-box;
+}
+.app-rip--l{width:56px;height:56px;background:var(--app-licht);}
+.app-rip--m{width:46px;height:46px;background:var(--app-medium);}
+.app-rip--d{width:36px;height:36px;background:var(--app-donker);}
+.app-icon{
+  position:absolute;
+  left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:36px;height:36px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:2;
+  color:var(--cream);
+}
+.app-icon svg{
+  width:16px;height:16px;
+  flex-shrink:0;
+}
 .app-head{display:flex;align-items:center;gap:12px}
 .app-name{font-family:var(--font-serif);font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--chocolade)}
 .app-desc{font-size:13px;color:var(--m);line-height:1.62;flex:1}
@@ -468,10 +497,14 @@ a{text-decoration:none;color:inherit}
   <section class="grid" aria-label="Beschikbare apps" role="list">
 
     <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-link="datesense.html">
-      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
-        <div class="app-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <div class="app-icon-wrap" aria-hidden="true">
+          <span class="app-rip app-rip--l"></span>
+          <span class="app-rip app-rip--m"></span>
+          <span class="app-rip app-rip--d"></span>
+          <div class="app-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </div>
         </div>
         <div class="app-name">DateSense</div>
       </div>
@@ -483,10 +516,14 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card self-card dimmed" role="listitem" aria-label="SelfSense, binnenkort beschikbaar">
-      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
-        <div class="app-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c0 0-8-4-8-10a8 8 0 0 1 16 0c0 6-8 10-8 10z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="currentColor" stroke="none"/></svg>
+        <div class="app-icon-wrap" aria-hidden="true">
+          <span class="app-rip app-rip--l"></span>
+          <span class="app-rip app-rip--m"></span>
+          <span class="app-rip app-rip--d"></span>
+          <div class="app-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c0 0-8-4-8-10a8 8 0 0 1 16 0c0 6-8 10-8 10z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="currentColor" stroke="none"/></svg>
+          </div>
         </div>
         <div class="app-name">SelfSense</div>
       </div>
@@ -497,10 +534,14 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card people-card dimmed" role="listitem" aria-label="FriendSense, binnenkort beschikbaar">
-      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
-        <div class="app-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M21 20c0-2.8-1.8-5-4-5"/></svg>
+        <div class="app-icon-wrap" aria-hidden="true">
+          <span class="app-rip app-rip--l"></span>
+          <span class="app-rip app-rip--m"></span>
+          <span class="app-rip app-rip--d"></span>
+          <div class="app-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M21 20c0-2.8-1.8-5-4-5"/></svg>
+          </div>
         </div>
         <div class="app-name">FriendSense</div>
       </div>
@@ -511,10 +552,14 @@ a{text-decoration:none;color:inherit}
     </article>
 
     <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense" data-app-link="familysense.html">
-      <div class="app-card-ripples" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="app-head">
-        <div class="app-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11.5l9-7 9 7"/><path d="M5 10.5V20h14v-9.5"/><path d="M9 20v-5h6v5"/></svg>
+        <div class="app-icon-wrap" aria-hidden="true">
+          <span class="app-rip app-rip--l"></span>
+          <span class="app-rip app-rip--m"></span>
+          <span class="app-rip app-rip--d"></span>
+          <div class="app-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11.5l9-7 9 7"/><path d="M5 10.5V20h14v-9.5"/><path d="M9 20v-5h6v5"/></svg>
+          </div>
         </div>
         <div class="app-name">FamilySense</div>
       </div>
