@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 18:36">
+<meta name="sc-build" content="18-04-2026 18:42">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -89,7 +89,6 @@ a{text-decoration:none;color:inherit}
 .logo{display:flex;align-items:center;gap:9px}
 .logo-mark{width:30px;height:30px;background:var(--r);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo-mark svg{width:16px;height:16px}
-.header-own-photo{width:30px;height:30px;border-radius:15px;border:1px solid #E3D5D1;object-fit:cover;display:none;flex-shrink:0}
 .logo-text{font-family:var(--font-serif);font-size:17px;font-weight:700;color:var(--t);letter-spacing:-.01em}
 .logo-title-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 10px}
 /* Decoratief: Japanse aanspreekvorm voor «sensei» (begeleider); blijft NL-first in copy. */
@@ -164,8 +163,27 @@ a{text-decoration:none;color:inherit}
   color:rgba(61,47,31,.36);letter-spacing:-.02em;line-height:1;margin-bottom:2px;
 }
 .ring-pct:empty{display:none;margin-bottom:0}
-.ring-icon{display:flex;align-items:center;justify-content:center}
-.hero-body{flex:1;min-width:0}
+.ring-icon{display:flex;align-items:center;justify-content:center;position:relative}
+.ring-icon .ring-avatar-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;line-height:0}
+.ring-initial{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:50%;box-sizing:border-box;
+  border:2px solid rgba(107,142,111,.45);background:var(--card);
+  box-shadow:0 0 0 1px rgba(255,255,255,.75);
+  font-family:var(--font-serif);font-size:17px;font-weight:700;
+  color:var(--sage-donker);line-height:1;
+}
+.ring-avatar-img{
+  width:40px;height:40px;border-radius:50%;object-fit:cover;
+  border:2px solid rgba(107,142,111,.45);background:var(--card);box-sizing:border-box;
+  box-shadow:0 0 0 1px rgba(255,255,255,.75);
+}
+.ring-avatar-done{
+  position:absolute;right:-1px;bottom:-1px;width:17px;height:17px;border-radius:50%;
+  background:#1E7E34;display:flex;align-items:center;justify-content:center;
+  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.14);
+}
+.ring-avatar-done svg{display:block}
 .hero-kicker{font-size:11px;font-weight:700;color:var(--r);letter-spacing:.06em;margin-bottom:5px;text-transform:uppercase}
 .hero-title{font-family:var(--font-serif);font-size:27px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
 .hero-sub{font-size:14px;color:var(--m);line-height:1.7;margin-bottom:12px}
@@ -385,6 +403,9 @@ a{text-decoration:none;color:inherit}
   .hero-ring-stack .hero-ring{width:60px;height:60px}
   .hero-ring-stack .hero-ring svg{width:60px;height:60px}
   .hero-ring-stack .ring-pct{font-size:9px;margin-bottom:1px}
+  .ring-avatar-img{width:33px;height:33px}
+  .ring-initial{width:33px;height:33px;font-size:15px}
+  .ring-avatar-done{width:15px;height:15px;right:0;bottom:0}
   .hero-title{font-size:22px}
   .hero{padding:16px 14px 14px;margin-bottom:8px}
   .hero-sub{margin-bottom:10px}
@@ -426,7 +447,6 @@ a{text-decoration:none;color:inherit}
       <div class="logo-mark" aria-hidden="true">
         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="#fff" stroke-width="2"/><circle cx="8" cy="8" r="2" fill="#fff"/></svg>
       </div>
-      <img id="headerOwnPhoto" class="header-own-photo" alt="Jouw profielfoto">
       <div>
         <div class="logo-title-row">
           <div class="logo-text">SenseCorner</div>
@@ -464,9 +484,7 @@ a{text-decoration:none;color:inherit}
           </svg>
           <div class="ring-center-wrap">
             <span class="ring-pct" id="ringPct"></span>
-            <div class="ring-icon" id="ringIcon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 5.5l6.8 6.5-6.8 6.5-6.8-6.5 6.8-6.5z" stroke="#6B8E6F" stroke-width="1.65" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="ring-icon" id="ringIcon"></div>
           </div>
         </div>
       </div>
@@ -708,7 +726,6 @@ a{text-decoration:none;color:inherit}
   var ringIcon=document.getElementById('ringIcon');
   var ringPct=document.getElementById('ringPct');
   var heroRingStack=document.getElementById('heroRingStack');
-  var headerOwnPhoto=document.getElementById('headerOwnPhoto');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
   var adminPill=document.getElementById('adminPill');
@@ -912,36 +929,7 @@ a{text-decoration:none;color:inherit}
   function isDirectlyLoadableImageUrl(u){
     return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
   }
-  async function resolveOwnPhotoForHeader(url){
-    url=String(url||'').trim();
-    if(!url||!headerOwnPhoto)return;
-    if(isDirectlyLoadableImageUrl(url)){
-      headerOwnPhoto.src=url;
-      headerOwnPhoto.style.display='block';
-      headerOwnPhoto.onerror=function(){headerOwnPhoto.style.display='none';};
-      return;
-    }
-    if(!sb){return;}
-    try{
-      var sign=await sb.storage.from('own-photos').createSignedUrl(url.replace(/^\/+/,''),60*60*24*30);
-      var su=sign&&sign.data&&sign.data.signedUrl;
-      if(su){
-        headerOwnPhoto.src=su;
-        headerOwnPhoto.style.display='block';
-        headerOwnPhoto.onerror=function(){headerOwnPhoto.style.display='none';};
-      }
-    }catch(_e){}
-  }
-  if(headerOwnPhoto){
-    if(userSession&&ownPhotoUrl){
-      resolveOwnPhotoForHeader(ownPhotoUrl);
-    }else{
-      headerOwnPhoto.removeAttribute('src');
-      headerOwnPhoto.style.display='none';
-    }
-  }
 
-  var RING_ICON_HUB='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 5.5l6.8 6.5-6.8 6.5-6.8-6.5 6.8-6.5z" stroke="#6B8E6F" stroke-width="1.65" stroke-linejoin="round"/></svg>';
   var heroWelcome=document.getElementById('heroWelcome');
   var heroQuote=document.getElementById('heroQuote');
   /* Vaste quotes in dit bestand (geen externe API). Keuze: kalenderdag + hash account + sessionStorage-spin;
@@ -1010,6 +998,82 @@ a{text-decoration:none;color:inherit}
     if(n2&&n2.indexOf('@')===-1)return n2;
     return scFirstNameFromEmail(user.email)||'';
   }
+  function setRingCenterEmpty(){
+    if(ringIcon)ringIcon.innerHTML='';
+  }
+  function ringFallbackInitialLetter(){
+    if(hubProfile){
+      var dn=scTrimName(hubProfile.display_name);
+      if(dn){
+        for(var i=0;i<dn.length;i++){
+          var ch=dn.charAt(i);
+          if(/[A-Za-zÀ-ÿ0-9]/.test(ch))return ch.toUpperCase();
+        }
+      }
+    }
+    if(userSession){
+      var nm=pickSenseCornerDisplayName(userSession);
+      if(nm){
+        for(var j=0;j<nm.length;j++){
+          var c2=nm.charAt(j);
+          if(/[A-Za-zÀ-ÿ0-9]/.test(c2))return c2.toUpperCase();
+        }
+      }
+      var em=String(userSession.email||'').trim();
+      if(em){
+        var c3=em.charAt(0);
+        if(/[A-Za-z0-9]/.test(c3))return c3.toUpperCase();
+      }
+    }
+    return '';
+  }
+  function setRingCenterInitialFromContext(){
+    var L=ringFallbackInitialLetter();
+    if(!L){setRingCenterEmpty();return;}
+    if(!ringIcon)return;
+    ringIcon.innerHTML='';
+    var sp=document.createElement('span');
+    sp.className='ring-initial';
+    sp.setAttribute('aria-hidden','true');
+    sp.textContent=L;
+    ringIcon.appendChild(sp);
+  }
+  function setRingCenterCheck(){
+    if(ringIcon)ringIcon.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E7E34" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  }
+  async function setRingCenterOwnPhoto(url, withDoneBadge){
+    if(!ringIcon)return;
+    url=String(url||'').trim();
+    if(!url){setRingCenterInitialFromContext();return;}
+    var finalUrl=url;
+    if(!isDirectlyLoadableImageUrl(url)&&sb){
+      try{
+        var sign=await sb.storage.from('own-photos').createSignedUrl(url.replace(/^\/+/,''),60*60*24*30);
+        var su=sign&&sign.data&&sign.data.signedUrl;
+        if(su)finalUrl=su;
+      }catch(_e){}
+    }
+    if(!isDirectlyLoadableImageUrl(finalUrl)){setRingCenterInitialFromContext();return;}
+    ringIcon.innerHTML='';
+    var wrap=document.createElement('span');
+    wrap.className='ring-avatar-wrap';
+    var img=document.createElement('img');
+    img.className='ring-avatar-img';
+    img.alt='Profielfoto';
+    img.decoding='async';
+    img.loading='lazy';
+    img.src=finalUrl;
+    img.onerror=function(){if(withDoneBadge)setRingCenterCheck();else setRingCenterInitialFromContext();};
+    wrap.appendChild(img);
+    if(withDoneBadge){
+      var bd=document.createElement('span');
+      bd.className='ring-avatar-done';
+      bd.setAttribute('aria-hidden','true');
+      bd.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      wrap.appendChild(bd);
+    }
+    ringIcon.appendChild(wrap);
+  }
   function updateHeroWelcome(user){
     if(!heroWelcome)return;
     if(!user){
@@ -1063,7 +1127,7 @@ a{text-decoration:none;color:inherit}
       hideOwnHeroBar();
       setRing(0);
       if(ringFg)ringFg.style.stroke='';
-      if(ringIcon)ringIcon.innerHTML=RING_ICON_HUB;
+      setRingCenterEmpty();
       if(dot)dot.className='own-status-dot';
       if(statusText)statusText.textContent='Log in om je OWN-profiel en voortgang op dit toestel te tonen.';
       if(statusPct)statusPct.textContent='';
@@ -1680,10 +1744,6 @@ a{text-decoration:none;color:inherit}
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
       applyGuestOwnHubHeroDom();
-      if(headerOwnPhoto){
-        headerOwnPhoto.removeAttribute('src');
-        headerOwnPhoto.style.display='none';
-      }
     }
     refreshCoachHintsFromServer(user);
     return user;
@@ -1709,7 +1769,7 @@ a{text-decoration:none;color:inherit}
       statusText.textContent='Nog niet gestart';
       statusPct.textContent='';
       if(ringFg)ringFg.style.stroke='';
-      if(ringIcon)ringIcon.innerHTML=RING_ICON_HUB;
+      setRingCenterInitialFromContext();
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
       var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
@@ -1719,7 +1779,11 @@ a{text-decoration:none;color:inherit}
       statusText.textContent='Je profiel is actief (ingevuld)';
       statusPct.textContent='';
       ringFg.style.stroke='#1E7E34';
-      ringIcon.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E7E34" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      if(String(ownPhotoUrl||'').trim()){
+        void setRingCenterOwnPhoto(ownPhotoUrl,true);
+      }else{
+        setRingCenterCheck();
+      }
       btnMain.textContent='Open OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
     } else if(profile.status==='skipped'){
@@ -1728,6 +1792,7 @@ a{text-decoration:none;color:inherit}
       dot.className='own-status-dot';
       statusText.textContent='Overgeslagen, kan later';
       statusPct.textContent='';
+      if(String(ownPhotoUrl||'').trim()){void setRingCenterOwnPhoto(ownPhotoUrl,false);}else{setRingCenterInitialFromContext();}
       btnMain.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Start OWN Sense';
     } else {
       var filled=filledAnswers;
@@ -1737,6 +1802,7 @@ a{text-decoration:none;color:inherit}
       dot.className='own-status-dot active';
       statusText.textContent='Bezig ('+(filled||0)+'/'+totalQ+' vragen)';
       statusPct.textContent='';
+      if(String(ownPhotoUrl||'').trim()){void setRingCenterOwnPhoto(ownPhotoUrl,false);}else{setRingCenterInitialFromContext();}
       btnMain.textContent='Ga verder in OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>');
     }
