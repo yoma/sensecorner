@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 00:28">
+<meta name="os-build" content="18-04-2026 11:17">
 <title>OWN Sense HUB</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -169,24 +169,33 @@ body{isolation:isolate}
   white-space:normal;
   word-break:break-word;
 }
+/* Zelfde pill-stijl als DateSense / FamilySense (hub-nav) */
 .quick-nav{
   display:flex;
   flex-wrap:wrap;
-  justify-content:flex-start;
+  justify-content:flex-end;
   align-items:center;
   gap:6px;
   padding:6px 0 10px;
+  margin:0 calc(-1 * clamp(12px,min(4vw,28px),28px));
+  padding-left:clamp(12px,min(4vw,28px),28px);
+  padding-right:clamp(12px,min(4vw,28px),28px);
+  border-bottom:1px solid rgba(61,47,31,.06);
+  background:rgba(242,232,213,.72);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
 }
 .quick-nav-btn{
-  border:0.5px solid var(--border);
+  border:1px solid var(--border);
   border-radius:999px;
-  background:rgba(255,255,255,.88);
-  color:var(--warm-bruin);
+  background:#fff;
+  color:#555;
   font:inherit;
   font-size:11px;
-  font-weight:500;
-  padding:6px 11px;
+  font-weight:700;
+  padding:4px 10px;
   cursor:pointer;
+  touch-action:manipulation;
 }
 .tabs{
   display:flex;
@@ -443,6 +452,18 @@ body{isolation:isolate}
 .import-hub-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#8E2B20;margin-bottom:6px}
 .import-hub-text{font-size:13px;line-height:1.55;color:#4E535B}
 .free-own-text{width:100%;min-height:92px;border:0.5px solid var(--border);border-radius:10px;padding:9px 10px;font:inherit;font-size:13px;line-height:1.5;resize:vertical;background:#fff}
+/* Vertel-modal: zelfde PTT-dictee als DateSense Vertel */
+.own-vertel-toolbar{display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:nowrap;min-width:0}
+.own-vertel-mic{
+  width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;border:1.5px solid #d0d8e0;background:#eceff3;color:#555;cursor:pointer;
+  touch-action:none;-webkit-user-select:none;user-select:none;
+}
+.own-vertel-mic svg{stroke:currentColor}
+.own-vertel-mic:active{transform:scale(.96)}
+.own-vertel-mic.on{background:var(--sage-donker);border-color:var(--sage-donker);color:#fff;box-shadow:0 4px 12px rgba(107,142,111,.28)}
+.own-vertel-mic.on svg{stroke:#fff}
+.own-vertel-mic-hint{flex:1;min-width:0;font-size:10px;font-weight:600;color:var(--sage-donker);line-height:1.35;margin:0}
 .import-modal{position:fixed;inset:0;display:none;z-index:60}
 .import-modal.show{display:block}
 .import-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
@@ -597,12 +618,12 @@ body{isolation:isolate}
     <div class="top-row">
       <div></div>
       <h1 class="top-title">OWN Sense</h1>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 00:28</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 11:17</span>
     </div>
-    <div class="quick-nav">
-      <button type="button" class="quick-nav-btn" id="ownHomeBtn">OWN Home</button>
-      <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none">Terug app</button>
-      <button type="button" class="quick-nav-btn" id="cornerBtn">SenseCorner</button>
+    <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
+      <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none" hidden>Bron-app</button>
+      <button type="button" class="quick-nav-btn" id="ownHomeBtn">Home OWN Sense</button>
+      <button type="button" class="quick-nav-btn" id="cornerBtn">Home Sensecorner</button>
     </div>
     <nav class="tabs" aria-label="OWN Sense tabs">
       <button class="tab-btn active" type="button" data-tab="mij"><span class="tab-mini-rimpel" aria-hidden="true"><span></span><span></span><span></span></span><span class="tab-btn-text">Mij</span></button>
@@ -707,7 +728,15 @@ body{isolation:isolate}
   <div class="import-modal-sheet">
     <div style="font-size:16px;font-weight:800">Vertel iets over jezelf</div>
     <div class="subtle">Wordt feiten + profielvoorstel (jij keurt).</div>
-    <textarea id="ownVertelInput" class="free-own-text" placeholder="Wat speelt er vandaag in jou?"></textarea>
+    <textarea id="ownVertelInput" class="free-own-text" placeholder="Wat speelt er vandaag in jou?" aria-label="Vrije tekst over jezelf"></textarea>
+    <div class="own-vertel-toolbar">
+      <button type="button" class="own-vertel-mic" id="ownVertelMicBtn"
+        onpointerdown="osPttMicPointerDown(event,'ownVertelInput')" onpointerup="osPttMicPointerUp(event)" onpointercancel="osPttMicPointerUp(event)" onlostpointercapture="osPttMicPointerUp(event)"
+        title="Indrukken = praten, loslaten = stoppen" aria-label="Dictee (spraak naar tekst)" aria-describedby="ownVertelMicHint" aria-pressed="false">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      </button>
+      <p class="own-vertel-mic-hint" id="ownVertelMicHint">Micro: ingedrukt houden = praten · loslaten = stoppen (zelfde als Vertel in DateSense).</p>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn btn-primary" onclick="submitOwnVertel()">Opslaan en verwerken</button>
       <button type="button" class="btn btn-muted" onclick="closeOwnVertelModal()">Sluiten</button>
@@ -1044,16 +1073,157 @@ function renderMijTab(){
     +cats.map(function(c){
     var txt=categoryLongText(c.id);
     return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p style="white-space:pre-wrap">'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
-  }).join('')+'<div class="sticky-cta-wrap"><div class="os-mic-wrap"><span class="os-mic-ripple"></span><span class="os-mic-ripple"></span><span class="os-mic-ripple"></span><button type="button" class="os-mic-btn" onclick="openOwnVertelModal()" aria-label="Vertel iets over jezelf — opent invoervenster"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><p class="sticky-cta-caption">Tik op de microfoon om iets over jezelf te schrijven of te plakken.</p></div>';
+  }).join('')+'<div class="sticky-cta-wrap"><div class="os-mic-wrap"><span class="os-mic-ripple"></span><span class="os-mic-ripple"></span><span class="os-mic-ripple"></span><button type="button" class="os-mic-btn" onclick="openOwnVertelModal()" aria-label="Vertel iets over jezelf — opent invoervenster"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><p class="sticky-cta-caption">Tik op de microfoon om te typen, te plakken of te dicteren (PTT, zoals Vertel in DateSense).</p></div>';
+}
+
+/* ── OWN Vertel-modal: Web Speech push-to-talk (zelfde gedrag als DateSense Vertel) ── */
+var __osPttRecognition=null;
+var __osPttActive=false;
+var __osPttStopping=false;
+var __osPttTargetId='ownVertelInput';
+var __osPttPrefix='';
+var __osPttHeld=false;
+
+function ownVertelAutoResize(el){
+  if(!el)return;
+  el.style.height='auto';
+  var cap=168;
+  el.style.height=Math.min(el.scrollHeight,cap)+'px';
+}
+function osPttSyncInput(inp){
+  if(!inp)return;
+  try{inp.dispatchEvent(new Event('input',{bubbles:true,cancelable:true}));}catch(_e){
+    try{var ev=document.createEvent('Event');ev.initEvent('input',true,true);inp.dispatchEvent(ev);}catch(_e2){}
+  }
+}
+function osOwnVertelMicSetOn(on){
+  var btn=document.getElementById('ownVertelMicBtn');
+  if(!btn)return;
+  if(on){btn.classList.add('on');btn.setAttribute('aria-pressed','true');}
+  else{btn.classList.remove('on');btn.setAttribute('aria-pressed','false');}
+}
+function osPttNotify(msg,isErr){
+  var st=document.getElementById('ownVertelStatus');
+  if(!st){if(msg)console.warn('[OWN Vertel]',msg);return;}
+  st.classList.toggle('err',!!isErr);
+  st.textContent=msg||'';
+}
+function osPttWireRecognition(recognition,inp){
+  recognition.onresult=function(e){
+    var finals='',interim='';
+    for(var i=0;i<e.results.length;i++){
+      var seg=e.results[i],t=seg[0].transcript;
+      if(seg.isFinal)finals+=t;else interim+=t;
+    }
+    inp.value=__osPttPrefix+finals+interim;
+    ownVertelAutoResize(inp);
+    osPttSyncInput(inp);
+  };
+  recognition.onerror=function(){osPttStopMic(true);};
+  recognition.onend=function(){
+    if(__osPttStopping)return;
+    if(__osPttHeld){setTimeout(osPttMicRestartAfterSegment,0);return;}
+    osPttStopMic(true);
+  };
+}
+function osPttMicRestartAfterSegment(){
+  if(!__osPttHeld||!__osPttActive)return;
+  var inp=document.getElementById(__osPttTargetId||'ownVertelInput');
+  if(!inp){osPttStopMic(true);return;}
+  var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SRClass){osPttStopMic(true);return;}
+  var old=__osPttRecognition;
+  __osPttRecognition=null;
+  if(old){
+    try{old.onresult=null;old.onerror=null;old.onend=null;old.stop();}catch(_e){}
+  }
+  __osPttPrefix=String(inp.value||'');
+  __osPttStopping=false;
+  try{
+    __osPttRecognition=new SRClass();
+    __osPttRecognition.lang='nl-NL';
+    __osPttRecognition.continuous=true;
+    __osPttRecognition.interimResults=true;
+    osPttWireRecognition(__osPttRecognition,inp);
+    __osPttRecognition.start();
+  }catch(_e){osPttStopMic(true);}
+}
+function osPttMicPointerDown(e,fieldId){
+  if(!e)return;
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
+    osPttNotify('Spraakherkenning niet beschikbaar in deze browser.',true);return;
+  }
+  var fid=String(fieldId||'ownVertelInput');
+  var inp=document.getElementById(fid);
+  if(!inp){osPttNotify('Invulvak niet gevonden.',true);return;}
+  e.preventDefault();
+  try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}
+  if(__osPttActive)osPttStopMic(true);
+  __osPttTargetId=fid;
+  __osPttHeld=true;
+  osPttStartMic();
+}
+function osPttMicPointerUp(e){
+  __osPttHeld=false;
+  if(e&&e.currentTarget&&typeof e.pointerId==='number'){
+    try{e.currentTarget.releasePointerCapture(e.pointerId);}catch(_){}
+  }
+  if(__osPttActive)osPttStopMic(true);
+}
+function osPttStartMic(){
+  var SRClass=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var inp=document.getElementById(__osPttTargetId||'ownVertelInput');
+  if(!inp||!SRClass)return;
+  if(__osPttRecognition){
+    try{__osPttRecognition.onresult=null;__osPttRecognition.onerror=null;__osPttRecognition.onend=null;__osPttRecognition.stop();}catch(_e){}
+    __osPttRecognition=null;
+  }
+  __osPttPrefix=inp.value?String(inp.value):'';
+  __osPttRecognition=new SRClass();
+  __osPttRecognition.lang='nl-NL';
+  __osPttRecognition.continuous=true;
+  __osPttRecognition.interimResults=true;
+  __osPttStopping=false;
+  osPttWireRecognition(__osPttRecognition,inp);
+  __osPttRecognition.start();
+  __osPttActive=true;
+  if(__osPttTargetId==='ownVertelInput')osOwnVertelMicSetOn(true);
+}
+function osPttStopMic(preserveText){
+  __osPttHeld=false;
+  __osPttStopping=true;
+  var inp=document.getElementById(__osPttTargetId||'ownVertelInput');
+  if(__osPttRecognition){
+    try{__osPttRecognition.stop();}catch(_e){}
+  }
+  if(inp){
+    var committed=String(inp.value||'').trim();
+    inp.value=committed;
+    ownVertelAutoResize(inp);
+    osPttSyncInput(inp);
+    try{inp.focus();}catch(_e){}
+  }
+  __osPttActive=false;
+  osOwnVertelMicSetOn(false);
+  __osPttRecognition=null;
+  __osPttTargetId='ownVertelInput';
 }
 
 function openOwnVertelModal(){
   var m=document.getElementById('ownVertelModal');
   if(!m)return;
+  var st=document.getElementById('ownVertelStatus');
+  if(st){st.textContent='';st.classList.remove('err');}
   m.classList.add('show');
   m.setAttribute('aria-hidden','false');
+  setTimeout(function(){
+    var ta=document.getElementById('ownVertelInput');
+    if(ta){try{ta.focus();}catch(_e){}}
+  },80);
 }
 function closeOwnVertelModal(){
+  osPttStopMic(true);
   var m=document.getElementById('ownVertelModal');
   if(!m)return;
   m.classList.remove('show');
@@ -1061,6 +1231,7 @@ function closeOwnVertelModal(){
 }
 
 async function submitOwnVertel(){
+  osPttStopMic(true);
   var ta=document.getElementById('ownVertelInput');
   var st=document.getElementById('ownVertelStatus');
   var txt=String(ta&&ta.value||'').trim();
@@ -1816,7 +1987,12 @@ function initQuickNav(){
     ownHomeBtn.onclick=function(){window.location.href='ownsense.html';};
   }
   if(backAppBtn&&returnToApp){
+    backAppBtn.removeAttribute('hidden');
     backAppBtn.style.display='inline-flex';
+    var rt=String(returnToApp||'').toLowerCase();
+    if(rt.indexOf('datesense')>=0)backAppBtn.textContent='Home DateSense';
+    else if(rt.indexOf('familysense')>=0)backAppBtn.textContent='Home FamilySense';
+    else backAppBtn.textContent='Terug naar app';
     backAppBtn.onclick=function(){window.location.href=returnToApp;};
   }
   if(cornerBtn){
