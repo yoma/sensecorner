@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 17:52">
+<meta name="os-build" content="18-04-2026 18:05">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -337,6 +337,13 @@ body{isolation:isolate}
 .field{width:100%;border:0.5px solid #D9CFCB;border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;margin-top:10px}
 .field-readonly{background:#FAFAFA;color:#4F545C;cursor:default;line-height:1.4}
 .subtle{font-size:12px;color:var(--muted)}
+.subtle--cat-intro p{margin:0 0 10px;line-height:1.65}
+.subtle--cat-intro p:last-child{margin-bottom:8px}
+.os-tablink{
+  display:inline;padding:0;margin:0 1px;border:none;background:none;font:inherit;font-size:inherit;
+  color:var(--app-donker);font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer;
+}
+.os-tablink:hover{color:var(--chocolade)}
 .bar-row{margin:9px 0}
 .bar-head{display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:4px}
 .bar-head > *{min-width:0}
@@ -630,7 +637,7 @@ body{isolation:isolate}
         <h1 class="top-title">OWN Sense</h1>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </div>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 16:32</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 18:05</span>
     </div>
     <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
       <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none" hidden>Bron-app</button>
@@ -1121,7 +1128,12 @@ function renderMijTab(){
     {id:'gevoels',label:'Gevoelswereld'},
     {id:'algemeen',label:'Algemeen'}
   ];
-  catsEl.innerHTML='<h3>Categorieën</h3><p class="subtle" style="margin-bottom:8px">Deze vijf <strong>domeinen</strong> zijn <strong>vast</strong> (geen eigen rubrieknamen). Je teksten bewerk je op tab <strong>Invullen</strong> of via <strong>Vertel</strong>. <strong>Sensei zet suggesties in de vaste vakken</strong>; DateSense/FamilySense kan mee-aanvullen (zie hierboven: pending telt pas na je OK).</p>'
+  catsEl.innerHTML='<h3>Categorieën</h3>'
+    +'<div class="subtle subtle--cat-intro">'
+    +'<p>Hieronder staan vijf <strong>vaste</strong> onderdelen (zoals Karakter en Interesses). Dat zijn vaste rubrieken van OWN Sense: je voegt er geen eigen namen aan toe.</p>'
+    +'<p>Wil je tekst aanpassen? Ga naar de tab <button type="button" class="os-tablink" onclick="activateTab(\'bron\')">Invullen</button> voor je vragenlijsten, of gebruik <button type="button" class="os-tablink" onclick="openOwnVertelModal()">Vertel</button> (microfoon hieronder) om iets in je eigen woorden neer te zetten.</p>'
+    +'<p><strong>Sensei</strong> zet suggesties in die vaste vakken. Wat er uit DateSense of FamilySense bijkomt, zie je eerst als <em>pending</em> tot jij OK geeft — dat staat ook bij <strong>Voortgang</strong> hierboven.</p>'
+    +'</div>'
     +cats.map(function(c){
     var txt=categoryLongText(c.id);
     return '<details class="cat-open" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">'+c.label+'</summary><p style="white-space:pre-wrap">'+(txt?escHTML(txt):'<span class="subtle">Nog geen tekst beschikbaar.</span>')+'</p></details>';
@@ -3296,11 +3308,6 @@ function renderQuestions(){
     var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
     return rows.filter(function(m){return detectSourceFromMsg(m)===scope;}).length;
   }
-  function appScopeLabel(scope){
-    if(scope==='ds')return'DateSense';
-    if(scope==='fs')return'FamilySense';
-    return'Algemeen';
-  }
   function visibleCats(){
     var list=OWN_CATS.slice();
     APP_CATS.forEach(function(cat){
@@ -3315,21 +3322,16 @@ function renderQuestions(){
   }
   var el=document.getElementById('questionsCard');
   var ownAnyAns=hasOwnFourCatAnyAnswer();
-  var html='<h3>Vragenlijsten</h3><p class="subtle">Thema\'s en vragen zijn <strong>vast</strong> (door de app); blokken hernoemen gaat niet. <strong>Sensei zet suggesties in de vaste vakken</strong> (o.a. na import); <strong>je antwoorden</strong> bewerk je hier. App-specifieke vragen tonen we als die app actief is.</p>'
+  var html='<h3>Vragenlijsten</h3><p class="subtle">Vaste thema\'s en vragen; je antwoorden bewerk je in de vakken hieronder.</p>'
     +'<div class="own-slot-repair-bar" style="margin:0 0 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
     +'<button type="button" class="btn btn-muted btn-small" id="ownSlotRepairBtn"'+(ownAnyAns?'':' disabled')+'>AI: antwoorden laten passen bij vragen</button>'
     +'<span id="ownSlotRepairMsg" class="subtle" style="font-size:12px;max-width:100%"></span></div>';
   visibleCats().forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
     var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>0;}).length;
-    var appInfo='';
-    if(cat.app){
-      var cnt=appMessageCount(cat.app);
-      appInfo=' <span class="subtle" style="font-size:11px">· Actief via '+appScopeLabel(cat.app)+' ('+cnt+' relevant bericht'+(cnt===1?'':'en')+')</span>';
-    }
     html+='<div class="qcat" id="cat-'+cat.id+'">'
       +'<div class="qcat-head" data-cat="'+cat.id+'"><div>'
-      +'<div class="qcat-title">'+cat.icon+' '+cat.title+appInfo+'</div>'
+      +'<div class="qcat-title">'+cat.icon+' '+cat.title+'</div>'
       +'<div class="qcat-meta">'+filled+'/4 vragen · update '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
       +'</div><div class="subtle">Open</div></div>'
       +'<div class="qcat-body">';
