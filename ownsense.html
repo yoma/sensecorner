@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 23:17">
+<meta name="os-build" content="18-04-2026 23:36">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -214,8 +214,23 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 }
 .os-micro-vertel__btn:hover{filter:brightness(1.06)}
 .os-micro-vertel__btn:active{transform:scale(.98)}
+.os-micro-vertel__actions{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-shrink:0;
+}
+.os-micro-vertel__mic{
+  width:44px;
+  height:44px;
+  border-radius:22px;
+}
 @media (max-width:380px){
-  .os-micro-vertel__btn{align-self:stretch;width:100%;text-align:center}
+  .os-micro-vertel__inner{flex-direction:column;align-items:stretch}
+  .os-micro-vertel__actions{width:100%;justify-content:space-between}
+  .os-micro-vertel__btn{flex:1;min-width:0;text-align:center}
 }
 /* Zelfde pill-stijl als DateSense / FamilySense (hub-nav) */
 .quick-nav{
@@ -676,7 +691,7 @@ a.top-title-wrap{text-decoration:none;color:inherit}
         <h1 class="top-title">OWN Sense</h1>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </a>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 23:17</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 23:36</span>
     </div>
     <section class="os-micro-vertel" role="region" aria-label="Vertel voor OWN Sense">
       <div class="os-micro-vertel__inner">
@@ -685,7 +700,17 @@ a.top-title-wrap{text-decoration:none;color:inherit}
           <h2 class="os-micro-vertel__title">Iets kwijt in je eigen woorden?</h2>
           <p class="os-micro-vertel__sub">Wat je hier opslaat, hoort bij je dossier <strong>OWN Sense</strong> — niet bij een ander dossier. In de apps kies je per Vertel-gesprek een dossier; hier is dat vast <strong>OWN Sense</strong>.</p>
         </div>
-        <button type="button" class="os-micro-vertel__btn" onclick="openOwnVertelModal()">Schrijf of dicteer</button>
+        <div class="os-micro-vertel__actions">
+          <button type="button" class="own-vertel-mic os-micro-vertel__mic" id="ownVertelMicStripBtn"
+            onpointerdown="osMicroVertelStripMicDown(event)"
+            onpointerup="osPttMicPointerUp(event)"
+            onpointercancel="osPttMicPointerUp(event)"
+            onlostpointercapture="osPttMicPointerUp(event)"
+            title="Ingedrukt houden = praten (opent Vertel)" aria-label="Dictee: houd ingedrukt om te praten (opent Vertel)" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+          <button type="button" class="os-micro-vertel__btn" onclick="openOwnVertelModal()">Schrijf of typ</button>
+        </div>
       </div>
     </section>
     <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
@@ -1210,10 +1235,17 @@ function osPttSyncInput(inp){
   }
 }
 function osOwnVertelMicSetOn(on){
-  var btn=document.getElementById('ownVertelMicBtn');
-  if(!btn)return;
-  if(on){btn.classList.add('on');btn.setAttribute('aria-pressed','true');}
-  else{btn.classList.remove('on');btn.setAttribute('aria-pressed','false');}
+  ['ownVertelMicBtn','ownVertelMicStripBtn'].forEach(function(id){
+    var btn=document.getElementById(id);
+    if(!btn)return;
+    if(on){btn.classList.add('on');btn.setAttribute('aria-pressed','true');}
+    else{btn.classList.remove('on');btn.setAttribute('aria-pressed','false');}
+  });
+}
+/** Micro bovenaan: open Vertel + zelfde PTT als in het modal (currentTarget = strip-knop). */
+function osMicroVertelStripMicDown(ev){
+  openOwnVertelModal();
+  osPttMicPointerDown(ev,'ownVertelInput');
 }
 function osPttNotify(msg,isErr){
   var st=document.getElementById('ownVertelStatus');
