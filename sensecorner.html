@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 11:34">
+<meta name="sc-build" content="18-04-2026 11:48">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -154,7 +154,20 @@ a{text-decoration:none;color:inherit}
 .hero-body{flex:1;min-width:0}
 .hero-kicker{font-size:11px;font-weight:700;color:var(--r);letter-spacing:.06em;margin-bottom:5px;text-transform:uppercase}
 .hero-title{font-family:var(--font-serif);font-size:27px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
-.hero-sub{font-size:14px;color:var(--m);line-height:1.7;margin-bottom:16px}
+.hero-sub{font-size:14px;color:var(--m);line-height:1.7;margin-bottom:12px}
+.hero-welcome{
+  display:block;
+  font-size:14px;
+  line-height:1.55;
+  color:var(--chocolade);
+  margin:0 0 14px;
+  font-weight:600;
+  font-family:var(--font-serif);
+  font-style:italic;
+}
+@media(max-width:520px){
+  .hero-welcome{font-size:13px;margin-bottom:12px}
+}
 .own-status-row{display:flex;align-items:center;gap:8px;margin-bottom:16px}
 .own-status-dot{width:8px;height:8px;border-radius:50%;background:var(--s);flex-shrink:0;transition:background .3s}
 .own-status-dot.done{background:var(--green)}
@@ -413,6 +426,7 @@ a{text-decoration:none;color:inherit}
         <div class="hero-kicker">OWN Sense · Over jou</div>
         <h1 class="hero-title">Één profiel over jou.<br>Jouw leven. Jouw tempo.</h1>
         <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter de begeleiding in elke Sense-app.</p>
+        <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
 
         <div class="own-status-row">
           <div class="own-status-dot" id="statusDot"></div>
@@ -789,6 +803,11 @@ a{text-decoration:none;color:inherit}
     return{filled:filled,total:total};
   }
   var userSession=await getCurrentUser();
+  /* Zonder actieve sessie geen persoons-UI uit localStorage (voorkomt «afgemeld maar nog mijn %»). */
+  if(!userSession){
+    profile=null;
+    hubProfile=null;
+  }
   if(userSession&&sb){
     try{
       var row=await sb.from('sense_profiles').select('props').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
@@ -859,8 +878,73 @@ a{text-decoration:none;color:inherit}
       }
     }catch(_e){}
   }
-  if(headerOwnPhoto&&ownPhotoUrl){
-    resolveOwnPhotoForHeader(ownPhotoUrl);
+  if(headerOwnPhoto){
+    if(userSession&&ownPhotoUrl){
+      resolveOwnPhotoForHeader(ownPhotoUrl);
+    }else{
+      headerOwnPhoto.removeAttribute('src');
+      headerOwnPhoto.style.display='none';
+    }
+  }
+
+  var RING_ICON_PERSON='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+  var heroWelcome=document.getElementById('heroWelcome');
+  function scTrimName(s){
+    s=String(s==null?'':s).trim();
+    if(!s)return'';
+    if(/^(true|false|null|undefined)$/i.test(s))return'';
+    return s;
+  }
+  function scFirstNameFromEmail(email){
+    email=String(email||'').trim();
+    var at=email.indexOf('@');
+    if(at<=0)return'';
+    var local=email.slice(0,at).replace(/[0-9]+$/g,'').trim();
+    if(!local)return'';
+    var part=String(local.split(/[._+-]/)[0]||'').replace(/[^a-zA-ZÀ-ÿ'\-]/g,'');
+    if(part.length<2)return'';
+    if(/^[0-9]+$/i.test(part))return'';
+    return part.charAt(0).toUpperCase()+part.slice(1).toLowerCase();
+  }
+  /** Volgorde: roepnaam → naam (metadata) → voornaam uit e-mail → leeg. */
+  function pickSenseCornerDisplayName(user){
+    if(!user)return'';
+    var m=user.user_metadata&&typeof user.user_metadata==='object'?user.user_metadata:{};
+    var r=scTrimName(m.roepnaam);
+    if(r)return r;
+    var n2=scTrimName(m.full_name)||scTrimName(m.name)||scTrimName(m.display_name);
+    if(n2&&n2.indexOf('@')===-1)return n2;
+    return scFirstNameFromEmail(user.email)||'';
+  }
+  function updateHeroWelcome(user){
+    if(!heroWelcome)return;
+    if(!user){
+      heroWelcome.textContent='';
+      heroWelcome.hidden=true;
+      return;
+    }
+    var nm=pickSenseCornerDisplayName(user);
+    if(nm){
+      heroWelcome.textContent='Welkom terug op SenseCorner, '+nm+'. Hoe gaat het vandaag met jou?';
+    }else{
+      heroWelcome.textContent='Welkom terug op SenseCorner. Hoe gaat het vandaag met jou?';
+    }
+    heroWelcome.hidden=false;
+  }
+  function applyGuestOwnHubHeroDom(){
+    try{
+      updateHeroWelcome(null);
+      hideOwnHeroBar();
+      setRing(0);
+      if(ringFg)ringFg.style.stroke='';
+      if(ringIcon)ringIcon.innerHTML=RING_ICON_PERSON;
+      if(dot)dot.className='own-status-dot';
+      if(statusText)statusText.textContent='Log in om je OWN-profiel en voortgang op dit toestel te tonen.';
+      if(statusPct)statusPct.textContent='';
+      if(btnMain){
+        btnMain.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Start OWN Sense';
+      }
+    }catch(_e){}
   }
 
   function setRing(pct){
@@ -1061,6 +1145,7 @@ a{text-decoration:none;color:inherit}
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
       await refreshHubOwnPreview(user);
+      updateHeroWelcome(user);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
@@ -1072,6 +1157,11 @@ a{text-decoration:none;color:inherit}
       if(hubPhoneField)hubPhoneField.value='';
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
+      applyGuestOwnHubHeroDom();
+      if(headerOwnPhoto){
+        headerOwnPhoto.removeAttribute('src');
+        headerOwnPhoto.style.display='none';
+      }
     }
     return user;
   }
@@ -1087,12 +1177,16 @@ a{text-decoration:none;color:inherit}
   }
 
   try{
-    if(!profile){
+    if(!userSession){
+      applyGuestOwnHubHeroDom();
+    }else if(!profile){
       hideOwnHeroBar();
       setRing(0);
       dot.className='own-status-dot';
       statusText.textContent='Nog niet gestart';
       statusPct.textContent='';
+      if(ringFg)ringFg.style.stroke='';
+      if(ringIcon)ringIcon.innerHTML=RING_ICON_PERSON;
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
       var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
@@ -1123,6 +1217,7 @@ a{text-decoration:none;color:inherit}
   }catch(e){
     console.warn('sensecorner OWN status',e);
   }
+  updateHeroWelcome(userSession);
 
   // Actieve apps bovenaan, niet-actieve (dimmed/binnenkort) onderaan.
   var grid=document.querySelector('.grid');
@@ -1180,6 +1275,8 @@ a{text-decoration:none;color:inherit}
         await persistRoepnaamToOwnSenseProfile(u.id,v);
         setHubRoepnaamState('Opgeslagen. Apps en Sensei gebruiken nu deze roepnaam.',false);
         await refreshHubOwnPreview(u);
+        var u2=await getCurrentUser();
+        updateHeroWelcome(u2||u);
       }catch(e){
         setHubRoepnaamState((e&&e.message)||'Opslaan mislukt.',true);
       }finally{
@@ -1260,7 +1357,11 @@ a{text-decoration:none;color:inherit}
       if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
       await refreshAuthUi();
       closeAuthModal();
-      if(pendingReturnTo)window.location.href=pendingReturnTo;
+      if(pendingReturnTo){
+        window.location.href=pendingReturnTo;
+      }else{
+        window.location.reload();
+      }
     }catch(_e){setAuthMsg('Inloggen mislukt. Probeer opnieuw.',true);}
   };
   if(authRegisterConfirmBtn)authRegisterConfirmBtn.onclick=async function(){
@@ -1314,6 +1415,13 @@ a{text-decoration:none;color:inherit}
     }catch(_e){setAuthMsg('Reset-link kon niet verstuurd worden.',true);}
   };
   await refreshAuthUi();
+  if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
+    sb.auth.onAuthStateChange(function(ev){
+      if(ev==='SIGNED_OUT'){
+        Promise.resolve(refreshAuthUi()).catch(function(){});
+      }
+    });
+  }
   try{
     var params=new URLSearchParams(window.location.search||'');
     var returnTo=String(params.get('returnTo')||'').trim();
