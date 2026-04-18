@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="18-04-2026 17:14">
+<meta name="ds-build" content="18-04-2026 17:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1099,7 +1099,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
     <div class="input-bar">
       <div id="vertelHelpMount" class="vertel-help-mount"></div>
       <div class="input-stack-vertel">
-        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ je verhaal - DateSensei helpt het dossier kiezen." rows="3" aria-label="Vertel je verhaal" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ je verhaal of vraag; Sensei helpt het dossier kiezen. Vast advies per persoon: open hun dossier → tab Advies." rows="3" aria-label="Vertel je verhaal" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
         <div class="input-toolbar-vertel input-toolbar-vertel--compact">
           <button type="button" class="rnd gr rnd--vertel" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1956,7 +1956,7 @@ function getQuickHelpStepsForScreen(screen){
     return[
       {targetSel:'#tab-vertel',title:'Vertel',text:'Hier zet je gebeurtenissen, gevoelens en vragen om naar bruikbare context.'},
       {targetSel:'#chatArea',title:'Gespreksoverzicht',text:'Je ziet wat jij en DateSense al bespraken in deze sessie.'},
-      {targetSel:'#msgInput',title:'Inputvak',text:'Typ vrij of gebruik de voorbeeldchips; DateSense koppelt slim aan dossiers.'}
+      {targetSel:'#msgInput',title:'Inputvak',text:'Typ vrij of vraag om advies; Sensei helpt het dossier kiezen. Vast dossier-advies staat per persoon onder tab Advies in hun dossier.'}
     ];
   }
   if(sc==='dossier'){
@@ -1964,7 +1964,7 @@ function getQuickHelpStepsForScreen(screen){
     return[
       {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Foto, Profiel en Advies.'},
       {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
-      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan: snel naar Advies of Vertel (aparte tab). Dat is iets anders dan «Dikteer dit vak» bij een invulveld.'}
+      {targetSel:'#dossierDock',title:'Snelle acties',text:'Advies = vaste analyse voor dit dossier. Vertel = apart scherm voor vrij gesprek (ook opnieuw advies vragen); bij opslaan koppel je aan een dossier.'}
     ];
   }
   return[
@@ -7540,7 +7540,8 @@ function buildOwnOverzichtSummaryAndMood(d){
 
 function buildOwnCategoryPreviewRows(d){
   var cats=d.categories||{};
-  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 8px">Vragenlijst per thema</div>';
+  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 6px">Vragenlijst per thema</div>'
+    +'<p style="font-size:11px;color:#8a8f97;margin:0 0 10px;line-height:1.45">De <strong>thema\'s</strong> (blokken en vragen) zijn <strong>vast</strong> in de app — bloknamen herschik of hernoem je niet. <strong>DateSensei zet suggesties in de vaste vakken</strong> (import, Vertel); <strong>je antwoorden</strong> stuur je bij op tab <strong>Profiel</strong>.</p>';
   html+='<div class="own-ov-cat-list">';
   OWN_CATS.forEach(function(cat){
     var catData=cats[cat.id]||{};
@@ -7565,7 +7566,8 @@ function buildContactCategoryPreviewRows(d,dossierName){
   var personName=String(dossierName||'').replace('Sense','').trim();
   var cats=d.categories||{};
   var CONTACT_CATS=getContactCatsDef(personName);
-  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 8px">Vragenlijst per thema</div>';
+  var html='<div style="font-size:13px;font-weight:700;color:#333;margin:16px 0 6px">Vragenlijst per thema</div>'
+    +'<p style="font-size:11px;color:#8a8f97;margin:0 0 10px;line-height:1.45">Zelfde idee: <strong>thema\'s en vragen</strong> zijn <strong>vast</strong>; blokken hernoem je niet. <strong>Sensei zet suggesties in de vaste vakken</strong>; <strong>antwoorden</strong> bewerk je op tab <strong>Profiel</strong>.</p>';
   html+='<div class="own-ov-cat-list">';
   CONTACT_CATS.forEach(function(cat){
     var catData=cats[cat.id]||{};
@@ -8010,6 +8012,11 @@ async function loadTab(name,tab,d){
     advHtml+='</div>';
     // Body
     advHtml+='<div style="background:#fff;padding:18px 16px">';
+    if(name==='OWN Sense'){
+      advHtml+='<p style="font-size:12px;color:#4b5563;line-height:1.5;margin:0 0 14px;padding:10px 12px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px"><strong>Waar hoort dit?</strong> Dit <strong>Advies</strong>-tabblad hoort bij <strong>OWN Sense</strong> (jouw profiel). Voor iemand uit je Senses: open <strong>hun dossier</strong> → tab <strong>Advies</strong> daar. <strong>Vertel</strong> is je algemene coachchat; bij opslaan koppel je je vraag aan het juiste dossier.</p>';
+    }else{
+      advHtml+='<p style="font-size:12px;color:#4b5563;line-height:1.5;margin:0 0 14px;padding:10px 12px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px"><strong>Waar hoort dit?</strong> Dit <strong>Advies</strong>-tabblad hoort bij <strong>'+escHTML(dn(name))+'</strong>: je vaste rapport op basis van <em>dit</em> dossier. <strong>Vertel</strong> is vrij praten (alle context); je kunt daar ook opnieuw om advies vragen — daarna kies je bij welk dossier je opslaat.</p>';
+    }
     if(name!=='OWN Sense'){
       advHtml+='<div style="margin-bottom:14px"><button type="button" class="coach-save-other" style="padding:10px 14px;border-color:#FFE0BF;background:#FFF7F0;color:#A55B00;font-weight:700" onclick="openPlanner(\''+escJsStr(name)+'\')">📅 Plan iets leuks</button></div>';
     }
@@ -8043,7 +8050,7 @@ async function loadTab(name,tab,d){
     } else {
       advHtml+=renderAdviceLoadingCard();
     }
-    advHtml+='</div><div style="margin-top:10px"><button id="advTalkCoreBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#E7C7C2;background:#FFF8F7;color:#8E2B20;font-weight:800">🗣️ Bespreek dit advies in Vertel</button></div></div>';
+    advHtml+='</div><div style="margin-top:10px"><button id="advTalkCoreBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#E7C7C2;background:#FFF8F7;color:#8E2B20;font-weight:800">🗣️ Bespreek dit advies in Vertel</button><div style="font-size:11px;color:#8a8f97;margin-top:6px;line-height:1.35">Zet in Vertel het dossier vast of kies bij opslaan — dan blijft het gekoppeld aan de juiste persoon.</div></div></div>';
     var extraHtml=cache&&cache.extra_html?cache.extra_html:'';
     if(extraHtml){
       advHtml+='<div id="advExtraWrap" style="margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
@@ -8923,7 +8930,7 @@ async function rVertel(el){
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
     var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.</div>`;
+    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.<br><br><strong>Advies vs Vertel:</strong> het tabblad <strong>Advies</strong> bij een dossier is het vaste coachrapport voor <em>die</em> persoon (op basis van tijdlijn en profiel). Hier in Vertel praat je vrij en kun je ook opnieuw om advies vragen — na het antwoord kies je bij welk dossier je opslaat.</div>`;
     ca.appendChild(welcome);
 
     if(!S.apiKey){
