@@ -113,10 +113,10 @@ a{text-decoration:none;color:inherit}
   position:absolute;inset:0;display:block;pointer-events:none;
 }
 .ring-pct{
-  position:absolute;top:4px;left:50%;transform:translateX(-50%);
+  position:absolute;top:-6px;left:50%;transform:translateX(-50%);
   z-index:4;margin:0;
   font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;font-family:var(--font-sans);
-  color:rgba(61,47,31,.42);letter-spacing:-.02em;line-height:1;
+  color:rgba(61,47,31,.48);letter-spacing:-.02em;line-height:1;
 }
 .ring-pct:empty{display:none}
 .ring-icon{
@@ -181,6 +181,9 @@ a{text-decoration:none;color:inherit}
 .own-status-text{font-size:13px;color:var(--m)}
 .own-status-pct{font-size:13px;font-weight:700;color:var(--t);margin-left:auto}
 .own-hero-bar-wrap{margin-top:12px;margin-bottom:18px;width:100%;max-width:320px}
+.own-hero-bar-row{display:flex;align-items:center;gap:10px}
+.own-hero-bar-track{flex:1;min-width:0;height:6px;border-radius:999px;background:rgba(61,47,31,.12);overflow:hidden}
+.own-hero-bar-pct{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--t);flex-shrink:0;min-width:2.5em;text-align:right}
 .cta-row{display:flex;flex-wrap:wrap;gap:10px}
 .btn{display:inline-flex;align-items:center;gap:6px;border-radius:11px;padding:10px 14px;font-size:14px;font-weight:800;border:none;cursor:pointer;transition:transform .12s ease, box-shadow .18s ease, background .2s ease;text-decoration:none;font-family:inherit;line-height:1}
 .btn-primary{background:var(--chocolade);color:var(--cream);letter-spacing:.01em;font-weight:600}
@@ -364,7 +367,7 @@ a{text-decoration:none;color:inherit}
   .hero-ring-stack{width:96px;height:96px;flex-shrink:0;margin:0 auto}
   .hero-ring-stack .hero-ring{width:60px;height:60px}
   .hero-ring-stack .hero-ring svg{width:60px;height:60px}
-  .hero-ring-stack .ring-pct{font-size:9px;top:2px}
+  .hero-ring-stack .ring-pct{font-size:9px;top:-5px}
   .ring-avatar-img{width:45px;height:45px}
   .ring-initial{width:45px;height:45px;font-size:17px}
   .ring-icon > .ring-avatar-done{width:15px;height:15px;top:-1px;right:4px}
@@ -464,8 +467,11 @@ a{text-decoration:none;color:inherit}
           <span class="own-status-pct" id="statusPct"></span>
         </div>
         <div class="own-hero-bar-wrap" id="ownHeroBarWrap" style="display:none" aria-hidden="true">
-          <div style="height:6px;border-radius:999px;background:rgba(61,47,31,.12);overflow:hidden">
-            <div id="ownHeroBarFill" style="height:100%;width:0%;background:var(--r);border-radius:999px;transition:width .45s ease"></div>
+          <div class="own-hero-bar-row">
+            <div class="own-hero-bar-track">
+              <div id="ownHeroBarFill" style="height:100%;width:0%;background:var(--r);border-radius:999px;transition:width .45s ease"></div>
+            </div>
+            <span class="own-hero-bar-pct" id="ownHeroBarPct" aria-hidden="true"></span>
           </div>
         </div>
 
@@ -1102,6 +1108,11 @@ a{text-decoration:none;color:inherit}
   function setRingInnerPct(p){
     var n=Math.max(0,Math.min(100,Number(p)||0));
     if(ringPct)ringPct.textContent=n>0?String(Math.round(n))+'%':'';
+    var barWrap=document.getElementById('ownHeroBarWrap');
+    var barPctEl=document.getElementById('ownHeroBarPct');
+    if(barPctEl&&barWrap&&barWrap.style.display==='block'){
+      barPctEl.textContent=n>0?String(Math.round(n))+'%':'';
+    }
     if(heroRingStack){
       if(n>0){
         heroRingStack.setAttribute('aria-label','OWN-profiel, ongeveer '+String(Math.round(n))+' procent ingevuld');
@@ -1121,17 +1132,28 @@ a{text-decoration:none;color:inherit}
     setRingInnerPct(p);
   }
   function setRingAndBar(pct){
-    setRing(pct);
     var bw=document.getElementById('ownHeroBarWrap');
     var bf=document.getElementById('ownHeroBarFill');
+    var bp=document.getElementById('ownHeroBarPct');
+    var n=Math.max(0,Math.min(100,Number(pct)||0));
     if(bw&&bf){
       bw.style.display='block';
-      bf.style.width=Math.max(0,Math.min(100,Number(pct)||0))+'%';
+      bw.setAttribute('aria-hidden','false');
+      bf.style.width=n+'%';
+      if(bp)bp.textContent=n>0?String(Math.round(n))+'%':'';
     }
+    setRing(n);
   }
   function hideOwnHeroBar(){
     var bw=document.getElementById('ownHeroBarWrap');
-    if(bw)bw.style.display='none';
+    var bp=document.getElementById('ownHeroBarPct');
+    var bf=document.getElementById('ownHeroBarFill');
+    if(bw){
+      bw.style.display='none';
+      bw.setAttribute('aria-hidden','true');
+    }
+    if(bp)bp.textContent='';
+    if(bf)bf.style.width='0%';
   }
   setHubSettingsCollapsed(false);
   closeHubDock();
