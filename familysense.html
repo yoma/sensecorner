@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-04-2026 13:15">
+<meta name="fs-build" content="18-04-2026 13:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -902,7 +902,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 18-04-2026 13:15</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 18-04-2026 13:43</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -11143,21 +11143,34 @@ async function refreshDossierSummaryAI(dosName){
 
 // ══ Coach Context ════════════════════════════════════════════════
 
-/* ── OWN Sense ↔ ownsense.html (zelfde 11 kernvragen) ──
-   Houd deze strings synchroon met ownsense.html → QUESTIONS[].q            */
-var OWNSENSE_STANDALONE_QS=[
-  'Wie ben jij als persoon, los van wat je doet of welke rollen je vervult?',
-  'Wat geeft jou écht energie, en wat kost je? Wees concreet in mensen, situaties of omgevingen.',
-  'Hoe ga jij om met stress, tegenslagen of conflicten? Wat doe jij dan typisch?',
-  'Hoe makkelijk deel jij je gevoelens of je innerlijk leven met anderen?',
-  'Wat zijn jouw sterkste kanten, en waar loop jij soms op jezelf vast?',
-  'Ben jij meer iemand van routine en zekerheid, of van verandering en nieuwe ervaringen?',
-  'Hoe ben jij in contact met mensen? Hoe bouw jij vertrouwen op, en wat maakt verbinding soms lastig voor jou?',
-  'Welke rol speelt humor en luchtigheid in jouw leven en in hoe jij omgaat met anderen?',
-  'Wat heb jij nodig van mensen die dicht bij jou staan, en wat doet het met jou als je dat niet krijgt?',
-  'Zijn er patronen uit je jeugd of verleden die je nog terugziet in hoe je vandaag reageert op mensen of situaties?',
-  'Wat drijft jou diep van binnen, en waar wil jij naartoe in je leven?'
-];
+/* ── OWN Sense ↔ localStorage ownsense_profile_v1
+   Platte index = OWN_CATS in volgorde (karakter, interesses, relatie, gevoels), per categorie a0..a3.
+   Alleen layout flat16v2 mag terug naar Supabase gemerged worden (geen legacy 11-vragen remap).      */
+function ownPromptTextFromDef(p){
+  if(typeof p==='string')return String(p);
+  return (p&&p.q)?String(p.q):'';
+}
+function buildOwnsenseStandaloneQsFromOwnCats(){
+  var a=[];
+  OWN_CATS.forEach(function(cat){
+    cat.prompts.forEach(function(p){a.push(ownPromptTextFromDef(p));});
+  });
+  return a;
+}
+function ownFlatIndexForCatSlot(catId,slot){
+  var fi=0,si=parseInt(slot,10);
+  if(isNaN(si))return -1;
+  for(var c=0;c<OWN_CATS.length;c++){
+    var cat=OWN_CATS[c];
+    if(cat.id===catId){
+      if(si>=0&&si<cat.prompts.length)return fi+si;
+      return -1;
+    }
+    fi+=cat.prompts.length;
+  }
+  return -1;
+}
+var OWNSENSE_STANDALONE_QS=buildOwnsenseStandaloneQsFromOwnCats();
 function normOwnsenseQLabel(s){
   return String(s||'').toLowerCase().replace(/\s+/g,' ').replace(/[?!.]+$/,'').trim();
 }
@@ -11167,9 +11180,6 @@ function matchOwnsenseQIndex(label){
   for(var i=0;i<OWNSENSE_STANDALONE_QS.length;i++){
     var Q=normOwnsenseQLabel(OWNSENSE_STANDALONE_QS[i]);
     if(Q===L)return i;
-    var shorter=L.length<Q.length?L:Q;
-    var longer=L.length<Q.length?Q:L;
-    if(shorter.length>=40&&longer.indexOf(shorter)!==-1)return i;
   }
   return -1;
 }
@@ -11179,22 +11189,30 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
     var raw=localStorage.getItem('ownsense_profile_v1')||'';
     var profile={};
     if(raw){try{profile=JSON.parse(raw);}catch(_e){profile={};}}
-    if(!Array.isArray(profile.answers))profile.answers=[];
-    var n=OWNSENSE_STANDALONE_QS.length;
-    while(profile.answers.length<n)profile.answers.push('');
+    var expect=OWN_CATS.reduce(function(n,c){return n+c.prompts.length;},0);
+    var flat=new Array(expect);
+    for(var z=0;z<expect;z++)flat[z]='';
     var changed=false;
     entries.forEach(function(e){
-      var idx=matchOwnsenseQIndex(e.label);
-      if(idx<0)return;
-      var prev=String(profile.answers[idx]||'').trim();
       var next=String(e.value||'').trim();
       if(!next)return;
-      if(next.length>prev.length||!prev){
-        profile.answers[idx]=e.value;
+      var fi=-1;
+      if(e&&e.cat!=null&&e.slot!=null){
+        fi=ownFlatIndexForCatSlot(String(e.cat),parseInt(e.slot,10));
+      }
+      if(fi<0)fi=matchOwnsenseQIndex(e.label);
+      if(fi<0)return;
+      var prev=String(flat[fi]||'').trim();
+      if(!prev||next.length>prev.length){
+        flat[fi]=e.value;
         changed=true;
       }
     });
     if(!changed)return;
+    profile.answers=flat;
+    while(profile.answers.length<expect)profile.answers.push('');
+    profile.ownsenseSlotLayout='flat16v2';
+    var n=expect;
     var filled=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
     var statusWas=String(profile.status||'');
     if(filled>0&&statusWas!=='skipped')profile.status='completed';
@@ -11208,7 +11226,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
   }catch(_e){}
 }
 
-/** Hub (ownsense_profile_v1) → Supabase OWN Sense-categorieën: vult langere/ontbrekende antwoorden aan waar de vraagteksten matchen. */
+/** Hub (ownsense_profile_v1) → Supabase OWN Sense-categorieën: alleen flat16v2 (zelfde slotvolgorde als OWN_CATS). */
 async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
   if(!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
   try{
@@ -11216,16 +11234,18 @@ async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
     if(!raw)return;
     var prof=JSON.parse(raw);
     if(!prof||!Array.isArray(prof.answers))return;
+    if(String(prof.ownsenseSlotLayout||'')!=='flat16v2')return;
+    var expect=OWN_CATS.reduce(function(n,c){return n+c.prompts.length;},0);
+    if(prof.answers.length<expect)return;
     var d=S.pdata['OWN Sense'];
     var cats=JSON.parse(JSON.stringify(d.categories||{}));
     var changed=false;
+    var fi=0;
     OWN_CATS.forEach(function(cat){
       var catData=Object.assign({},cats[cat.id]||{});
-      cat.prompts.forEach(function(pr,idx){
-        var qIdx=matchOwnsenseQIndex(pr.q);
-        if(qIdx<0)return;
-        var ans=prof.answers[qIdx];
-        if(ans==null||!String(ans).trim())return;
+      for(var idx=0;idx<cat.prompts.length;idx++){
+        var ans=prof.answers[fi++];
+        if(ans==null||!String(ans).trim())continue;
         var key='a'+idx;
         var prev=String(catData[key]||'').trim();
         var next=String(ans).trim();
@@ -11233,7 +11253,7 @@ async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
           catData[key]=ans;
           changed=true;
         }
-      });
+      }
       cats[cat.id]=catData;
     });
     if(!changed)return;
@@ -11255,7 +11275,10 @@ function mirrorOwnSenseCatsToLocalStorage(){
       var cData=d.categories[cat.id]||{};
       cat.prompts.forEach(function(p,i){
         var v=(cData['a'+i]||'').trim();
-        if(v)entries.push({label:String(p||''),value:v});
+        if(v){
+          var lbl=ownPromptTextFromDef(p);
+          entries.push({cat:cat.id,slot:i,label:lbl,value:v});
+        }
       });
     });
     if(!entries.length)return;
