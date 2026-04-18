@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 12:22">
+<meta name="sc-build" content="18-04-2026 16:46">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -156,7 +156,15 @@ a{text-decoration:none;color:inherit}
 .hero-ring svg{transform:rotate(-90deg)}
 .ring-bg{fill:none;stroke:rgba(61,47,31,.07);stroke-width:5}
 .ring-fg{fill:none;stroke:var(--r);stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1);stroke-dasharray:188.5;stroke-dashoffset:188.5}
-.ring-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.ring-center-wrap{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;
+}
+.ring-pct{
+  font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;font-family:var(--font-sans);
+  color:rgba(61,47,31,.36);letter-spacing:-.02em;line-height:1;margin-bottom:2px;
+}
+.ring-pct:empty{display:none;margin-bottom:0}
+.ring-icon{display:flex;align-items:center;justify-content:center}
 .hero-body{flex:1;min-width:0}
 .hero-kicker{font-size:11px;font-weight:700;color:var(--r);letter-spacing:.06em;margin-bottom:5px;text-transform:uppercase}
 .hero-title{font-family:var(--font-serif);font-size:27px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
@@ -301,7 +309,7 @@ a{text-decoration:none;color:inherit}
 .app-card.clickable:focus-visible{outline:3px solid var(--card-m);outline-offset:3px}
 .app-card.dimmed{opacity:.58}
 .app-card.dimmed.enter{animation:none}
-.app-head,.app-desc,.app-footer{position:relative;z-index:1}
+.app-head,.app-desc,.app-coach-hint,.app-footer{position:relative;z-index:1}
 /* Icoon: 3 concentrische schijven (licht → medium → donker), icoon 16px in cream op kern */
 .app-icon-wrap{
   position:relative;
@@ -338,6 +346,21 @@ a{text-decoration:none;color:inherit}
 .app-head{display:flex;align-items:center;gap:12px}
 .app-name{font-family:var(--font-serif);font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--chocolade)}
 .app-desc{font-size:13px;color:var(--m);line-height:1.62;flex:1}
+.app-coach-hint{
+  margin:0;
+  font-size:11px;
+  line-height:1.38;
+  color:rgba(61,47,31,.5);
+  font-weight:500;
+  letter-spacing:.01em;
+}
+.app-coach-hint__n{
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+  margin-right:1px;
+}
+.app-coach-hint--datesense .app-coach-hint__n{color:var(--date-donker);}
+.app-coach-hint--familysense .app-coach-hint__n{color:var(--family-donker);}
 .app-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
 .badge-live{background:color-mix(in srgb,var(--date-licht) 55%,white);color:var(--date-donker);border:1px solid color-mix(in srgb,var(--date-medium) 40%,transparent)}
@@ -361,6 +384,7 @@ a{text-decoration:none;color:inherit}
   .hero-ring-stack{width:96px;height:96px}
   .hero-ring-stack .hero-ring{width:60px;height:60px}
   .hero-ring-stack .hero-ring svg{width:60px;height:60px}
+  .hero-ring-stack .ring-pct{font-size:9px;margin-bottom:1px}
   .hero-title{font-size:22px}
   .hero{padding:16px 14px 14px;margin-bottom:8px}
   .hero-sub{margin-bottom:10px}
@@ -429,17 +453,20 @@ a{text-decoration:none;color:inherit}
     <div class="hero-inner">
 
       <!-- Voortgang + rimpel-ensemble (sage, zoals OWN Sense-hub) -->
-      <div class="hero-ring-stack" aria-hidden="true">
-        <span class="hero-rip hero-rip--l"></span>
-        <span class="hero-rip hero-rip--m"></span>
-        <span class="hero-rip hero-rip--d"></span>
+      <div class="hero-ring-stack" id="heroRingStack" aria-hidden="true">
+        <span class="hero-rip hero-rip--l" aria-hidden="true"></span>
+        <span class="hero-rip hero-rip--m" aria-hidden="true"></span>
+        <span class="hero-rip hero-rip--d" aria-hidden="true"></span>
         <div class="hero-ring">
-          <svg width="72" height="72" viewBox="0 0 72 72">
+          <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
             <circle class="ring-bg" cx="36" cy="36" r="30"/>
             <circle class="ring-fg" id="ringFg" cx="36" cy="36" r="30"/>
           </svg>
-          <div class="ring-icon" id="ringIcon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          <div class="ring-center-wrap">
+            <span class="ring-pct" id="ringPct"></span>
+            <div class="ring-icon" id="ringIcon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B8E6F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            </div>
           </div>
         </div>
       </div>
@@ -546,6 +573,7 @@ a{text-decoration:none;color:inherit}
         <div class="app-name">DateSense</div>
       </div>
       <p class="app-desc">Bewuster daten, inzicht in patronen en persoonlijk advies.</p>
+      <p class="app-coach-hint app-coach-hint--datesense" id="scCoachHintDatesense" hidden></p>
       <div class="app-footer">
         <span class="badge badge-live">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -601,6 +629,7 @@ a{text-decoration:none;color:inherit}
         <div class="app-name">FamilySense</div>
       </div>
       <p class="app-desc">Ondersteuning bij gezin, communicatie en opvoedvragen in je thuissituatie.</p>
+      <p class="app-coach-hint app-coach-hint--familysense" id="scCoachHintFamilysense" hidden></p>
       <div class="app-footer">
         <span class="badge badge-live-fs">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -677,6 +706,8 @@ a{text-decoration:none;color:inherit}
   var ringFg=document.getElementById('ringFg');
   var btnMain=document.getElementById('btnMain');
   var ringIcon=document.getElementById('ringIcon');
+  var ringPct=document.getElementById('ringPct');
+  var heroRingStack=document.getElementById('heroRingStack');
   var headerOwnPhoto=document.getElementById('headerOwnPhoto');
   var hubSettingsCard=document.getElementById('hubSettingsCard');
   var hubSettingsToggle=document.getElementById('hubSettingsToggle');
@@ -1042,12 +1073,26 @@ a{text-decoration:none;color:inherit}
     }catch(_e){}
   }
 
+  function setRingInnerPct(p){
+    var n=Math.max(0,Math.min(100,Number(p)||0));
+    if(ringPct)ringPct.textContent=n>0?String(Math.round(n))+'%':'';
+    if(heroRingStack){
+      if(n>0){
+        heroRingStack.setAttribute('aria-label','OWN-profiel, ongeveer '+String(Math.round(n))+' procent ingevuld');
+        heroRingStack.removeAttribute('aria-hidden');
+      }else{
+        heroRingStack.removeAttribute('aria-label');
+        heroRingStack.setAttribute('aria-hidden','true');
+      }
+    }
+  }
   function setRing(pct){
     if(!ringFg)return;
     var p=Math.max(0,Math.min(100,Number(pct)||0));
     var offset=CIRCUMFERENCE*(1-p/100);
     ringFg.style.strokeDasharray=String(CIRCUMFERENCE);
     ringFg.style.strokeDashoffset=String(offset);
+    setRingInnerPct(p);
   }
   function setRingAndBar(pct){
     setRing(pct);
@@ -1134,6 +1179,386 @@ a{text-decoration:none;color:inherit}
       var res=await sb.auth.getSession();
       return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
     }catch(_e){return null;}
+  }
+  var _scLastCoachPack=null;
+  var SC_PROPS_KEYS=['gevoeligheid','openheid','humor','directheid','avontuur','stabiliteit','vertrouwen','communicatie','onafhankelijkheid'];
+  function scSenseProfilesToPdata(data){
+    var profiles=['OWN Sense'];
+    var pdata={};
+    if(!data||!data.length)return{profiles:profiles,pdata:pdata};
+    data.forEach(function(p){
+      if(p.name!=='OWN Sense')profiles.push(p.name);
+      var savedProps=p.props||{};
+      var mergedProps={};
+      SC_PROPS_KEYS.forEach(function(k){
+        mergedProps[k]=savedProps[k]!==undefined?savedProps[k]:0;
+      });
+      var loadedCats=savedProps.categories||{};
+      var loadedMeta=savedProps.meta||{};
+      var hubFotoUrls=[];
+      if(Array.isArray(p.foto_urls))hubFotoUrls=p.foto_urls.slice(0,4).filter(Boolean);
+      else if(Array.isArray(savedProps.foto_urls))hubFotoUrls=savedProps.foto_urls.slice(0,4).filter(Boolean);
+      if(p.name==='OWN Sense'){
+        if(!String(loadedMeta.photo_url||'').trim()&&hubFotoUrls.length){
+          loadedMeta.photo_url=String(hubFotoUrls[0]||'').trim();
+        }
+        if(hubFotoUrls.length)loadedMeta.foto_urls=hubFotoUrls;
+        if(String(p.ai_summary_general||'').trim())loadedMeta.own_hub_ai_summary_general=String(p.ai_summary_general).trim();
+        if(String(p.foto_patroon_text||'').trim())loadedMeta.own_hub_foto_patroon=String(p.foto_patroon_text).trim();
+        if(p.ai_summary_per_app&&typeof p.ai_summary_per_app==='object')loadedMeta.own_hub_ai_summary_per_app=p.ai_summary_per_app;
+      }
+      delete mergedProps._v;
+      delete mergedProps.categories;
+      delete mergedProps.meta;
+      pdata[p.name]={
+        props:mergedProps,
+        count:p.bericht_count||0,
+        lastActive:p.last_active,
+        categories:loadedCats,
+        summary:p.summary||'',
+        meta:loadedMeta
+      };
+    });
+    return{profiles:profiles,pdata:pdata};
+  }
+  function scDn(dosName){
+    if(dosName==='OWN Sense')return'OWN Sense';
+    return String(dosName||'').replace(/Sense$/,'').trim();
+  }
+  function scNormalizeAppScopeList(meta){
+    var m=meta||{};
+    var raw=m.app_scope;
+    var list=Array.isArray(raw)?raw:(typeof raw==='string'?raw.split(/[,\s]+/):[]);
+    return list.map(function(v){return String(v||'').toLowerCase().trim();}).filter(Boolean);
+  }
+  function scIsFamilyTaggedMeta(meta){
+    var m=meta||{};
+    if(String(m.familie_rol||'').trim())return true;
+    if(String(m.familie_relatie||'').trim())return true;
+    var scopes=scNormalizeAppScopeList(m);
+    return scopes.indexOf('fs')>=0;
+  }
+  function scUserPart(user){
+    return String(user&&(user.id||user.email)||'').trim()||'guest';
+  }
+  function scReadCoachState(user){
+    try{
+      var up=scUserPart(user);
+      if(!up||up==='guest')return'{}';
+      var raw=localStorage.getItem('dsCoachState::'+up);
+      if(raw==null)raw=localStorage.getItem('dsCoachState');
+      return raw!=null?raw:'{}';
+    }catch(_e){return'{}';}
+  }
+  function scReadDsPref(user,key,fb){
+    try{
+      var up=scUserPart(user);
+      if(!up||up==='guest')return fb;
+      var v=localStorage.getItem(key+'::'+up);
+      if(v==null)v=localStorage.getItem(key);
+      return v==null?fb:v;
+    }catch(_e){return fb;}
+  }
+  function scGetUsageMode(user){
+    var v=String(scReadDsPref(user,'ds_usage_mode','multi')||'').trim();
+    return v==='single'?'single':'multi';
+  }
+  function scGetFocusDossier(user){
+    return String(scReadDsPref(user,'ds_focus_dossier','')||'').trim();
+  }
+  function scGetFocusRelationType(user){
+    return String(scReadDsPref(user,'ds_focus_relation_type','')||'').trim();
+  }
+  function scDossierLifecycle(pdata,name){
+    if(!name||name==='OWN Sense')return'active';
+    var m=(pdata[name]||{}).meta||{};
+    var v=String(m.lifecycle_status||'active').toLowerCase();
+    if(v!=='active'&&v!=='on_hold'&&v!=='closed')return'active';
+    return v;
+  }
+  function scDsDatingStage(pdata,name){
+    if(!name||name==='OWN Sense')return'virtueel';
+    var m=(pdata[name]||{}).meta||{};
+    var s=String(m.dating_stage||'virtueel').toLowerCase();
+    if(['virtueel','eerste_date','meerdere_dates','exclusief daten','prille relatie','vaste relatie','geen_contact'].indexOf(s)===-1)return'virtueel';
+    return s;
+  }
+  function scProfileMetaComplete(pdata,name){
+    var d=pdata[name]||{};
+    var m=d.meta||{};
+    var keys=['birthdate','city','country','intent'];
+    var filled=keys.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
+    return filled===keys.length;
+  }
+  function scBoostCategoryLabels(stage,relType){
+    var st=String(stage||'').toLowerCase();
+    var rt=String(relType||'').toLowerCase();
+    var arr=['verbinden'];
+    if(rt==='vaste relatie')arr.push('herstel','quality time');
+    else if(rt==='prille relatie'||rt==='exclusief daten')arr.push('afstemmen','quality time');
+    else if(st==='meerdere_dates')arr.push('verdiepen','nieuwigheid');
+    else arr.push('nieuwigheid');
+    return arr.filter(function(v,i,a){return a.indexOf(v)===i;});
+  }
+  function scBuildRelationshipBoostMini(pdata,name,usageMode,focusDossier){
+    if(!name||name==='OWN Sense')return null;
+    var d=pdata[name]||{count:0,categories:{},meta:{}};
+    var stage=String(scDsDatingStage(pdata,name)||'virtueel').toLowerCase();
+    var relType=String(((d.meta||{}).relationship_type)||'').trim();
+    var inFocus=(usageMode==='single'&&focusDossier===name);
+    if(!inFocus&&stage!=='meerdere_dates'&&relType!=='prille relatie'&&relType!=='vaste relatie'&&relType!=='exclusief daten')return null;
+    var cats=scBoostCategoryLabels(stage,relType);
+    var ideas=[];
+    var nm=scDn(name);
+    if(cats.indexOf('afstemmen')>=0)ideas.push({title:'Mini check-in met '+nm,tip:''});
+    if(cats.indexOf('quality time')>=0)ideas.push({title:'Quality-time met '+nm,tip:''});
+    if(cats.indexOf('nieuwigheid')>=0)ideas.push({title:'Doe iets nieuws met '+nm,tip:''});
+    if(cats.indexOf('herstel')>=0)ideas.push({title:'Relatie check-in',tip:''});
+    if(cats.indexOf('verdiepen')>=0)ideas.push({title:'Verdiep jullie ritme',tip:''});
+    return ideas.length?{ideas:ideas.slice(0,3)}:null;
+  }
+  function scContactCatIds(){
+    return[{id:'karakter_contact'},{id:'patronen_contact'},{id:'gevoel_contact'},{id:'achtergrond_contact'}];
+  }
+  function scCountFocusFilledSlots(pdata,focusName){
+    var fd=pdata[focusName]||{categories:{}};
+    var focusFilled=0;
+    scContactCatIds().forEach(function(cat){
+      var cid=cat.id;
+      Object.values((fd.categories||{})[cid]||{}).forEach(function(v){if((v||'').trim())focusFilled++;});
+    });
+    return focusFilled;
+  }
+  function scBuildDateSenseCoachTasks(pack,user){
+    var pdata=pack.pdata||{};
+    var profiles=pack.profiles||[];
+    var tasks=[];
+    var usageMode=scGetUsageMode(user);
+    var focusName=scGetFocusDossier(user);
+    var focusRelTypeGlobal=scGetFocusRelationType(user);
+    function dateActiveContacts(){
+      return profiles.filter(function(p){
+        if(!p||p==='OWN Sense')return false;
+        var m=(pdata[p]||{}).meta||{};
+        if(scIsFamilyTaggedMeta(m))return false;
+        return scDossierLifecycle(pdata,p)==='active';
+      });
+    }
+    function notifOn(nm){
+      if(!nm||nm==='OWN Sense')return true;
+      var m=(pdata[nm]||{}).meta||{};
+      return m.notifications_muted!==true;
+    }
+    dateActiveContacts().forEach(function(p){
+      if(!notifOn(p))return;
+      var d=pdata[p]||{};
+      var stage=scDsDatingStage(pdata,p);
+      var hasRealActivity=!!d.lastActive||((d.count||0)>0);
+      var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
+      if(hasRealActivity&&days>=4&&stage!=='geen_contact'){
+        tasks.push({id:'check-stale-'+p});
+      }
+      var lastAdviceBlock=((d.meta||{}).last_advice)||{};
+      var lastAdviceAt=lastAdviceBlock.updated_at||'';
+      var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
+      if((d.count||0)>=1&&!hasAdviceBody){
+        tasks.push({id:'actie-eerste-advies-'+p});
+      }
+      var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
+      if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
+        tasks.push({id:'actie-advies-'+p});
+      }
+      var m=d.meta||{};
+      var hasPhotoUrl=!!(m&&m.photo_url);
+      var hasAnPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
+      if((d.count||0)>=1&&!(m&&m.photo_analysis)){
+        if(!hasPhotoUrl&&!hasAnPhotos){
+          tasks.push({id:'sense-foto-'+p});
+        }else if((d.count||0)>=6){
+          tasks.push({id:'sense-foto-analyse-'+p});
+        }
+      }
+      if(stage==='geen_contact'&&days<=30){
+        tasks.push({id:'check-reopen-'+p});
+      }
+    });
+    if(usageMode==='single'&&focusName&&scDossierLifecycle(pdata,focusName)==='active'){
+      var fd=pdata[focusName]||{count:0,categories:{},meta:{}};
+      var fStage=scDsDatingStage(pdata,focusName);
+      var fRelType=String(((fd.meta||{}).relationship_type)||focusRelTypeGlobal||'').toLowerCase();
+      var focusHasRealActivity=!!fd.lastActive||((fd.count||0)>0);
+      var focusDays=fd.lastActive?Math.floor((Date.now()-new Date(fd.lastActive))/86400000):0;
+      var focusFilled=scCountFocusFilledSlots(pdata,focusName);
+      if((fRelType==='prille relatie'||fStage==='meerdere_dates'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusFilled<7){
+        tasks.push({id:'rel-focus-align-'+focusName});
+      }
+      if(fRelType==='vaste relatie'||fStage==='vaste relatie'){
+        tasks.push({id:'rel-focus-grow-'+focusName});
+      }
+      if(focusHasRealActivity&&(fRelType==='exclusief daten'||fRelType==='prille relatie'||fStage==='exclusief daten'||fStage==='prille relatie')&&focusDays>=5){
+        tasks.push({id:'rel-focus-update-'+focusName});
+      }
+      var focusBoost=scBuildRelationshipBoostMini(pdata,focusName,usageMode,focusName);
+      if(focusBoost&&focusBoost.ideas&&focusBoost.ideas.length){
+        tasks.push({id:'boost-focus-'+focusName});
+      }
+    }
+    if(!scProfileMetaComplete(pdata,'OWN Sense')){
+      tasks.push({id:'check-own-profile'});
+    }
+    return tasks;
+  }
+  function scBuildFamilySenseCoachTasks(pack){
+    var pdata=pack.pdata||{};
+    var profiles=pack.profiles||[];
+    var tasks=[];
+    function famActiveContacts(){
+      return profiles.filter(function(p){
+        if(!p||p==='OWN Sense')return false;
+        var m=(pdata[p]||{}).meta||{};
+        if(!scIsFamilyTaggedMeta(m))return false;
+        return scDossierLifecycle(pdata,p)==='active';
+      });
+    }
+    function notifOn(nm){
+      if(!nm||nm==='OWN Sense')return true;
+      var m=(pdata[nm]||{}).meta||{};
+      return m.notifications_muted!==true;
+    }
+    famActiveContacts().forEach(function(p){
+      if(!notifOn(p))return;
+      var d=pdata[p]||{};
+      var hasRealActivity=!!d.lastActive||((d.count||0)>0);
+      var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
+      if(hasRealActivity&&days>=4){
+        tasks.push({id:'check-stale-'+p});
+      }
+      var lastAdviceBlock=((d.meta||{}).last_advice)||{};
+      var lastAdviceAt=lastAdviceBlock.updated_at||'';
+      var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
+      if((d.count||0)>=1&&!hasAdviceBody){
+        tasks.push({id:'actie-eerste-advies-'+p});
+      }
+      var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
+      if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
+        tasks.push({id:'actie-advies-'+p});
+      }
+      var m=d.meta||{};
+      var hasPhotoUrl=!!(m&&m.photo_url);
+      var hasAnPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
+      if((d.count||0)>=1&&!(m&&m.photo_analysis)){
+        if(!hasPhotoUrl&&!hasAnPhotos){
+          tasks.push({id:'sense-foto-'+p});
+        }else if((d.count||0)>=6){
+          tasks.push({id:'sense-foto-analyse-'+p});
+        }
+      }
+    });
+    if(!scProfileMetaComplete(pdata,'OWN Sense')){
+      tasks.push({id:'check-own-profile'});
+    }
+    return tasks;
+  }
+  function scCoachOpenCountAfterState(taskList,stateRaw){
+    var state={};
+    try{state=JSON.parse(stateRaw||'{}')||{};}catch(_e){state={};}
+    var now=Date.now();
+    return taskList.filter(function(t){
+      var st=state[t.id];
+      return!(st&&st.until&&st.until>now);
+    }).length;
+  }
+  function scCoachOpenStorageKey(app,user){
+    var uid=String(user&&(user.id||user.email)||'').trim();
+    if(!uid)return'';
+    return 'sc_coach_open_'+app+'::'+uid;
+  }
+  function scPersistCoachHintCache(user,dsCount,fsCount){
+    try{
+      var uid=String(user&&(user.id||user.email)||'').trim();
+      if(!uid)return;
+      localStorage.setItem(scCoachOpenStorageKey('datesense',user),String(dsCount));
+      localStorage.setItem(scCoachOpenStorageKey('familysense',user),String(fsCount));
+    }catch(_e){}
+  }
+  function readScCoachOpenCount(app,user){
+    try{
+      var k=scCoachOpenStorageKey(app,user);
+      if(!k)return null;
+      var raw=localStorage.getItem(k);
+      if(raw===null)return null;
+      var n=parseInt(raw,10);
+      if(isNaN(n)||n<0)return null;
+      return Math.min(9999,n);
+    }catch(_e){return null;}
+  }
+  function updateAppCardCoachHintsWithCounts(user,dsN,fsN){
+    var dsEl=document.getElementById('scCoachHintDatesense');
+    var fsEl=document.getElementById('scCoachHintFamilysense');
+    function wipe(el){
+      if(!el)return;
+      el.textContent='';
+      el.hidden=true;
+      el.removeAttribute('aria-label');
+    }
+    if(!user){
+      wipe(dsEl);
+      wipe(fsEl);
+      return;
+    }
+    function applyHint(el,n,appLabel){
+      if(!el)return;
+      if(n===null||n===undefined){wipe(el);return;}
+      if(n<1){wipe(el);return;}
+      el.hidden=false;
+      var tail=n===1?'coachmelding open':'coachmeldingen open';
+      el.innerHTML='<span class="app-coach-hint__n">'+String(n)+'</span> '+tail+' · open de app';
+      el.setAttribute('aria-label',String(n)+' openstaande '+(n===1?'coachmelding':'coachmeldingen')+' in '+appLabel);
+    }
+    applyHint(dsEl,dsN,'DateSense');
+    applyHint(fsEl,fsN,'FamilySense');
+  }
+  function updateAppCardCoachHints(user){
+    if(!user){updateAppCardCoachHintsWithCounts(null,0,0);return;}
+    var dsv=readScCoachOpenCount('datesense',user);
+    var fsv=readScCoachOpenCount('familysense',user);
+    updateAppCardCoachHintsWithCounts(user,dsv==null?0:dsv,fsv==null?0:fsv);
+  }
+  function refreshCoachHintsFromCache(user){
+    if(!user){updateAppCardCoachHintsWithCounts(null,0,0);return;}
+    if(!_scLastCoachPack){
+      refreshCoachHintsFromServer(user);
+      return;
+    }
+    try{
+      var coachRaw=scReadCoachState(user);
+      var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(_scLastCoachPack,user),coachRaw);
+      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(_scLastCoachPack),coachRaw);
+      scPersistCoachHintCache(user,ds,fs);
+      updateAppCardCoachHintsWithCounts(user,ds,fs);
+    }catch(_e){
+      refreshCoachHintsFromServer(user);
+    }
+  }
+  async function refreshCoachHintsFromServer(user){
+    if(!user||!sb){
+      updateAppCardCoachHintsWithCounts(null,0,0);
+      return;
+    }
+    try{
+      var res=await sb.from('sense_profiles').select('*').eq('user_id',user.id).order('created_at');
+      var rows=(res&&res.data)?res.data:[];
+      var pack=scSenseProfilesToPdata(rows);
+      _scLastCoachPack=pack;
+      var coachRaw=scReadCoachState(user);
+      var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(pack,user),coachRaw);
+      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(pack),coachRaw);
+      scPersistCoachHintCache(user,ds,fs);
+      updateAppCardCoachHintsWithCounts(user,ds,fs);
+    }catch(e){
+      console.warn('sensecorner coach hints',e);
+      updateAppCardCoachHints(user);
+    }
   }
   function setHubRoepnaamState(msg,isErr){
     if(!hubRoepnaamState)return;
@@ -1258,6 +1683,7 @@ a{text-decoration:none;color:inherit}
         headerOwnPhoto.style.display='none';
       }
     }
+    refreshCoachHintsFromServer(user);
     return user;
   }
   async function openAppWithAuth(target){
@@ -1285,15 +1711,17 @@ a{text-decoration:none;color:inherit}
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
       var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
+      setRingInnerPct(pct);
       setTimeout(function(){setRingAndBar(pct);},200);
       dot.className='own-status-dot done';
-      statusText.textContent='Je profiel is actief ('+pct+'% ingevuld)';
+      statusText.textContent='Je profiel is actief (ingevuld)';
       statusPct.textContent='';
       ringFg.style.stroke='#1E7E34';
       ringIcon.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E7E34" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
       btnMain.textContent='Open OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
     } else if(profile.status==='skipped'){
+      setRingInnerPct(10);
       setTimeout(function(){setRingAndBar(10);},200);
       dot.className='own-status-dot';
       statusText.textContent='Overgeslagen, kan later';
@@ -1302,10 +1730,11 @@ a{text-decoration:none;color:inherit}
     } else {
       var filled=filledAnswers;
       var pct=Math.max(0,Math.min(100,Math.round((filled/totalQ)*100)));
+      setRingInnerPct(pct);
       setTimeout(function(){setRingAndBar(pct);},200);
       dot.className='own-status-dot active';
       statusText.textContent='Bezig ('+(filled||0)+'/'+totalQ+' vragen)';
-      statusPct.textContent=pct+'%';
+      statusPct.textContent='';
       btnMain.textContent='Ga verder in OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>');
     }
@@ -1341,6 +1770,16 @@ a{text-decoration:none;color:inherit}
         openAppWithAuth(target);
       }
     });
+  });
+  window.addEventListener('storage',function(ev){
+    var k=String(ev.key||'');
+    if(k.indexOf('dsCoachState')===0||k.indexOf('ds_focus_')===0||k.indexOf('ds_usage_mode')===0||k.indexOf('sc_coach_open_')===0){
+      getCurrentUser().then(function(u){refreshCoachHintsFromCache(u);}).catch(function(){});
+    }
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState!=='visible')return;
+    getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
   });
   if(hubLoginBtn)hubLoginBtn.onclick=function(){openAuthModal('login','');};
   if(hubRegisterBtn)hubRegisterBtn.onclick=function(){openAuthModal('register','');};

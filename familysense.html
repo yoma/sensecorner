@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-04-2026 15:32">
+<meta name="fs-build" content="18-04-2026 16:38">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -5744,6 +5744,7 @@ function rHome(el){
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
   var notes=[];
+  var coachOpenTotal=0;
   var allTasks=buildCoachTasks();
   if(allTasks.length){
     var state=_coachState();
@@ -5761,6 +5762,7 @@ function rHome(el){
       }
       return t;
     });
+    coachOpenTotal=openTasks.length;
     if(openTasks.length){
       openTasks=openTasks.slice().sort(function(a,b){
         var pr=prioWeight(b.prio)-prioWeight(a.prio);
@@ -5786,6 +5788,12 @@ function rHome(el){
       notes=picked;
     }
   }
+  try{
+    if(S&&S.user){
+      var uidSc=String(S.user.id||S.user.email||'').trim();
+      if(uidSc)localStorage.setItem('sc_coach_open_familysense::'+uidSc,String(coachOpenTotal));
+    }
+  }catch(_scHint){}
 
   var notesHtml='';
   if(notes.length){
