@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 13:43">
+<meta name="os-build" content="18-04-2026 14:12">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -630,7 +630,7 @@ body{isolation:isolate}
         <h1 class="top-title">OWN Sense</h1>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </div>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 13:43</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 14:12</span>
     </div>
     <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
       <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none" hidden>Bron-app</button>
@@ -913,14 +913,29 @@ function normTxt(v){
 function mergeMirrorEntriesIntoCategories(entries){
   if(!Array.isArray(entries)||!entries.length)return;
   if(!hubState.categories||typeof hubState.categories!=='object')hubState.categories={};
-  OWN_CATS.forEach(function(cat){
+  var validCat={};
+  ALL_CATS.forEach(function(c){validCat[c.id]=1;});
+  entries.forEach(function(en){
+    if(!en)return;
+    var v=String(en.value||'').trim();
+    if(!v)return;
+    if(en.cat!=null&&en.slot!=null){
+      var cid=String(en.cat);
+      if(!validCat[cid])return;
+      var si=parseInt(en.slot,10);
+      if(isNaN(si)||si<0||si>3)return;
+      if(!hubState.categories[cid])hubState.categories[cid]={a0:'',a1:'',a2:'',a3:''};
+      hubState.categories[cid]['a'+si]=v;
+    }
+  });
+  ALL_CATS.forEach(function(cat){
     if(!hubState.categories[cat.id])hubState.categories[cat.id]={a0:'',a1:'',a2:'',a3:''};
     cat.prompts.forEach(function(prompt,idx){
       var key='a'+idx;
       if(String(hubState.categories[cat.id][key]||'').trim())return;
       var pNorm=normTxt(prompt);
       var hit=entries.find(function(en){
-        if(en&&en.cat===cat.id&&(parseInt(en.slot,10)===idx||en.slot===idx))return true;
+        if(en&&en.cat!=null)return false;
         var label=normTxt(en&&en.label);
         return label&&pNorm&&label===pNorm;
       });
@@ -2289,6 +2304,12 @@ async function loadOwnFromSupabase(){
       hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
       hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
       __ownSensePropsMetaCache=Object.assign({},pm);
+      try{
+        var mSlot=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+        if(mSlot&&Array.isArray(mSlot.entries)&&mSlot.entries.some(function(e){return e&&e.cat!=null&&e.slot!=null;})){
+          mergeMirrorEntriesIntoCategories(mSlot.entries);
+        }
+      }catch(_eSlot){}
     }
   }catch(e){}
 }
@@ -2426,7 +2447,11 @@ function mergeHubStateFromLocalStorage(user){
     try{localStorage.removeItem(HUB_KEY);}catch(_e){}
     return;
   }
-  hubState=Object.assign(createEmptyHubState(),hubState,local);
+  var localClean={};
+  Object.keys(local).forEach(function(k){
+    if(k!=='categories')localClean[k]=local[k];
+  });
+  hubState=Object.assign(createEmptyHubState(),hubState,localClean);
 }
 
 /** DateSense/FamilySense hub-handoff: alleen voor dezelfde Supabase-user; nooit timeline (komt uit DB). */
@@ -2472,19 +2497,18 @@ function loadHubState(){
       hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
     }
   }
-  var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
-  if(old&&Array.isArray(old.answers)&&old.answers.some(function(a){return String(a||'').trim();})){
-    var mapped=[
-      ['karakter','a0',0],['karakter','a1',1],['karakter','a2',2],['karakter','a3',3],
-      ['interesses','a0',4],['interesses','a1',5],
-      ['relatie','a0',6],['relatie','a1',7],
-      ['gevoels','a0',8],['gevoels','a1',9],['gevoels','a2',10]
-    ];
-    mapped.forEach(function(m){
-      var cat=m[0],key=m[1],idx=m[2];
-      if(!hubState.categories[cat])hubState.categories[cat]={a0:'',a1:'',a2:'',a3:''};
-      if(!String(hubState.categories[cat][key]||'').trim()){
-        hubState.categories[cat][key]=String(old.answers[idx]||'').trim();
+  var v1flat=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  if(v1flat&&String(v1flat.ownsenseSlotLayout||'')==='flat16v2'&&Array.isArray(v1flat.answers)&&v1flat.answers.length>=16){
+    var fi=0;
+    OWN_CATS.forEach(function(cat){
+      if(!hubState.categories[cat.id])hubState.categories[cat.id]={a0:'',a1:'',a2:'',a3:''};
+      for(var i=0;i<cat.prompts.length;i++){
+        var key='a'+i;
+        var val=String(v1flat.answers[fi++]||'').trim();
+        if(!val)continue;
+        if(!String(hubState.categories[cat.id][key]||'').trim()){
+          hubState.categories[cat.id][key]=val;
+        }
       }
     });
   }
