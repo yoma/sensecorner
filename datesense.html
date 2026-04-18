@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense — Jouw persoonlijke dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="18-04-2026 00:39">
+<meta name="ds-build" content="18-04-2026 10:38">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -57,10 +57,11 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .pad-corner{position:fixed;pointer-events:none;z-index:-1;line-height:0}
 .pad-corner svg{display:block;width:100%;height:100%}
 .pad-corner--tr.pad-corner--ds{
-  top:0;right:0;
-  width:min(200px,42vw);height:min(200px,42vw);
+  top:-28px;right:0;
+  width:min(220px,46vw);height:min(220px,46vw);
   padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);
   box-sizing:content-box;
+  z-index:0;
 }
 .pad-corner--bl.pad-corner--ds{
   bottom:0;left:0;
@@ -70,14 +71,14 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 }
 
 /* Topbar */
-.topbar{position:relative;z-index:1;display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(242,232,213,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 1px 0 rgba(61,47,31,.08)}
+.topbar{position:relative;z-index:2;display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(242,232,213,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 1px 0 rgba(61,47,31,.08)}
 .tb-title{flex:1;font-size:var(--fs-md);font-weight:700;text-align:center;color:var(--t);font-family:var(--font-serif)}
-.ico{width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none;border-radius:19px}
+.ico{width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none;border-radius:19px;touch-action:manipulation}
 .ico{transition:background .18s ease}
 .ico:active{background:var(--g)}
 .ds-build-badge{position:fixed;top:calc(8px + var(--st));right:10px;z-index:120;background:rgba(255,255,255,.92);border:1px solid var(--b);border-radius:999px;padding:4px 9px;font-size:11px;font-weight:800;color:#555;backdrop-filter:blur(6px);display:none!important}
-.quick-nav{position:relative;z-index:1;display:flex;justify-content:flex-end;gap:6px;padding:6px 14px 8px;background:rgba(242,232,213,.88);border-bottom:1px solid rgba(61,47,31,.06)}
-.quick-nav-btn{border:1px solid var(--b);background:#fff;color:#555;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer}
+.quick-nav{position:relative;z-index:2;display:flex;justify-content:flex-end;gap:6px;padding:6px 14px 8px;background:rgba(242,232,213,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(61,47,31,.06)}
+.quick-nav-btn{border:1px solid var(--b);background:#fff;color:#555;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;touch-action:manipulation}
 
 /* Logobar */
 .logobar{position:relative;z-index:1;display:flex;align-items:flex-start;gap:12px;padding:10px 16px 12px;flex-shrink:0}
@@ -141,9 +142,10 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .logobar .build-tag-top,.logobar .build-user-top{z-index:1}
 .logobar-hidden{display:none!important}
 
-.main{position:relative;z-index:1;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
-/* Ruimte onderaan: tabbar + dossier-dock + kleine ademruimte (zelfde logica als --nav-bar-core + --dossier-dock-core) */
-.app.dossier-mode .main{padding-bottom:calc(52px + var(--sb) + 12px)}
+.app-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;position:relative;z-index:1}
+.main{position:relative;z-index:1;flex:0 0 auto;width:100%;overflow:visible}
+/* Ruimte onderaan dossier: tabbar + dossier-dock + adem */
+.app.dossier-mode .main{padding-bottom:calc(var(--dossier-dock-core) + 52px + var(--sb) + 10px + var(--dock-gap))}
 
 .dossier-dock{
   display:none;flex-direction:row;
@@ -193,7 +195,7 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 
 /* Nav — altijd boven dossier-dock (z-index) zodat tikken op tabs betrouwbaar blijft */
 .nav{background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:16px 0 4px;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:16px 0 4px;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease;touch-action:manipulation}
 .tab.active{color:var(--r)}
 /* Nav-tab rimpel = kleurenschaal 72:58:44 (+ app-kern), compact */
 .nav-tab-rimpel{
@@ -466,8 +468,10 @@ a:focus-visible,
 .input-toolbar-vertel--compact{flex-wrap:nowrap}
 .input-toolbar-vertel--compact .rnd.rnd--vertel{width:40px;height:40px;border-radius:20px;flex-shrink:0}
 .input-toolbar-vertel--compact .rnd.rnd--vertel svg{width:15px;height:15px}
-.vertel-mic-hint-row{width:100%;margin:0;padding:0 2px 1px;min-height:0}
-.vertel-mic-hint{font-size:11px;font-weight:600;color:#b0101d;line-height:1.35;margin:0;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vertel-mic-hint-row{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:2px 0 0;min-height:0;flex-wrap:nowrap}
+.vertel-mic-hint-row--inline{flex:1 1 0;min-width:0;width:auto;padding:0;margin:0}
+.vertel-mic-hint-row--inline .rnd.rd-mic{flex-shrink:0}
+.vertel-mic-hint{flex:1;min-width:0;font-size:10px;font-weight:600;color:#b0101d;line-height:1.3;margin:0}
 .input-area{flex:1;background:var(--g);border:1.5px solid var(--b);border-radius:20px;padding:13px 18px;font-size:var(--fs-md);color:#333;outline:none;font-family:inherit;resize:none;min-height:50px;max-height:130px;line-height:1.4}
 /* Vertel: breed veld, beperkte hoogte — het gesprek (#chatArea) blijft het hoofdscherm */
 .input-area-vertel{width:100%;min-height:72px;max-height:168px}
@@ -722,7 +726,7 @@ a:focus-visible,
   .logobar-meta{max-width:42%}
   .build-tag-top{padding:6px 8px;font-size:11px;max-width:min(100%,160px)}
   .build-user-top{font-size:11px;max-width:min(100%,180px)}
-  .main{padding-bottom:2px}
+  .app-scroll .main{padding-bottom:2px}
   .mic-wrap{width:148px;height:148px;margin:10px auto 12px}
   .home-shell{padding:16px 14px 28px}
   .home-greeting{font-size:14px;margin-bottom:14px}
@@ -756,7 +760,7 @@ a:focus-visible,
   .input-toolbar-vertel{gap:7px;flex-wrap:nowrap}
   .input-toolbar-vertel--compact .rnd.rnd--vertel{width:38px;height:38px;border-radius:19px}
   .input-toolbar-vertel--compact .rnd.rnd--vertel svg{width:14px;height:14px}
-  .vertel-mic-hint{font-size:11px;font-weight:600;color:#b0101d;-webkit-line-clamp:3;line-clamp:3}
+  .vertel-mic-hint{font-size:10px}
   .input-area{padding:12px 14px;min-height:46px}
   .input-area-vertel{padding:10px 12px;min-height:64px;max-height:min(24dvh,156px)}
   .rnd{width:42px;height:42px;border-radius:21px}
@@ -1057,9 +1061,10 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
     <button class="ico" id="btnHelpTour" onclick="startFullAppTour()" title="Rondleiding"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
     <button class="ico" onclick="goScreen('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
+  <div class="app-scroll" id="appScroll">
   <div class="quick-nav">
-    <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('home')}else{window.location.href='datesense.html'}">Home</button>
-    <button type="button" class="quick-nav-btn" onclick="window.location.href='sensecorner.html'">SenseCorner</button>
+    <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('home')}else{window.location.href='datesense.html'}">Home DateSense</button>
+    <button type="button" class="quick-nav-btn" onclick="window.location.href='sensecorner.html'">Home Sensecorner</button>
   </div>
 
   <!-- Logobar (alleen zichtbaar op Home; zie goScreen) -->
@@ -1080,6 +1085,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 
   <div class="sync-bar" id="syncBar"></div>
   <main class="main" id="mainContent" aria-label="Hoofdinhoud"></main>
+  </div>
 
   <!-- Input bar (alleen Vertel scherm) -->
   <div id="inputBar" style="display:none">
@@ -1091,15 +1097,17 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
           <button type="button" class="rnd gr rnd--vertel" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <button type="button" class="rnd rd-mic rnd--vertel" id="micBtn" onpointerdown="pttMicPointerDown(event,'msgInput')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)" title="Houd ingedrukt om te spreken, laat los om te stoppen (rood = luistert)" aria-label="Spraak invoeren" aria-describedby="micHint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-          </button>
+          <div class="vertel-mic-hint-row vertel-mic-hint-row--inline">
+            <button type="button" class="rnd rd-mic rnd--vertel" id="micBtn" onpointerdown="pttMicPointerDown(event,'msgInput')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)" title="Indrukken = praten, loslaten = stoppen, rood = luistert" aria-label="Spraak invoeren" aria-describedby="micHint">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </button>
+            <p class="vertel-mic-hint" id="micHint">Micro: indrukken = praten · loslaten = stoppen · rood = luisteren</p>
+          </div>
           <span class="input-toolbar-spacer" aria-hidden="true"></span>
           <button type="button" class="rnd rd rnd--vertel" onclick="sendMsg()" title="Verstuur bericht" aria-label="Verstuur">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
           </button>
         </div>
-        <div class="vertel-mic-hint-row"><p class="vertel-mic-hint" id="micHint">Micro: houd ingedrukt tijdens praten · loslaten = stoppen · rood = luistert</p></div>
       </div>
     </div>
   </div>
@@ -1949,7 +1957,7 @@ function getQuickHelpStepsForScreen(screen){
     return[
       {targetSel:'.dossier-tabs-wrap',title:own?'OwnSense tabs':'Dossier tabs',text:'Switch tussen Overzicht, Tijdlijn, Foto, Profiel en Advies.'},
       {targetSel:'#tabContent',title:'Inhoud',text:own?'Vul hier jezelf aan voor betere matches.':'Hier zie je alle analyse en acties voor dit contact.'},
-      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan: Vrij vertellen (Vertel-tab) en Advies. Dat is iets anders dan «Dikteer dit vak» bij een invulveld.'}
+      {targetSel:'#dossierDock',title:'Snelle acties',text:'Onderaan: snel naar Advies of Vertel (aparte tab). Dat is iets anders dan «Dikteer dit vak» bij een invulveld.'}
     ];
   }
   return[
@@ -4030,6 +4038,8 @@ function _goScreenBody(sc){
     }
   }
   mc.scrollTop=0;
+  var appScroll=document.getElementById('appScroll');
+  if(appScroll)appScroll.scrollTop=0;
   renderOwnAvatar();
   renderBrandTag();
   if(S.user){
@@ -4228,9 +4238,11 @@ function getSensesCardMatchHtml(name,opts){
   var metaOk=(getProfileMetaCompletion(name)||{}).complete;
   var incomplete=(total>0&&filled<total)||!metaOk;
   if(name==='OWN Sense'){
-    var dossierHint=ownSenseShowAsInAppDossier()
-      ?'<div style="font-size:10px;color:#1B5E20;margin-top:6px;line-height:1.35">Compleet — tik opent je <strong>dossier</strong> (tijdlijn, foto, profiel, advies). Voor de hub met 11 diepte-vragen: knop bovenaan het <strong>Profiel</strong>-tabblad.</div>'
-      :'<div style="font-size:10px;color:#8a8f97;margin-top:6px;line-height:1.35">Nog niet compleet — tik opent de <strong>OWN Sense-hub</strong> om verder te gaan.</div>';
+    var dossierHint=incomplete
+      ?'<div style="font-size:10px;color:#8a8f97;margin-top:6px;line-height:1.35">Nog niet compleet — tik opent de <strong>OWN Sense-hub</strong> om verder te gaan.</div>'
+      :(ownSenseShowAsInAppDossier()
+        ?'<div style="font-size:10px;color:#1B5E20;margin-top:6px;line-height:1.35">Compleet — tik opent je <strong>dossier</strong> (tijdlijn, foto, profiel, advies). Voor de hub met 11 diepte-vragen: knop bovenaan het <strong>Profiel</strong>-tabblad.</div>'
+        :'<div style="font-size:10px;color:#1B5E20;margin-top:6px;line-height:1.35">Profiel op punt — beheer details in de <strong>OWN Sense-hub</strong> (OwnSense-tab).</div>');
     var barPct=total>0?Math.max(0,Math.min(100,Math.round((100*filled)/total))):0;
     var barRow='<div style="margin-top:8px;height:5px;background:rgba(61,47,31,.1);border-radius:3px;overflow:hidden" aria-hidden="true">'
       +'<div style="height:100%;width:'+barPct+'%;background:var(--r);border-radius:3px;transition:width .4s ease"></div></div>';
@@ -5773,7 +5785,7 @@ function plannerField(id,label,html){
   return '<div class="planner-field"><div class="planner-label">'+label+'</div>'+html+'</div>';
 }
 function renderAdviceLoadingCard(){
-  return '<div class="advice-loading">'
+  return '<div id="advLoadingPanel" class="advice-loading">'
     +'<div class="advice-loading-top"><div class="advice-loading-spinner"></div><div class="advice-loading-title">Advies wordt vernieuwd</div></div>'
     +'<p class="advice-loading-text">DateSense bekijkt nu de nieuwste signalen uit dit dossier en zet die om naar een scherper, actueler advies.</p>'
     +'<div class="advice-progress"><div class="advice-progress-bar"></div></div>'
@@ -7764,7 +7776,7 @@ async function loadTab(name,tab,d){
       else if(e&&e.message)errHint='<p style="font-size:12px;color:#8a9099;margin-top:10px;line-height:1.45">'+String(e.message).replace(/</g,'&lt;').substring(0,200)+'</p>';
       cont.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--m)">'
         +'<div style="font-size:36px;margin-bottom:10px">⚠️</div>'
-        +'<p style="font-size:14px;line-height:1.6">Kon tijdlijn niet laden.<br>Controleer je verbinding en probeer opnieuw.</p>'
+        +'<p style="font-size:14px;line-height:1.6">Kon tijdlijn niet laden.<br>Controleer je verbinding en probeer opnieuw.<br><span style="color:#6a6f77;font-size:13px">Vaak is de server tijdelijk overbelast — probeer straks opnieuw. Blijft het mis? Sluit de app even helemaal af en open opnieuw.</span></p>'
         +errHint
         +'<button class="btn-g" style="margin-top:16px;max-width:200px" onclick="switchTab(\'tijdlijn\')">↻ Opnieuw proberen</button>'
         +'</div>';
@@ -8056,6 +8068,7 @@ async function genAdvies(name,forced){
       box.innerHTML='<div style="font-size:13px;color:#8a8f97;margin-bottom:12px">Er is nieuwe info sinds je laatste advies.</div>'+oldHtml;
     } else {
       box.innerHTML=renderAdviceLoadingCard();
+      scrollAdviceLoadingIntoView();
     }
   }
   var d=S.pdata[name]||{props:{...DP}};
@@ -8301,6 +8314,15 @@ function scrollToAdviceSection(id){
     el.scrollIntoView(true);
   }
   flashAdviceSection(el);
+}
+function scrollAdviceLoadingIntoView(){
+  requestAnimationFrame(function(){
+    setTimeout(function(){
+      var el=document.getElementById('advLoadingPanel');
+      if(!el||typeof el.scrollIntoView!=='function')return;
+      try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(_e){el.scrollIntoView(true);}
+    },70);
+  });
 }
 function discussAdviceInVertel(name,mode){
   var dName=name||S.viewDossier||S.vertelGesprekDossier||S.vertelFrom;
