@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 12:18">
+<meta name="os-build" content="18-04-2026 12:48">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -630,7 +630,7 @@ body{isolation:isolate}
         <h1 class="top-title">OWN Sense</h1>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </div>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 12:05</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 12:48</span>
     </div>
     <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
       <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none" hidden>Bron-app</button>
@@ -821,28 +821,32 @@ var returnToApp='';
 var SB_URL='';
 var SB_ANON='';
 var sb=null;
-var hubState={
-  display_name:'',
-  photo_url:'',
-  photo_urls:[],
-  photo_paths:[],
-  foto_analyse:'',
-  props:{},
-  categories:{},
-  updated_at:new Date().toISOString(),
-  cat_updated:{},
-  insight_all:'',
-  insight_ds:'',
-  insight_fs:'',
-  insight_gen:'',
-  last_insight_count:0,
-  last_insight_at:'',
-  insight_scores_snap:{},
-  algemeen_text:'',
-  ai_summary_general:'',
-  ai_summary_per_app:{},
-  foto_patroon_text:''
-};
+function createEmptyHubState(){
+  return{
+    __ownsense_uid:'',
+    display_name:'',
+    photo_url:'',
+    photo_urls:[],
+    photo_paths:[],
+    foto_analyse:'',
+    props:{},
+    categories:{},
+    updated_at:new Date().toISOString(),
+    cat_updated:{},
+    insight_all:'',
+    insight_ds:'',
+    insight_fs:'',
+    insight_gen:'',
+    last_insight_count:0,
+    last_insight_at:'',
+    insight_scores_snap:{},
+    algemeen_text:'',
+    ai_summary_general:'',
+    ai_summary_per_app:{},
+    foto_patroon_text:''
+  };
+}
+var hubState=createEmptyHubState();
 var ownTimeline=[];
 var senseProfileScopeByName={};
 var ownFacts=[];
@@ -989,7 +993,13 @@ async function loadOwnBrainTables(){
   try{
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
-    if(!user)return;
+    if(!user){
+      ownFacts=[];
+      ownInsights=[];
+      ownPhotos=[];
+      ownGrowthEvents=[];
+      return;
+    }
     var uid=user.id;
     var factsRes=await client.from('own_facts').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(300);
     if(factsRes&&Array.isArray(factsRes.data))ownFacts=factsRes.data;
@@ -2231,7 +2241,22 @@ async function loadOwnFromSupabase(){
   try{
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
-    if(!user)return;
+    if(!user){
+      window.__ownSenseUid='';
+      ownTimeline=[];
+      ownFacts=[];
+      ownInsights=[];
+      ownPhotos=[];
+      ownGrowthEvents=[];
+      return;
+    }
+    ownTimeline=[];
+    ownFacts=[];
+    ownInsights=[];
+    ownPhotos=[];
+    ownGrowthEvents=[];
+    mergeHubStateFromLocalStorage(user);
+    tryConsumeOwnsenseHandoff(user);
     var res=await client.from('sense_profiles').select('*').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
     if(res&&res.data){
       var row=res.data;
@@ -2314,7 +2339,10 @@ async function loadOwnTimelineFromSupabase(){
   try{
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
-    if(!user)return;
+    if(!user){
+      ownTimeline=[];
+      return;
+    }
     await loadSenseProfileScopesForUser(user.id);
     var res=await client.from('sense_messages')
       .select('*')
@@ -2323,7 +2351,7 @@ async function loadOwnTimelineFromSupabase(){
       .limit(1000);
     if(res&&res.error)throw new Error(res.error.message||'timeline fetch failed');
     var rows=Array.isArray(res&&res.data)?res.data:[];
-    if(rows.length||!ownTimeline.length)ownTimeline=rows;
+    ownTimeline=rows;
     renderTimelineTab();
   }catch(e){}
 }
@@ -2387,16 +2415,51 @@ async function saveOwnToSupabase(){
   }catch(e){}
 }
 
-function loadHubState(){
+function mergeHubStateFromLocalStorage(user){
+  if(!user||!user.id)return;
+  window.__ownSenseUid=String(user.id);
   var local=safeJsonParse(localStorage.getItem(HUB_KEY)||'');
-  if(local&&typeof local==='object'){
-    hubState=Object.assign({},hubState,local);
-  }else{
-    var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
-    if(old&&Array.isArray(old.answers)){
-      hubState.display_name=String(old.name||'').trim();
-      hubState.photo_url=String(old.photo||'').trim();
-    }
+  if(!local||typeof local!=='object')return;
+  var tag=String(local.__ownsense_uid||'');
+  if(tag&&tag!==String(user.id)){
+    try{localStorage.removeItem(HUB_KEY);}catch(_e){}
+    return;
+  }
+  hubState=Object.assign(createEmptyHubState(),hubState,local);
+}
+
+/** DateSense/FamilySense hub-handoff: alleen voor dezelfde Supabase-user; nooit timeline (komt uit DB). */
+function tryConsumeOwnsenseHandoff(user){
+  if(!user||!user.id)return;
+  var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
+  if(!handoff||typeof handoff!=='object')return;
+  if(String(handoff.user_id||'')!==String(user.id)){
+    try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
+    return;
+  }
+  if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
+  if(!hubState.photo_url)hubState.photo_url=String(handoff.photo_url||'').trim();
+  if(Array.isArray(handoff.photo_urls)&&handoff.photo_urls.length&&!hubState.photo_urls.length){
+    hubState.photo_urls=handoff.photo_urls.slice(0,4).map(function(u){return String(u||'').trim();}).filter(Boolean);
+    if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=hubState.photo_urls[0];
+  }
+  if(handoff.categories&&typeof handoff.categories==='object'){
+    hubState.categories=Object.assign({},handoff.categories,hubState.categories||{});
+  }
+  if(handoff.props&&typeof handoff.props==='object'){
+    PK.forEach(function(k){
+      var v=parseInt(handoff.props[k],10);
+      if(!isNaN(v)&&v>0)hubState.props[k]=v;
+    });
+  }
+  try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
+}
+
+function loadHubState(){
+  var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  if(old&&Array.isArray(old.answers)){
+    hubState.display_name=String(old.name||'').trim();
+    hubState.photo_url=String(old.photo||'').trim();
   }
   delete hubState.phone;
   var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
@@ -2423,27 +2486,6 @@ function loadHubState(){
         hubState.categories[cat][key]=String(old.answers[idx]||'').trim();
       }
     });
-  }
-  var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
-  if(handoff&&typeof handoff==='object'){
-    if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
-    if(!hubState.photo_url)hubState.photo_url=String(handoff.photo_url||'').trim();
-    if(Array.isArray(handoff.photo_urls)&&handoff.photo_urls.length&&!hubState.photo_urls.length){
-      hubState.photo_urls=handoff.photo_urls.slice(0,4).map(function(u){return String(u||'').trim();}).filter(Boolean);
-      if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=hubState.photo_urls[0];
-    }
-    if(handoff.categories&&typeof handoff.categories==='object'){
-      hubState.categories=Object.assign({},handoff.categories,hubState.categories||{});
-    }
-    if(handoff.props&&typeof handoff.props==='object'){
-      PK.forEach(function(k){
-        var v=parseInt(handoff.props[k],10);
-        if(!isNaN(v)&&v>0)hubState.props[k]=v;
-      });
-    }
-    if(Array.isArray(handoff.timeline)&&handoff.timeline.length&&!ownTimeline.length){
-      ownTimeline=handoff.timeline.slice();
-    }
   }
   if(!hubState.props)hubState.props={};
   PK.forEach(function(k){
@@ -2478,6 +2520,7 @@ function loadHubState(){
 
 function saveHubState(){
   hubState.updated_at=new Date().toISOString();
+  if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
   localStorage.setItem(HUB_KEY,JSON.stringify(hubState));
   saveOwnToSupabase();
   var saved=document.getElementById('saveIndicator');
@@ -3357,21 +3400,21 @@ initPhotoPreview();
 loadHubState();
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
+  .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})
   .finally(function(){
     renderMijTab();
+    renderInzichtenV2();
+    renderGroeiTab();
+    renderBronTab();
+    return refreshOwnPhotoSlotPreviews();
+  })
+  .then(function(){
+    renderFotosTab();
+    applyUrlTabBoot();
+  })
+  .catch(function(){
+    try{renderFotosTab();applyUrlTabBoot();}catch(_e){}
   });
-Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]).finally(function(){
-  renderMijTab();
-  renderInzichtenV2();
-  renderGroeiTab();
-  renderBronTab();
-  return refreshOwnPhotoSlotPreviews();
-}).then(function(){
-  renderFotosTab();
-  applyUrlTabBoot();
-}).catch(function(){
-  try{renderFotosTab();applyUrlTabBoot();}catch(_e){}
-});
 
 document.getElementById('photoPicker').addEventListener('change',async function(e){
   var file=e.target.files&&e.target.files[0];
