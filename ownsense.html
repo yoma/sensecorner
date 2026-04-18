@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="18-04-2026 16:16">
+<meta name="os-build" content="18-04-2026 16:22">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -630,7 +630,7 @@ body{isolation:isolate}
         <h1 class="top-title">OWN Sense</h1>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </div>
-      <span class="hub-badge">HUB · BUILD 18-04-2026 16:16</span>
+      <span class="hub-badge">HUB · BUILD 18-04-2026 16:22</span>
     </div>
     <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
       <button type="button" class="quick-nav-btn" id="backAppBtn" style="display:none" hidden>Bron-app</button>
@@ -2965,6 +2965,95 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     if(outerTimer)clearTimeout(outerTimer);
   }
 }
+
+var _ownSlotRepairBusy=false;
+var _OWN_SLOT_REPAIR_MAX=400;
+function hasOwnFourCatAnyAnswer(){
+  var any=false;
+  OWN_CATS.forEach(function(cat){
+    var c=(hubState.categories&&hubState.categories[cat.id])||{};
+    ['a0','a1','a2','a3'].forEach(function(k){
+      if(String(c[k]||'').trim())any=true;
+    });
+  });
+  return any;
+}
+function buildOwnSlotRepairPayload(){
+  var vragen={},antwoorden={};
+  OWN_CATS.forEach(function(cat){
+    vragen[cat.id]={};
+    antwoorden[cat.id]={};
+    for(var idx=0;idx<cat.prompts.length;idx++){
+      var ak='a'+idx;
+      vragen[cat.id][ak]=ownHubPromptQ(cat.prompts[idx]);
+      antwoorden[cat.id][ak]=String((hubState.categories&&hubState.categories[cat.id]||{})[ak]||'').trim();
+    }
+  });
+  return JSON.stringify({vragen:vragen,antwoorden:antwoorden});
+}
+function parseJsonFromAiSlotRepair(raw){
+  var t=String(raw||'').trim();
+  var m=t.match(/\{[\s\S]*\}/);
+  if(m)t=m[0];
+  t=t.replace(/```json\s*/gi,'').replace(/```/g,'').trim();
+  return JSON.parse(t);
+}
+async function runOwnSlotRepairAi(){
+  if(_ownSlotRepairBusy)return;
+  var msgEl=document.getElementById('ownSlotRepairMsg');
+  var btn=document.getElementById('ownSlotRepairBtn');
+  function setMsg(t,err){
+    if(msgEl){
+      msgEl.textContent=t||'';
+      msgEl.style.color=err?'#a61b1b':'#5a6470';
+    }
+  }
+  if(!hasOwnFourCatAnyAnswer()){
+    setMsg('Geen antwoorden om te herschikken.',true);
+    return;
+  }
+  if(!confirm('De AI herschikt je antwoorden in de vier OWN-categorieën (karakter t/m gevoels) zodat ze beter bij elke vraag passen, en kort ze zo nodig in. De DateSense- en FamilySense-verdiepingsblokken blijven ongewijzigd. Doorgaan?'))return;
+  _ownSlotRepairBusy=true;
+  if(btn)btn.disabled=true;
+  setMsg('Bezig met AI…',false);
+  try{
+    var sys='Je bent OWN Sensei. De gebruiker heeft een OWN-profiel waarbij antwoorden in vakjes a0..a3 mogelijk niet bij de vraag passen.\n'
+      +'Je krijgt JSON met "vragen" en "antwoorden": keys karakter, interesses, relatie, gevoels; elk met a0..a3. "vragen" bevat per vak de exacte vraagzin; "antwoorden" het huidige antwoord in dat vak.\n'
+      +'1) Herverdeel de BESTAANDE inhoud uit de antwoorden over de vakjes zodat elke tekst semantisch bij de vraag in dat vak past. Je mag inkorten en parafraseren; maximaal ongeveer 400 tekens per vak.\n'
+      +'2) Voeg geen nieuwe feiten toe die niet in de input staan. Geen meta-commentaar.\n'
+      +'3) Output: ALLEEN geldig JSON, één object met exact keys karakter, interesses, relatie, gevoels; elk subobject met strings a0,a1,a2,a3. Leeg veld = "".\n'
+      +'4) Geen markdown. Gebruik geen Unicode U+2014 (em dash); gebruik komma, punt of hyphen met spaties.\n';
+    var rawOut=await callAnthropicJson(sys,buildOwnSlotRepairPayload(),2200,120000,{raw:true});
+    var parsed=parseJsonFromAiSlotRepair(rawOut);
+    var ids=['karakter','interesses','relatie','gevoels'];
+    var changedSlots=0;
+    ids.forEach(function(cid){
+      var blk=parsed[cid];
+      if(!blk||typeof blk!=='object')return;
+      if(!hubState.categories[cid])hubState.categories[cid]={a0:'',a1:'',a2:'',a3:''};
+      var nowIso=new Date().toISOString();
+      ['a0','a1','a2','a3'].forEach(function(ak){
+        if(!Object.prototype.hasOwnProperty.call(blk,ak))return;
+        var s=String(blk[ak]==null?'':blk[ak]).trim().substring(0,_OWN_SLOT_REPAIR_MAX);
+        var prev=String(hubState.categories[cid][ak]||'').trim();
+        hubState.categories[cid][ak]=s;
+        if(s!==prev)changedSlots++;
+      });
+      hubState.cat_updated[cid]=nowIso;
+    });
+    saveHubState();
+    renderProps();
+    renderMijTab();
+    renderQuestions();
+    setMsg(changedSlots?'Klaar. Controleer de vier blokken en pas zo nodig bij.':'Geen wijzigingen toegepast.',false);
+  }catch(e){
+    setMsg(aiShortErr(e&&e.message?e.message:String(e),200),true);
+  }finally{
+    _ownSlotRepairBusy=false;
+    if(btn)btn.disabled=false;
+  }
+}
+
 async function runAiImportProfileAnalysis(bundle){
   return await callAnthropicJson(
     _AI_IMPORT_SYS,
@@ -3221,7 +3310,11 @@ function renderQuestions(){
     return list;
   }
   var el=document.getElementById('questionsCard');
-  var html='<h3>Vragenlijsten</h3><p class="subtle">Vaste vragen altijd zichtbaar; app-vragen als die app actief is.</p>';
+  var ownAnyAns=hasOwnFourCatAnyAnswer();
+  var html='<h3>Vragenlijsten</h3><p class="subtle">Vaste vragen altijd zichtbaar; app-vragen als die app actief is.</p>'
+    +'<div class="own-slot-repair-bar" style="margin:0 0 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
+    +'<button type="button" class="btn btn-muted btn-small" id="ownSlotRepairBtn"'+(ownAnyAns?'':' disabled')+'>AI: antwoorden laten passen bij vragen</button>'
+    +'<span id="ownSlotRepairMsg" class="subtle" style="font-size:12px;max-width:100%"></span></div>';
   visibleCats().forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
     var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>0;}).length;
@@ -3254,6 +3347,8 @@ function renderQuestions(){
       wrap.classList.toggle('open');
     });
   });
+  var repairBtn=document.getElementById('ownSlotRepairBtn');
+  if(repairBtn)repairBtn.addEventListener('click',function(){runOwnSlotRepairAi();});
   el.querySelectorAll('.qta').forEach(function(ta){
     ta.addEventListener('input',function(){
       var cat=this.getAttribute('data-cat');
