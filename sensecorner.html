@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 11:56">
+<meta name="sc-build" content="18-04-2026 12:08">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -91,6 +91,12 @@ a{text-decoration:none;color:inherit}
 .logo-mark svg{width:16px;height:16px}
 .header-own-photo{width:30px;height:30px;border-radius:15px;border:1px solid #E3D5D1;object-fit:cover;display:none;flex-shrink:0}
 .logo-text{font-family:var(--font-serif);font-size:17px;font-weight:700;color:var(--t);letter-spacing:-.01em}
+.logo-title-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 10px}
+/* Decoratief: Japanse aanspreekvorm voor «sensei» (begeleider); blijft NL-first in copy. */
+.sensei-kanji{
+  font-size:13px;font-weight:700;color:var(--sage-donker);opacity:.88;letter-spacing:.06em;line-height:1;user-select:none;
+  font-family:"Yu Gothic UI","Meiryo UI",Meiryo,"Hiragino Kaku Gothic ProN","Hiragino Sans",sans-serif;
+}
 .logo-sub{
   display:block;
   margin-top:4px;
@@ -398,7 +404,10 @@ a{text-decoration:none;color:inherit}
       </div>
       <img id="headerOwnPhoto" class="header-own-photo" alt="Jouw profielfoto">
       <div>
-        <div class="logo-text">SenseCorner</div>
+        <div class="logo-title-row">
+          <div class="logo-text">SenseCorner</div>
+          <span class="sensei-kanji" lang="ja" title="Sensei — respectvolle vorm van begeleider">先生</span>
+        </div>
         <div class="logo-sub"><span class="logo-sub-l1">Jouw plek voor gevoel,</span><span class="logo-sub-l2">inzicht en groei</span></div>
       </div>
     </div>
@@ -438,7 +447,7 @@ a{text-decoration:none;color:inherit}
       <div class="hero-body">
         <div class="hero-kicker">OWN Sense · Over jou</div>
         <h1 class="hero-title">Één profiel over jou.<br>Jouw leven. Jouw tempo.</h1>
-        <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter de begeleiding in elke Sense-app.</p>
+        <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter Sensei met je meedenkt in elke Sense-app.</p>
         <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
         <p class="hero-quote" id="heroQuote" hidden aria-live="polite"></p>
 
@@ -612,7 +621,7 @@ a{text-decoration:none;color:inherit}
 <div id="authOverlay" class="auth-overlay" aria-hidden="true">
   <div class="auth-modal" role="dialog" aria-modal="true" aria-label="Hub login">
     <div class="auth-title" id="authTitle">Inloggen in SenseCorner</div>
-    <div class="auth-sub" id="authSub">Eén account voor OWN Sense, DateSense en FamilySense.</div>
+    <div class="auth-sub" id="authSub">Eén account voor OWN Sense, DateSense en FamilySense. Sensei gebruikt je OWN-profiel waar de apps AI inzetten.</div>
     <input id="authName" class="auth-input" type="text" placeholder="Jouw naam" autocomplete="name" style="display:none">
     <div id="authNameHint" class="auth-name-hint" style="display:none">Naam is verplicht bij account aanmaken.</div>
     <input id="authEmail" class="auth-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
@@ -940,7 +949,8 @@ a{text-decoration:none;color:inherit}
       var s=sessionStorage.getItem(SC_QUOTE_SPIN_KEY);
       if(s)spin=parseInt(s,10)>>>0;
     }catch(_e){}
-    return (day+h+spin)>>>0%n;
+    /* Haakjes nodig: % heeft hogere prioriteit dan >>> — zonder dit werd qi enorm en quotes 'undefined'. */
+    return ((day+h+spin)>>>0)%n;
   }
   function scTrimName(s){
     s=String(s==null?'':s).trim();
@@ -1009,7 +1019,9 @@ a{text-decoration:none;color:inherit}
     heroWelcome.hidden=false;
     if(heroQuote){
       var qi=senseCornerQuoteIndex(user);
-      heroQuote.textContent='\u201C'+SC_SENSE_QUOTES[qi]+'\u201D';
+      var qtxt=SC_SENSE_QUOTES[qi];
+      if(!qtxt)qtxt=SC_SENSE_QUOTES[0]||'';
+      heroQuote.textContent='\u201C'+qtxt+'\u201D';
       heroQuote.hidden=false;
     }
   }
@@ -1090,8 +1102,8 @@ a{text-decoration:none;color:inherit}
     var isRegister=(mode==='register');
     if(authTitle)authTitle.textContent=(mode==='register'?'Account aanmaken':'Inloggen in SenseCorner');
     if(authSub)authSub.textContent=(mode==='register'
-      ?'Maak je account aan. Na bevestiging ga je door naar je gekozen app.'
-      :'Eén account voor OWN Sense, DateSense en FamilySense.');
+      ?'Maak je account aan. Na bevestiging opent je gekozen app — Sensei pakt daar je context mee op.'
+      :'Eén account voor OWN Sense, DateSense en FamilySense. Sensei gebruikt je OWN-profiel waar de apps AI inzetten.');
     if(authName){
       authName.style.display=isRegister?'block':'none';
       if(!isRegister)authName.value='';
