@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 16:46">
+<meta name="sc-build" content="18-04-2026 16:59">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -309,7 +309,7 @@ a{text-decoration:none;color:inherit}
 .app-card.clickable:focus-visible{outline:3px solid var(--card-m);outline-offset:3px}
 .app-card.dimmed{opacity:.58}
 .app-card.dimmed.enter{animation:none}
-.app-head,.app-desc,.app-coach-hint,.app-footer{position:relative;z-index:1}
+.app-head,.app-desc,.app-coach-wrap,.app-footer{position:relative;z-index:1}
 /* Icoon: 3 concentrische schijven (licht → medium → donker), icoon 16px in cream op kern */
 .app-icon-wrap{
   position:relative;
@@ -361,6 +361,39 @@ a{text-decoration:none;color:inherit}
 }
 .app-coach-hint--datesense .app-coach-hint__n{color:var(--date-donker);}
 .app-coach-hint--familysense .app-coach-hint__n{color:var(--family-donker);}
+.app-coach-wrap{
+  margin:4px 0 0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:0;
+  max-width:100%;
+}
+.app-coach-hint-sub{
+  margin:3px 0 5px;
+  font-size:10px;
+  line-height:1.35;
+  color:rgba(61,47,31,.48);
+  font-weight:500;
+  max-width:22em;
+}
+.app-coach-all-link{
+  display:inline-block;
+  margin:0;
+  padding:0;
+  border:none;
+  background:none;
+  cursor:pointer;
+  font:inherit;
+  font-size:11px;
+  font-weight:700;
+  text-decoration:underline;
+  text-underline-offset:2px;
+  color:var(--warm-bruin);
+}
+.date-card .app-coach-all-link{color:var(--date-donker);}
+.career-card .app-coach-all-link{color:var(--family-donker);}
+.app-coach-all-link:hover{opacity:.88}
 .app-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
 .badge-live{background:color-mix(in srgb,var(--date-licht) 55%,white);color:var(--date-donker);border:1px solid color-mix(in srgb,var(--date-medium) 40%,transparent)}
@@ -573,7 +606,11 @@ a{text-decoration:none;color:inherit}
         <div class="app-name">DateSense</div>
       </div>
       <p class="app-desc">Bewuster daten, inzicht in patronen en persoonlijk advies.</p>
-      <p class="app-coach-hint app-coach-hint--datesense" id="scCoachHintDatesense" hidden></p>
+      <div class="app-coach-wrap" id="scCoachWrapDatesense" hidden>
+        <p class="app-coach-hint app-coach-hint--datesense" id="scCoachHintDatesense"></p>
+        <p class="app-coach-hint-sub" id="scCoachHintSubDatesense" hidden></p>
+        <button type="button" class="app-coach-all-link" id="scCoachAllDatesense">Alle coachmeldingen</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -629,7 +666,11 @@ a{text-decoration:none;color:inherit}
         <div class="app-name">FamilySense</div>
       </div>
       <p class="app-desc">Ondersteuning bij gezin, communicatie en opvoedvragen in je thuissituatie.</p>
-      <p class="app-coach-hint app-coach-hint--familysense" id="scCoachHintFamilysense" hidden></p>
+      <div class="app-coach-wrap" id="scCoachWrapFamilysense" hidden>
+        <p class="app-coach-hint app-coach-hint--familysense" id="scCoachHintFamilysense"></p>
+        <p class="app-coach-hint-sub" id="scCoachHintSubFamilysense" hidden></p>
+        <button type="button" class="app-coach-all-link" id="scCoachAllFamilysense">Alle coachmeldingen</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live-fs">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1493,30 +1534,63 @@ a{text-decoration:none;color:inherit}
     }catch(_e){return null;}
   }
   function updateAppCardCoachHintsWithCounts(user,dsN,fsN){
-    var dsEl=document.getElementById('scCoachHintDatesense');
-    var fsEl=document.getElementById('scCoachHintFamilysense');
-    function wipe(el){
-      if(!el)return;
-      el.textContent='';
-      el.hidden=true;
-      el.removeAttribute('aria-label');
+    var HOME_CAP=5;
+    var dsWrap=document.getElementById('scCoachWrapDatesense');
+    var fsWrap=document.getElementById('scCoachWrapFamilysense');
+    var dsHint=document.getElementById('scCoachHintDatesense');
+    var fsHint=document.getElementById('scCoachHintFamilysense');
+    var dsSub=document.getElementById('scCoachHintSubDatesense');
+    var fsSub=document.getElementById('scCoachHintSubFamilysense');
+    function wipeWrap(wrap,hint,sub){
+      if(wrap)wrap.hidden=true;
+      if(wrap)wrap.removeAttribute('aria-label');
+      if(hint){
+        hint.textContent='';
+      }
+      if(sub)sub.hidden=true;
     }
     if(!user){
-      wipe(dsEl);
-      wipe(fsEl);
+      wipeWrap(dsWrap,dsHint,dsSub);
+      wipeWrap(fsWrap,fsHint,fsSub);
       return;
     }
-    function applyHint(el,n,appLabel){
-      if(!el)return;
-      if(n===null||n===undefined){wipe(el);return;}
-      if(n<1){wipe(el);return;}
-      el.hidden=false;
+    function applyBlock(wrap,hint,sub,n,appShort){
+      if(!wrap||!hint)return;
+      if(n===null||n===undefined||n<1){
+        wipeWrap(wrap,hint,sub);
+        return;
+      }
+      wrap.hidden=false;
       var tail=n===1?'coachmelding open':'coachmeldingen open';
-      el.innerHTML='<span class="app-coach-hint__n">'+String(n)+'</span> '+tail+' · open de app';
-      el.setAttribute('aria-label',String(n)+' openstaande '+(n===1?'coachmelding':'coachmeldingen')+' in '+appLabel);
+      hint.innerHTML='<span class="app-coach-hint__n">'+String(n)+'</span> '+tail;
+      if(sub){
+        if(n>HOME_CAP){
+          sub.textContent='Op Home zie je er max. '+HOME_CAP+' tegelijk; hieronder open je de volledige lijst (Mijn meldingen).';
+          sub.hidden=false;
+        }else{
+          sub.hidden=true;
+        }
+      }
+      var extra=n>HOME_CAP?(' Op Home max. '+HOME_CAP+' tegelijk; in de app onder Mijn meldingen staan ze allemaal.'):'';
+      wrap.setAttribute('aria-label',String(n)+' openstaande '+(n===1?'coachmelding':'coachmeldingen')+' in '+appShort+'.'+extra);
     }
-    applyHint(dsEl,dsN,'DateSense');
-    applyHint(fsEl,fsN,'FamilySense');
+    applyBlock(dsWrap,dsHint,dsSub,dsN,'DateSense');
+    applyBlock(fsWrap,fsHint,fsSub,fsN,'FamilySense');
+  }
+  function bindCoachAllDeepLinksOnce(){
+    var dsBtn=document.getElementById('scCoachAllDatesense');
+    var fsBtn=document.getElementById('scCoachAllFamilysense');
+    function wire(btn,href){
+      if(!btn||btn.dataset.scBound)return;
+      btn.dataset.scBound='1';
+      btn.addEventListener('click',function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        openAppWithAuth(href);
+      });
+    }
+    wire(dsBtn,'datesense.html?screen=notifications');
+    wire(fsBtn,'familysense.html?screen=notifications');
   }
   function updateAppCardCoachHints(user){
     if(!user){updateAppCardCoachHintsWithCounts(null,0,0);return;}
@@ -1771,6 +1845,7 @@ a{text-decoration:none;color:inherit}
       }
     });
   });
+  bindCoachAllDeepLinksOnce();
   window.addEventListener('storage',function(ev){
     var k=String(ev.key||'');
     if(k.indexOf('dsCoachState')===0||k.indexOf('ds_focus_')===0||k.indexOf('ds_usage_mode')===0||k.indexOf('sc_coach_open_')===0){
