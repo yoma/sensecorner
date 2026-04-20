@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="18-04-2026 21:47">
+<meta name="ds-build" content="20-04-2026 13:25">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1517,8 +1517,8 @@ function refreshOwnAppDepthHintMounts(){
 var S={
   user:null,
   adminRole:'user',
-  // Backward-compat: veel legacy guards checken enkel op truthy apiKey, terwijl callAPI server-side via Supabase loopt.
-  apiKey:localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'',
+  // Backward-compat: legacy guards checken enkel op truthy apiKey; sleutel blijft server-side beheerd.
+  apiKey:'',
   adviceTone:'eerlijk',
   screen:'home',prev:'home',
   busy:false,
@@ -9139,7 +9139,7 @@ async function saveSettings(){
       style:(document.getElementById('focusBoostStyleField')||{}).value||'',
       time:(document.getElementById('focusBoostTimeField')||{}).value||''
     };
-    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+    S.apiKey=String(S.apiKey||'').trim();
     if(!S.apiKey && S.user)S.apiKey='hub_server_managed';
     S.adviceTone='eerlijk';
     localStorage.removeItem('ds_advice_tone');
@@ -9379,7 +9379,7 @@ async function cmpAdviesCurrent(){
 
 // ══ API call ══════════════════════════════════════════════════════
 function getEffectiveAnthropicKey(){
-  return String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+  return String(S.apiKey||'').trim();
 }
 
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){

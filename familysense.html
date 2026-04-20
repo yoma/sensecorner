@@ -1507,8 +1507,8 @@ const LEGACY_FAMILIE_ROL_LABELS={
 var S={
   user:null,
   adminRole:'user',
-  // Backward-compat: legacy flows checken op truthy apiKey, terwijl AI via server-side gateway loopt.
-  apiKey:localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||'',
+  // Backward-compat: legacy flows checken op truthy apiKey; sleutel blijft server-side beheerd.
+  apiKey:'',
   adviceTone:'eerlijk',
   screen:'home',prev:'home',
   busy:false,
@@ -8737,7 +8737,7 @@ async function saveSettings(){
   var btn=document.getElementById('btnSaveSettings');
   setButtonSaveBusy(btn,true,{busyLabel:'Opslaan…'});
   try{
-    S.apiKey=String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+    S.apiKey=String(S.apiKey||'').trim();
     if(!S.apiKey && S.user)S.apiKey='hub_server_managed';
     var sumSl=document.getElementById('dossierSummaryEverySlider');
     if(sumSl){
@@ -8846,7 +8846,7 @@ function rCompare(el){
 }
 
 function getEffectiveAnthropicKey(){
-  return String(localStorage.getItem('anthropic_api_key')||localStorage.getItem('ds_ak')||S.apiKey||'').trim();
+  return String(S.apiKey||'').trim();
 }
 
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
