@@ -1040,6 +1040,44 @@ function hydrateAppDepthSlotsFromOwnFacts(){
     saveHubState();
   }
 }
+
+/** SenseCorner onboarding.html schrijft core_* naar own_facts (source_app onboarding). Vul lege OWN-hubvakken. */
+var SENSECORNER_CORE_SUB_TO_OWN_SLOT={
+  core_friends_view:{cat:'karakter',idx:0},
+  core_daily_joy:{cat:'interesses',idx:0},
+  core_recharge:{cat:'interesses',idx:2},
+  core_emotion_sharing:{cat:'gevoels',idx:0},
+  core_friction:{cat:'karakter',idx:1}
+};
+function hydrateOwnCatsFromSenseCornerOnboarding(){
+  if(!ownFacts||!ownFacts.length)return;
+  var touched=false;
+  var updatedCats={};
+  ownFacts.forEach(function(f){
+    if(!f||String(f.status||'')!=='accepted')return;
+    if(String(f.source_app||'')!=='onboarding')return;
+    var sub=String(f.subcategory||'').trim();
+    var map=SENSECORNER_CORE_SUB_TO_OWN_SLOT[sub];
+    if(!map)return;
+    var catId=map.cat;
+    var idx=map.idx;
+    if(!hubState.categories[catId])hubState.categories[catId]=emptySlotsObjectForCategory(OWN_CATS.find(function(c){return c.id===catId;})||{prompts:[{},{},{},{}]});
+    var key='a'+idx;
+    if(String(hubState.categories[catId][key]||'').trim())return;
+    var txt=String(f.fact_text||'').trim();
+    if(!txt)return;
+    hubState.categories[catId][key]=txt;
+    touched=true;
+    updatedCats[catId]=1;
+  });
+  if(touched){
+    hubState.cat_updated=hubState.cat_updated||{};
+    Object.keys(updatedCats).forEach(function(cid){
+      hubState.cat_updated[cid]=new Date().toISOString();
+    });
+    saveHubState();
+  }
+}
 var __appDepthSyncTimer=null;
 function scheduleSyncAppDepthSubFacts(){
   clearTimeout(__appDepthSyncTimer);
@@ -3862,6 +3900,7 @@ loadOwnFromSupabase()
   .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})
   .finally(function(){
     hydrateAppDepthSlotsFromOwnFacts();
+    hydrateOwnCatsFromSenseCornerOnboarding();
     renderMijTab();
     renderInzichtenV2();
     renderGroeiTab();
