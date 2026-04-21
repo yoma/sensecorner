@@ -1,0 +1,2553 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SenseCorner - Kennismaking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/sense-theme.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ob-border: rgba(61, 47, 31, 0.14);
+      --ob-border-soft: rgba(61, 47, 31, 0.08);
+      --ob-muted: rgba(61, 47, 31, 0.55);
+      --ob-success: #5a7a4a;
+      --ob-own-donker: var(--sage-donker);
+      --ob-own-medium: var(--sage-medium);
+      --ob-own-licht: var(--sage-licht);
+      --ob-own-wolk: rgba(200, 212, 181, 0.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--cream);
+      color: var(--chocolade);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      position: relative;
+    }
+    .ob-bg-decor {
+      position: fixed;
+      left: -280px;
+      bottom: -240px;
+      width: 520px;
+      height: 520px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.55;
+    }
+    .ob-bg-decor-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle, #c9b68f 0 80px, #d8c8a4 80px 150px, #e4d6b8 150px 220px, #ede1c7 220px 260px);
+    }
+    .ob-rail {
+      position: sticky;
+      top: 0;
+      height: 3px;
+      background: var(--ob-border-soft);
+      z-index: 20;
+      display: none;
+    }
+    .ob-rail.is-on { display: block; }
+    .ob-rail-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--ob-own-medium);
+      transition: width 0.45s ease, background 0.45s ease;
+    }
+    .ob-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px calc(40px + env(safe-area-inset-bottom, 0px));
+      position: relative;
+      z-index: 1;
+    }
+    .ob-screen {
+      width: 100%;
+      max-width: 520px;
+      display: none;
+    }
+    .ob-screen.is-active { display: block; }
+    .ob-screen--wide { max-width: 820px; }
+    /* Los van .ob-screen: anders blijft display:none zonder .is-active */
+    .ob-dynamic-host {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      display: block;
+    }
+    .ob-dynamic-host[hidden] {
+      display: none !important;
+    }
+    .ob-inline-error {
+      text-align: center;
+      font-size: 14px;
+      color: #8a4a3a;
+      margin-top: 10px;
+      min-height: 22px;
+    }
+    .ob-toast {
+      position: fixed;
+      bottom: max(16px, env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(420px, 92vw);
+      padding: 12px 18px;
+      background: rgba(61, 47, 31, 0.92);
+      color: var(--cream);
+      border-radius: 12px;
+      font-size: 14px;
+      z-index: 100;
+      display: none;
+      text-align: center;
+      line-height: 1.45;
+    }
+    .ob-toast.is-on { display: block; }
+    .ob-ai-wait {
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 16px;
+      color: var(--warm-bruin);
+      text-align: center;
+      margin: 14px 0 10px;
+      line-height: 1.5;
+    }
+    .ob-ripple {
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ob-ripple--sm { width: 72px; height: 72px; margin: 0 auto 24px; }
+    .ob-ripple--sm .ob-ripple-inner { width: 72px; height: 72px; }
+    .ob-ripple-inner {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--ob-own-donker) 0 22px, var(--ob-own-medium) 22px 36px, var(--ob-own-licht) 36px 48px);
+      box-shadow: 0 4px 24px rgba(79, 110, 75, 0.12);
+    }
+    .ob-ripple.pulsing .ob-ripple-inner {
+      animation: obRipplePulse 2.6s ease-in-out infinite;
+    }
+    @keyframes obRipplePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .ob-sensei {
+      font-family: "Caveat", cursive;
+      font-size: 28px;
+      line-height: 1.35;
+      color: var(--chocolade);
+      text-align: center;
+      margin-bottom: 20px;
+      min-height: 40px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .ob-sensei em { font-style: normal; font-weight: 700; color: var(--ob-own-donker); }
+    .ob-sensei.smaller { font-size: 23px; color: var(--warm-bruin); margin-bottom: 16px; }
+    .ob-sensei.lg { font-size: 30px; margin-bottom: 24px; min-height: 44px; }
+    .ob-sensei.typing::after {
+      content: "";
+      display: inline-block;
+      width: 2px;
+      height: 0.85em;
+      background: var(--chocolade);
+      margin-left: 3px;
+      vertical-align: -0.08em;
+      animation: obBlink 0.75s steps(2) infinite;
+    }
+    @keyframes obBlink { 50% { opacity: 0; } }
+    .ob-typing-fade {
+      opacity: 0;
+      transform: translateY(2px);
+      will-change: opacity, transform;
+    }
+    .ob-typing-fade.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 1.08s cubic-bezier(0.22, 1, 0.36, 1), transform 1s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ob-typing-fade.is-visible {
+        transition-duration: 0.05s;
+      }
+    }
+    .ob-input-wrap, .ob-code-wrap, .ob-cta-wrap, .ob-answer-wrap, .ob-photo-wrap {
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .ob-input-wrap.shown, .ob-code-wrap.shown, .ob-cta-wrap.shown, .ob-answer-wrap.shown, .ob-photo-wrap.shown { opacity: 1; }
+    .ob-text-input {
+      width: 100%;
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--ob-border);
+      border-radius: 14px;
+      font-family: inherit;
+      font-size: 17px;
+      color: var(--chocolade);
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+      backdrop-filter: blur(6px);
+    }
+    .ob-text-input:focus {
+      outline: none;
+      border-color: var(--ob-own-donker);
+      background: #fff;
+    }
+    .ob-text-input::placeholder {
+      color: var(--ob-muted);
+      font-family: var(--font-serif);
+      font-style: italic;
+    }
+    .ob-code-wrap {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 24px 0 16px;
+    }
+    .ob-code-box {
+      width: 48px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--ob-border);
+      border-radius: 12px;
+      text-align: center;
+      font-family: inherit;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--chocolade);
+      transition: border-color 0.15s, background 0.15s;
+      backdrop-filter: blur(6px);
+    }
+    .ob-code-box:focus { outline: none; border-color: var(--ob-own-donker); background: #fff; }
+    .ob-code-box.filled { border-color: var(--ob-own-medium); }
+    .ob-code-meta { text-align: center; font-size: 13px; color: var(--ob-muted); margin-top: 4px; }
+    .ob-code-resend { text-align: center; margin-top: 20px; font-size: 14px; color: var(--ob-muted); }
+    .ob-code-resend button {
+      background: none;
+      border: none;
+      color: var(--ob-own-donker);
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 0;
+    }
+    .ob-code-resend button:disabled { opacity: 0.4; cursor: not-allowed; text-decoration: none; }
+    .ob-cta-wrap { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+    .ob-cta-primary {
+      background: var(--chocolade-diep);
+      color: var(--cream);
+      border: none;
+      padding: 16px 32px;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s, box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(42, 24, 16, 0.12);
+    }
+    .ob-cta-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      opacity: 0.95;
+      box-shadow: 0 4px 16px rgba(42, 24, 16, 0.18);
+    }
+    .ob-cta-primary:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+    .ob-cta-secondary {
+      background: transparent;
+      color: var(--warm-bruin);
+      border: none;
+      padding: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .ob-cta-secondary:hover { color: var(--chocolade); }
+    .ob-success-check {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--ob-own-wolk);
+      border: 2px solid var(--ob-own-donker);
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: obCheckBounce 0.5s ease-out;
+      box-shadow: 0 4px 20px rgba(79, 110, 75, 0.2);
+    }
+    .ob-success-check svg { width: 32px; height: 32px; stroke: var(--ob-own-donker); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    @keyframes obCheckBounce {
+      0% { transform: scale(0.6); opacity: 0; }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .ob-mirror-grid-wrap { opacity: 0; transition: opacity 0.5s ease; margin: 24px 0 12px; }
+    .ob-mirror-grid-wrap.shown { opacity: 1; }
+    .ob-mirror-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .ob-mirror-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      padding: 12px 8px;
+      border-radius: 16px;
+      transition: all 0.25s ease;
+      user-select: none;
+      position: relative;
+    }
+    .ob-mirror-item.own { cursor: default; }
+    .ob-mirror-item:not(.own):not(.active) { opacity: 0.38; }
+    .ob-mirror-item:not(.own):not(.active):hover { opacity: 0.6; transform: translateY(-2px); }
+    .ob-mirror-item.active { opacity: 1; transform: translateY(-2px); }
+    .ob-mirror-ripple {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .ob-mirror-item.active .ob-mirror-ripple { box-shadow: 0 6px 20px rgba(42, 24, 16, 0.12); }
+    .ob-mirror-ripple-center {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--chocolade-diep);
+      color: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 500;
+      font-size: 14px;
+      z-index: 2;
+      position: relative;
+    }
+    .ob-mirror-item[data-mirror="own"] .ob-mirror-ripple {
+      background: radial-gradient(circle, transparent 0 14px, var(--ob-own-donker) 14px 22px, var(--ob-own-medium) 22px 30px, var(--ob-own-licht) 30px 36px);
+    }
+    .ob-mirror-item[data-mirror="date"] .ob-mirror-ripple {
+      background: radial-gradient(circle, transparent 0 14px, #9a4e3e 14px 22px, var(--date-donker) 22px 30px, var(--date-licht) 30px 36px);
+    }
+    .ob-mirror-item[data-mirror="family"] .ob-mirror-ripple {
+      background: radial-gradient(circle, transparent 0 14px, #6b4e8e 14px 22px, var(--family-donker) 22px 30px, var(--family-licht) 30px 36px);
+    }
+    .ob-mirror-item[data-mirror="friend"] .ob-mirror-ripple {
+      background: radial-gradient(circle, transparent 0 14px, #a67635 14px 22px, var(--friend-donker) 22px 30px, var(--friend-licht) 30px 36px);
+    }
+    .ob-mirror-item[data-mirror="self"] .ob-mirror-ripple {
+      background: radial-gradient(circle, transparent 0 14px, #4e7090 14px 22px, var(--self-donker) 22px 30px, var(--self-licht) 30px 36px);
+    }
+    .ob-mirror-item h3 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: 16px;
+      color: var(--chocolade);
+      margin-bottom: 4px;
+    }
+    .ob-mirror-item p { font-size: 12px; color: var(--warm-bruin); line-height: 1.4; max-width: 140px; }
+    .ob-mirror-tag {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 2px 8px;
+      background: rgba(61, 47, 31, 0.06);
+      color: var(--warm-bruin);
+      font-size: 10px;
+      border-radius: 999px;
+      font-family: var(--font-serif);
+      font-style: italic;
+    }
+    .ob-mirror-check {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--chocolade-diep);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .ob-mirror-item.active .ob-mirror-check { opacity: 1; transform: scale(1); }
+    .ob-mirror-check svg { width: 11px; height: 11px; stroke: var(--cream); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .ob-mirror-item.own .ob-mirror-check { opacity: 1; transform: scale(1); background: var(--ob-own-donker); }
+    .ob-reassure {
+      margin: 16px 0 20px;
+      text-align: center;
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 14px;
+      color: var(--ob-muted);
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .ob-reassure.shown { opacity: 1; }
+    .ob-reaction-selected {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .ob-reaction-selected.shown { opacity: 1; }
+    .ob-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px 6px 8px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid var(--ob-border);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--chocolade);
+    }
+    .ob-chip .dot { width: 14px; height: 14px; border-radius: 50%; }
+    .ob-chip[data-mirror="own"] .dot { background: radial-gradient(circle, var(--ob-own-donker) 0 4px, var(--ob-own-medium) 4px 7px); }
+    .ob-chip[data-mirror="date"] .dot { background: radial-gradient(circle, var(--date-donker) 0 4px, var(--date-licht) 4px 7px); }
+    .ob-chip[data-mirror="family"] .dot { background: radial-gradient(circle, var(--family-donker) 0 4px, var(--family-licht) 4px 7px); }
+    .ob-chip[data-mirror="friend"] .dot { background: radial-gradient(circle, var(--friend-donker) 0 4px, var(--friend-licht) 4px 7px); }
+    .ob-chip[data-mirror="self"] .dot { background: radial-gradient(circle, var(--self-donker) 0 4px, var(--self-licht) 4px 7px); }
+    .ob-blok-badge {
+      text-align: center;
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 13px;
+      color: var(--ob-muted);
+      margin-bottom: 16px;
+      letter-spacing: 0.02em;
+    }
+    .ob-overgang {
+      text-align: center;
+      font-family: "Caveat", cursive;
+      font-size: 20px;
+      color: var(--warm-bruin);
+      margin-bottom: 12px;
+      min-height: 28px;
+    }
+    .ob-answer-input {
+      width: 100%;
+      min-height: 100px;
+      padding: 18px 20px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--ob-border);
+      border-radius: 14px;
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 17px;
+      line-height: 1.55;
+      color: var(--chocolade);
+      resize: none;
+      transition: border-color 0.2s, background 0.2s;
+      backdrop-filter: blur(6px);
+    }
+    .ob-answer-input:focus { outline: none; border-color: var(--warm-bruin); background: #fff; }
+    .ob-answer-input::placeholder {
+      color: var(--ob-muted);
+      font-family: "Caveat", cursive;
+      font-style: normal;
+      font-size: 22px;
+      font-weight: 400;
+    }
+    .ob-answer-hint {
+      text-align: right;
+      font-size: 12px;
+      color: var(--ob-muted);
+      margin-top: 6px;
+      font-family: var(--font-serif);
+      font-style: italic;
+    }
+    .ob-ripple-q { width: 72px; height: 72px; margin: 0 auto 24px; }
+    .ob-ripple-q .ob-ripple-inner { width: 72px; height: 72px; }
+    .ob-ripple-q.big, .ob-ripple-q.big .ob-ripple-inner { width: 96px; height: 96px; }
+    .ob-ripple-center-letter {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--chocolade-diep);
+      color: var(--cream);
+      font-weight: 500;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ob-ripple-q.own .ob-ripple-inner {
+      background: radial-gradient(circle, transparent 0 14px, var(--ob-own-donker) 14px 22px, var(--ob-own-medium) 22px 30px, var(--ob-own-licht) 30px 36px);
+    }
+    .ob-ripple-q.date .ob-ripple-inner {
+      background: radial-gradient(circle, transparent 0 14px, #9a4e3e 14px 22px, var(--date-donker) 22px 30px, var(--date-licht) 30px 36px);
+      box-shadow: 0 4px 20px rgba(186, 86, 84, 0.12);
+    }
+    .ob-ripple-q.family .ob-ripple-inner {
+      background: radial-gradient(circle, transparent 0 14px, #6b4e8e 14px 22px, var(--family-donker) 22px 30px, var(--family-licht) 30px 36px);
+      box-shadow: 0 4px 20px rgba(125, 106, 171, 0.12);
+    }
+    .ob-ripple-q.friend .ob-ripple-inner {
+      background: radial-gradient(circle, transparent 0 14px, #a67635 14px 22px, var(--friend-donker) 22px 30px, var(--friend-licht) 30px 36px);
+      box-shadow: 0 4px 20px rgba(200, 136, 31, 0.12);
+    }
+    .ob-ripple-q.self .ob-ripple-inner {
+      background: radial-gradient(circle, transparent 0 14px, #4e7090 14px 22px, var(--self-donker) 22px 30px, var(--self-licht) 30px 36px);
+      box-shadow: 0 4px 20px rgba(74, 107, 80, 0.12);
+    }
+    .ob-photo-drop {
+      width: 100%;
+      min-height: 220px;
+      border: 2px dashed var(--ob-border);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      padding: 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .ob-photo-drop:hover { border-color: var(--warm-bruin); background: rgba(255, 255, 255, 0.72); }
+    .ob-photo-drop.has-photo { border-style: solid; padding: 0; background: transparent; }
+    .ob-photo-drop.has-photo .ob-photo-placeholder { display: none; }
+    .ob-photo-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(61, 47, 31, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ob-photo-icon svg { width: 22px; height: 22px; stroke: var(--warm-bruin); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .ob-photo-prompt { font-family: "Caveat", cursive; font-size: 22px; color: var(--chocolade); }
+    .ob-photo-sub { font-family: var(--font-serif); font-style: italic; font-size: 13px; color: var(--ob-muted); }
+    .ob-photo-preview { width: 100%; min-height: 220px; object-fit: cover; display: block; }
+    .ob-photo-remove {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--chocolade-diep);
+      color: var(--cream);
+      border: none;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1;
+      padding: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .ob-photo-drop.has-photo .ob-photo-remove { display: flex; }
+    .ob-photo-caption {
+      width: 100%;
+      margin-top: 14px;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--ob-border);
+      border-radius: 12px;
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 15px;
+      color: var(--chocolade);
+      backdrop-filter: blur(6px);
+    }
+    .ob-photo-caption:focus { outline: none; border-color: var(--warm-bruin); background: #fff; }
+    .ob-photo-caption::placeholder {
+      color: var(--ob-muted);
+      font-family: "Caveat", cursive;
+      font-style: normal;
+      font-size: 18px;
+    }
+    .ob-photo-skip {
+      display: block;
+      text-align: center;
+      margin-top: 4px;
+      color: var(--warm-bruin);
+      text-decoration: underline;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px;
+      width: 100%;
+    }
+    .ob-end-card { text-align: center; padding: 20px 0; }
+    .ob-end-card h2 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-style: italic;
+      font-size: 28px;
+      color: var(--chocolade);
+      margin-bottom: 14px;
+    }
+    .ob-mirrors-preview { display: flex; justify-content: center; gap: 14px; margin: 24px 0 28px; flex-wrap: wrap; }
+    .ob-mini-ripple {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--cream);
+      font-weight: 500;
+      position: relative;
+    }
+    .ob-mini-ripple.own { background: radial-gradient(circle, var(--ob-own-donker) 0 11px, var(--ob-own-medium) 11px 16px, var(--ob-own-licht) 16px 20px); }
+    .ob-mini-ripple.date { background: radial-gradient(circle, #9a4e3e 0 11px, var(--date-donker) 11px 16px, var(--date-licht) 16px 20px); }
+    .ob-mini-ripple.family { background: radial-gradient(circle, #6b4e8e 0 11px, var(--family-donker) 11px 16px, var(--family-licht) 16px 20px); }
+    .ob-mini-ripple.friend { background: radial-gradient(circle, #a67635 0 11px, var(--friend-donker) 11px 16px, var(--friend-licht) 16px 20px); }
+    .ob-mini-ripple.self { background: radial-gradient(circle, #4e7090 0 11px, var(--self-donker) 11px 16px, var(--self-licht) 16px 20px); }
+    .ob-mini-ripple.is-off { opacity: 0.22; filter: grayscale(0.4); }
+    .ob-mini-ripple span {
+      position: absolute;
+      background: var(--chocolade-diep);
+      color: var(--cream);
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+    }
+    @media (max-width: 700px) {
+      .ob-mirror-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .ob-mirror-ripple { width: 60px; height: 60px; }
+      .ob-mirror-ripple-center { width: 24px; height: 24px; font-size: 12px; }
+    }
+    @media (max-width: 420px) {
+      .ob-mirror-grid { grid-template-columns: 1fr; }
+      .ob-mirror-item p { max-width: 100%; }
+    }
+    @media (max-width: 520px) {
+      .ob-bg-decor { left: -320px; width: 440px; height: 440px; }
+      .ob-sensei { font-size: 26px; }
+      .ob-sensei.smaller { font-size: 21px; }
+      .ob-sensei.lg { font-size: 26px; }
+      .ob-code-box { width: 42px; height: 52px; font-size: 20px; }
+      .ob-ripple, .ob-ripple-inner { width: 80px; height: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ob-bg-decor" aria-hidden="true"><div class="ob-bg-decor-inner"></div></div>
+  <div class="ob-rail" id="obRail" aria-hidden="true"><div class="ob-rail-fill" id="obRailFill"></div></div>
+
+  <main class="ob-stage" id="obStage">
+    <div id="obStaticStack">
+      <section class="ob-screen is-active" data-ob="acc0">
+        <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Welkom."></p>
+        <p class="ob-sensei smaller" data-type="Ik ben <em>Sensei</em>. Laten we kennismaken."></p>
+        <div class="ob-cta-wrap shown">
+          <button type="button" class="ob-cta-primary" id="obBtnAcc0">Begin</button>
+        </div>
+      </section>
+
+      <section class="ob-screen" data-ob="acc1">
+        <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Hoe mag ik je noemen?"></p>
+        <div class="ob-input-wrap" id="obWrapName">
+          <input type="text" class="ob-text-input" id="obNameInput" placeholder="jouw naam" autocomplete="given-name">
+        </div>
+        <div class="ob-cta-wrap" id="obCtaName">
+          <button type="button" class="ob-cta-primary" id="obBtnName" disabled>Verder</button>
+        </div>
+      </section>
+
+      <section class="ob-screen" data-ob="acc2">
+        <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Hey <em>{{name}}</em>. Fijn dat je er bent."></p>
+        <p class="ob-sensei smaller" data-type="Ik wil je graag leren kennen. Ik onthoud wat je deelt en groei mee met jou."></p>
+        <p class="ob-sensei smaller" data-type="Maar eerst: laten we je account veilig opzetten. Zo raak je niks kwijt, ook als je even moet pauzeren."></p>
+        <div class="ob-cta-wrap" id="obCtaAcc2">
+          <button type="button" class="ob-cta-primary" id="obBtnAcc2">Veilig opzetten</button>
+        </div>
+      </section>
+
+      <section class="ob-screen" data-ob="acc3">
+        <div class="ob-ripple"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Wat is je e-mail?"></p>
+        <p class="ob-sensei smaller" data-type="Ik stuur je zo een code van 6 cijfers."></p>
+        <div class="ob-input-wrap" id="obWrapEmail" style="margin-top: 8px;">
+          <input type="email" class="ob-text-input" id="obEmailInput" placeholder="jij@voorbeeld.be" autocomplete="email">
+        </div>
+        <div class="ob-cta-wrap" id="obCtaEmail">
+          <button type="button" class="ob-cta-primary" id="obBtnEmail" disabled>Stuur code</button>
+          <button type="button" class="ob-cta-secondary" id="obBtnEmailBack">← Terug</button>
+        </div>
+        <p class="ob-inline-error" id="obEmailErr" aria-live="polite"></p>
+      </section>
+
+      <section class="ob-screen" data-ob="acc4">
+        <div class="ob-ripple"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Check je mail."></p>
+        <p class="ob-sensei smaller" data-type="Ik stuurde een code van 6 cijfers naar <em>{{email}}</em>."></p>
+        <div class="ob-code-wrap" id="obCodeWrap">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 1">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 2">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 3">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 4">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 5">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 6">
+        </div>
+        <p class="ob-code-meta">De code is 10 minuten geldig.</p>
+        <div class="ob-code-resend">
+          Geen code ontvangen? <button type="button" id="obResendBtn" disabled>Stuur opnieuw <span id="obResendTimer">(30s)</span></button>
+        </div>
+        <div class="ob-cta-wrap" id="obCtaCode" style="margin-top: 32px;">
+          <button type="button" class="ob-cta-primary" id="obBtnCode" disabled>Bevestig</button>
+          <button type="button" class="ob-cta-secondary" id="obBtnCodeBack">← Ander e-mailadres</button>
+        </div>
+        <p class="ob-inline-error" id="obCodeErr" aria-live="polite"></p>
+      </section>
+
+      <section class="ob-screen" data-ob="acc5">
+        <div class="ob-success-check">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5,12 10,17 19,7"/></svg>
+        </div>
+        <p class="ob-sensei" data-type="Top, <em>{{name}}</em>."></p>
+        <p class="ob-sensei smaller" data-type="Je account is veilig opgezet. Alles wat we bespreken bewaar ik nu automatisch."></p>
+        <p class="ob-sensei smaller" data-type="Klaar voor het echte gesprek?"></p>
+        <div class="ob-cta-wrap" id="obCtaAcc5">
+          <button type="button" class="ob-cta-primary" id="obBtnAcc5">Laten we beginnen</button>
+        </div>
+      </section>
+
+      <section class="ob-screen ob-screen--wide" data-ob="mir0">
+        <div class="ob-ripple ob-ripple--sm pulsing"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Voor ik je leer kennen,"></p>
+        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Kies de spiegels die nu voor jou gelden."></p>
+        <div class="ob-mirror-grid-wrap" id="obGridWrap">
+          <div class="ob-mirror-grid" id="obMirrorGrid">
+            <div class="ob-mirror-item own active" data-mirror="own">
+              <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
+              <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">O</div></div>
+              <h3>OwnSense</h3>
+              <p>Jouw basis. Altijd aan.</p>
+            </div>
+            <div class="ob-mirror-item" data-mirror="date" role="button" tabindex="0">
+              <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
+              <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">D</div></div>
+              <h3>DateSense</h3>
+              <p>Bewuster daten, met meer helderheid.</p>
+            </div>
+            <div class="ob-mirror-item" data-mirror="family" role="button" tabindex="0">
+              <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
+              <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">F</div></div>
+              <h3>FamilySense</h3>
+              <p>Rust en inzicht in familierelaties.</p>
+            </div>
+            <div class="ob-mirror-item" data-mirror="friend" role="button" tabindex="0">
+              <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
+              <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">V</div></div>
+              <h3>FriendSense</h3>
+              <p>Vriendschappen met balans en verbinding.</p>
+              <span class="ob-mirror-tag">in opbouw</span>
+            </div>
+            <div class="ob-mirror-item" data-mirror="self" role="button" tabindex="0">
+              <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
+              <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">S</div></div>
+              <h3>SelfSense</h3>
+              <p>Herstel in je eigen tempo.</p>
+              <span class="ob-mirror-tag">in opbouw</span>
+            </div>
+          </div>
+        </div>
+        <p class="ob-reassure" id="obReassure">Spiegels toevoegen of weghalen kan altijd, ook later.</p>
+        <div class="ob-cta-wrap" id="obCtaMir0">
+          <button type="button" class="ob-cta-primary" id="obBtnMir0" disabled>Kies minstens één extra spiegel</button>
+        </div>
+      </section>
+
+      <section class="ob-screen" data-ob="mir1">
+        <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
+        <div class="ob-reaction-selected" id="obChips"></div>
+        <p class="ob-sensei" id="obReactionMsg"></p>
+        <div class="ob-cta-wrap" id="obCtaMir1">
+          <button type="button" class="ob-cta-primary" id="obBtnMir1">Laten we beginnen</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="ob-dynamic-host" id="obDynamic" hidden></div>
+  </main>
+  <div class="ob-toast" id="obToast" role="status"></div>
+
+  <script>
+(function () {
+  var SURL = "https://ghuqjtdrkwssyqvcubcd.supabase.co";
+  var SKEY = "sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq";
+  var OB_SS_PREFIX = "sense_onb_";
+  var sb = null;
+  var __obUserId = "";
+  var userName = "";
+  var userEmail = "";
+  var selectedMirrors = new Set(["own"]);
+  var answers = {};
+  var photo = "";
+  var photoCaption = "";
+  var photoFile = null;
+  var currentTypingController = null;
+  var resendInterval = null;
+  var staticKey = "acc0";
+  var route = [];
+  var routeIndex = 0;
+  var routeStarted = false;
+
+  var ANSWER_KEY_TO_SUB = {
+    core_1: "core_friends_view",
+    core_2: "core_daily_joy",
+    core_3: "core_recharge",
+    core_4: "core_emotion_sharing",
+    core_5: "core_friction",
+    date_1: "date_safety",
+    date_2: "date_overcommit",
+    family_1: "family_meaning",
+    family_2: "family_friction",
+    friend_1: "friend_values",
+    friend_2: "friend_conflict",
+    self_1: "self_coping",
+    self_2: "self_need"
+  };
+
+  var PROFILE_NAME_BY_MIRROR = {
+    date: "DateSense",
+    family: "FamilySense",
+    friend: "FriendSense",
+    self: "SelfSense"
+  };
+
+  var PROFILE_MIRROR_BY_NAME = {
+    datesense: "date",
+    familysense: "family",
+    friendsense: "friend",
+    selfsense: "self"
+  };
+
+  if (window.supabase && typeof window.supabase.createClient === "function") {
+    try {
+      sb = window.supabase.createClient(SURL, SKEY);
+    } catch (_eInit) {}
+  }
+
+  var CORE_QUESTIONS = [
+    { key: "core_1", q: "Hoe zouden je beste vrienden jou omschrijven?", hint: "In een paar woorden of een zin is genoeg" },
+    { key: "core_2", q: "Waar word je blij van op een doordeweekse dag?", hint: "Een klein of groot ding, alles telt" },
+    { key: "core_3", q: "Na een drukke dag - zoek je mensen op, of wil je even alleen zijn?", hint: "Mag gerust een tussenweg zijn" },
+    { key: "core_4", q: "Praat je makkelijk over hoe je je voelt, of houd je dat liever voor jezelf?", hint: "Wat voor jou klopt, is genoeg." },
+    { key: "core_5", q: "Waar loop je weleens tegenaan?", hint: "Geen groot probleem hoeft het te zijn." }
+  ];
+
+  var MIRROR_META = {
+    date: { letter: "D", name: "DateSense", intro: "Nu iets over daten.", q1: "Wat heb je nodig om je veilig te voelen bij iemand?", h1: "Denk aan hoe iemand met je praat, kijkt, luistert", q2: "Wanneer voel je je rond dating het snelst onrustig of onzeker?", h2: "Mag heel klein zijn: voor een afspraak, na een app, als het even stil wordt", sum: "Je merkt waar rust of duidelijkheid voor je telt. Je voelt ook momenten waar dating onzeker wordt. Dat neem ik mee." },
+    family: { letter: "F", name: "FamilySense", intro: "Nu iets over familie.", q1: "Wat betekent familie voor jou?", h1: "Je eigen definitie: bloedband of keuze of allebei", q2: "Zijn er problemen thuis waar je vaak op terugbotst?", h2: "Het mag een situatie zijn, niet per se een persoon.", sum: "Familie is voor jou een plek met betekenis. Er zijn dingen thuis die terugkomen en energie vragen. Dat houd ik bij me." },
+    friend: { letter: "V", name: "FriendSense", intro: "Nu iets over vriendschap.", q1: "Wat vind je belangrijk in een vriendschap?", h1: "Denk aan wat je mist als het er niet is.", q2: "Hoe ga je om met meningsverschillen met een vriend?", h2: "Denk aan een recent voorbeeld.", sum: "Je weet wat een vriendschap voor jou écht maakt. En je merkt dat wrijving je iets kost. Dat neem ik mee." },
+    self: { letter: "S", name: "SelfSense", intro: "Nu iets over jezelf, in moeilijke momenten.", q1: "Hoe ga je doorgaans om met moeilijke periodes?", h1: "Er is geen juist antwoord. Alleen jouw antwoord", q2: "Wat heb je het liefst als het even niet goed gaat: luisteren, advies, of ruimte?", h2: "Kies wat meest klopt, ook als het varieert", sum: "Je hebt een eigen manier om door zware dagen te komen, en je weet wat je dan nodig hebt. Daar houd ik rekening mee." }
+  };
+
+  var CORE_SUMMARY = "Je vrienden zien een betrouwbare, aandachtige kant van je. Je haalt energie uit rustige momenten, en na drukte zoek je liever ruimte dan gezelschap. Over gevoelens doe je het op jouw manier, en ergens loop je weleens tegenaan. Dat neem ik mee.";
+  var FINAL_IMPRESSION = "Ik zie iemand die aandachtig is voor de mensen om zich heen, die rust zoekt in het kleine, en die voelt waar grenzen schuiven. Alles wat je deelde staat nu in jouw profiel. Vanaf hier groeit het mee met elk gesprek.";
+  var NOTE_LINE = "Alles staat in jouw profiel, klaar om mee te groeien.";
+
+  var OVERGANG_POOL = [
+    "Top, we gaan door.",
+    "Bedankt, nog eentje.",
+    "Mooi gezegd, verder.",
+    "Oké, en dan dit.",
+    "Goed. Volgende.",
+    "Helder. Door."
+  ];
+
+  function showToast(msg) {
+    var el = document.getElementById("obToast");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.add("is-on");
+    setTimeout(function () {
+      el.classList.remove("is-on");
+    }, 4200);
+  }
+
+  function backupPendingFact(sub, text) {
+    try {
+      var raw = sessionStorage.getItem(OB_SS_PREFIX + "pending_facts") || "[]";
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) arr = [];
+      arr.push({ sub: sub, text: text, t: Date.now() });
+      sessionStorage.setItem(OB_SS_PREFIX + "pending_facts", JSON.stringify(arr.slice(-40)));
+    } catch (_e) {}
+  }
+
+  function persistRouteIdx() {
+    try {
+      sessionStorage.setItem(OB_SS_PREFIX + "route_idx", String(routeIndex));
+      sessionStorage.setItem(OB_SS_PREFIX + "mirrors", Array.from(selectedMirrors).sort().join(","));
+    } catch (_e) {}
+  }
+
+  function clearRouteIdx() {
+    try {
+      sessionStorage.removeItem(OB_SS_PREFIX + "route_idx");
+      sessionStorage.removeItem(OB_SS_PREFIX + "mirrors");
+    } catch (_e) {}
+  }
+
+  async function sleep(ms) {
+    return new Promise(function (r) {
+      setTimeout(r, ms);
+    });
+  }
+
+  async function withRetries(fn, max) {
+    max = max || 3;
+    var lastErr;
+    for (var attempt = 0; attempt < max; attempt++) {
+      try {
+        var out = await fn();
+        if (out && out.error) throw new Error(out.error.message || "request error");
+        return out;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < max - 1) await sleep(1000);
+      }
+    }
+    throw lastErr;
+  }
+
+  async function insertOnboardingFact(userId, subcategory, factText) {
+    if (!sb || !userId || !subcategory) return { data: null, error: new Error("Geen verbinding") };
+    var row = {
+      user_id: userId,
+      category: "onboarding",
+      subcategory: subcategory,
+      fact_text: String(factText || "").trim(),
+      source_app: "onboarding",
+      source_dossier: null,
+      source_session_id: null,
+      confidence: 1.0,
+      status: "accepted"
+    };
+    try {
+      return await withRetries(function () {
+        return sb.from("own_facts").insert(row).select("id").maybeSingle();
+      }, 3);
+    } catch (e) {
+      return { data: null, error: e };
+    }
+  }
+
+  async function fetchOnboardingSubcats(userId) {
+    var set = new Set();
+    if (!sb || !userId) return set;
+    var res = await sb
+      .from("own_facts")
+      .select("subcategory,fact_text")
+      .eq("user_id", userId)
+      .eq("source_app", "onboarding");
+    if (res && res.error) return set;
+    var rows = Array.isArray(res.data) ? res.data : [];
+    rows.forEach(function (r) {
+      var s = String((r && r.subcategory) || "").trim();
+      if (s) {
+        set.add(s);
+        var key = null;
+        Object.keys(ANSWER_KEY_TO_SUB).forEach(function (k) {
+          if (ANSWER_KEY_TO_SUB[k] === s) key = k;
+        });
+        if (key) answers[key] = String((r && r.fact_text) || "").trim();
+      }
+    });
+    return set;
+  }
+
+  async function hasOnboardingCompleted(userId) {
+    if (!sb || !userId) return false;
+    var res = await sb
+      .from("own_facts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("source_app", "onboarding")
+      .eq("subcategory", "completed")
+      .limit(1)
+      .maybeSingle();
+    return !!(res && res.data);
+  }
+
+  async function hasPhotoSlot1(userId) {
+    if (!sb || !userId) return false;
+    var res = await sb.from("own_photos").select("storage_path").eq("user_id", userId).eq("slot", 1).maybeSingle();
+    return !!(res && res.data && String(res.data.storage_path || "").trim());
+  }
+
+  async function loadMirrorSelectionFromProfiles(userId) {
+    var out = new Set(["own"]);
+    if (!sb || !userId) return out;
+    var res = await sb.from("sense_profiles").select("name").eq("user_id", userId);
+    if (res && res.error) return out;
+    var rows = Array.isArray(res.data) ? res.data : [];
+    rows.forEach(function (r) {
+      var nm = String((r && r.name) || "").trim().toLowerCase();
+      var mid = PROFILE_MIRROR_BY_NAME[nm.replace(/\s+/g, "")];
+      if (mid) out.add(mid);
+    });
+    return out;
+  }
+
+  function applyMirrorSelectionToDom() {
+    document.querySelectorAll("#obMirrorGrid .ob-mirror-item").forEach(function (el) {
+      var m = el.getAttribute("data-mirror");
+      if (!m || m === "own") return;
+      if (selectedMirrors.has(m)) el.classList.add("active");
+      else el.classList.remove("active");
+    });
+    updateMirrorCTA();
+  }
+
+  async function saveMirrorProfilesForUser(userId) {
+    if (!sb || !userId) return "";
+    var iso = new Date().toISOString();
+    var extras = Array.from(selectedMirrors).filter(function (m) {
+      return m !== "own";
+    });
+    for (var i = 0; i < extras.length; i++) {
+      var id = extras[i];
+      var name = PROFILE_NAME_BY_MIRROR[id];
+      if (!name) continue;
+      var payload = {
+        user_id: userId,
+        name: name,
+        phone: null,
+        props: { activated_at: iso, via: "onboarding" },
+        last_active: iso
+      };
+      var up = await withRetries(function () {
+        return sb.from("sense_profiles").upsert(payload, { onConflict: "user_id,name" });
+      }, 3);
+      if (up && up.error) return "Even een haperingetje. Ik probeer het opnieuw.";
+    }
+    return "";
+  }
+
+  function stepDoneStorageKey(idx) {
+    return OB_SS_PREFIX + (__obUserId || "x") + "_done_" + idx;
+  }
+
+  function photoSkipStorageKey() {
+    return OB_SS_PREFIX + (__obUserId || "") + "_photo_skip";
+  }
+
+  function markRouteStepDone(idx) {
+    try {
+      sessionStorage.setItem(stepDoneStorageKey(idx), "1");
+    } catch (_e) {}
+  }
+
+  function isRouteStepDone(idx, factsSub, hasPhoto) {
+    var st = route[idx];
+    if (!st) return true;
+    try {
+      if (sessionStorage.getItem(stepDoneStorageKey(idx)) === "1") return true;
+    } catch (_e) {}
+    if (st.kind === "q") {
+      var sub = ANSWER_KEY_TO_SUB[st.key];
+      return !!(sub && factsSub.has(sub));
+    }
+    if (st.kind === "sum") return false;
+    if (st.kind === "photo") {
+      try {
+        if (sessionStorage.getItem(photoSkipStorageKey()) === "1") return true;
+      } catch (_e2) {}
+      return !!hasPhoto;
+    }
+    if (st.kind === "final") return false;
+    return false;
+  }
+
+  function findResumeRouteIndex(factsSub, hasPhoto) {
+    route = buildRoute();
+    for (var i = 0; i < route.length; i++) {
+      if (!isRouteStepDone(i, factsSub, hasPhoto)) return i;
+    }
+    return Math.max(0, route.length - 1);
+  }
+
+  async function bootOnboarding() {
+    if (!window.supabase || typeof window.supabase.createClient !== "function") {
+      goToStatic("acc0");
+      return;
+    }
+    if (!sb) sb = window.supabase.createClient(SURL, SKEY);
+    var sess = await sb.auth.getSession();
+    var session = sess && sess.data && sess.data.session;
+    if (!session || !session.user) {
+      goToStatic("acc0");
+      return;
+    }
+    var user = session.user;
+    var uid = user.id;
+    __obUserId = uid;
+    if (await hasOnboardingCompleted(uid)) {
+      window.location.href = "ownsense.html";
+      return;
+    }
+    userEmail = String(user.email || "").trim();
+    var meta = (user.user_metadata && typeof user.user_metadata === "object") ? user.user_metadata : {};
+    userName =
+      String(meta.roepnaam || meta.display_name || meta.full_name || "").trim() ||
+      (userEmail.indexOf("@") > 0 ? userEmail.split("@")[0] : "vriend");
+
+    var factsSub = await fetchOnboardingSubcats(uid);
+    var mirrorsDb = await loadMirrorSelectionFromProfiles(uid);
+    if (mirrorsDb.size > 1) {
+      selectedMirrors = mirrorsDb;
+      applyMirrorSelectionToDom();
+    }
+    var slot1 = await hasPhotoSlot1(uid);
+
+    if (factsSub.size === 0 && mirrorsDb.size <= 1) {
+      goToStatic("acc5");
+      return;
+    }
+
+    routeStarted = true;
+    route = buildRoute();
+    routeIndex = findResumeRouteIndex(factsSub, slot1);
+    try {
+      var savedIdx = parseInt(sessionStorage.getItem(OB_SS_PREFIX + "route_idx"), 10);
+      var savedMir = sessionStorage.getItem(OB_SS_PREFIX + "mirrors") || "";
+      var curMir = Array.from(selectedMirrors)
+        .sort()
+        .join(",");
+      if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < route.length && savedMir === curMir) {
+        routeIndex = savedIdx;
+      }
+    } catch (_e2) {}
+
+    document.getElementById("obStaticStack").hidden = true;
+    document.getElementById("obDynamic").hidden = false;
+    if (factsSub.size > 0) {
+      await renderResumeSenseiBridge(uid);
+    }
+    await renderRouteStep();
+  }
+
+  function dataURLToBlob(dataUrl) {
+    var parts = String(dataUrl || "").split(",");
+    if (parts.length < 2) return null;
+    var mime = (parts[0].match(/:(.*?);/) || [])[1] || "image/jpeg";
+    var bin = atob(parts[1]);
+    var n = bin.length;
+    var u8 = new Uint8Array(n);
+    while (n--) u8[n] = bin.charCodeAt(n);
+    return new Blob([u8], { type: mime });
+  }
+
+  async function uploadOnboardingPhoto(userId, file) {
+    if (!sb || !userId || !file) return { error: "Geen bestand" };
+    var ext = (file.name && file.name.split(".").pop()) || "jpg";
+    ext = String(ext).toLowerCase();
+    if (ext.length > 8) ext = "jpg";
+    var path = userId + "/onboarding_" + Date.now() + "." + ext;
+    var up = await withRetries(function () {
+      return sb.storage.from("own-photos").upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" });
+    }, 3);
+    if (up && up.error) return { error: String(up.error.message || "Upload mislukt") };
+    var payload = { user_id: userId, slot: 1, storage_path: path };
+    var row = await withRetries(function () {
+      return sb.from("own_photos").upsert(payload, { onConflict: "user_id,slot" }).select("*").maybeSingle();
+    }, 3);
+    if (row && row.error) return { error: String(row.error.message || "Opslaan mislukt") };
+    return { error: "" };
+  }
+
+  var AI_SUMMARY_FALLBACK = "Dank dat je dit deelde. Ik neem het mee.";
+
+  function obSanitizeForPrompt(s) {
+    return String(s || "")
+      .replace(/</g, " ")
+      .replace(/>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
+  }
+
+  function obParseSenseiResponse(data) {
+    var txt = "";
+    if (data && Array.isArray(data.content)) {
+      for (var i = 0; i < data.content.length; i++) {
+        var b = data.content[i];
+        if (b && b.type === "text" && b.text) txt += b.text;
+      }
+    } else if (data && data.content && data.content[0] && data.content[0].text) {
+      txt = data.content[0].text;
+    }
+    return String(txt || "").trim();
+  }
+
+  async function obSenseiFetchOnce(systemPrompt, userMessage, maxTokens) {
+    maxTokens = maxTokens || 400;
+    if (!sb) throw new Error("Geen verbinding");
+    var sess = await sb.auth.getSession();
+    var token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+    if (!token) throw new Error("Geen geldige sessie");
+    var controller = new AbortController();
+    var timer = setTimeout(function () {
+      controller.abort();
+    }, 30000);
+    try {
+      var res = await fetch(SURL + "/functions/v1/sensei-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userMessage }]
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      timer = null;
+      var raw = await res.text();
+      var data;
+      try {
+        data = JSON.parse(raw);
+      } catch (_pe) {
+        throw new Error("Ongeldig antwoord van API.");
+      }
+      if (!res.ok) {
+        var apiMsg = (data && data.error && data.error.message) || "HTTP " + res.status;
+        if (res.status === 403) apiMsg = "AI toegang nog niet geactiveerd. Vraag admin approval in SenseCorner.";
+        if (res.status === 429) apiMsg = "Sensei is even druk. Probeer straks opnieuw.";
+        throw new Error(apiMsg);
+      }
+      if (data && data.error) throw new Error(data.error.message || "API fout");
+      var out = obParseSenseiResponse(data);
+      if (!out) throw new Error("Leeg AI antwoord.");
+      return out;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  async function callSenseiOnboarding(systemPrompt, userMessage, maxTokens) {
+    var lastErr;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await obSenseiFetchOnce(systemPrompt, userMessage, maxTokens);
+      } catch (e) {
+        lastErr = e;
+        if (attempt === 0) await sleep(900);
+      }
+    }
+    console.warn("sensei-chat onboarding failed", lastErr);
+    throw lastErr;
+  }
+
+  async function saveOnboardingInsight(userId, scopeKey, insightText) {
+    if (!sb || !userId || !insightText) return;
+    try {
+      await sb.from("own_insights").insert({
+        user_id: userId,
+        level: "specifiek",
+        scope: "onboarding:" + String(scopeKey || "unknown"),
+        text: String(insightText).trim().slice(0, 12000),
+        bookmarked: false
+      });
+    } catch (e) {
+      console.warn("own_insights insert (onboarding) failed", e);
+    }
+  }
+
+  function buildCoreSummarySystemPrompt() {
+    var nm = obSanitizeForPrompt(userName) || "deze persoon";
+    return (
+      "Je bent Sensei, een warme, rustige begeleider in de SenseCorner-app. Je hebt net kennisgemaakt met " +
+      nm +
+      " en die persoon vijf vragen gesteld over wie hij of zij is.\n\n" +
+      "Schrijf een korte reflectie van 2-3 zinnen op wat je hebt gehoord. Regels:\n" +
+      "- Schrijf in het Nederlands (Vlaamse tongval toegestaan)\n" +
+      "- Spreek de persoon direct aan (met jij of je), noem geen naam\n" +
+      "- Begin niet met begroeting of aanhef\n" +
+      "- Reflecteer, oordeel niet: geen complimenten, geen advies\n" +
+      "- Gebruik geen woorden als noteren, opschrijven, vastleggen\n" +
+      "- Gebruik wel ik zie, ik hoor, dat neem ik mee\n" +
+      "- Max 3 zinnen, losse zinnen, geen lijsten of bullets\n" +
+      "- Geen emoji, geen markdown\n" +
+      "- Gebruik geen typografische lange streep (Unicode U+2014); gebruik komma of punt.\n" +
+      "Het model mag geen Unicode U+2014 in het antwoord gebruiken."
+    );
+  }
+
+  function buildCoreSummaryUserMessage() {
+    var lines = [];
+    for (var i = 0; i < CORE_QUESTIONS.length; i++) {
+      var cq = CORE_QUESTIONS[i];
+      lines.push(String(i + 1) + ". " + cq.q + "\n→ " + obSanitizeForPrompt(answers[cq.key]));
+    }
+    return (
+      "De gebruiker (" +
+      obSanitizeForPrompt(userName) +
+      ") heeft de volgende antwoorden gegeven:\n\n" +
+      lines.join("\n\n") +
+      "\n\nSchrijf je reflectie."
+    );
+  }
+
+  function buildMirrorSummarySystemPrompt(spiegelNaam) {
+    return (
+      "Je bent Sensei. De gebruiker heeft zojuist twee vragen beantwoord over het onderwerp " +
+      obSanitizeForPrompt(spiegelNaam) +
+      ". Schrijf een korte reflectie van 2-3 zinnen.\n\n" +
+      "Regels:\n" +
+      "- Nederlands (Vlaams toegestaan)\n" +
+      "- Spreek direct aan (jij of je), geen naam\n" +
+      "- Begin niet met aanhef\n" +
+      "- Reflecteer, oordeel niet\n" +
+      "- Geen ik noteer of ik schrijf op: wel ik zie of dat neem ik mee\n" +
+      "- Max 2-3 zinnen\n" +
+      "- Geen bullets, geen markdown, geen emoji\n" +
+      "- Gebruik geen Unicode U+2014 in het antwoord; gebruik komma of punt."
+    );
+  }
+
+  function buildMirrorSummaryUserMessage(mirrorId, meta) {
+    var k1 = mirrorId + "_1";
+    var k2 = mirrorId + "_2";
+    return (
+      "De gebruiker heeft in het " +
+      obSanitizeForPrompt(meta.name) +
+      "-blok geantwoord:\n\n" +
+      "1. " +
+      meta.q1 +
+      "\n→ " +
+      obSanitizeForPrompt(answers[k1]) +
+      "\n\n" +
+      "2. " +
+      meta.q2 +
+      "\n→ " +
+      obSanitizeForPrompt(answers[k2]) +
+      "\n\nSchrijf je reflectie."
+    );
+  }
+
+  function buildFinalImpressionSystemPrompt() {
+    return (
+      "Je bent Sensei. De gebruiker heeft zojuist een volledige onboarding doorlopen: vijf kernvragen over zichzelf " +
+      "plus twee vragen per gekozen spiegel. Geef een afsluitende impressie die begint met: Ik zie iemand die\n\n" +
+      "Regels:\n" +
+      "- Begin met Ik zie iemand die (zonder dubbele punt aan het einde van die zin)\n" +
+      "- Nederlands (Vlaams toegestaan)\n" +
+      "- Max 3 zinnen totaal\n" +
+      "- Geen advies, geen doelen, geen instructie\n" +
+      "- Warm, rustig, erkennend\n" +
+      "- Eindig niet met een vraag\n" +
+      "- Geen emoji, geen markdown\n" +
+      "- Gebruik geen Unicode U+2014; gebruik komma of punt."
+    );
+  }
+
+  function buildFinalImpressionUserMessage() {
+    var parts = [];
+    for (var i = 0; i < CORE_QUESTIONS.length; i++) {
+      var cq = CORE_QUESTIONS[i];
+      parts.push(cq.q + ": " + obSanitizeForPrompt(answers[cq.key]));
+    }
+    var order = ["date", "family", "friend", "self"];
+    for (var m = 0; m < order.length; m++) {
+      var mid = order[m];
+      if (!selectedMirrors.has(mid) || !MIRROR_META[mid]) continue;
+      var mm = MIRROR_META[mid];
+      parts.push(mm.name + " - " + mm.q1 + ": " + obSanitizeForPrompt(answers[mid + "_1"]));
+      parts.push(mm.name + " - " + mm.q2 + ": " + obSanitizeForPrompt(answers[mid + "_2"]));
+    }
+    return (
+      "De gebruiker heeft de onboarding afgerond. Alle antwoorden:\n\n" +
+      parts.join("\n") +
+      "\n\nSchrijf je afsluitende impressie."
+    );
+  }
+
+  function resumeBridgeStorageKey(uid) {
+    return OB_SS_PREFIX + (uid || "") + "_resume_bridge_shown";
+  }
+
+  async function fetchOnboardingFactsDump(uid) {
+    if (!sb || !uid) return "";
+    var res = await sb
+      .from("own_facts")
+      .select("subcategory,fact_text")
+      .eq("user_id", uid)
+      .eq("source_app", "onboarding")
+      .order("created_at", { ascending: true });
+    if (res && res.error) return "";
+    var rows = Array.isArray(res.data) ? res.data : [];
+    var lines = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var sub = String((r && r.subcategory) || "").trim();
+      if (!sub || sub === "completed") continue;
+      lines.push("- " + sub + ": " + obSanitizeForPrompt(r.fact_text));
+    }
+    return lines.join("\n");
+  }
+
+  function buildResumeReflectionSystemPrompt() {
+    return (
+      "Je bent Sensei. Iemand komt terug om de kennismaking in SenseCorner af te maken. " +
+      "Hieronder staan feiten die hij of zij eerder al gaf tijdens onboarding.\n\n" +
+      "Schrijf twee tot drie zinnen: rustig terugkijken, erkennen wat er al ligt, en uitnodigen om verder te gaan.\n" +
+      "Regels: Nederlands (Vlaams mag), spreek aan met jij of je, geen naam in de tekst, geen oordeel, geen advies. " +
+      "Gebruik geen woorden als noteren, opschrijven of vastleggen. Gebruik wel ik zie, ik hoor, dat neem ik mee. " +
+      "Geen emoji, geen markdown. Gebruik geen Unicode U+2014; gebruik komma of punt."
+    );
+  }
+
+  async function renderResumeSenseiBridge(uid) {
+    try {
+      if (sessionStorage.getItem(resumeBridgeStorageKey(uid)) === "1") return;
+    } catch (_sk) {}
+    var dump = await fetchOnboardingFactsDump(uid);
+    if (!dump) return;
+    var host = document.getElementById("obDynamic");
+    if (!host) return;
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    host.innerHTML =
+      '<div class="ob-end-card" style="padding-top:8px">' +
+      '<div class="ob-ripple ob-ripple-q own big pulsing"><div class="ob-ripple-inner">' +
+      '<div class="ob-ripple-center-letter">O</div></div></div>' +
+      '<p class="ob-ai-wait" id="obResWait">Ik haal even op wat je al deelde...</p>' +
+      '<p class="ob-sensei" id="obResBody" style="min-height:48px"></p>' +
+      '<div class="ob-cta-wrap" id="obResCta" style="margin-top:20px">' +
+      '<button type="button" class="ob-cta-primary" id="obResBtn">Verder waar we waren</button></div></div>';
+
+    var bodyEl = document.getElementById("obResBody");
+    var waitEl = document.getElementById("obResWait");
+    var ctaWrap = document.getElementById("obResCta");
+    if (ctaWrap) ctaWrap.classList.remove("shown");
+
+    var msg =
+      "Welkom terug. Ik heb wat je deelde bewaard. We gaan rustig verder waar je gebleven was.";
+    if (sb) {
+      try {
+        var sysR = buildResumeReflectionSystemPrompt();
+        var usrR =
+          "Feiten uit je vorige onboarding-stappen (inhoud, zonder volgorde van schermen):\n\n" +
+          dump +
+          "\n\nSchrijf je korte terugblik.";
+        msg = await callSenseiOnboarding(sysR, usrR, 380);
+        msg = obSanitizeForPrompt(msg) || msg;
+        await saveOnboardingInsight(uid, "resume_welcome", msg);
+      } catch (_re) {
+        console.warn("resume sensei bridge", _re);
+      }
+    }
+    if (waitEl) waitEl.style.display = "none";
+    if (bodyEl) {
+      bodyEl.innerHTML = "";
+      await fadeInContent(bodyEl, escapeHtml(msg), controller, 620);
+    }
+    if (ctaWrap) ctaWrap.classList.add("shown");
+    await new Promise(function (resolve) {
+      var b = document.getElementById("obResBtn");
+      if (!b) {
+        resolve();
+        return;
+      }
+      b.addEventListener("click", function onRes() {
+        b.removeEventListener("click", onRes);
+        try {
+          sessionStorage.setItem(resumeBridgeStorageKey(uid), "1");
+        } catch (_st) {}
+        resolve();
+      });
+    });
+  }
+
+  function applyTokens(html) {
+    return html
+      .replace(/\{\{name\}\}/g, userName || "vriend")
+      .replace(/\{\{email\}\}/g, userEmail || "jij@voorbeeld.be");
+  }
+
+  /** Splits HTML into typing steps: whole tags at once, otherwise single characters (valid partial HTML at each step). */
+  function splitTypingUnits(html) {
+    var s = String(html || "");
+    if (!s) return [];
+    var parts = s.split(/(<[^>]+>)/);
+    var units = [];
+    for (var p = 0; p < parts.length; p++) {
+      var part = parts[p];
+      if (!part) continue;
+      if (/^<[^>]+>$/.test(part)) units.push(part);
+      else {
+        for (var c = 0; c < part.length; c++) units.push(part.charAt(c));
+      }
+    }
+    return units;
+  }
+
+  var OB_SENSEI_FADE_MS = 1080;
+
+  async function fadeInContent(el, htmlString, controller, durationMs) {
+    durationMs = durationMs == null ? 580 : durationMs;
+    if (!el || controller.cancelled) return;
+    var fullHtml = applyTokens(String(htmlString || ""));
+
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      el.classList.remove("typing", "ob-typing-fade", "is-visible");
+      el.innerHTML = fullHtml;
+      el.classList.add("ob-typing-fade", "is-visible");
+      return;
+    }
+
+    el.classList.remove("typing", "ob-typing-fade", "is-visible");
+    el.innerHTML = "";
+    el.classList.add("typing", "ob-typing-fade");
+    void el.offsetHeight;
+
+    var units = splitTypingUnits(fullHtml);
+    var n = units.length;
+    var totalTypingMs =
+      n === 0 ? 0 : Math.min(6800, Math.max(520 + Math.round(durationMs * 0.35), Math.round(n * 22)));
+    var charDelay = n === 0 ? 0 : Math.max(12, Math.min(32, Math.floor(totalTypingMs / n)));
+
+    await new Promise(function (resolve) {
+      if (controller.cancelled) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (controller.cancelled) {
+            resolve();
+            return;
+          }
+          el.classList.add("is-visible");
+          resolve();
+        });
+      });
+    });
+
+    if (controller.cancelled) {
+      el.innerHTML = fullHtml;
+      el.classList.remove("typing");
+      el.classList.add("is-visible");
+      return;
+    }
+
+    var tVisible = Date.now();
+    var buf = "";
+    for (var i = 0; i < n; i++) {
+      if (controller.cancelled) {
+        el.innerHTML = fullHtml;
+        break;
+      }
+      buf += units[i];
+      el.innerHTML = buf;
+      if (charDelay > 0) await sleep(charDelay);
+    }
+    el.classList.remove("typing");
+
+    var elapsed = Date.now() - tVisible;
+    if (elapsed < OB_SENSEI_FADE_MS) await sleep(OB_SENSEI_FADE_MS - elapsed + 24);
+  }
+
+  async function animateStaticScreen(key) {
+    if (key === "mir1") return;
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    var target = document.querySelector('[data-ob="' + key + '"]');
+    if (!target) return;
+
+    var typeTargets = target.querySelectorAll(".ob-sensei[data-type]");
+    var inputWrap = target.querySelector(".ob-input-wrap");
+    var codeWrap = target.querySelector(".ob-code-wrap");
+    var ctaWrap = target.querySelector(".ob-cta-wrap");
+    var gridWrap = target.querySelector("#obGridWrap");
+    var reassure = target.querySelector("#obReassure");
+
+    typeTargets.forEach(function (el) {
+      el.innerHTML = "";
+      el.classList.remove("typing", "ob-typing-fade", "is-visible");
+    });
+    if (inputWrap) inputWrap.classList.remove("shown");
+    if (codeWrap) codeWrap.classList.remove("shown");
+    if (ctaWrap && key !== "acc0") ctaWrap.classList.remove("shown");
+    if (gridWrap) gridWrap.classList.remove("shown");
+    if (reassure) reassure.classList.remove("shown");
+
+    if (key === "acc0") {
+      for (var i = 0; i < typeTargets.length; i++) {
+        if (controller.cancelled) return;
+        await fadeInContent(typeTargets[i], typeTargets[i].getAttribute("data-type"), controller, 560);
+        if (!controller.cancelled) await sleep(120);
+      }
+      return;
+    }
+
+    if (key === "mir0") {
+      for (var m = 0; m < typeTargets.length; m++) {
+        if (controller.cancelled) return;
+        await fadeInContent(typeTargets[m], typeTargets[m].getAttribute("data-type"), controller, 560);
+        if (!controller.cancelled) await sleep(120);
+      }
+      if (controller.cancelled) return;
+      await sleep(150);
+      if (gridWrap) gridWrap.classList.add("shown");
+      await sleep(300);
+      if (reassure) reassure.classList.add("shown");
+      await sleep(200);
+      if (ctaWrap) ctaWrap.classList.add("shown");
+      return;
+    }
+
+    for (var a = 0; a < typeTargets.length; a++) {
+      if (controller.cancelled) return;
+      await fadeInContent(typeTargets[a], typeTargets[a].getAttribute("data-type"), controller, 560);
+      if (!controller.cancelled) await sleep(120);
+    }
+    if (controller.cancelled) return;
+    await sleep(150);
+    if (inputWrap) inputWrap.classList.add("shown");
+    if (codeWrap) codeWrap.classList.add("shown");
+    if (ctaWrap) ctaWrap.classList.add("shown");
+
+    setTimeout(function () {
+      var input = target.querySelector("input");
+      if (input && !controller.cancelled) input.focus();
+    }, 300);
+  }
+
+  function showStatic(key) {
+    staticKey = key;
+    document.getElementById("obStaticStack").hidden = false;
+    document.getElementById("obDynamic").hidden = true;
+    document.querySelectorAll("#obStaticStack .ob-screen").forEach(function (s) {
+      s.classList.toggle("is-active", s.getAttribute("data-ob") === key);
+    });
+    if (key.indexOf("acc") === 0 || key === "mir0" || key === "mir1") {
+      document.getElementById("obRail").classList.remove("is-on");
+    }
+  }
+
+  function mirrorReactionText() {
+    function has(m) { return selectedMirrors.has(m); }
+    var extras = Array.from(selectedMirrors).filter(function (m) { return m !== "own"; });
+    var count = extras.length;
+    if (count >= 3) return "Meerdere spiegels tegelijk. Dat zegt iets over hoe breed je kijkt.";
+    if (count === 1) {
+      if (has("date")) return "Jezelf en daten. Twee werelden die elkaar raken, daar kunnen we echt iets mee.";
+      if (has("family")) return "Jezelf en familie. Vaak zit daar meer verband dan we denken.";
+      if (has("friend")) return "Jezelf en vriendschap. Mooi dat je daar ruimte voor maakt.";
+      if (has("self")) return "Jezelf en herstel. Dat vraagt zachtheid. Die krijg je.";
+    }
+    if (count === 2) {
+      if (has("date") && has("family")) return "Daten en familie. Twee spiegels die vaak met elkaar praten.";
+      if (has("date") && has("friend")) return "Daten en vriendschap. Daar zit vaak overlap, ik ben benieuwd.";
+      if (has("date") && has("self")) return "Daten en herstel. Dat vraagt tempo én zachtheid. Goed dat je beide ziet.";
+      if (has("family") && has("friend")) return "Familie en vriendschap. Twee plekken waar je mensen mag kiezen, of niet.";
+      if (has("family") && has("self")) return "Familie en herstel. Dat zijn vaak twee kanten van hetzelfde.";
+      if (has("friend") && has("self")) return "Vriendschap en herstel. Verbinding en ruimte, belangrijk dat je beide ziet.";
+    }
+    return "Oké. Dan gaan we zo beginnen.";
+  }
+
+  function buildRoute() {
+    var r = [];
+    for (var c = 0; c < CORE_QUESTIONS.length; c++) {
+      r.push({ kind: "q", mirror: "own", key: CORE_QUESTIONS[c].key, idx: c });
+    }
+    r.push({ kind: "sum", mirror: "own", text: CORE_SUMMARY });
+    r.push({ kind: "photo" });
+    var order = ["date", "family", "friend", "self"];
+    for (var o = 0; o < order.length; o++) {
+      var id = order[o];
+      if (!selectedMirrors.has(id)) continue;
+      var meta = MIRROR_META[id];
+      r.push({ kind: "q", mirror: id, key: id + "_1", idx: 0, meta: meta });
+      r.push({ kind: "q", mirror: id, key: id + "_2", idx: 1, meta: meta });
+      r.push({ kind: "sum", mirror: id, text: meta.sum, meta: meta });
+    }
+    r.push({ kind: "final" });
+    return r;
+  }
+
+  function railColorForMirror(m) {
+    var map = {
+      own: "var(--ob-own-medium)",
+      date: "var(--date-donker)",
+      family: "var(--family-donker)",
+      friend: "var(--friend-donker)",
+      self: "var(--self-donker)"
+    };
+    return map[m] || map.own;
+  }
+
+  function updateRail() {
+    var rail = document.getElementById("obRail");
+    var fill = document.getElementById("obRailFill");
+    if (!routeStarted) return;
+    rail.classList.add("is-on");
+    var step = route[routeIndex];
+    var pct = Math.round((routeIndex / Math.max(1, route.length - 1)) * 100);
+    fill.style.width = pct + "%";
+    var m = step && step.mirror ? step.mirror : "own";
+    fill.style.background = railColorForMirror(m);
+  }
+
+  function escapeAttr(s) {
+    return String(s).replace(/"/g, "&quot;");
+  }
+
+  async function renderRouteStep() {
+    var host = document.getElementById("obDynamic");
+    host.innerHTML = "";
+    host.hidden = false;
+    document.getElementById("obStaticStack").hidden = true;
+
+    var step = route[routeIndex];
+    if (!step) return;
+
+    if (step.kind === "q") {
+      renderQuestion(host, step);
+    } else if (step.kind === "sum") {
+      await renderSummary(host, step);
+    } else if (step.kind === "photo") {
+      await renderPhoto(host);
+    } else if (step.kind === "final") {
+      await renderFinal(host);
+    }
+    updateRail();
+  }
+
+  function renderQuestion(host, step) {
+    var mirror = step.mirror;
+    var letter = mirror === "own" ? "O" : step.meta ? step.meta.letter : "O";
+    var blokLabel = mirror === "own" ? "Over jou · basis" : step.meta.name;
+    var total = mirror === "own" ? 5 : 2;
+    var num = mirror === "own" ? step.idx + 1 : step.idx + 1;
+    var introHtml = "";
+    if (mirror !== "own" && step.idx === 0) {
+      introHtml = '<p class="ob-sensei smaller" data-type="' + escapeAttr(step.meta.intro) + '"></p>';
+    }
+    var overgang = "";
+    if (step.idx > 0) {
+      var poolIdx = mirror === "own" ? (step.idx - 1) % OVERGANG_POOL.length : step.idx % OVERGANG_POOL.length;
+      overgang = '<p class="ob-overgang" data-type="' + escapeAttr(OVERGANG_POOL[poolIdx]) + '"></p>';
+    }
+    var qtext = "";
+    var hint = "";
+    if (mirror === "own") {
+      qtext = CORE_QUESTIONS[step.idx].q;
+      hint = CORE_QUESTIONS[step.idx].hint;
+    } else {
+      qtext = step.idx === 0 ? step.meta.q1 : step.meta.q2;
+      hint = step.idx === 0 ? step.meta.h1 : step.meta.h2;
+    }
+
+    host.innerHTML =
+      '<div class="ob-blok-badge">' + blokLabel + " · vraag " + num + " van " + total + "</div>" +
+      '<div class="ob-ripple ob-ripple-q ' + mirror + ' pulsing"><div class="ob-ripple-inner">' +
+      '<div class="ob-ripple-center-letter">' + letter + "</div></div></div>" +
+      introHtml +
+      overgang +
+      '<p class="ob-sensei lg" data-type="' + escapeAttr(qtext) + '"></p>' +
+      '<div class="ob-answer-wrap" id="obAnsWrap">' +
+      '<textarea class="ob-answer-input" id="obAns" rows="3" placeholder="' + escapeAttr(hint) + '"></textarea>' +
+      '<div class="ob-answer-hint">Neem je tijd. Één of twee zinnen is genoeg.</div></div>' +
+      '<div class="ob-cta-wrap" id="obAnsCta">' +
+      '<button type="button" class="ob-cta-primary" id="obAnsBtn" disabled>Antwoord opslaan</button></div>';
+
+    var existing = answers[step.key] || "";
+    var ta = document.getElementById("obAns");
+    ta.value = existing;
+    var btn = document.getElementById("obAnsBtn");
+    btn.disabled = !ta.value.trim();
+    ta.addEventListener("input", function () {
+      btn.disabled = !ta.value.trim();
+    });
+    ta.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !btn.disabled) {
+        btn.click();
+      }
+    });
+    btn.addEventListener("click", async function () {
+      var text = ta.value.trim();
+      if (!text) return;
+      var sub = ANSWER_KEY_TO_SUB[step.key];
+      if (!sub) {
+        answers[step.key] = text;
+        advanceRoute();
+        return;
+      }
+      btn.disabled = true;
+      try {
+        var gu = await sb.auth.getUser();
+        var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+        if (!sb || !uid) throw new Error("Geen sessie");
+        var ins = await insertOnboardingFact(uid, sub, text);
+        if (ins && ins.error) throw ins.error;
+        answers[step.key] = text;
+        advanceRoute();
+      } catch (_save) {
+        backupPendingFact(sub, text);
+        showToast("Even een haperingetje. Ik probeer het opnieuw.");
+        btn.disabled = !ta.value.trim();
+      }
+    });
+
+    animateQuestion(host);
+  }
+
+  async function animateQuestion(host) {
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    var typeTargets = host.querySelectorAll(".ob-overgang[data-type], .ob-sensei[data-type]");
+    var answerWrap = host.querySelector("#obAnsWrap");
+    var ctaWrap = host.querySelector("#obAnsCta");
+
+    for (var i = 0; i < typeTargets.length; i++) {
+      if (controller.cancelled) return;
+      await fadeInContent(typeTargets[i], typeTargets[i].getAttribute("data-type"), controller, 560);
+      if (!controller.cancelled) await sleep(100);
+    }
+    if (controller.cancelled) return;
+    await sleep(200);
+    if (answerWrap) answerWrap.classList.add("shown");
+    await sleep(150);
+    if (ctaWrap) ctaWrap.classList.add("shown");
+    setTimeout(function () {
+      var input = document.getElementById("obAns");
+      if (input && !controller.cancelled) input.focus();
+    }, 300);
+  }
+
+  async function renderSummary(host, step) {
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    var mirror = step.mirror;
+    var letter = mirror === "own" ? "O" : step.meta.letter;
+    var blokLabel = mirror === "own" ? "Even terugkijken" : "Even terugkijken: " + step.meta.name;
+    var intro = mirror === "own" ? "Mag ik even stilstaan bij wat ik hoor?" : "Dan even stil bij wat je deelde.";
+
+    host.innerHTML =
+      '<div class="ob-blok-badge">' + blokLabel + "</div>" +
+      '<div class="ob-ripple ob-ripple-q ' + mirror + ' big pulsing"><div class="ob-ripple-inner">' +
+      '<div class="ob-ripple-center-letter">' + letter + "</div></div></div>" +
+      '<p class="ob-sensei smaller" id="obSumIntro" data-type="' + escapeAttr(intro) + '"></p>' +
+      '<p class="ob-sensei" id="obSumBody"></p>' +
+      '<div class="ob-cta-wrap" id="obSumCta">' +
+      '<button type="button" class="ob-cta-primary" id="obSumBtn">Verder</button></div>';
+
+    var introEl = document.getElementById("obSumIntro");
+    var bodyEl = document.getElementById("obSumBody");
+    var ctaWrap = document.getElementById("obSumCta");
+    ctaWrap.classList.remove("shown");
+
+    await fadeInContent(introEl, introEl.getAttribute("data-type"), controller, 560);
+    if (controller.cancelled) return;
+    await sleep(220);
+    bodyEl.innerHTML = '<p class="ob-ai-wait" id="obSumWait">Even stil...</p>';
+    await sleep(120);
+
+    var summaryText = step.text || AI_SUMMARY_FALLBACK;
+    var scopeForInsight = mirror === "own" ? "core" : mirror;
+    if (sb) {
+      try {
+        var gu = await sb.auth.getUser();
+        var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+        if (uid) {
+          var sysU;
+          var usrU;
+          if (mirror === "own") {
+            sysU = buildCoreSummarySystemPrompt();
+            usrU = buildCoreSummaryUserMessage();
+            summaryText = await callSenseiOnboarding(sysU, usrU, 420);
+          } else if (step.meta) {
+            sysU = buildMirrorSummarySystemPrompt(step.meta.name);
+            usrU = buildMirrorSummaryUserMessage(step.mirror, step.meta);
+            summaryText = await callSenseiOnboarding(sysU, usrU, 380);
+          }
+          summaryText = obSanitizeForPrompt(summaryText) || AI_SUMMARY_FALLBACK;
+          await saveOnboardingInsight(uid, scopeForInsight, summaryText);
+        }
+      } catch (_aiE) {
+        console.warn("onboarding summary AI", _aiE);
+        summaryText = (step.text && String(step.text).trim()) || AI_SUMMARY_FALLBACK;
+      }
+    }
+
+    bodyEl.innerHTML = "";
+    await fadeInContent(bodyEl, escapeHtml(summaryText), controller, 680);
+    if (controller.cancelled) return;
+    await sleep(300);
+    ctaWrap.classList.add("shown");
+
+    document.getElementById("obSumBtn").addEventListener("click", function () {
+      advanceRoute();
+    });
+  }
+
+  async function renderPhoto(host) {
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    host.innerHTML =
+      '<div class="ob-blok-badge">Iets van jou</div>' +
+      '<div class="ob-ripple ob-ripple-q own pulsing"><div class="ob-ripple-inner">' +
+      '<div class="ob-ripple-center-letter">O</div></div></div>' +
+      '<p class="ob-sensei lg" data-type="Heb je een foto die iets over jou zegt?"></p>' +
+      '<p class="ob-sensei smaller" data-type="Hoeft niet van jezelf. Een plek, een dier, iets wat je vasthoudt, ook goed."></p>' +
+      '<div class="ob-photo-wrap" id="obPhotoWrap">' +
+      '<div class="ob-photo-drop" id="obPhotoDrop">' +
+      '<div class="ob-photo-placeholder">' +
+      '<div class="ob-photo-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/>' +
+      '<circle cx="12" cy="12" r="3.5"/><path d="M7 5l1.5-2h7L17 5"/></svg></div>' +
+      '<div class="ob-photo-prompt">Tik om een foto te kiezen</div>' +
+      '<div class="ob-photo-sub">of sleep er eentje hierheen</div></div>' +
+      '<img class="ob-photo-preview" id="obPhotoPreview" alt="">' +
+      '<button type="button" class="ob-photo-remove" id="obPhotoRemove" title="Verwijder foto">×</button></div>' +
+      '<input type="file" id="obPhotoInput" accept="image/*" style="display:none">' +
+      '<input type="text" class="ob-photo-caption" id="obPhotoCap" placeholder="Wil je er iets bij schrijven? Optioneel."></div>' +
+      '<div class="ob-cta-wrap" id="obPhotoCta">' +
+      '<button type="button" class="ob-cta-primary" id="obPhotoNext">Verder</button>' +
+      '<button type="button" class="ob-photo-skip" id="obPhotoSkip">Liever niet, later misschien</button></div>';
+
+    var typeTargets = host.querySelectorAll(".ob-sensei[data-type]");
+    var wrap = document.getElementById("obPhotoWrap");
+    var cta = document.getElementById("obPhotoCta");
+    cta.classList.remove("shown");
+
+    for (var t = 0; t < typeTargets.length; t++) {
+      if (controller.cancelled) return;
+      await fadeInContent(typeTargets[t], typeTargets[t].getAttribute("data-type"), controller, 560);
+      if (!controller.cancelled) await sleep(120);
+    }
+    if (controller.cancelled) return;
+    await sleep(200);
+    wrap.classList.add("shown");
+    await sleep(200);
+    cta.classList.add("shown");
+
+    var drop = document.getElementById("obPhotoDrop");
+    var finput = document.getElementById("obPhotoInput");
+    var prev = document.getElementById("obPhotoPreview");
+    var rem = document.getElementById("obPhotoRemove");
+    var cap = document.getElementById("obPhotoCap");
+
+    if (photo) {
+      prev.src = photo;
+      drop.classList.add("has-photo");
+    }
+    if (photoCaption) cap.value = photoCaption;
+
+    drop.addEventListener("click", function (e) {
+      if (e.target === rem) return;
+      finput.click();
+    });
+    finput.addEventListener("change", function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      photoFile = file;
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        photo = ev.target.result;
+        prev.src = photo;
+        drop.classList.add("has-photo");
+      };
+      reader.readAsDataURL(file);
+    });
+    rem.addEventListener("click", function (e) {
+      e.stopPropagation();
+      photo = "";
+      photoFile = null;
+      prev.src = "";
+      drop.classList.remove("has-photo");
+      finput.value = "";
+    });
+    ["dragover", "dragenter"].forEach(function (evt) {
+      drop.addEventListener(evt, function (e) {
+        e.preventDefault();
+        drop.style.borderColor = "var(--chocolade)";
+      });
+    });
+    ["dragleave", "dragend"].forEach(function (evt2) {
+      drop.addEventListener(evt2, function (e) {
+        e.preventDefault();
+        drop.style.borderColor = "";
+      });
+    });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault();
+      drop.style.borderColor = "";
+      var file = e.dataTransfer.files[0];
+      if (file && file.type.indexOf("image/") === 0) {
+        photoFile = file;
+        var r2 = new FileReader();
+        r2.onload = function (ev2) {
+          photo = ev2.target.result;
+          prev.src = photo;
+          drop.classList.add("has-photo");
+        };
+        r2.readAsDataURL(file);
+      }
+    });
+
+    async function leavePhoto() {
+      photoCaption = cap.value.trim() || "";
+      if (!sb) {
+        advanceRoute();
+        return;
+      }
+      var gu = await sb.auth.getUser();
+      var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+      if (!uid) {
+        advanceRoute();
+        return;
+      }
+      try {
+        if (photoFile) {
+          var up = await uploadOnboardingPhoto(uid, photoFile);
+          if (up && up.error) {
+            showToast(String(up.error));
+            return;
+          }
+          try {
+            sessionStorage.removeItem(photoSkipStorageKey());
+          } catch (_r) {}
+        } else if (photo && String(photo).indexOf("data:") === 0) {
+          var blob = dataURLToBlob(photo);
+          if (blob) {
+            var f = new File([blob], "onboarding.jpg", { type: blob.type || "image/jpeg" });
+            var up2 = await uploadOnboardingPhoto(uid, f);
+            if (up2 && up2.error) {
+              showToast(String(up2.error));
+              return;
+            }
+          }
+          try {
+            sessionStorage.removeItem(photoSkipStorageKey());
+          } catch (_r2) {}
+        } else {
+          try {
+            sessionStorage.setItem(photoSkipStorageKey(), "1");
+          } catch (_s) {}
+        }
+      } catch (_eUp) {
+        showToast("De verbinding is niet stabiel. Probeer later opnieuw.");
+        return;
+      }
+      advanceRoute();
+    }
+    document.getElementById("obPhotoNext").addEventListener("click", function () {
+      leavePhoto();
+    });
+    document.getElementById("obPhotoSkip").addEventListener("click", function () {
+      leavePhoto();
+    });
+  }
+
+  async function renderFinal(host) {
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    var previews = ["own", "date", "family", "friend", "self"]
+      .map(function (mid) {
+        var on = selectedMirrors.has(mid);
+        var L = mid === "own" ? "O" : MIRROR_META[mid] ? MIRROR_META[mid].letter : "";
+        return (
+          '<div class="ob-mini-ripple ' + mid + (on ? "" : " is-off") + '" data-mid="' + mid + '"><span>' + L + "</span></div>"
+        );
+      })
+      .join("");
+
+    host.innerHTML =
+      '<div class="ob-end-card">' +
+      '<div class="ob-ripple ob-ripple-q own big pulsing"><div class="ob-ripple-inner">' +
+      '<div class="ob-ripple-center-letter">O</div></div></div>' +
+      "<h2>We zijn er, " +
+      escapeHtml(userName || "vriend") +
+      ".</h2>" +
+      '<p class="ob-sensei" id="obImp"></p>' +
+      '<p class="ob-sensei smaller" id="obNote" style="margin-top:20px"></p>' +
+      '<div class="ob-mirrors-preview">' +
+      previews +
+      "</div>" +
+      '<div class="ob-cta-wrap" id="obFinCta">' +
+      '<a class="ob-cta-primary" id="obOwnLink" href="ownsense.html" style="text-align:center;text-decoration:none;display:inline-block">Open OwnSense</a></div></div>';
+
+    document.getElementById("obFinCta").classList.remove("shown");
+
+    var imp = document.getElementById("obImp");
+    var note = document.getElementById("obNote");
+    await sleep(400);
+    imp.innerHTML = '<p class="ob-ai-wait">Laat me dit even lezen...</p>';
+    await sleep(160);
+    var impress = FINAL_IMPRESSION;
+    if (sb) {
+      try {
+        var guF = await sb.auth.getUser();
+        var uidF = guF && guF.data && guF.data.user && guF.data.user.id;
+        if (uidF) {
+          var sysF = buildFinalImpressionSystemPrompt();
+          var usrF = buildFinalImpressionUserMessage();
+          impress = await callSenseiOnboarding(sysF, usrF, 520);
+          impress = obSanitizeForPrompt(impress) || FINAL_IMPRESSION;
+          await saveOnboardingInsight(uidF, "overall", impress);
+        }
+      } catch (_fe) {
+        console.warn("onboarding final AI", _fe);
+        impress = FINAL_IMPRESSION;
+      }
+    }
+    imp.innerHTML = "";
+    await fadeInContent(imp, escapeHtml(impress), controller, 640);
+    if (controller.cancelled) return;
+    await sleep(500);
+    await fadeInContent(note, NOTE_LINE, controller, 560);
+    if (controller.cancelled) return;
+    await sleep(300);
+    document.getElementById("obFinCta").classList.add("shown");
+    var ownLink = document.getElementById("obOwnLink");
+    if (ownLink) {
+      ownLink.addEventListener("click", async function (e) {
+        e.preventDefault();
+        if (!sb) {
+          window.location.href = "ownsense.html";
+          return;
+        }
+        var gu = await sb.auth.getUser();
+        var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+        if (!uid) {
+          window.location.href = "ownsense.html";
+          return;
+        }
+        if (await hasOnboardingCompleted(uid)) {
+          window.location.href = "ownsense.html";
+          return;
+        }
+        var done = await insertOnboardingFact(uid, "completed", "Onboarding voltooid");
+        if (done && done.error) {
+          showToast("Even een haperingetje. Probeer de knop opnieuw.");
+          return;
+        }
+        clearOnboardingProgressMarkers();
+        try {
+          sessionStorage.removeItem(photoSkipStorageKey());
+        } catch (_p) {}
+        window.location.href = "ownsense.html";
+      });
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function advanceRoute() {
+    if (routeStarted && route.length && routeIndex < route.length) {
+      markRouteStepDone(routeIndex);
+    }
+    if (routeIndex + 1 < route.length) {
+      routeIndex++;
+      persistRouteIdx();
+      renderRouteStep();
+    }
+  }
+
+  function clearOnboardingProgressMarkers() {
+    try {
+      var pref = OB_SS_PREFIX + (__obUserId || "");
+      var keys = Object.keys(sessionStorage);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (k.indexOf(pref) === 0) sessionStorage.removeItem(k);
+      }
+      try {
+        sessionStorage.removeItem(resumeBridgeStorageKey(__obUserId));
+      } catch (_r) {}
+      clearRouteIdx();
+    } catch (_e) {}
+  }
+
+  function startQuestionsFromMirror() {
+    route = buildRoute();
+    routeIndex = 0;
+    routeStarted = true;
+    persistRouteIdx();
+    renderRouteStep();
+  }
+
+  function goToStatic(key) {
+    showStatic(key);
+    animateStaticScreen(key);
+  }
+
+  document.getElementById("obBtnAcc0").addEventListener("click", function () {
+    goToStatic("acc1");
+  });
+
+  var nameInput = document.getElementById("obNameInput");
+  var nameBtn = document.getElementById("obBtnName");
+  nameInput.addEventListener("input", function () {
+    nameBtn.disabled = nameInput.value.trim().length < 2;
+  });
+  nameInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !nameBtn.disabled) {
+      userName = nameInput.value.trim();
+      goToStatic("acc2");
+    }
+  });
+  nameBtn.addEventListener("click", function () {
+    userName = nameInput.value.trim();
+    goToStatic("acc2");
+  });
+
+  document.getElementById("obBtnAcc2").addEventListener("click", function () {
+    goToStatic("acc3");
+  });
+
+  var emailInput = document.getElementById("obEmailInput");
+  var emailBtn = document.getElementById("obBtnEmail");
+  function emailOk() {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value);
+  }
+  emailInput.addEventListener("input", function () {
+    emailBtn.disabled = !emailOk();
+  });
+  async function sendOtpAndGoToCode() {
+    var errEl = document.getElementById("obEmailErr");
+    if (errEl) errEl.textContent = "";
+    userEmail = emailInput.value.trim();
+    if (!emailOk()) return;
+    if (!sb) {
+      if (errEl) errEl.textContent = "Verbinding wordt geladen. Even geduld en opnieuw.";
+      return;
+    }
+    emailBtn.disabled = true;
+    var res = await sb.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: true } });
+    emailBtn.disabled = false;
+    if (res && res.error) {
+      if (errEl) {
+        errEl.textContent =
+          String(res.error.message || "").indexOf("rate") >= 0
+            ? "Je hebt net al een code aangevraagd. Wacht even en probeer opnieuw."
+            : "Kon geen code sturen. Controleer je e-mailadres of probeer het zo opnieuw.";
+      }
+      return;
+    }
+    goToStatic("acc4");
+    startResendTimer();
+  }
+  emailInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !emailBtn.disabled) sendOtpAndGoToCode();
+  });
+  emailBtn.addEventListener("click", function () {
+    sendOtpAndGoToCode();
+  });
+  document.getElementById("obBtnEmailBack").addEventListener("click", function () {
+    goToStatic("acc2");
+  });
+
+  function startResendTimer() {
+    var resendBtn = document.getElementById("obResendBtn");
+    var timer = document.getElementById("obResendTimer");
+    var seconds = 30;
+    resendBtn.disabled = true;
+    clearInterval(resendInterval);
+    timer.textContent = "(30s)";
+    resendInterval = setInterval(function () {
+      seconds--;
+      timer.textContent = "(" + seconds + "s)";
+      if (seconds <= 0) {
+        clearInterval(resendInterval);
+        resendBtn.disabled = false;
+        timer.textContent = "";
+      }
+    }, 1000);
+  }
+
+  var codeBoxes = Array.from(document.querySelectorAll("#obCodeWrap .ob-code-box"));
+  var codeBtn = document.getElementById("obBtnCode");
+  function checkCodeComplete() {
+    var complete = codeBoxes.every(function (b) {
+      return b.value.length === 1;
+    });
+    codeBtn.disabled = !complete;
+  }
+  async function verifyOtpAndContinue() {
+    var errEl = document.getElementById("obCodeErr");
+    if (errEl) errEl.textContent = "";
+    var token = codeBoxes
+      .map(function (b) {
+        return b.value;
+      })
+      .join("");
+    if (token.length !== 6 || !userEmail) return;
+    if (!sb) {
+      if (errEl) errEl.textContent = "Geen verbinding. Vernieuw de pagina.";
+      return;
+    }
+    codeBtn.disabled = true;
+    var res = await sb.auth.verifyOtp({ email: userEmail, token: token, type: "email" });
+    codeBtn.disabled = false;
+    if (res && res.error) {
+      if (errEl) {
+        errEl.textContent =
+          "De code is onjuist of verlopen. Probeer opnieuw of vraag een nieuwe code aan.";
+      }
+      codeBoxes.forEach(function (b) {
+        b.value = "";
+        b.classList.remove("filled");
+      });
+      checkCodeComplete();
+      if (codeBoxes[0]) codeBoxes[0].focus();
+      return;
+    }
+    try {
+      await sb.auth.updateUser({
+        data: { roepnaam: userName, display_name: userName, full_name: userName }
+      });
+    } catch (_meta) {}
+    var u = res && res.data && res.data.user;
+    if (u && u.id) __obUserId = u.id;
+    try {
+      var rpcAi = await sb.rpc("apply_auto_ai_access_after_email_verify");
+      if (rpcAi && rpcAi.error) console.warn("auto ai access rpc", rpcAi.error);
+    } catch (_rpc) {
+      console.warn("auto ai access rpc", _rpc);
+    }
+    goToStatic("acc5");
+  }
+  codeBoxes.forEach(function (box, i) {
+    box.addEventListener("input", function (e) {
+      var errEl = document.getElementById("obCodeErr");
+      if (errEl) errEl.textContent = "";
+      var val = e.target.value.replace(/\D/g, "");
+      e.target.value = val;
+      if (val) {
+        e.target.classList.add("filled");
+        if (i < codeBoxes.length - 1) codeBoxes[i + 1].focus();
+      } else {
+        e.target.classList.remove("filled");
+      }
+      checkCodeComplete();
+    });
+    box.addEventListener("keydown", function (e) {
+      if (e.key === "Backspace" && !e.target.value && i > 0) codeBoxes[i - 1].focus();
+      if (e.key === "Enter" && !codeBtn.disabled) verifyOtpAndContinue();
+    });
+    box.addEventListener("paste", function (e) {
+      e.preventDefault();
+      var pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+      for (var p = 0; p < pasted.length; p++) {
+        if (codeBoxes[p]) {
+          codeBoxes[p].value = pasted.charAt(p);
+          codeBoxes[p].classList.add("filled");
+        }
+      }
+      checkCodeComplete();
+      var nextEmpty = codeBoxes.findIndex(function (b) {
+        return !b.value;
+      });
+      if (nextEmpty >= 0) codeBoxes[nextEmpty].focus();
+      else codeBoxes[5].focus();
+    });
+  });
+  codeBtn.addEventListener("click", function () {
+    verifyOtpAndContinue();
+  });
+  document.getElementById("obResendBtn").addEventListener("click", async function () {
+    if (!userEmail || !sb) return;
+    var res = await sb.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: true } });
+    if (res && res.error) {
+      showToast("Kon geen nieuwe code sturen. Wacht even en probeer opnieuw.");
+      return;
+    }
+    startResendTimer();
+    showToast("Nieuwe code onderweg.");
+  });
+  document.getElementById("obBtnCodeBack").addEventListener("click", function () {
+    goToStatic("acc3");
+  });
+
+  document.getElementById("obBtnAcc5").addEventListener("click", function () {
+    goToStatic("mir0");
+    updateMirrorCTA();
+  });
+
+  function toggleMirrorCard(card) {
+    var mirror = card.getAttribute("data-mirror");
+    if (mirror === "own") return;
+    if (card.classList.contains("active")) {
+      card.classList.remove("active");
+      selectedMirrors.delete(mirror);
+    } else {
+      card.classList.add("active");
+      selectedMirrors.add(mirror);
+    }
+    updateMirrorCTA();
+  }
+
+  document.querySelectorAll("#obMirrorGrid .ob-mirror-item:not(.own)").forEach(function (card) {
+    card.addEventListener("click", function () {
+      toggleMirrorCard(card);
+    });
+    card.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleMirrorCard(card);
+      }
+    });
+  });
+
+  function updateMirrorCTA() {
+    var btn = document.getElementById("obBtnMir0");
+    var extras = Array.from(selectedMirrors).filter(function (m) {
+      return m !== "own";
+    }).length;
+    if (extras === 0) {
+      btn.textContent = "Kies minstens één extra spiegel";
+      btn.disabled = true;
+    } else {
+      btn.textContent = "Verder met " + (extras + 1) + " spiegels";
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById("obBtnMir0").addEventListener("click", async function () {
+    var extras = Array.from(selectedMirrors).filter(function (m) {
+      return m !== "own";
+    }).length;
+    if (extras === 0) return;
+    if (!sb) {
+      showToast("Geen verbinding. Vernieuw de pagina.");
+      return;
+    }
+    var gu = await sb.auth.getUser();
+    var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+    if (!uid) {
+      showToast("Je sessie is verlopen. Vernieuw de pagina.");
+      return;
+    }
+    var err = await saveMirrorProfilesForUser(uid);
+    if (err) {
+      showToast(err);
+      return;
+    }
+    goToStatic("mir1");
+    setupMirrorReaction();
+  });
+
+  async function setupMirrorReaction() {
+    var chipsEl = document.getElementById("obChips");
+    chipsEl.innerHTML = "";
+    var order = ["own", "date", "family", "friend", "self"];
+    var labels = { own: "OwnSense", date: "DateSense", family: "FamilySense", friend: "FriendSense", self: "SelfSense" };
+    order.forEach(function (m) {
+      if (!selectedMirrors.has(m)) return;
+      var chip = document.createElement("span");
+      chip.className = "ob-chip";
+      chip.dataset.mirror = m;
+      chip.innerHTML = '<span class="dot"></span>' + labels[m];
+      chipsEl.appendChild(chip);
+    });
+
+    if (currentTypingController) currentTypingController.cancelled = true;
+    var controller = { cancelled: false };
+    currentTypingController = controller;
+
+    chipsEl.classList.remove("shown");
+    var msgEl = document.getElementById("obReactionMsg");
+    msgEl.innerHTML = "";
+    msgEl.classList.remove("typing", "ob-typing-fade", "is-visible");
+    var ctaWrap = document.getElementById("obCtaMir1");
+    ctaWrap.classList.remove("shown");
+
+    await sleep(200);
+    chipsEl.classList.add("shown");
+    await sleep(600);
+
+    var reactionText = mirrorReactionText();
+    await fadeInContent(msgEl, reactionText, controller, 600);
+    if (!controller.cancelled) {
+      await sleep(300);
+      ctaWrap.classList.add("shown");
+    }
+  }
+
+  document.getElementById("obBtnMir1").addEventListener("click", function () {
+    startQuestionsFromMirror();
+  });
+
+  document.addEventListener("DOMContentLoaded", function () {
+    bootOnboarding().catch(function () {
+      goToStatic("acc0");
+    });
+  });
+})();
+  </script>
+</body>
+</html>
+

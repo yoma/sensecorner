@@ -457,6 +457,7 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 .qcat-head > *{min-width:0}
 .qcat-title{font-size:14px;font-weight:700;overflow-wrap:anywhere}
 .qcat-meta{font-size:11px;color:var(--muted)}
+.own-onb-badge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.02em;color:#5a4a3a;background:rgba(139,90,43,.12);border:1px solid rgba(139,90,43,.22);vertical-align:middle;white-space:nowrap}
 .qcat-body{display:none;margin-top:10px}
 .qcat.open .qcat-body{display:block}
 .qprompt{font-size:12px;font-weight:700;margin:9px 0 5px}
@@ -933,19 +934,166 @@ var OWN_CATS=[
 ];
 var APP_CATS=[
   {id:'datesense_focus',app:'ds',title:'DateSense verdieping',icon:'💬',prompts:[
+    {q:'Wat heb je nodig om je veilig te voelen bij iemand?',ph:'Bv: rust, iemand die niet oordeelt, duidelijke afspraken, tijd om te landen…',sub:'date_safety',fromOnboarding:true},
+    {q:'Wanneer voel je je rond dating het snelst onrustig of onzeker?',ph:'Bv: voor een afspraak, na een app, als het even stil wordt, als ik me te veel wil bewijzen…',sub:'date_overcommit',fromOnboarding:true},
     {q:'Val je steeds op hetzelfde type, of merk je iets anders op in hoe je datet?',ph:'Bv: ik merk dat ik vaak kies voor rustige nerdy types, of juist weer dezelfde rode vlag mist…'},
     {q:'Wanneer voelt een gesprek met iemand echt goed?',ph:'Bv: als we kunnen lachen én serieus praten, als ik niet hoef te presteren, als er ook ruimte is voor stilte…'},
-    {q:'Is er iets dat je de volgende keer anders zou willen doen?',ph:'Bv: mijn grens eerder zeggen, minder snel nog een date plannen uit schuldgevoel, niet meteen alles appen…'},
-    {q:'Waar zeg je te snel ja terwijl je eigenlijk nee bedoelt?',ph:'Bv: nog eens afspreken terwijl ik twijfel, overwerken als ik "geen tijd heb", mee in plannen waar ik buikpijn van krijg…'}
+    {q:'Is er iets dat je de volgende keer anders zou willen doen?',ph:'Bv: mijn grens eerder zeggen, minder snel nog een date plannen uit schuldgevoel, niet meteen alles appen…'}
   ]},
   {id:'familysense_focus',app:'fs',title:'FamilySense verdieping',icon:'🏠',prompts:[
+    {q:'Wat betekent familie voor jou?',ph:'Bv: mensen bij wie ik mezelf mag zijn, of juist ingewikkeld omdat verwachtingen hoog liggen…',sub:'family_meaning',fromOnboarding:true},
+    {q:'Zijn er problemen thuis waar je vaak op terugbotst?',ph:'Bv: een situatie of moment, niet per se iemand; iets dat telkens terugkomt…',sub:'family_friction',fromOnboarding:true},
     {q:'Welk familielid of welke situatie thuis houdt je het meest bezig?',ph:'Bv: de sfeer na het eten, gesprekken met een ouder over school, spanning rond geld of opruimen…'},
     {q:'Is er iemand thuis met wie gesprekken vaak moeilijk verlopen?',ph:'Bv: mijn partner als we allebei moe zijn, of iemand die alles bagatelliseert als ik iets moeilijk vind…'},
-    {q:'Is er iets dat thuis steeds opnieuw voor spanning zorgt?',ph:'Bv: scherm aan tafel, wie welke klus doet, bezoek schoonfamilie, afspraken rond de kinderen…'},
     {q:'Als je één ding kon veranderen thuis, wat zou het zijn?',ph:'Bv: een vast moment om rustig bij te praten, rollen scherper afspreken, minder gehaast aan tafel…'}
   ]}
 ];
 var ALL_CATS=OWN_CATS.concat(APP_CATS);
+function catAnswerKeys(cat){
+  var n=(cat&&cat.prompts)?cat.prompts.length:4;
+  var keys=[];
+  for(var i=0;i<n;i++)keys.push('a'+i);
+  return keys;
+}
+function emptySlotsObjectForCategory(cat){
+  var o={};
+  catAnswerKeys(cat).forEach(function(k){o[k]='';});
+  return o;
+}
+function normalizeCategoryObject(cat,raw){
+  var out=emptySlotsObjectForCategory(cat);
+  var src=raw&&typeof raw==='object'?raw:{};
+  catAnswerKeys(cat).forEach(function(k){
+    if(Object.prototype.hasOwnProperty.call(src,k)&&src[k]!=null)out[k]=String(src[k]||'');
+  });
+  return out;
+}
+function maxMirrorSlotIndexForCatId(cid){
+  var cat=ALL_CATS.find(function(c){return c.id===cid;});
+  return Math.max(3,(cat&&cat.prompts?cat.prompts.length:4)-1);
+}
+function latestAcceptedFactBySub(sub){
+  var want=String(sub||'').trim();
+  if(!want)return null;
+  var hits=ownFacts.filter(function(f){
+    return f&&f.status==='accepted'&&String(f.subcategory||'').trim()===want;
+  });
+  if(!hits.length)return null;
+  hits.sort(function(a,b){
+    return new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0);
+  });
+  return hits[0];
+}
+function applyOwnHubAppDepthV2Migration(){
+  try{
+    var pm=__ownSensePropsMetaCache&&typeof __ownSensePropsMetaCache==='object'?__ownSensePropsMetaCache:{};
+    if(pm.own_hub_depth_v2)return;
+    var migrated=false;
+    var df=hubState.categories&&hubState.categories.datesense_focus;
+    if(df&&typeof df==='object'){
+      var t0=String(df.a0||'').trim(),t1=String(df.a1||'').trim(),t2=String(df.a2||'').trim(),t3=String(df.a3||'').trim();
+      if(t0||t1||t2||t3){
+        hubState.categories.datesense_focus={a0:'',a1:t3,a2:t0,a3:t1,a4:t2};
+        migrated=true;
+      }
+    }
+    var ff=hubState.categories&&hubState.categories.familysense_focus;
+    if(ff&&typeof ff==='object'){
+      var u0=String(ff.a0||'').trim(),u1=String(ff.a1||'').trim(),u2=String(ff.a2||'').trim(),u3=String(ff.a3||'').trim();
+      if(u0||u1||u2||u3){
+        hubState.categories.familysense_focus={a0:'',a1:u2,a2:u0,a3:u1,a4:u3};
+        migrated=true;
+      }
+    }
+    __ownSensePropsMetaCache=Object.assign({},__ownSensePropsMetaCache||{},{own_hub_depth_v2:true});
+    if(migrated){
+      hubState.cat_updated=hubState.cat_updated||{};
+      hubState.cat_updated.datesense_focus=new Date().toISOString();
+      hubState.cat_updated.familysense_focus=new Date().toISOString();
+      saveHubState();
+    }else{
+      saveOwnToSupabase();
+    }
+  }catch(_mig){}
+}
+function hydrateAppDepthSlotsFromOwnFacts(){
+  if(!ownFacts||!ownFacts.length)return;
+  var touched=false;
+  APP_CATS.forEach(function(cat){
+    if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
+    cat.prompts.forEach(function(p,idx){
+      if(!p||!p.sub)return;
+      var key='a'+idx;
+      if(String(hubState.categories[cat.id][key]||'').trim())return;
+      var hit=latestAcceptedFactBySub(p.sub);
+      if(hit&&String(hit.fact_text||'').trim()){
+        hubState.categories[cat.id][key]=String(hit.fact_text).trim();
+        touched=true;
+      }
+    });
+  });
+  if(touched){
+    hubState.cat_updated=hubState.cat_updated||{};
+    APP_CATS.forEach(function(c){
+      hubState.cat_updated[c.id]=new Date().toISOString();
+    });
+    saveHubState();
+  }
+}
+var __appDepthSyncTimer=null;
+function scheduleSyncAppDepthSubFacts(){
+  clearTimeout(__appDepthSyncTimer);
+  __appDepthSyncTimer=setTimeout(function(){syncAppDepthSubFactsToSupabase();},650);
+}
+async function syncAppDepthSubFactsToSupabase(){
+  var client=initSupabase();
+  if(!client)return;
+  try{
+    var auth=await client.auth.getUser();
+    var user=auth&&auth.data&&auth.data.user;
+    if(!user)return;
+    var uid=user.id;
+    for(var ci=0;ci<APP_CATS.length;ci++){
+      var cat=APP_CATS[ci];
+      var c=hubState.categories[cat.id]||{};
+      for(var idx=0;idx<cat.prompts.length;idx++){
+        var p=cat.prompts[idx];
+        if(!p||!p.sub)continue;
+        var key='a'+idx;
+        var txt=String(c[key]||'').trim();
+        if(!txt)continue;
+        var hit=latestAcceptedFactBySub(p.sub);
+        if(hit){
+          if(String(hit.fact_text||'').trim()!==txt){
+            var r=await client.from('own_facts').update({
+              fact_text:txt,
+              source_app:'ownsense',
+              updated_at:new Date().toISOString()
+            }).eq('id',hit.id).select('*').maybeSingle();
+            if(r&&r.data){
+              var ix=ownFacts.findIndex(function(x){return x.id===hit.id;});
+              if(ix>=0)ownFacts[ix]=r.data;
+            }
+          }
+        }else{
+          await insertOwnFactRow({
+            user_id:uid,
+            category:'onboarding',
+            subcategory:p.sub,
+            fact_text:txt,
+            source_app:'ownsense',
+            source_dossier:null,
+            source_session_id:null,
+            confidence:1.0,
+            status:'accepted'
+          });
+        }
+      }
+    }
+  }catch(e){
+    console.warn('syncAppDepthSubFactsToSupabase',e);
+  }
+}
 /** Query `?cat=datesense_focus|familysense_focus`: toon die lijst altijd + spring er naartoe na load. */
 var urlBootFocusCat='';
 function refreshBootFocusCatFromUrl(){
@@ -1012,7 +1160,7 @@ var hasNewInsightBadge=false;
 
 PK.forEach(function(k){hubState.props[k]=0;});
 ALL_CATS.forEach(function(c){
-  hubState.categories[c.id]={a0:'',a1:'',a2:'',a3:''};
+  hubState.categories[c.id]=emptySlotsObjectForCategory(c);
 });
 
 var tabButtons=document.querySelectorAll('[data-tab]');
@@ -1068,15 +1216,18 @@ function mergeMirrorEntriesIntoCategories(entries,opts){
       var cid=String(en.cat);
       if(!validCat[cid])return;
       var si=parseInt(en.slot,10);
-      if(isNaN(si)||si<0||si>3)return;
-      if(!hubState.categories[cid])hubState.categories[cid]={a0:'',a1:'',a2:'',a3:''};
+      if(isNaN(si)||si<0||si>maxMirrorSlotIndexForCatId(cid))return;
+      if(!hubState.categories[cid]){
+        var defC=ALL_CATS.find(function(x){return x.id===cid;});
+        hubState.categories[cid]=emptySlotsObjectForCategory(defC||{prompts:[{},{},{},{}]});
+      }
       var ak='a'+si;
       if(fillOnly&&String(hubState.categories[cid][ak]||'').trim())return;
       hubState.categories[cid][ak]=v;
     }
   });
   ALL_CATS.forEach(function(cat){
-    if(!hubState.categories[cat.id])hubState.categories[cat.id]={a0:'',a1:'',a2:'',a3:''};
+    if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
     cat.prompts.forEach(function(prompt,idx){
       var key='a'+idx;
       if(String(hubState.categories[cat.id][key]||'').trim())return;
@@ -1117,14 +1268,17 @@ function categoryLongText(catId){
     });
     return parts.join('\n\n');
   }
+  var catDef=ALL_CATS.find(function(x){return x.id===catId;});
+  if(!catDef)return'';
   var c=hubState.categories&&hubState.categories[catId]?hubState.categories[catId]:{};
-  var lines=['a0','a1','a2','a3'].map(function(k){return String(c[k]||'').trim();}).filter(Boolean);
-  return lines.join('\n\n');
+  return catAnswerKeys(catDef).map(function(k){return String(c[k]||'').trim();}).filter(Boolean).join('\n\n');
 }
 
 function legacyUnitsForCategory(catId){
+  var catDef=ALL_CATS.find(function(x){return x.id===catId;});
+  if(!catDef)return 0;
   var c=hubState.categories&&hubState.categories[catId]?hubState.categories[catId]:{};
-  var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>6;}).length;
+  var filled=catAnswerKeys(catDef).filter(function(k){return String(c[k]||'').trim().length>6;}).length;
   var chars=categoryLongText(catId).length;
   return filled*2+Math.min(6,Math.floor(chars/380));
 }
@@ -2447,6 +2601,9 @@ async function loadOwnFromSupabase(){
       if(!hubState.photo_url)hubState.photo_url=String(pm.photo_url||'').trim();
       if(p.categories&&typeof p.categories==='object'){
         hubState.categories=Object.assign({},hubState.categories,p.categories);
+        ALL_CATS.forEach(function(c){
+          hubState.categories[c.id]=normalizeCategoryObject(c,hubState.categories[c.id]||{});
+        });
       }
       PK.forEach(function(k){
         if(typeof p[k]==='number')hubState.props[k]=p[k];
@@ -2470,6 +2627,8 @@ async function loadOwnFromSupabase(){
         }
       }catch(_eSlot){}
     }
+    if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
+    applyOwnHubAppDepthV2Migration();
   }catch(e){}
 }
 
@@ -2660,7 +2819,7 @@ function loadHubState(){
   if(v1flat&&String(v1flat.ownsenseSlotLayout||'')==='flat16v2'&&Array.isArray(v1flat.answers)&&v1flat.answers.length>=16){
     var fi=0;
     OWN_CATS.forEach(function(cat){
-      if(!hubState.categories[cat.id])hubState.categories[cat.id]={a0:'',a1:'',a2:'',a3:''};
+      if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
       for(var i=0;i<cat.prompts.length;i++){
         var key='a'+i;
         var val=String(v1flat.answers[fi++]||'').trim();
@@ -2680,13 +2839,7 @@ function loadHubState(){
   hubState.foto_analyse=String(hubState.foto_analyse||'');
   if(!hubState.categories)hubState.categories={};
   ALL_CATS.forEach(function(c){
-    var cat=hubState.categories[c.id]||{};
-    hubState.categories[c.id]={
-      a0:String(cat.a0||''),
-      a1:String(cat.a1||''),
-      a2:String(cat.a2||''),
-      a3:String(cat.a3||'')
-    };
+    hubState.categories[c.id]=normalizeCategoryObject(c,hubState.categories[c.id]||{});
   });
   if(!hubState.cat_updated||typeof hubState.cat_updated!=='object')hubState.cat_updated={};
   hubState.insight_all=String(hubState.insight_all||'');
@@ -2706,6 +2859,7 @@ function saveHubState(){
   hubState.updated_at=new Date().toISOString();
   if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
   localStorage.setItem(HUB_KEY,JSON.stringify(hubState));
+  scheduleSyncAppDepthSubFacts();
   saveOwnToSupabase();
   var saved=document.getElementById('saveIndicator');
   if(saved){
@@ -3433,9 +3587,11 @@ function renderPhotoSection(){
 }
 
 function renderQuestions(){
-  function hasAnswersInCat(catId){
+  function hasAnswersInCatId(catId){
+    var catDef=ALL_CATS.find(function(x){return x.id===catId;});
+    if(!catDef)return false;
     var c=hubState.categories[catId]||{};
-    return ['a0','a1','a2','a3'].some(function(k){return String(c[k]||'').trim().length>0;});
+    return catAnswerKeys(catDef).some(function(k){return String(c[k]||'').trim().length>0;});
   }
   function appMessageCount(scope){
     var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
@@ -3445,7 +3601,7 @@ function renderQuestions(){
     var list=OWN_CATS.slice();
     APP_CATS.forEach(function(cat){
       var active=appMessageCount(cat.app)>=1;
-      if(active||hasAnswersInCat(cat.id))list.push(cat);
+      if(active||hasAnswersInCatId(cat.id))list.push(cat);
     });
     if(urlBootFocusCat){
       var forced=APP_CATS.find(function(c){return c.id===urlBootFocusCat;});
@@ -3461,11 +3617,13 @@ function renderQuestions(){
     +'<span id="ownSlotRepairMsg" class="subtle" style="font-size:12px;max-width:100%"></span></div>';
   visibleCats().forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
-    var filled=['a0','a1','a2','a3'].filter(function(k){return String(c[k]||'').trim().length>0;}).length;
+    var keys=catAnswerKeys(cat);
+    var filled=keys.filter(function(k){return String(c[k]||'').trim().length>0;}).length;
+    var totalQ=cat.prompts.length;
     html+='<div class="qcat" id="cat-'+cat.id+'">'
       +'<div class="qcat-head" data-cat="'+cat.id+'"><div>'
       +'<div class="qcat-title">'+cat.icon+' '+cat.title+'</div>'
-      +'<div class="qcat-meta">'+filled+'/4 vragen · update '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
+      +'<div class="qcat-meta">'+filled+'/'+totalQ+' vragen · update '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
       +'</div><div class="subtle">Open</div></div>'
       +'<div class="qcat-body">';
     cat.prompts.forEach(function(p,idx){
@@ -3474,7 +3632,8 @@ function renderQuestions(){
       var phtext=ownHubPromptPh(p);
       var phUse=(phtext&&phtext.trim())?phtext.trim():'Tip: een paar zinnen uit je eigen ervaring zijn genoeg.';
       var phEsc=escHTML(phUse);
-      html+='<div class="qprompt">'+escHTML(qtext)+'</div><textarea class="qta" data-cat="'+cat.id+'" data-key="'+key+'" placeholder="'+phEsc+'">'+(c[key]||'')+'</textarea>';
+      var badge=(p&&p.fromOnboarding)?'<span class="own-onb-badge" title="Antwoord uit SenseCorner-onboarding">uit onboarding</span>':'';
+      html+='<div class="qprompt">'+escHTML(qtext)+badge+'</div><textarea class="qta" data-cat="'+cat.id+'" data-key="'+key+'" placeholder="'+phEsc+'">'+(c[key]||'')+'</textarea>';
     });
     html+='</div></div>';
   });
@@ -3493,7 +3652,8 @@ function renderQuestions(){
     ta.addEventListener('input',function(){
       var cat=this.getAttribute('data-cat');
       var key=this.getAttribute('data-key');
-      if(!hubState.categories[cat])hubState.categories[cat]={a0:'',a1:'',a2:'',a3:''};
+      var catDef=ALL_CATS.find(function(x){return x.id===cat;});
+      if(!hubState.categories[cat])hubState.categories[cat]=emptySlotsObjectForCategory(catDef||{prompts:[{},{},{},{}]});
       hubState.categories[cat][key]=this.value;
       hubState.cat_updated[cat]=new Date().toISOString();
       saveHubState();
@@ -3701,6 +3861,7 @@ loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
   .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})
   .finally(function(){
+    hydrateAppDepthSlotsFromOwnFacts();
     renderMijTab();
     renderInzichtenV2();
     renderGroeiTab();

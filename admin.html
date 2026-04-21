@@ -80,7 +80,13 @@ a{color:inherit}
       <h2 style="margin:0">AI-toegang beheren</h2>
       <button id="adminAiRefreshBtn" class="admin-refresh-btn" type="button">Vernieuwen</button>
     </div>
-    <p>Nieuwe gebruikers staan standaard op wacht. Keur per account AI-toegang goed of trek die terug.</p>
+    <p id="adminAiIntro">Nieuwe gebruikers kunnen automatisch AI krijgen zodra ze hun e-mailcode bevestigd hebben. Je kunt dat hieronder uitzetten. Per account blijf je toegang goedkeuren of intrekken.</p>
+    <div id="adminAutoApproveRow" style="margin-bottom:14px;padding:10px 11px;border:1px solid var(--b);border-radius:12px;background:var(--ivoor)">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;line-height:1.45;color:var(--chocolade)">
+        <input type="checkbox" id="adminAutoApproveAi" style="margin-top:3px;flex-shrink:0" />
+        <span><strong>Automatisch AI na e-mailcode</strong><br /><span class="subtle" style="margin-top:4px;display:inline-block">Zet uit als je weer handmatig wilt goedkeuren voor iedereen. Accounts volledig blokkeren doe je in Supabase onder Authentication (ban user); hieronder trek je vooral AI-toegang in.</span></span>
+      </label>
+    </div>
     <div id="adminAiState" class="admin-state">Laden…</div>
     <div id="adminAiList" class="admin-list"></div>
   </section>
@@ -274,6 +280,35 @@ a{color:inherit}
     adminAiState.style.color=isErr?'var(--date-donker)':'var(--m)';
   }
 
+  var AUTO_APPROVE_KEY='auto_approve_ai_on_signup';
+
+  async function loadAutoApproveSetting(){
+    var el=document.getElementById('adminAutoApproveAi');
+    if(!el||!sb)return;
+    var en=true;
+    try{
+      var rs=await sb.from('app_admin_settings').select('value').eq('key',AUTO_APPROVE_KEY).maybeSingle();
+      if(rs&&rs.error)throw new Error(rs.error.message||'Laden mislukt');
+      if(rs&&rs.data&&rs.data.value&&typeof rs.data.value.enabled==='boolean')en=rs.data.value.enabled;
+    }catch(e){
+      console.warn('loadAutoApproveSetting',e);
+    }
+    el.checked=en;
+  }
+
+  async function saveAutoApproveSetting(enabled,user){
+    if(!sb||!user||!user.id)throw new Error('Geen sessie');
+    var body={
+      key:AUTO_APPROVE_KEY,
+      app:'global',
+      value:{enabled:!!enabled},
+      updated_by:user.id,
+      updated_at:new Date().toISOString()
+    };
+    var up=await sb.from('app_admin_settings').upsert(body,{onConflict:'key'});
+    if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+  }
+
   function fmtDateTime(iso){
     if(!iso)return'';
     var dt=new Date(iso);
@@ -330,6 +365,7 @@ a{color:inherit}
   async function loadAdminAiPanel(){
     if(!sb||!adminAiPanel)return;
     setAdminAiState('Laden…',false);
+    await loadAutoApproveSetting();
     if(adminAiList)adminAiList.innerHTML='';
     try{
       var rs=await sb.rpc('admin_list_ai_access');
@@ -389,6 +425,30 @@ a{color:inherit}
     await loadAdminAiPanel();
     if(adminAiRefreshBtn){
       adminAiRefreshBtn.onclick=function(){loadAdminAiPanel();};
+    }
+    var autoEl=document.getElementById('adminAutoApproveAi');
+    if(autoEl&&!autoEl._obAutoBound){
+      autoEl._obAutoBound=true;
+      autoEl.addEventListener('change',async function(){
+        if(!user)return;
+        var want=!!autoEl.checked;
+        autoEl.disabled=true;
+        setAdminAiState('Instelling opslaan…',false);
+        try{
+          await saveAutoApproveSetting(want,user);
+          setAdminAiState(
+            want
+              ?'Automatisch AI staat aan: na e-mailcode krijgen nieuwe accounts meteen AI (tenzij jij revoke doet).'
+              :'Automatisch AI staat uit: nieuwe accounts wachten op jouw Approve.',
+            false
+          );
+        }catch(e){
+          setAdminAiState((e&&e.message)||'Opslaan mislukt.',true);
+          autoEl.checked=!want;
+        }finally{
+          autoEl.disabled=false;
+        }
+      });
     }
   }
 
