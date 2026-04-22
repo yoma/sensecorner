@@ -1612,8 +1612,26 @@
       "Schrijf twee tot drie zinnen: rustig terugkijken, erkennen wat er al ligt, en uitnodigen om verder te gaan.\n" +
       "Regels: Nederlands (Vlaams mag), spreek aan met jij of je, geen naam in de tekst, geen oordeel, geen advies. " +
       "Gebruik geen woorden als noteren, opschrijven of vastleggen. Gebruik wel ik zie, ik hoor, dat neem ik mee. " +
+      "Herhaal geen laadteksten of meta-zinnen (zoals even ophalen, even lezen, een momentje). Begin direct met je terugblik. " +
       "Geen emoji, geen markdown. Gebruik geen Unicode U+2014; gebruik komma of punt."
     );
+  }
+
+  function stripEchoedResumeLoaderLines(txt) {
+    txt = String(txt || "").trim();
+    if (!txt) return txt;
+    var lines = txt.split(/\n+/);
+    var first = String(lines[0] || "").trim();
+    var low = first.toLowerCase();
+    if (
+      low.indexOf("ik haal even op") === 0 ||
+      (low.indexOf("ik haal even") === 0 && low.indexOf("deelde") >= 0) ||
+      low.indexOf("even op wat je al") >= 0
+    ) {
+      lines.shift();
+      return lines.join("\n").trim() || txt;
+    }
+    return txt;
   }
 
   async function renderResumeSenseiBridge(uid) {
@@ -1632,7 +1650,7 @@
       '<div class="ob-end-card" style="padding-top:8px">' +
       '<div class="ob-ripple ob-ripple-q own big pulsing"><div class="ob-ripple-inner">' +
       '<div class="ob-ripple-center-letter">O</div></div></div>' +
-      '<p class="ob-ai-wait" id="obResWait">Ik haal even op wat je al deelde...</p>' +
+      '<p class="ob-ai-wait" id="obResWait" aria-busy="true">Even geduld…</p>' +
       '<p class="ob-sensei" id="obResBody" style="min-height:48px"></p>' +
       '<div class="ob-cta-wrap" id="obResCta" style="margin-top:20px">' +
       '<button type="button" class="ob-cta-primary" id="obResBtn">Verder waar we waren</button></div></div>';
@@ -1653,6 +1671,11 @@
           "\n\nSchrijf je korte terugblik.";
         msg = await callSenseiOnboarding(sysR, usrR, 380);
         msg = obSanitizeForPrompt(msg) || msg;
+        msg = stripEchoedResumeLoaderLines(msg);
+        if (!String(msg || "").trim()) {
+          msg =
+            "Welkom terug. Ik heb wat je deelde bewaard. We gaan rustig verder waar je gebleven was.";
+        }
         await saveOnboardingInsight(uid, "resume_welcome", msg);
       } catch (_re) {
         console.warn("resume sensei bridge", _re);

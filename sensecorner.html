@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="22-04-2026 20:08">
+<meta name="sc-build" content="22-04-2026 20:16">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1233,6 +1233,15 @@ a{text-decoration:none;color:inherit}
     }
     setAuthMsg('');
   }
+  function goToIndexLogin(mode,targetApp){
+    mode=String(mode||'login').toLowerCase()==='register'?'register':'login';
+    var rt=String(targetApp||'').trim();
+    var q=[];
+    if(mode==='register')q.push('register=1');
+    else q.push('login=1');
+    if(rt)q.push('returnTo='+encodeURIComponent(rt));
+    window.location.href='index.html?'+q.join('&');
+  }
   function authReturnUrl(target){
     var t=String(target||'').trim()||'ownsense.html';
     return window.location.origin+window.location.pathname.replace(/[^/]*$/,'')+t;
@@ -1756,7 +1765,7 @@ a{text-decoration:none;color:inherit}
       window.location.href=t;
       return;
     }
-    openAuthModal('login',t);
+    goToIndexLogin('login',t);
   }
 
   try{
@@ -1849,8 +1858,8 @@ a{text-decoration:none;color:inherit}
     if(document.visibilityState!=='visible')return;
     getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
   });
-  if(hubLoginBtn)hubLoginBtn.onclick=function(){openAuthModal('login','');};
-  if(hubRegisterBtn)hubRegisterBtn.onclick=function(){openAuthModal('register','');};
+  if(hubLoginBtn)hubLoginBtn.onclick=function(){goToIndexLogin('login','');};
+  if(hubRegisterBtn)hubRegisterBtn.onclick=function(){goToIndexLogin('register','');};
   if(hubLogoutBtn)hubLogoutBtn.onclick=async function(){
     try{
       var uOut=await getCurrentUser();
@@ -2046,7 +2055,7 @@ a{text-decoration:none;color:inherit}
       var user=await getCurrentUser();
       if(user)window.location.href=target;
       else{
-        openAuthModal('login',target);
+        goToIndexLogin('login',target);
         openedReturnToModal=true;
       }
     }
@@ -2054,8 +2063,9 @@ a{text-decoration:none;color:inherit}
   if(!openedReturnToModal){
     var guestFinal=await getCurrentUser();
     if(!guestFinal){
-      openAuthModal('login','');
-      if(authSub)authSub.textContent='Log in om de SenseCorner-hub te gebruiken. Nog geen account? Kies «Account aanmaken».';
+      var hx=String(window.location.hash||'');
+      if(hx.indexOf('access_token')>=0||hx.indexOf('type=recovery')>=0)return;
+      window.location.replace('index.html?login=1');
     }
   }
 })();
