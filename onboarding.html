@@ -1118,7 +1118,43 @@
   async function hasPhotoSlot1(userId) {
     if (!sb || !userId) return false;
     var res = await sb.from("own_photos").select("storage_path").eq("user_id", userId).eq("slot", 1).maybeSingle();
-    return !!(res && res.data && String(res.data.storage_path || "").trim());
+    if (res && res.error) console.warn("own_photos slot1", res.error);
+    if (res && res.data && String(res.data.storage_path || "").trim()) return true;
+    return false;
+  }
+
+  function profileRowHasPrimaryPhoto(row) {
+    if (!row || typeof row !== "object") return false;
+    var paths = Array.isArray(row.foto_paths) ? row.foto_paths : [];
+    var urls = Array.isArray(row.foto_urls) ? row.foto_urls : [];
+    if (String(paths[0] || "").trim()) return true;
+    if (String(urls[0] || "").trim()) return true;
+    var props = row.props && typeof row.props === "object" ? row.props : {};
+    var pp = Array.isArray(props.foto_paths) ? props.foto_paths : [];
+    var pu = Array.isArray(props.foto_urls) ? props.foto_urls : [];
+    if (String(pp[0] || "").trim()) return true;
+    if (String(pu[0] || "").trim()) return true;
+    var meta = props.meta && typeof props.meta === "object" ? props.meta : {};
+    if (String(meta.photo_url || "").trim()) return true;
+    return false;
+  }
+
+  async function hasOwnSenseProfilePrimaryPhoto(userId) {
+    if (!sb || !userId) return false;
+    var sp = await sb
+      .from("sense_profiles")
+      .select("foto_paths,foto_urls,props")
+      .eq("user_id", userId)
+      .eq("name", "OWN Sense")
+      .maybeSingle();
+    if (sp && sp.error) console.warn("sense_profiles OWN foto", sp.error);
+    return profileRowHasPrimaryPhoto(sp && sp.data ? sp.data : null);
+  }
+
+  async function hasResumePrimaryPhoto(userId) {
+    if (await hasPhotoSlot1(userId)) return true;
+    if (await hasOwnSenseProfilePrimaryPhoto(userId)) return true;
+    return false;
   }
 
   async function loadMirrorSelectionFromProfiles(userId) {
@@ -1210,6 +1246,7 @@
       try {
         if (sessionStorage.getItem(photoSkipStorageKey()) === "1") return true;
       } catch (_e2) {}
+      if (factsSub.has("onboarding_primary_photo")) return true;
       return !!hasPhoto;
     }
     if (st.kind === "final") return false;
@@ -1258,7 +1295,7 @@
       selectedMirrors = mirrorsDb;
       applyMirrorSelectionToDom();
     }
-    var slot1 = await hasPhotoSlot1(uid);
+    var slot1 = await hasResumePrimaryPhoto(uid);
 
     if (factsSub.size === 0 && mirrorsDb.size <= 1) {
       goToStatic("acc5");
@@ -1531,21 +1568,21 @@
 
   function buildMirrorSummarySystemPrompt(spiegelNaam) {
     return (
-      "Je bent Sensei. De gebruiker heeft zojuist twee vragen beantwoord over het onderwerp " +
+      "Je bent Sensei. De gebruiker heeft zojuist twee vragen beantwoord over " +
       obSanitizeForPrompt(spiegelNaam) +
-      ". Schrijf een korte reflectie van 2-3 zinnen.\n\n" +
+      ". Schrijf een korte, warme terugblik van 2 tot 3 zinnen, alsof je het even rustig naleest.\n\n" +
       "Regels:\n" +
       "- Nederlands (Vlaams toegestaan)\n" +
       "- Spreek direct aan (jij of je), geen naam\n" +
-      "- Begin niet met aanhef\n" +
-      "- Reflecteer, oordeel niet\n" +
-      "- Geen ik noteer of ik schrijf op: wel ik zie of dat neem ik mee\n" +
-      "- Max 2-3 zinnen\n" +
+      "- Begin niet met een begroeting of met ja hoor\n" +
+      "- Mag licht parafraseren en verbinden, maar elke gedachte moet in de twee antwoorden terug te vinden zijn. " +
+      "Voeg geen feiten, spanning of emotionele kost toe die de gebruiker niet zo benoemt. " +
+      "Als iets meevalt, licht of relatief is, blijf daarbij en maak het niet zwaarder.\n" +
+      "- Geen letterlijke herhaling van de volledige antwoorden, geen opsomming met eerste en tweede antwoord, geen citaatblokken.\n" +
+      "- Geen generieke zinnen die ook zonder die antwoorden zouden kloppen (zoals ik neem het mee zoals je het zei zonder inhoud).\n" +
+      "- Geen ik noteer of ik schrijf op: wel ik hoor, ik merk, dat neem ik mee\n" +
       "- Geen bullets, geen markdown, geen emoji\n" +
-      "- Gebruik geen Unicode U+2014 in het antwoord; gebruik komma of punt.\n" +
-      "- Baseer je alleen op wat letterlijk in de twee antwoorden staat. " +
-      "Verzin geen problemen, spanning of emotionele kost (zoals dat iets energie vraagt of blijft terugkomen) als de gebruiker dat niet zo zegt. " +
-      "Een vraag over problemen wil niet zeggen dat het antwoord zwaar is: als het meevalt, rustig is of relatief licht voelt, blijf daar dan bij."
+      "- Gebruik geen Unicode U+2014 in het antwoord; gebruik komma of punt."
     );
   }
 
@@ -1565,7 +1602,7 @@
       meta.q2 +
       "\n→ " +
       obSanitizeForPrompt(answers[k2]) +
-      "\n\nSchrijf je reflectie."
+      "\n\nSchrijf je korte terugblik."
     );
   }
 
@@ -2260,7 +2297,11 @@
             showToast(String(up.error));
             return;
           }
-          if (up && up.storage_path) await syncOwnSenseProfilePrimaryPhoto(uid, up.storage_path);
+          if (up && up.storage_path) {
+            await syncOwnSenseProfilePrimaryPhoto(uid, up.storage_path);
+            var insPh = await insertOnboardingFact(uid, "onboarding_primary_photo", String(up.storage_path).slice(0, 480));
+            if (insPh && insPh.error) console.warn("onboarding_primary_photo fact", insPh.error);
+          }
           try {
             sessionStorage.removeItem(photoSkipStorageKey());
           } catch (_r) {}
@@ -2273,7 +2314,11 @@
               showToast(String(up2.error));
               return;
             }
-            if (up2 && up2.storage_path) await syncOwnSenseProfilePrimaryPhoto(uid, up2.storage_path);
+            if (up2 && up2.storage_path) {
+              await syncOwnSenseProfilePrimaryPhoto(uid, up2.storage_path);
+              var insPh2 = await insertOnboardingFact(uid, "onboarding_primary_photo", String(up2.storage_path).slice(0, 480));
+              if (insPh2 && insPh2.error) console.warn("onboarding_primary_photo fact", insPh2.error);
+            }
           }
           try {
             sessionStorage.removeItem(photoSkipStorageKey());
