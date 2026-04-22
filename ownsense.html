@@ -1041,19 +1041,22 @@ function hydrateAppDepthSlotsFromOwnFacts(){
   }
 }
 
-/** True zodra er minstens één geaccepteerd feit is dat niet uit SenseCorner-onboarding komt (DateSense, OwnSense, …). */
-async function userHasAcceptedNonOnboardingOwnFacts(client,userId){
-  if(!client||!userId)return true;
+/**
+ * Alleen true als er al geaccepteerde onboarding-feiten zijn én géén enkel ander geaccepteerd feit.
+ * Geen rijen (of alleen leeg profiel) => false: dan volle merge uit server/mirror (admin en bestaande users).
+ */
+async function shouldRestrictExternalCategorySources(client,userId){
+  if(!client||!userId)return false;
   try{
-    var r=await client.from('own_facts').select('id,source_app').eq('user_id',userId).eq('status','accepted').limit(300);
-    if(r&&r.error)return true;
+    var r=await client.from('own_facts').select('id,source_app').eq('user_id',userId).eq('status','accepted').limit(400);
+    if(r&&r.error)return false;
     var rows=Array.isArray(r.data)?r.data:[];
     if(!rows.length)return false;
     for(var i=0;i<rows.length;i++){
-      if(String(rows[i].source_app||'')!=='onboarding')return true;
+      if(String(rows[i].source_app||'')!=='onboarding')return false;
     }
-    return false;
-  }catch(_e){return true;}
+    return true;
+  }catch(_e){return false;}
 }
 
 /** SenseCorner onboarding.html schrijft core_* naar own_facts (source_app onboarding). Vul lege OWN-hubvakken. */
@@ -2658,7 +2661,7 @@ async function loadOwnFromSupabase(){
     mergeHubStateFromLocalStorage(user);
     var restrictExternalCategorySources=false;
     try{
-      restrictExternalCategorySources=!(await userHasAcceptedNonOnboardingOwnFacts(client,user.id));
+      restrictExternalCategorySources=await shouldRestrictExternalCategorySources(client,user.id);
     }catch(_re){restrictExternalCategorySources=false;}
     tryConsumeOwnsenseHandoff(user,{skipCategories:restrictExternalCategorySources});
     loadHubState(user,{restrictExternalCategorySources:restrictExternalCategorySources});
@@ -2878,7 +2881,9 @@ function mergeHubStateFromLocalStorage(user){
   }
   var localClean={};
   Object.keys(local).forEach(function(k){
-    if(k!=='categories')localClean[k]=local[k];
+    /* Geen categories: idem geen foto-velden uit hub-cache (zelfde uid-label met verouderde blobs komt voor). */
+    if(k==='categories'||k==='photo_url'||k==='photo_urls'||k==='photo_paths'||k==='foto_analyse')return;
+    localClean[k]=local[k];
   });
   hubState=Object.assign(createEmptyHubState(),hubState,localClean);
 }
@@ -2915,7 +2920,7 @@ function tryConsumeOwnsenseHandoff(user,opts){
   try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
 }
 
-/** restrictExternalCategorySources: geen mirror- of flat16-categorieën tot er own_facts buiten onboarding zijn (bronfix i.p.v. achteraf wissen). */
+/** restrictExternalCategorySources: geen server/mirror/flat16-categorie-merge alleen bij uitsluitend geaccepteerde onboarding-own_facts. */
 function loadHubState(user,opts){
   opts=opts||{};
   var blockExternalCats=!!opts.restrictExternalCategorySources;
@@ -2933,7 +2938,6 @@ function loadHubState(user,opts){
   }
   if(old&&Array.isArray(old.answers)){
     hubState.display_name=String(old.name||'').trim();
-    hubState.photo_url=String(old.photo||'').trim();
   }
   delete hubState.phone;
   var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
