@@ -2511,37 +2511,84 @@ async function getStorageObjectUrl(bucket,path){
 function isDirectlyLoadableImageUrl(u){
   return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
 }
-async function hydrateOwnSensePhotoMetaFromStorage(){
-  if(!sb||!S||!S.user)return;
-  var cell=S.pdata&&S.pdata['OWN Sense'];
-  if(!cell||!cell.meta)return;
-  var m=cell.meta;
-  async function signIfPath(v){
-    var s=String(v||'').trim();
-    if(!s)return'';
-    if(isDirectlyLoadableImageUrl(s))return s;
-    return await getStorageObjectUrl('own-photos',s.replace(/^\/+/,''));
+function parseStorageRef(v){
+  var s=String(v||'').trim();
+  if(!s)return null;
+  if(!/^https?:\/\//i.test(s)){
+    if(/^data:/i.test(s)||/^blob:/i.test(s))return null;
+    return {bucket:'',path:s.replace(/^\/+/,'')};
   }
+  var m=s.match(/\/storage\/v1\/object\/(?:sign|public)\/([^/]+)\/([^?#]+)/i);
+  if(!m)return null;
+  var bucket=decodeURIComponent(String(m[1]||'').trim());
+  var path=decodeURIComponent(String(m[2]||'').trim()).replace(/^\/+/,'');
+  if(!bucket||!path)return null;
+  return {bucket:bucket,path:path};
+}
+function isLikelyExpiringStorageUrl(v){
+  return /\/storage\/v1\/object\/sign\//i.test(String(v||'').trim());
+}
+async function signWithFallbackBuckets(path,buckets){
+  var p=String(path||'').trim().replace(/^\/+/,'');
+  if(!p)return'';
+  var uniq=[];
+  (buckets||[]).forEach(function(b){
+    var k=String(b||'').trim();
+    if(k&&uniq.indexOf(k)<0)uniq.push(k);
+  });
+  for(var i=0;i<uniq.length;i++){
+    var u=await getStorageObjectUrl(uniq[i],p);
+    if(u)return u;
+  }
+  return'';
+}
+async function refreshPhotoRef(v,bucketHints){
+  var s=String(v||'').trim();
+  if(!s)return'';
+  var ref=parseStorageRef(s);
+  if(ref&&ref.path){
+    if(ref.bucket)return await getStorageObjectUrl(ref.bucket,ref.path);
+    var fromFallback=await signWithFallbackBuckets(ref.path,bucketHints||[]);
+    if(fromFallback)return fromFallback;
+  }
+  if(isDirectlyLoadableImageUrl(s)&&!isLikelyExpiringStorageUrl(s))return s;
+  return'';
+}
+async function hydrateAllProfilePhotoMetaFromStorage(){
+  if(!sb||!S||!S.user||!S.pdata)return;
+  var fallbackBuckets=['familysense-photos','sense-photos','datesense-photos','own-photos'];
   try{
-    if(String(m.photo_url||'').trim()&&!isDirectlyLoadableImageUrl(m.photo_url)){
-      var u=await signIfPath(m.photo_url);
-      if(u)m.photo_url=u;
-      else delete m.photo_url;
-    }
-    if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
-      var next=[];
-      for(var i=0;i<m.foto_urls.length;i++){
-        var raw=m.foto_urls[i];
-        if(isDirectlyLoadableImageUrl(raw))next.push(String(raw).trim());
-        else{
-          var su=await signIfPath(raw);
-          if(su)next.push(su);
-        }
+    var names=Object.keys(S.pdata||{});
+    for(var ni=0;ni<names.length;ni++){
+      var dossier=names[ni];
+      var cell=S.pdata[dossier];
+      if(!cell||!cell.meta)continue;
+      var m=cell.meta;
+      var preferred=dossier==='OWN Sense'?['own-photos'].concat(fallbackBuckets):fallbackBuckets.slice();
+      if(String(m.photo_url||'').trim()){
+        var one=await refreshPhotoRef(m.photo_url,preferred);
+        if(one)m.photo_url=one;
+        else delete m.photo_url;
       }
-      m.foto_urls=next;
-      if(!String(m.photo_url||'').trim()&&next.length)m.photo_url=next[0];
+      if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
+        var nextUrls=[];
+        for(var i=0;i<m.foto_urls.length;i++){
+          var u=await refreshPhotoRef(m.foto_urls[i],preferred);
+          if(u)nextUrls.push(u);
+        }
+        m.foto_urls=nextUrls;
+        if(!String(m.photo_url||'').trim()&&nextUrls.length)m.photo_url=nextUrls[0];
+      }
+      if(Array.isArray(m.analysis_photos)&&m.analysis_photos.length){
+        var nextAn=[];
+        for(var j=0;j<m.analysis_photos.length;j++){
+          var au=await refreshPhotoRef(m.analysis_photos[j],preferred);
+          if(au)nextAn.push(au);
+        }
+        m.analysis_photos=nextAn;
+      }
     }
-  }catch(e){console.warn('hydrateOwnSensePhotoMetaFromStorage',e);}
+  }catch(e){console.warn('hydrateAllProfilePhotoMetaFromStorage',e);}
 }
 
 function parseFirstJSONObject(txt){
@@ -3831,7 +3878,7 @@ async function loadAll(){
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
-  try{await hydrateOwnSensePhotoMetaFromStorage();}catch(e){console.warn('OWN foto-urls',e);}
+  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
 }
 
 /** Herstelt oude gemixte scope-data voor family-dossiers (fs verplicht, ds eruit). */

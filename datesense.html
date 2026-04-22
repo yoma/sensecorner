@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="22-04-2026 10:55">
+<meta name="ds-build" content="22-04-2026 11:08">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -154,8 +154,8 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .dossier-mc-btn{display:flex;flex-direction:column;align-items:flex-end;gap:1px;padding:2px 0 2px 10px;border:none;background:none;cursor:pointer;font-family:inherit;text-align:right;flex-shrink:0;max-width:46%}
 .dossier-mc-pct{font-size:18px;font-weight:800;line-height:1.1;letter-spacing:-.3px}
 .dossier-mc-lbl{font-size:11px;font-weight:700;color:var(--m);line-height:1.15;max-width:8.5em}
-.dossier-mc-chev{font-size:11px;color:#aaa;margin-top:2px;transition:transform .2s ease}
-.dossier-mc-btn.open .dossier-mc-chev{transform:rotate(-180deg)}
+.dossier-mc-chev{font-size:11px;color:#aaa;margin-top:2px;transition:transform .18s ease}
+.dossier-mc-btn[aria-expanded="true"] .dossier-mc-chev{transform:rotate(180deg)}
 .dossier-acc-wrap{max-height:0;overflow:hidden;transition:max-height .38s ease;margin:0 0 8px}
 .dossier-acc-wrap.open{max-height:min(520px,78vh)}
 .dossier-acc-inner{display:flex;gap:12px;padding:10px 0 12px;align-items:flex-start;border-bottom:1px solid var(--b)}
@@ -163,6 +163,8 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .dossier-rf-row .rf-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .dossier-rf-row .rf-mid{flex:1;min-width:0;font-size:14px;font-weight:700;color:#333}
 .dossier-rf-row .rf-pct{font-size:16px;font-weight:800;flex-shrink:0}
+.dossier-rf-row .rf-chev{font-size:11px;color:#888;flex-shrink:0;transition:transform .18s ease}
+.dossier-rf-row[aria-expanded="true"] .rf-chev{transform:rotate(180deg)}
 .dossier-rf-acc{max-height:0;overflow:hidden;transition:max-height .35s ease}
 .dossier-rf-acc.open{max-height:400px}
 .dossier-rf-acc-inn{padding:0 0 14px}
@@ -2391,37 +2393,84 @@ async function getStorageObjectUrl(bucket,path){
 function isDirectlyLoadableImageUrl(u){
   return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
 }
-async function hydrateOwnSensePhotoMetaFromStorage(){
-  if(!sb||!S||!S.user)return;
-  var cell=S.pdata&&S.pdata['OWN Sense'];
-  if(!cell||!cell.meta)return;
-  var m=cell.meta;
-  async function signIfPath(v){
-    var s=String(v||'').trim();
-    if(!s)return'';
-    if(isDirectlyLoadableImageUrl(s))return s;
-    return await getStorageObjectUrl('own-photos',s.replace(/^\/+/,''));
+function parseStorageRef(v){
+  var s=String(v||'').trim();
+  if(!s)return null;
+  if(!/^https?:\/\//i.test(s)){
+    if(/^data:/i.test(s)||/^blob:/i.test(s))return null;
+    return {bucket:'',path:s.replace(/^\/+/,'')};
   }
+  var m=s.match(/\/storage\/v1\/object\/(?:sign|public)\/([^/]+)\/([^?#]+)/i);
+  if(!m)return null;
+  var bucket=decodeURIComponent(String(m[1]||'').trim());
+  var path=decodeURIComponent(String(m[2]||'').trim()).replace(/^\/+/,'');
+  if(!bucket||!path)return null;
+  return {bucket:bucket,path:path};
+}
+function isLikelyExpiringStorageUrl(v){
+  return /\/storage\/v1\/object\/sign\//i.test(String(v||'').trim());
+}
+async function signWithFallbackBuckets(path,buckets){
+  var p=String(path||'').trim().replace(/^\/+/,'');
+  if(!p)return'';
+  var uniq=[];
+  (buckets||[]).forEach(function(b){
+    var k=String(b||'').trim();
+    if(k&&uniq.indexOf(k)<0)uniq.push(k);
+  });
+  for(var i=0;i<uniq.length;i++){
+    var u=await getStorageObjectUrl(uniq[i],p);
+    if(u)return u;
+  }
+  return'';
+}
+async function refreshPhotoRef(v,bucketHints){
+  var s=String(v||'').trim();
+  if(!s)return'';
+  var ref=parseStorageRef(s);
+  if(ref&&ref.path){
+    if(ref.bucket)return await getStorageObjectUrl(ref.bucket,ref.path);
+    var fromFallback=await signWithFallbackBuckets(ref.path,bucketHints||[]);
+    if(fromFallback)return fromFallback;
+  }
+  if(isDirectlyLoadableImageUrl(s)&&!isLikelyExpiringStorageUrl(s))return s;
+  return'';
+}
+async function hydrateAllProfilePhotoMetaFromStorage(){
+  if(!sb||!S||!S.user||!S.pdata)return;
+  var fallbackBuckets=['datesense-photos','sense-photos','familysense-photos','own-photos'];
   try{
-    if(String(m.photo_url||'').trim()&&!isDirectlyLoadableImageUrl(m.photo_url)){
-      var u=await signIfPath(m.photo_url);
-      if(u)m.photo_url=u;
-      else delete m.photo_url;
-    }
-    if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
-      var next=[];
-      for(var i=0;i<m.foto_urls.length;i++){
-        var raw=m.foto_urls[i];
-        if(isDirectlyLoadableImageUrl(raw))next.push(String(raw).trim());
-        else{
-          var su=await signIfPath(raw);
-          if(su)next.push(su);
-        }
+    var names=Object.keys(S.pdata||{});
+    for(var ni=0;ni<names.length;ni++){
+      var dossier=names[ni];
+      var cell=S.pdata[dossier];
+      if(!cell||!cell.meta)continue;
+      var m=cell.meta;
+      var preferred=dossier==='OWN Sense'?['own-photos'].concat(fallbackBuckets):fallbackBuckets.slice();
+      if(String(m.photo_url||'').trim()){
+        var one=await refreshPhotoRef(m.photo_url,preferred);
+        if(one)m.photo_url=one;
+        else delete m.photo_url;
       }
-      m.foto_urls=next;
-      if(!String(m.photo_url||'').trim()&&next.length)m.photo_url=next[0];
+      if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
+        var nextUrls=[];
+        for(var i=0;i<m.foto_urls.length;i++){
+          var u=await refreshPhotoRef(m.foto_urls[i],preferred);
+          if(u)nextUrls.push(u);
+        }
+        m.foto_urls=nextUrls;
+        if(!String(m.photo_url||'').trim()&&nextUrls.length)m.photo_url=nextUrls[0];
+      }
+      if(Array.isArray(m.analysis_photos)&&m.analysis_photos.length){
+        var nextAn=[];
+        for(var j=0;j<m.analysis_photos.length;j++){
+          var au=await refreshPhotoRef(m.analysis_photos[j],preferred);
+          if(au)nextAn.push(au);
+        }
+        m.analysis_photos=nextAn;
+      }
     }
-  }catch(e){console.warn('hydrateOwnSensePhotoMetaFromStorage',e);}
+  }catch(e){console.warn('hydrateAllProfilePhotoMetaFromStorage',e);}
 }
 
 function parseFirstJSONObject(txt){
@@ -3702,7 +3751,7 @@ async function loadAll(){
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{await cleanupSystemMirrorDossiers();}catch(e){console.warn('cleanupSystemMirrorDossiers',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
-  try{await hydrateOwnSensePhotoMetaFromStorage();}catch(e){console.warn('OWN foto-urls',e);}
+  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
 }
 
 /** Herstelt oude gemixte scope-data: family-dossiers horen geen ds-scope te houden. */
@@ -7437,7 +7486,7 @@ async function rDossier(el){
   }
   header+='</div>';
   if(!isOwn&&matchPct>=0){
-    header+='<button type="button" class="dossier-mc-btn" id="dossierMatchToggle" aria-expanded="false" onclick="var w=document.getElementById(\'dossierMatchAccWrap\');var b=document.getElementById(\'dossierMatchToggle\');if(w&&b){w.classList.toggle(\'open\');b.classList.toggle(\'open\');b.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
+    header+='<button type="button" class="dossier-mc-btn" id="dossierMatchToggle" aria-expanded="false" onclick="var w=document.getElementById(\'dossierMatchAccWrap\');var b=document.getElementById(\'dossierMatchToggle\');if(w&&b){w.classList.toggle(\'open\');b.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
     header+='<span class="dossier-mc-pct" style="color:'+matchColor+'">'+matchPct+'%</span>';
     header+='<span class="dossier-mc-lbl" style="color:'+matchColor+'">'+matchLabel+'</span>';
     header+='<span class="dossier-mc-chev" aria-hidden="true">▼</span>';
@@ -7681,14 +7730,24 @@ async function loadTab(name,tab,d){
         var rfTopLevel=rfTopScore>=65?'Let op: verhoogd risico':(rfTopScore>=35?'Waakzaam: gemengd signaal':'Rustiger: lager risico');
         var rfTopBg=rfTopScore>=65?'#FFF1F1':(rfTopScore>=35?'#FFF8EC':'#F3FAF4');
         var rfTopBorder=rfTopScore>=65?'#E39B9B':(rfTopScore>=35?'#F2C98E':'#A8D8B0');
-        html+='<div style="margin-bottom:12px;padding:14px 16px;border-radius:14px;border:2px solid '+rfTopBorder+';background:'+rfTopBg+'">';
-        html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
-        html+='<div style="font-size:12px;font-weight:800;color:'+rfTopVisual.txt+';text-transform:uppercase;letter-spacing:.4px">Red flags</div>';
-        html+='<div style="font-size:26px;font-weight:900;color:'+rfTopVisual.bar+';line-height:1">'+rfTopScore+'%</div>';
-        html+='</div>';
-        html+='<div style="font-size:14px;font-weight:800;color:'+rfTopVisual.txt+';margin-top:6px">'+rfTopLevel+'</div>';
-        html+='<div style="font-size:12px;color:#6b7280;margin-top:6px">Detail en onderbouwing staan lager in dit overzicht en op tab <strong>Advies</strong>.</div>';
-        html+='</div>';
+        var rfTopReasons=(rfTop.reasons||[]).slice(0,3);
+        html+='<div style="margin-bottom:12px;border-radius:14px;border:2px solid '+rfTopBorder+';background:'+rfTopBg+';overflow:hidden">';
+        html+='<button type="button" class="dossier-rf-row" aria-expanded="false" style="background:transparent;border:0;border-radius:0;padding:12px 14px" onclick="var w=document.getElementById(\'dossierRfTopAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
+        html+='<span class="rf-dot" style="background:'+rfTopVisual.dot+'"></span>';
+        html+='<span class="rf-mid" style="color:'+rfTopVisual.txt+'">Red flags · '+rfTopLevel+'</span>';
+        html+='<span class="rf-pct" style="color:'+rfTopVisual.bar+'">'+rfTopScore+'%</span>';
+        html+='<span class="rf-chev" aria-hidden="true">▼</span>';
+        html+='</button>';
+        html+='<div id="dossierRfTopAcc" class="dossier-rf-acc"><div class="dossier-rf-acc-inn" style="padding-top:6px">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><span style="font-size:12px;font-weight:800;color:#333">Score</span><span style="font-size:16px;font-weight:900;color:'+rfTopVisual.bar+'">'+rfTopScore+'%</span></div>';
+        html+='<div style="height:4px;background:#e8ebef;border-radius:999px;overflow:hidden"><div style="height:100%;width:'+rfTopScore+'%;background:'+rfTopVisual.bar+'"></div></div>';
+        if(rfTopReasons.length){
+          html+='<ul class="ai-sec-list" style="margin-top:10px">';
+          rfTopReasons.forEach(function(rr){ html+='<li>'+escHTML(rr)+'</li>'; });
+          html+='</ul>';
+        }
+        html+='<p class="ai-sec-text" style="font-size:11px;color:#6b7280;margin-top:8px">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen). Volledige duiding staat ook op tab <strong>Advies</strong>.</p>';
+        html+='</div></div></div>';
       }else{
         html+='<div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;border:1px solid #FFE082;background:#FFF8E1">'
           +'<div style="font-size:13px;font-weight:800;color:#7A5A00">Red flags nog niet berekend</div>'
@@ -7754,39 +7813,6 @@ async function loadTab(name,tab,d){
     if(isOwnDossier){
       html+='<div style="font-size:11px;color:#8a8f97;margin:0 0 12px;line-height:1.45">Overzicht toont enkel kerninfo. Voor alle invuldetails ga je naar tab <strong>Profiel</strong>.</div>';
       html+=buildInvulvragenStripHtml(name);
-    }
-
-    // Contact: red flags (compact + uitklapbaar)
-    if(!isOwnDossier){
-      var rf=((d.meta||{}).red_flags)||null;
-      if(rf&&typeof rf.score==='number'){
-        var rfs=Math.max(0,Math.min(100,parseInt(rf.score,10)||0));
-        var rv=redFlagVisuals(rfs);
-        var reasons=(rf.reasons||[]).slice(0,3);
-        html+='<div style="margin-bottom:14px">';
-        html+='<button type="button" class="dossier-rf-row" aria-expanded="false" onclick="var w=document.getElementById(\'dossierRfAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
-        html+='<span class="rf-dot" style="background:'+rv.dot+'"></span>';
-        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · red flags</span>';
-        html+='<span class="rf-pct" style="color:'+rv.txt+'">'+rfs+'%</span>';
-        html+='<span style="font-size:11px;color:#aaa;flex-shrink:0">▼</span>';
-        html+='</button>';
-        html+='<div id="dossierRfAcc" class="dossier-rf-acc"><div class="dossier-rf-acc-inn">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:800;color:#333">Score</span><span style="font-size:18px;font-weight:800;color:'+rv.bar+'">'+rfs+'%</span></div>';
-        html+='<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+rfs+'%;background:'+rv.bar+'"></div></div>';
-        if(reasons.length){
-          html+='<ul class="ai-sec-list" style="margin-top:10px">';
-          reasons.forEach(function(rr){ html+='<li>'+escHTML(rr)+'</li>'; });
-          html+='</ul>';
-        }
-        html+='<p class="ai-sec-text" style="font-size:11px;color:#8a8f97;margin-top:8px">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen).</p>';
-        html+='</div></div></div>';
-      }else{
-        html+='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:14px;padding:14px 14px;margin:0 0 14px">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
-        html+='<div><div style="font-size:13px;font-weight:800;color:#7A5A00">Red flags nog niet berekend</div><div style="font-size:12px;color:#806A1A;margin-top:2px">Laat Advies één keer draaien voor score + uitleg op basis van gedrag en context.</div></div>';
-        html+='<button class="btn-g" style="max-width:170px;padding:8px 12px" onclick="switchTab(\'advies\')">Naar Advies</button>';
-        html+='</div></div>';
-      }
     }
 
     if(isOwnDossier){
