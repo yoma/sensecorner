@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging landingspagina: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="lp-build" content="22-04-2026 19:40">
+<meta name="lp-build" content="22-04-2026 20:01">
 <title>SenseCorner - Een coach die jou echt leert kennen</title>
 <meta name="description" content="Sensei is je persoonlijke coach voor dating, familie, vriendschap en zelfkennis. Eén profiel dat jou begrijpt, in elk levensgebied.">
 <meta property="og:title" content="SenseCorner — Maak kennis met Sensei">
@@ -290,21 +290,33 @@ section.lp-section{padding:clamp(56px,10vw,100px) 0;border-top:1px solid rgba(61
   .sc-footer-inner{grid-template-columns:1fr;gap:32px}
   .sc-footer-links{gap:32px}
 }
-/* Terugkeer: ingelogde gebruiker (onboarding of hub) */
+/* Terugkeer: ingelogde gebruiker (onboarding of hub); mobiel: dvh + hoge z-index i.v.m. sticky nav en iOS */
 .lp-auth-shell{
-  position:fixed;inset:0;z-index:220;display:flex;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;
   padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   box-sizing:border-box;
+  min-height:100vh;
+  min-height:100dvh;
+  min-height:-webkit-fill-available;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
 }
 .lp-auth-shell[hidden]{display:none!important}
+html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 .lp-auth-shell__backdrop{
-  position:absolute;inset:0;background:rgba(42,24,16,.42);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  position:fixed;inset:0;background:rgba(42,24,16,.46);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+@media(max-width:520px){
+  .lp-auth-shell__backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 .lp-auth-shell__card{
-  position:relative;z-index:2;width:100%;max-width:400px;
+  position:relative;z-index:2;width:100%;max-width:400px;margin:auto;
+  flex-shrink:0;
   background:var(--ivoor);border:1px solid var(--b);border-radius:var(--radius-card-lg);
   padding:28px 24px 22px;box-shadow:0 18px 48px rgba(61,47,31,.14);
   text-align:center;animation:lpAuthPop .42s cubic-bezier(.2,.9,.25,1) both;
+  -webkit-transform:translateZ(0);transform:translateZ(0);
 }
 @keyframes lpAuthPop{
   from{opacity:0;transform:translateY(12px) scale(.97)}
@@ -698,13 +710,21 @@ section.lp-section{padding:clamp(56px,10vw,100px) 0;border-top:1px solid rgba(61
     shell.hidden=true;
     shell.setAttribute('aria-hidden','true');
     document.body.style.overflow='';
+    try{document.documentElement.classList.remove('lp-auth-noscroll');document.body.classList.remove('lp-auth-noscroll');}catch(_e0){}
   }
 
   function show(){
     shell.hidden=false;
     shell.setAttribute('aria-hidden','false');
     document.body.style.overflow='hidden';
-    try{primary.focus();}catch(_e){}
+    try{document.documentElement.classList.add('lp-auth-noscroll');document.body.classList.add('lp-auth-noscroll');}catch(_e1){}
+    try{
+      requestAnimationFrame(function(){
+        try{primary.focus();}catch(_e2){}
+      });
+    }catch(_e3){
+      try{primary.focus();}catch(_e4){}
+    }
   }
 
   async function hasOnboardingCompleted(sb,userId){
@@ -776,7 +796,11 @@ section.lp-section{padding:clamp(56px,10vw,100px) 0;border-top:1px solid rgba(61
     show();
   }
 
-  run();
+  function bootLpAuthPop(){
+    run();
+  }
+  if(document.readyState==='complete')bootLpAuthPop();
+  else window.addEventListener('load',bootLpAuthPop,{once:true});
 })();
 </script>
 </body>

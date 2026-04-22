@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="sc-build" content="18-04-2026 21:58">
+<meta name="sc-build" content="22-04-2026 20:08">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -646,7 +646,6 @@ a{text-decoration:none;color:inherit}
     <div class="auth-actions">
       <button id="authLoginBtn" class="hub-auth-btn primary" type="button">Inloggen</button>
       <button id="authRegisterConfirmBtn" class="hub-auth-btn" type="button">Account maken</button>
-      <button id="authMagicBtn" class="hub-auth-btn" type="button">Inloglink via e-mail</button>
       <button id="authCloseBtn" class="auth-close" type="button">Sluiten</button>
     </div>
     <div id="authMsg" class="auth-msg"></div>
@@ -664,6 +663,28 @@ a{text-decoration:none;color:inherit}
     }
   }catch(_e){}
   var pendingReturnTo='';
+
+  async function scHasOnboardingCompleted(userId){
+    if(!sb||!userId)return false;
+    try{
+      var oc=await sb.from('own_facts').select('id').eq('user_id',userId).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
+      return !!(oc&&oc.data);
+    }catch(_e){return false;}
+  }
+
+  if(sb){
+    try{
+      var sessEarly=await sb.auth.getSession();
+      var uEarly=sessEarly&&sessEarly.data&&sessEarly.data.session&&sessEarly.data.session.user?sessEarly.data.session.user:null;
+      if(uEarly){
+        var doneEarly=await scHasOnboardingCompleted(uEarly.id);
+        if(!doneEarly){
+          window.location.replace('onboarding.html');
+          return;
+        }
+      }
+    }catch(_e){}
+  }
 
   /* ── Datum in header ── */
   var d=new Date();
@@ -721,7 +742,6 @@ a{text-decoration:none;color:inherit}
   var authMsg=document.getElementById('authMsg');
   var authLoginBtn=document.getElementById('authLoginBtn');
   var authRegisterConfirmBtn=document.getElementById('authRegisterConfirmBtn');
-  var authMagicBtn=document.getElementById('authMagicBtn');
   var authPwToggleBtn=document.getElementById('authPwToggleBtn');
   var authForgotBtn=document.getElementById('authForgotBtn');
   var authCloseBtn=document.getElementById('authCloseBtn');
@@ -1932,9 +1952,24 @@ a{text-decoration:none;color:inherit}
   if(hubOpenOwnBtn){
     hubOpenOwnBtn.onclick=function(){window.location.href='ownsense.html';};
   }
-  if(authCloseBtn)authCloseBtn.onclick=closeAuthModal;
+  if(authCloseBtn)authCloseBtn.onclick=function(){
+    closeAuthModal();
+    getCurrentUser().then(function(u){
+      if(!u){
+        try{window.location.href='index.html';}
+        catch(_e){window.location.replace('index.html');}
+      }
+    }).catch(function(){});
+  };
   if(authOverlay)authOverlay.addEventListener('click',function(e){
-    if(e.target===authOverlay)closeAuthModal();
+    if(e.target!==authOverlay)return;
+    closeAuthModal();
+    getCurrentUser().then(function(u){
+      if(!u){
+        try{window.location.href='index.html';}
+        catch(_e){window.location.replace('index.html');}
+      }
+    }).catch(function(){});
   });
   if(authLoginBtn)authLoginBtn.onclick=async function(){
     if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
@@ -1975,17 +2010,6 @@ a{text-decoration:none;color:inherit}
       setAuthMsg('Account aangemaakt. Bevestig je e-mail en log daarna in.');
     }catch(_e){setAuthMsg('Account maken mislukt. Probeer opnieuw.',true);}
   };
-  if(authMagicBtn)authMagicBtn.onclick=async function(){
-    if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
-    var email=String((authEmail&&authEmail.value)||'').trim();
-    if(!email){setAuthMsg('Vul eerst je e-mail in.',true);return;}
-    setAuthMsg('Magic link verzenden…');
-    try{
-      var ml=await sb.auth.signInWithOtp({email:email,options:{emailRedirectTo:authReturnUrl(pendingReturnTo||'sensecorner.html')}});
-      if(ml&&ml.error){setAuthMsg(ml.error.message||'Verzenden mislukt.',true);return;}
-      setAuthMsg('Magic link verzonden. Check je mailbox.');
-    }catch(_e){setAuthMsg('Verzenden mislukt. Probeer opnieuw.',true);}
-  };
   if(authPwToggleBtn&&authPassword){
     authPwToggleBtn.onclick=function(){
       var isPw=authPassword.type==='password';
@@ -2012,6 +2036,7 @@ a{text-decoration:none;color:inherit}
       }
     });
   }
+  var openedReturnToModal=false;
   try{
     var params=new URLSearchParams(window.location.search||'');
     var returnTo=String(params.get('returnTo')||'').trim();
@@ -2020,9 +2045,19 @@ a{text-decoration:none;color:inherit}
       if(target.indexOf('.html')===-1||target.indexOf('http')===0)target='ownsense.html';
       var user=await getCurrentUser();
       if(user)window.location.href=target;
-      else openAuthModal('login',target);
+      else{
+        openAuthModal('login',target);
+        openedReturnToModal=true;
+      }
     }
   }catch(_e){}
+  if(!openedReturnToModal){
+    var guestFinal=await getCurrentUser();
+    if(!guestFinal){
+      openAuthModal('login','');
+      if(authSub)authSub.textContent='Log in om de SenseCorner-hub te gebruiken. Nog geen account? Kies «Account aanmaken».';
+    }
+  }
 })();
 </script>
 </body>

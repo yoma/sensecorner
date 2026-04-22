@@ -52,17 +52,43 @@
     .ob-rail {
       position: sticky;
       top: 0;
-      height: 3px;
-      background: var(--ob-border-soft);
       z-index: 20;
       display: none;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 7px;
+      padding: 10px clamp(16px, 4vw, 28px) 9px;
+      background: linear-gradient(180deg, rgba(242, 232, 213, 0.94) 0%, rgba(242, 232, 213, 0.78) 100%);
+      border-bottom: 1px solid var(--ob-border-soft);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
-    .ob-rail.is-on { display: block; }
+    .ob-rail.is-on {
+      display: flex;
+    }
+    .ob-rail-track {
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(61, 47, 31, 0.09);
+      overflow: hidden;
+      box-shadow: inset 0 1px 2px rgba(61, 47, 31, 0.07);
+    }
     .ob-rail-fill {
       height: 100%;
       width: 0%;
+      min-width: 0;
+      border-radius: 999px;
       background: var(--ob-own-medium);
-      transition: width 0.45s ease, background 0.45s ease;
+      transition: width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.45s ease;
+      box-shadow: 0 1px 7px rgba(79, 110, 75, 0.22);
+    }
+    .ob-rail-hint {
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--ob-muted);
+      text-align: center;
+      letter-spacing: 0.03em;
     }
     .ob-stage {
       flex: 1;
@@ -724,7 +750,12 @@
 </head>
 <body>
   <div class="ob-bg-decor" aria-hidden="true"><div class="ob-bg-decor-inner"></div></div>
-  <div class="ob-rail" id="obRail" aria-hidden="true"><div class="ob-rail-fill" id="obRailFill"></div></div>
+  <div class="ob-rail" id="obRail" aria-hidden="true">
+    <div class="ob-rail-track" id="obRailTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Voortgang kennismaking">
+      <div class="ob-rail-fill" id="obRailFill"></div>
+    </div>
+    <div class="ob-rail-hint" id="obRailHint" aria-live="polite"></div>
+  </div>
 
   <main class="ob-stage" id="obStage">
     <div id="obStaticStack">
@@ -1271,7 +1302,72 @@
       return sb.from("own_photos").upsert(payload, { onConflict: "user_id,slot" }).select("*").maybeSingle();
     }, 3);
     if (row && row.error) return { error: String(row.error.message || "Opslaan mislukt") };
-    return { error: "" };
+    return { error: "", storage_path: path };
+  }
+
+  async function syncOwnSenseProfilePrimaryPhoto(userId, storagePath) {
+    if (!sb || !userId || !storagePath) return;
+    var pathClean = String(storagePath || "").trim();
+    if (!pathClean) return;
+    var signRes = await sb.storage.from("own-photos").createSignedUrl(pathClean, 60 * 60 * 24 * 30);
+    var signed = signRes && signRes.data && signRes.data.signedUrl ? String(signRes.data.signedUrl) : "";
+    if (!signed) return;
+    var sel = await sb.from("sense_profiles").select("id,props,foto_urls,foto_paths").eq("user_id", userId).eq("name", "OWN Sense").maybeSingle();
+    if (sel && sel.error) return;
+    var iso = new Date().toISOString();
+    var topUrls = sel && sel.data && Array.isArray(sel.data.foto_urls) ? sel.data.foto_urls.slice() : [];
+    var topPaths = sel && sel.data && Array.isArray(sel.data.foto_paths) ? sel.data.foto_paths.slice() : [];
+    if (!topUrls.length) topUrls = [signed];
+    else {
+      topUrls = topUrls.slice();
+      topUrls[0] = signed;
+    }
+    if (!topPaths.length) topPaths = [pathClean];
+    else {
+      topPaths = topPaths.slice();
+      topPaths[0] = pathClean;
+    }
+    var mergedProps = Object.assign({}, (sel && sel.data && sel.data.props && typeof sel.data.props === "object") ? sel.data.props : {});
+    if (!Array.isArray(mergedProps.foto_urls)) mergedProps.foto_urls = [];
+    mergedProps.foto_urls = mergedProps.foto_urls.slice();
+    if (!mergedProps.foto_urls.length) mergedProps.foto_urls.push(signed);
+    else mergedProps.foto_urls[0] = signed;
+    if (!Array.isArray(mergedProps.foto_paths)) mergedProps.foto_paths = [];
+    mergedProps.foto_paths = mergedProps.foto_paths.slice();
+    if (!mergedProps.foto_paths.length) mergedProps.foto_paths.push(pathClean);
+    else mergedProps.foto_paths[0] = pathClean;
+    mergedProps.meta = Object.assign({}, (mergedProps.meta && typeof mergedProps.meta === "object") ? mergedProps.meta : {}, { photo_url: signed });
+    if (sel && sel.data) {
+      var up = await sb
+        .from("sense_profiles")
+        .update({ foto_urls: topUrls, foto_paths: topPaths, props: mergedProps, last_active: iso })
+        .eq("user_id", userId)
+        .eq("name", "OWN Sense");
+      if (up && up.error) console.warn("syncOwnSenseProfilePrimaryPhoto", up.error);
+    } else {
+      var ins = await sb.from("sense_profiles").insert({
+        user_id: userId,
+        name: "OWN Sense",
+        foto_urls: topUrls,
+        foto_paths: topPaths,
+        props: mergedProps,
+        last_active: iso
+      });
+      if (ins && ins.error) console.warn("syncOwnSenseProfilePrimaryPhoto insert", ins.error);
+    }
+    try {
+      var key = "ownsense_hub_profile_v2";
+      var raw = localStorage.getItem(key);
+      var o = raw ? JSON.parse(raw) : {};
+      if (!o || typeof o !== "object") o = {};
+      if (o.__ownsense_uid && String(o.__ownsense_uid) !== String(userId)) return;
+      o.__ownsense_uid = String(userId);
+      o.photo_url = signed;
+      o.photo_urls = topUrls.slice(0, 4);
+      o.photo_paths = topPaths.slice(0, 4);
+      o.updated_at = iso;
+      localStorage.setItem(key, JSON.stringify(o));
+    } catch (_loc) {}
   }
 
   var AI_SUMMARY_FALLBACK = "Dank dat je dit deelde. Ik neem het mee.";
@@ -1749,7 +1845,18 @@
       s.classList.toggle("is-active", s.getAttribute("data-ob") === key);
     });
     if (key.indexOf("acc") === 0 || key === "mir0" || key === "mir1") {
-      document.getElementById("obRail").classList.remove("is-on");
+      var railOff = document.getElementById("obRail");
+      var trOff = document.getElementById("obRailTrack");
+      if (railOff) {
+        railOff.classList.remove("is-on");
+        railOff.setAttribute("aria-hidden", "true");
+      }
+      if (trOff) {
+        trOff.setAttribute("aria-valuenow", "0");
+        trOff.removeAttribute("aria-valuetext");
+      }
+      var rh = document.getElementById("obRailHint");
+      if (rh) rh.textContent = "";
     }
   }
 
@@ -1809,13 +1916,24 @@
   function updateRail() {
     var rail = document.getElementById("obRail");
     var fill = document.getElementById("obRailFill");
+    var hint = document.getElementById("obRailHint");
     if (!routeStarted) return;
     rail.classList.add("is-on");
     var step = route[routeIndex];
-    var pct = Math.round((routeIndex / Math.max(1, route.length - 1)) * 100);
+    var total = route.length;
+    var pct = Math.round((routeIndex / Math.max(1, total - 1)) * 100);
     fill.style.width = pct + "%";
     var m = step && step.mirror ? step.mirror : "own";
     fill.style.background = railColorForMirror(m);
+    if (hint) {
+      hint.textContent = "Stap " + (routeIndex + 1) + " van " + total;
+    }
+    var track = document.getElementById("obRailTrack");
+    if (track) {
+      track.setAttribute("aria-valuenow", String(pct));
+      track.setAttribute("aria-valuetext", "Stap " + (routeIndex + 1) + " van " + total);
+    }
+    rail.setAttribute("aria-hidden", "false");
   }
 
   function escapeAttr(s) {
@@ -2140,6 +2258,7 @@
             showToast(String(up.error));
             return;
           }
+          if (up && up.storage_path) await syncOwnSenseProfilePrimaryPhoto(uid, up.storage_path);
           try {
             sessionStorage.removeItem(photoSkipStorageKey());
           } catch (_r) {}
@@ -2152,6 +2271,7 @@
               showToast(String(up2.error));
               return;
             }
+            if (up2 && up2.storage_path) await syncOwnSenseProfilePrimaryPhoto(uid, up2.storage_path);
           }
           try {
             sessionStorage.removeItem(photoSkipStorageKey());
