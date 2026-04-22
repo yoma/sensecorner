@@ -297,6 +297,10 @@
       cursor: pointer;
       transition: transform 0.15s, background 0.15s, box-shadow 0.2s;
       backdrop-filter: blur(6px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
     }
     .ob-cta-oauth:hover:not(:disabled) {
       transform: translateY(-1px);
@@ -304,6 +308,22 @@
       box-shadow: 0 4px 16px rgba(42, 24, 16, 0.12);
     }
     .ob-cta-oauth:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+    .ob-google-icon{
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      background:#fff;
+      border:1px solid rgba(0,0,0,0.08);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      font-weight:700;
+      line-height:1;
+      color:#4285F4;
+      font-family:Arial,Helvetica,sans-serif;
+      flex-shrink:0;
+    }
     .ob-cta-split {
       text-align: center;
       font-size: 12px;
@@ -748,7 +768,7 @@
         <div class="ob-cta-wrap" id="obCtaEmail">
           <button type="button" class="ob-cta-primary" id="obBtnEmail" disabled>Stuur code</button>
           <div class="ob-cta-split">of</div>
-          <button type="button" class="ob-cta-oauth" id="obBtnGoogle">Verder met Google</button>
+          <button type="button" class="ob-cta-oauth" id="obBtnGoogle"><span class="ob-google-icon" aria-hidden="true">G</span><span>Verder met Google</span></button>
           <button type="button" class="ob-cta-secondary" id="obBtnEmailBack">← Terug</button>
         </div>
         <p class="ob-inline-error" id="obEmailErr" aria-live="polite"></p>
@@ -1099,7 +1119,18 @@
       var up = await withRetries(function () {
         return sb.from("sense_profiles").upsert(payload, { onConflict: "user_id,name" });
       }, 3);
-      if (up && up.error) return "Even een haperingetje. Ik probeer het opnieuw.";
+      if (up && up.error) {
+        var rawMsg = String(up.error.message || "");
+        // Sinds naam-guardrails in DB kunnen systeemspiegels geblokkeerd worden.
+        // Blokkeer onboarding niet, maar geef duidelijke melding zodat de flow verder kan.
+        if (
+          rawMsg.toLowerCase().indexOf("gereserveerd voor systeemgebruik") >= 0 ||
+          rawMsg.toLowerCase().indexOf("validate_sense_profile_name") >= 0
+        ) {
+          return "db_reserved_name_guard";
+        }
+        return "Even een haperingetje. Ik probeer het opnieuw.";
+      }
     }
     return "";
   }
@@ -2578,8 +2609,12 @@
     }
     var err = await saveMirrorProfilesForUser(uid);
     if (err) {
-      showToast(err);
-      return;
+      if (err === "db_reserved_name_guard") {
+        showToast("Spiegels zijn gekozen. We gaan verder, profielnamen worden later opgeschoond.");
+      } else {
+        showToast(err);
+        return;
+      }
     }
     goToStatic("mir1");
     setupMirrorReaction();
