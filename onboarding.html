@@ -1585,107 +1585,61 @@
     return OB_SS_PREFIX + (uid || "") + "_resume_bridge_shown";
   }
 
-  async function fetchOnboardingFactsDump(uid) {
-    if (!sb || !uid) return "";
-    var res = await sb
-      .from("own_facts")
-      .select("subcategory,fact_text")
-      .eq("user_id", uid)
-      .eq("source_app", "onboarding")
-      .order("created_at", { ascending: true });
-    if (res && res.error) return "";
-    var rows = Array.isArray(res.data) ? res.data : [];
-    var lines = [];
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i];
-      var sub = String((r && r.subcategory) || "").trim();
-      if (!sub || sub === "completed") continue;
-      lines.push("- " + sub + ": " + obSanitizeForPrompt(r.fact_text));
-    }
-    return lines.join("\n");
-  }
-
-  function buildResumeReflectionSystemPrompt() {
-    return (
-      "Je bent Sensei. Iemand komt terug om de kennismaking in SenseCorner af te maken. " +
-      "Hieronder staan feiten die hij of zij eerder al gaf tijdens onboarding.\n\n" +
-      "Schrijf twee tot drie zinnen: rustig terugkijken, erkennen wat er al ligt, en uitnodigen om verder te gaan.\n" +
-      "Regels: Nederlands (Vlaams mag), spreek aan met jij of je, geen naam in de tekst, geen oordeel, geen advies. " +
-      "Gebruik geen woorden als noteren, opschrijven of vastleggen. Gebruik wel ik zie, ik hoor, dat neem ik mee. " +
-      "Herhaal geen laadteksten of meta-zinnen (zoals even ophalen, even lezen, een momentje). Begin direct met je terugblik. " +
-      "Geen emoji, geen markdown. Gebruik geen Unicode U+2014; gebruik komma of punt."
-    );
-  }
-
-  function stripEchoedResumeLoaderLines(txt) {
-    txt = String(txt || "").trim();
-    if (!txt) return txt;
-    var lines = txt.split(/\n+/);
-    var first = String(lines[0] || "").trim();
-    var low = first.toLowerCase();
-    if (
-      low.indexOf("ik haal even op") === 0 ||
-      (low.indexOf("ik haal even") === 0 && low.indexOf("deelde") >= 0) ||
-      low.indexOf("even op wat je al") >= 0
-    ) {
-      lines.shift();
-      return lines.join("\n").trim() || txt;
-    }
-    return txt;
-  }
-
   async function renderResumeSenseiBridge(uid) {
     try {
       if (sessionStorage.getItem(resumeBridgeStorageKey(uid)) === "1") return;
     } catch (_sk) {}
-    var dump = await fetchOnboardingFactsDump(uid);
-    if (!dump) return;
     var host = document.getElementById("obDynamic");
     if (!host) return;
     if (currentTypingController) currentTypingController.cancelled = true;
     var controller = { cancelled: false };
     currentTypingController = controller;
 
+    var loadLines = [
+      "Zachtjes het touwtje straktrekken…",
+      "Even de pixels een pluim geven…",
+      "Nog gauw het licht dimmen voor het vervolg…",
+      "Je plekje op de bank opschuiven…",
+      "Gedachten even laten opwarmen in de zon…",
+      "De volgende vraag zet alvast zijn schoenen klaar…"
+    ];
+    function pickLoadLine() {
+      return loadLines[Math.floor(Math.random() * loadLines.length)];
+    }
+
     host.innerHTML =
       '<div class="ob-end-card" style="padding-top:8px">' +
       '<div class="ob-ripple ob-ripple-q own big pulsing"><div class="ob-ripple-inner">' +
       '<div class="ob-ripple-center-letter">O</div></div></div>' +
-      '<p class="ob-ai-wait" id="obResWait" aria-busy="true">Even geduld…</p>' +
-      '<p class="ob-sensei" id="obResBody" style="min-height:48px"></p>' +
+      '<p class="ob-sensei lg" id="obResWelcome" style="min-height:52px"></p>' +
+      '<p class="ob-ai-wait" id="obResWait" style="display:none;text-align:center" aria-live="polite"></p>' +
       '<div class="ob-cta-wrap" id="obResCta" style="margin-top:20px">' +
       '<button type="button" class="ob-cta-primary" id="obResBtn">Verder waar we waren</button></div></div>';
 
-    var bodyEl = document.getElementById("obResBody");
+    var welcomeEl = document.getElementById("obResWelcome");
     var waitEl = document.getElementById("obResWait");
     var ctaWrap = document.getElementById("obResCta");
     if (ctaWrap) ctaWrap.classList.remove("shown");
 
-    var msg =
-      "Welkom terug. Ik heb wat je deelde bewaard. We gaan rustig verder waar je gebleven was.";
-    if (sb) {
-      try {
-        var sysR = buildResumeReflectionSystemPrompt();
-        var usrR =
-          "Feiten uit je vorige onboarding-stappen (inhoud, zonder volgorde van schermen):\n\n" +
-          dump +
-          "\n\nSchrijf je korte terugblik.";
-        msg = await callSenseiOnboarding(sysR, usrR, 380);
-        msg = obSanitizeForPrompt(msg) || msg;
-        msg = stripEchoedResumeLoaderLines(msg);
-        if (!String(msg || "").trim()) {
-          msg =
-            "Welkom terug. Ik heb wat je deelde bewaard. We gaan rustig verder waar je gebleven was.";
-        }
-        await saveOnboardingInsight(uid, "resume_welcome", msg);
-      } catch (_re) {
-        console.warn("resume sensei bridge", _re);
-      }
+    var welcomeMsg = "Welkom terug. We gaan naar het punt waar je gebleven was.";
+    if (welcomeEl) {
+      welcomeEl.innerHTML = "";
+      await fadeInContent(welcomeEl, escapeHtml(welcomeMsg), controller, 520);
     }
-    if (waitEl) waitEl.style.display = "none";
-    if (bodyEl) {
-      bodyEl.innerHTML = "";
-      await fadeInContent(bodyEl, escapeHtml(msg), controller, 620);
+    if (controller.cancelled) return;
+
+    if (waitEl) {
+      waitEl.style.display = "block";
+      waitEl.textContent = pickLoadLine();
+      await sleep(820 + Math.floor(Math.random() * 380));
+      if (controller.cancelled) return;
+      waitEl.textContent = pickLoadLine();
+      await sleep(720 + Math.floor(Math.random() * 320));
+      if (controller.cancelled) return;
+      waitEl.style.display = "none";
+      waitEl.textContent = "";
     }
+
     if (ctaWrap) ctaWrap.classList.add("shown");
     await new Promise(function (resolve) {
       var b = document.getElementById("obResBtn");
