@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="22-04-2026 10:09">
+<meta name="ds-build" content="22-04-2026 10:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -7661,6 +7661,40 @@ async function loadTab(name,tab,d){
         +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+contactFilled+'/'+contactTotal+'</strong> profiel'
         +' · <button type="button" style="background:none;border:none;color:var(--r);font-weight:700;cursor:pointer;font-family:inherit;padding:0" onclick="switchTab(\'profiel\')">Profiel invullen</button>'
         +'</div>';
+      var msOverzicht=computeDossierMatchSummary(name);
+      if(msOverzicht.matchPct!==null&&msOverzicht.matchPct>=0){
+        html+='<div style="background:linear-gradient(135deg,#fafbfc 0%,#fff 100%);border:1px solid var(--b);border-radius:14px;padding:14px 16px;margin-bottom:10px">';
+        html+='<div style="font-size:11px;color:#8a8f97;margin-bottom:6px">Match met jou (OWN)</div>';
+        html+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">';
+        html+='<span style="font-size:36px;font-weight:800;line-height:1;color:'+msOverzicht.matchColor+'">'+msOverzicht.matchPct+'%</span>';
+        html+='<span style="font-size:15px;font-weight:800;color:'+msOverzicht.matchColor+'">'+escHTML(msOverzicht.matchLabel)+'</span>';
+        html+='</div></div>';
+      }else if(msOverzicht.matchPct===-1){
+        html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Vul eerst <strong>OWN Sense</strong> in om een matchscore te zien.</div>';
+      }else{
+        html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen) geeft een betere match.</div>';
+      }
+      var rfTop=((d.meta||{}).red_flags)||null;
+      if(rfTop&&typeof rfTop.score==='number'){
+        var rfTopScore=Math.max(0,Math.min(100,parseInt(rfTop.score,10)||0));
+        var rfTopVisual=redFlagVisuals(rfTopScore);
+        var rfTopLevel=rfTopScore>=65?'Let op: verhoogd risico':(rfTopScore>=35?'Waakzaam: gemengd signaal':'Rustiger: lager risico');
+        var rfTopBg=rfTopScore>=65?'#FFF1F1':(rfTopScore>=35?'#FFF8EC':'#F3FAF4');
+        var rfTopBorder=rfTopScore>=65?'#E39B9B':(rfTopScore>=35?'#F2C98E':'#A8D8B0');
+        html+='<div style="margin-bottom:12px;padding:14px 16px;border-radius:14px;border:2px solid '+rfTopBorder+';background:'+rfTopBg+'">';
+        html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+        html+='<div style="font-size:12px;font-weight:800;color:'+rfTopVisual.txt+';text-transform:uppercase;letter-spacing:.4px">Red flags</div>';
+        html+='<div style="font-size:26px;font-weight:900;color:'+rfTopVisual.bar+';line-height:1">'+rfTopScore+'%</div>';
+        html+='</div>';
+        html+='<div style="font-size:14px;font-weight:800;color:'+rfTopVisual.txt+';margin-top:6px">'+rfTopLevel+'</div>';
+        html+='<div style="font-size:12px;color:#6b7280;margin-top:6px">Detail en onderbouwing staan lager in dit overzicht en op tab <strong>Advies</strong>.</div>';
+        html+='</div>';
+      }else{
+        html+='<div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;border:1px solid #FFE082;background:#FFF8E1">'
+          +'<div style="font-size:13px;font-weight:800;color:#7A5A00">Red flags nog niet berekend</div>'
+          +'<div style="font-size:12px;color:#806A1A;margin-top:2px">Open <strong>Advies</strong> en laat 1 keer analyseren om deze score bovenaan te tonen.</div>'
+          +'</div>';
+      }
     }
 
     var openProfielCta='';
@@ -10226,22 +10260,10 @@ function buildProfielContactHtml(name,d){
   var contactFilled=CONTACT_CATS.reduce(function(s,c){return s+contactCatProgress(c.id).filled;},0);
   var contactTotal=CONTACT_CATS.reduce(function(s,c){return s+c.prompts.length;},0);
   var metaCC=getProfileMetaCompletion(name);
-  var ms=computeDossierMatchSummary(name);
   var profielIncomplete=!metaCC.complete||(contactTotal>0&&contactFilled<contactTotal);
   var html='';
   html+='<div style="font-size:16px;font-weight:800;color:#333;margin-bottom:6px">Profiel</div>';
-  if(ms.matchPct!==null&&ms.matchPct>=0){
-    html+='<div style="background:linear-gradient(135deg,#fafbfc 0%,#fff 100%);border:1px solid var(--b);border-radius:14px;padding:14px 16px;margin-bottom:10px">';
-    html+='<div style="font-size:11px;color:#8a8f97;margin-bottom:6px">Match met jou (OWN)</div>';
-    html+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">';
-    html+='<span style="font-size:36px;font-weight:800;line-height:1;color:'+ms.matchColor+'">'+ms.matchPct+'%</span>';
-    html+='<span style="font-size:15px;font-weight:800;color:'+ms.matchColor+'">'+escHTML(ms.matchLabel)+'</span>';
-    html+='</div></div>';
-  }else if(ms.matchPct===-1){
-    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Vul eerst <strong>OWN Sense</strong> in om een matchscore te zien.</div>';
-  }else{
-    html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Meer profielinfo (eigenschappen) geeft een betere match.</div>';
-  }
+  html+='<div style="font-size:13px;color:#666;margin-bottom:10px;padding:10px 12px;background:var(--g);border-radius:12px;border:1px solid var(--b)">Dit tabblad is voor dossier- en profielbeheer. Matchscore en relatierisico staan op tab <strong>Overzicht</strong>.</div>';
   if(profielIncomplete){
     html+='<div style="font-size:11px;color:#8a8f97;margin:-2px 0 12px">Profiel nog niet volledig ingevuld</div>';
   }
