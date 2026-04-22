@@ -1006,10 +1006,20 @@
     } catch (_e) {}
   }
 
+  function routeIdxStorageKey(forUid) {
+    var u = forUid || __obUserId || "";
+    return u ? OB_SS_PREFIX + u + "_route_idx" : OB_SS_PREFIX + "route_idx";
+  }
+
+  function mirrorsStorageKey(forUid) {
+    var u = forUid || __obUserId || "";
+    return u ? OB_SS_PREFIX + u + "_mirrors" : OB_SS_PREFIX + "mirrors";
+  }
+
   function persistRouteIdx() {
     try {
-      sessionStorage.setItem(OB_SS_PREFIX + "route_idx", String(routeIndex));
-      sessionStorage.setItem(OB_SS_PREFIX + "mirrors", Array.from(selectedMirrors).sort().join(","));
+      sessionStorage.setItem(routeIdxStorageKey(), String(routeIndex));
+      sessionStorage.setItem(mirrorsStorageKey(), Array.from(selectedMirrors).sort().join(","));
     } catch (_e) {}
   }
 
@@ -1017,6 +1027,10 @@
     try {
       sessionStorage.removeItem(OB_SS_PREFIX + "route_idx");
       sessionStorage.removeItem(OB_SS_PREFIX + "mirrors");
+      if (__obUserId) {
+        sessionStorage.removeItem(routeIdxStorageKey(__obUserId));
+        sessionStorage.removeItem(mirrorsStorageKey(__obUserId));
+      }
     } catch (_e) {}
   }
 
@@ -1256,15 +1270,21 @@
       localStorage.setItem(LP_OB_PROGRESS_KEY, uid);
     } catch (_lp2) {}
     route = buildRoute();
-    routeIndex = findResumeRouteIndex(factsSub, slot1);
+    var dbRouteIndex = findResumeRouteIndex(factsSub, slot1);
+    routeIndex = dbRouteIndex;
     try {
-      var savedIdx = parseInt(sessionStorage.getItem(OB_SS_PREFIX + "route_idx"), 10);
-      var savedMir = sessionStorage.getItem(OB_SS_PREFIX + "mirrors") || "";
+      var savedIdx = parseInt(sessionStorage.getItem(routeIdxStorageKey(uid)), 10);
+      var savedMir = sessionStorage.getItem(mirrorsStorageKey(uid)) || "";
+      if (isNaN(savedIdx)) {
+        savedIdx = parseInt(sessionStorage.getItem(OB_SS_PREFIX + "route_idx"), 10);
+        savedMir = sessionStorage.getItem(OB_SS_PREFIX + "mirrors") || "";
+      }
       var curMir = Array.from(selectedMirrors)
         .sort()
         .join(",");
       if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < route.length && savedMir === curMir) {
-        routeIndex = savedIdx;
+        routeIndex = Math.min(route.length - 1, Math.max(dbRouteIndex, savedIdx));
+        persistRouteIdx();
       }
     } catch (_e2) {}
 
