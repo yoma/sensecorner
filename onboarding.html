@@ -1543,7 +1543,10 @@
       var raw = localStorage.getItem(key);
       var o = raw ? JSON.parse(raw) : {};
       if (!o || typeof o !== "object") o = {};
-      if (o.__ownsense_uid && String(o.__ownsense_uid) !== String(userId)) return;
+      /* Zelfde regel als ownsense mergeHubState: ontbrekende of vreemde uid = geen merge.
+         Anders bleven legacy categories (karakter enz.) van een vorige browser-sessie hangen. */
+      var hubUid = String(o.__ownsense_uid || "").trim();
+      if (!hubUid || hubUid !== String(userId).trim()) o = {};
       o.__ownsense_uid = String(userId);
       o.photo_url = signed;
       o.photo_urls = topUrls.slice(0, 4);

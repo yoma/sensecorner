@@ -701,6 +701,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     <div class="lp-auth-shell__actions">
       <a class="lp-btn lp-btn--primary" id="lpAuthPrimary" href="#">Verder</a>
       <button type="button" class="lp-btn lp-btn--ghost lp-btn--sageline" id="lpAuthSecondary">Sluiten</button>
+      <button type="button" class="lp-btn lp-btn--ghost" id="lpAuthSignOut">Afmelden</button>
     </div>
   </div>
 </div>
@@ -764,6 +765,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   var descEl=document.getElementById('lpAuthDesc');
   var primary=document.getElementById('lpAuthPrimary');
   var secondary=document.getElementById('lpAuthSecondary');
+  var signOutBtn=document.getElementById('lpAuthSignOut');
   var backdrop=document.getElementById('lpAuthBackdrop');
   if(!shell||!window.supabase||typeof window.supabase.createClient!=='function')return;
 
@@ -829,6 +831,24 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   }
 
   secondary.addEventListener('click',function(){rememberHideForSession();hide();});
+  if(signOutBtn)signOutBtn.addEventListener('click',async function(){
+    try{
+      var client=window.supabase.createClient(SURL,SKEY);
+      try{
+        localStorage.removeItem('ownsense_hub_profile_v2');
+        localStorage.removeItem('ownsense_profile_v1');
+        localStorage.removeItem('ownsense_datesense_v1');
+        localStorage.removeItem('ownsense_handoff_v1');
+      }catch(_ls){}
+      await client.auth.signOut();
+    }catch(_so){}
+    try{
+      sessionStorage.removeItem(K_HUB_HIDE);
+      sessionStorage.removeItem(K_RESUME_HIDE);
+    }catch(_ss){}
+    hide();
+    try{window.location.reload();}catch(_r){window.location.href=window.location.pathname;}
+  });
   if(backdrop)backdrop.addEventListener('click',function(){rememberHideForSession();hide();});
 
   document.addEventListener('keydown',function(ev){
@@ -1071,6 +1091,12 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         }
       });
       if(signRes&&signRes.error){setMsg(signRes.error.message||'Account maken mislukt.',true);return;}
+      try{
+        localStorage.removeItem('ownsense_hub_profile_v2');
+        localStorage.removeItem('ownsense_profile_v1');
+        localStorage.removeItem('ownsense_datesense_v1');
+        localStorage.removeItem('ownsense_handoff_v1');
+      }catch(_lsReg){}
       setMsg('Account aangemaakt. Bevestig je e-mail en log daarna opnieuw in.',false);
     }catch(_e8){setMsg('Account maken mislukt. Probeer opnieuw.',true);}
   };

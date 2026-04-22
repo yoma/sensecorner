@@ -1041,6 +1041,21 @@ function hydrateAppDepthSlotsFromOwnFacts(){
   }
 }
 
+/** True zodra er minstens één geaccepteerd feit is dat niet uit SenseCorner-onboarding komt (DateSense, OwnSense, …). */
+async function userHasAcceptedNonOnboardingOwnFacts(client,userId){
+  if(!client||!userId)return true;
+  try{
+    var r=await client.from('own_facts').select('id,source_app').eq('user_id',userId).eq('status','accepted').limit(300);
+    if(r&&r.error)return true;
+    var rows=Array.isArray(r.data)?r.data:[];
+    if(!rows.length)return false;
+    for(var i=0;i<rows.length;i++){
+      if(String(rows[i].source_app||'')!=='onboarding')return true;
+    }
+    return false;
+  }catch(_e){return true;}
+}
+
 /** SenseCorner onboarding.html schrijft core_* naar own_facts (source_app onboarding). Vul lege OWN-hubvakken. */
 var SENSECORNER_CORE_SUB_TO_OWN_SLOT={
   core_friends_view:{cat:'karakter',idx:0},
@@ -1056,6 +1071,7 @@ function hydrateOwnCatsFromSenseCornerOnboarding(){
   ownFacts.forEach(function(f){
     if(!f||String(f.status||'')!=='accepted')return;
     if(String(f.source_app||'')!=='onboarding')return;
+    if(String(f.category||'').toLowerCase()!=='onboarding')return;
     var sub=String(f.subcategory||'').trim();
     var map=SENSECORNER_CORE_SUB_TO_OWN_SLOT[sub];
     if(!map)return;
@@ -2640,8 +2656,12 @@ async function loadOwnFromSupabase(){
     ownGrowthEvents=[];
     purgeCrossUserOwnsenseLocalCaches(user.id);
     mergeHubStateFromLocalStorage(user);
-    tryConsumeOwnsenseHandoff(user);
-    loadHubState(user);
+    var restrictExternalCategorySources=false;
+    try{
+      restrictExternalCategorySources=!(await userHasAcceptedNonOnboardingOwnFacts(client,user.id));
+    }catch(_re){restrictExternalCategorySources=false;}
+    tryConsumeOwnsenseHandoff(user,{skipCategories:restrictExternalCategorySources});
+    loadHubState(user,{restrictExternalCategorySources:restrictExternalCategorySources});
     var res=await client.from('sense_profiles').select('*').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
     if(res&&res.data){
       var row=res.data;
@@ -2655,7 +2675,7 @@ async function loadOwnFromSupabase(){
       // Vernieuw signed URLs als we paden hebben opgeslagen.
       if(hubState.photo_paths.length)await refreshSignedPhotoUrls();
       if(!hubState.photo_url)hubState.photo_url=String(pm.photo_url||'').trim();
-      if(p.categories&&typeof p.categories==='object'){
+      if(!restrictExternalCategorySources&&p.categories&&typeof p.categories==='object'){
         hubState.categories=Object.assign({},hubState.categories,p.categories);
         ALL_CATS.forEach(function(c){
           hubState.categories[c.id]=normalizeCategoryObject(c,hubState.categories[c.id]||{});
@@ -2676,18 +2696,20 @@ async function loadOwnFromSupabase(){
       hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
       hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
       __ownSensePropsMetaCache=Object.assign({},pm);
-      try{
-        var mSlot=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
-        var mOk=String((mSlot&&mSlot.user_id)||(mSlot&&mSlot.__uid)||'').trim()===String(user.id);
-        if(
-          mOk &&
-          mSlot &&
-          Array.isArray(mSlot.entries) &&
-          mSlot.entries.some(function(e){return e&&e.cat!=null&&e.slot!=null;})
-        ){
-          mergeMirrorEntriesIntoCategories(mSlot.entries,{fillOnly:true});
-        }
-      }catch(_eSlot){}
+      if(!restrictExternalCategorySources){
+        try{
+          var mSlot=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+          var mOk=String((mSlot&&mSlot.user_id)||(mSlot&&mSlot.__uid)||'').trim()===String(user.id);
+          if(
+            mOk &&
+            mSlot &&
+            Array.isArray(mSlot.entries) &&
+            mSlot.entries.some(function(e){return e&&e.cat!=null&&e.slot!=null;})
+          ){
+            mergeMirrorEntriesIntoCategories(mSlot.entries,{fillOnly:true});
+          }
+        }catch(_eSlot){}
+      }
     }
     if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
     applyOwnHubAppDepthV2Migration();
@@ -2839,6 +2861,7 @@ function purgeCrossUserOwnsenseLocalCaches(uid){
   }
   purgeKey('ownsense_profile_v1');
   purgeKey('ownsense_datesense_v1');
+  purgeKey(HUB_KEY);
 }
 
 function mergeHubStateFromLocalStorage(user){
@@ -2861,7 +2884,8 @@ function mergeHubStateFromLocalStorage(user){
 }
 
 /** DateSense/FamilySense hub-handoff: alleen voor dezelfde Supabase-user; nooit timeline (komt uit DB). */
-function tryConsumeOwnsenseHandoff(user){
+function tryConsumeOwnsenseHandoff(user,opts){
+  opts=opts||{};
   if(!user||!user.id)return;
   var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
   if(!handoff||typeof handoff!=='object')return;
@@ -2869,6 +2893,8 @@ function tryConsumeOwnsenseHandoff(user){
     try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
     return;
   }
+  var src=String(handoff.source||'').toLowerCase();
+  var handoffFromSenseApp=src==='datesense'||src==='familysense';
   if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
   if(!hubState.photo_url)hubState.photo_url=String(handoff.photo_url||'').trim();
   if(Array.isArray(handoff.photo_urls)&&handoff.photo_urls.length&&!hubState.photo_urls.length){
@@ -2876,7 +2902,9 @@ function tryConsumeOwnsenseHandoff(user){
     if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=hubState.photo_urls[0];
   }
   if(handoff.categories&&typeof handoff.categories==='object'){
-    hubState.categories=Object.assign({},handoff.categories,hubState.categories||{});
+    if(handoffFromSenseApp||!opts.skipCategories){
+      hubState.categories=Object.assign({},handoff.categories,hubState.categories||{});
+    }
   }
   if(handoff.props&&typeof handoff.props==='object'){
     PK.forEach(function(k){
@@ -2887,7 +2915,10 @@ function tryConsumeOwnsenseHandoff(user){
   try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
 }
 
-function loadHubState(user){
+/** restrictExternalCategorySources: geen mirror- of flat16-categorieën tot er own_facts buiten onboarding zijn (bronfix i.p.v. achteraf wissen). */
+function loadHubState(user,opts){
+  opts=opts||{};
+  var blockExternalCats=!!opts.restrictExternalCategorySources;
   if(!user||!user.id)return;
   var uid=String(user.id);
   var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
@@ -2916,7 +2947,9 @@ function loadHubState(user){
     }
   }
   if(mirror&&Array.isArray(mirror.entries)){
-    mergeMirrorEntriesIntoCategories(mirror.entries);
+    if(!blockExternalCats){
+      mergeMirrorEntriesIntoCategories(mirror.entries);
+    }
     if(!hubState.display_name)hubState.display_name=String(mirror.display_name||'').trim();
     if(!hubState.photo_url)hubState.photo_url=String(mirror.photo_url||'').trim();
     if(!hubState.photo_url&&Array.isArray(hubState.photo_urls)&&hubState.photo_urls.length){
@@ -2933,7 +2966,7 @@ function loadHubState(user){
       v1flat=null;
     }
   }
-  if(v1flat&&String(v1flat.ownsenseSlotLayout||'')==='flat16v2'&&Array.isArray(v1flat.answers)&&v1flat.answers.length>=16){
+  if(!blockExternalCats&&v1flat&&String(v1flat.ownsenseSlotLayout||'')==='flat16v2'&&Array.isArray(v1flat.answers)&&v1flat.answers.length>=16){
     var fi=0;
     OWN_CATS.forEach(function(cat){
       if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
