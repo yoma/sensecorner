@@ -1383,6 +1383,11 @@ async function refreshOwnPhotoSlotPreviews(){
       if(u)ownPhotoSignedBySlot[slot]=u;
     }catch(_e){}
   }
+  // Houd profielfoto in sync met slot 1 zodat verlopen links automatisch herstellen.
+  if(ownPhotoSignedBySlot[1]){
+    hubState.photo_url=String(ownPhotoSignedBySlot[1]||'').trim();
+    try{saveHubState();}catch(_e2){}
+  }
 }
 
 function flashOwnsenseMessage(msg,isError){
@@ -2062,6 +2067,10 @@ async function handleOwnPhotoSlotPicked(file){
       ownPhotos.sort(function(a,b){return (a.slot||0)-(b.slot||0);});
       if(uploaded.url)ownPhotoSignedBySlot[slot]=uploaded.url;
       else await refreshOwnPhotoSlotPreviews();
+      if(slot===1&&ownPhotoSignedBySlot[1]){
+        hubState.photo_url=String(ownPhotoSignedBySlot[1]||'').trim();
+        try{saveHubState();}catch(_sh2){}
+      }
       renderFotosTab();
       await analyzeOwnPhotoSlot(slot);
       await addGrowthEvent('photo_analyzed','Foto geupload en geanalyseerd (slot '+slot+')','ownsense','OWN Sense',up.data.id);
@@ -2185,7 +2194,7 @@ async function analyzeOwnPhotoSlot(slot){
 
 async function reanalyzeOwnPhotoSlot(slot){
   var s=parseInt(slot,10);
-  if(isNaN(s)||s<2||s>5)return;
+  if(isNaN(s)||s<1||s>5)return;
   var pr=getOwnPhotoSlot(s);
   if(!pr||!pr.storage_path){
     flashOwnsenseMessage('Geen opgeslagen foto in dit slot.',true);
@@ -2245,12 +2254,19 @@ function renderFotosTab(){
     var row=getOwnPhotoSlot(slot);
     var label=slot===1?'Profielfoto':'Slot '+slot;
     var displayUrl='';
-    if(slot===1)displayUrl=hubState.photo_url||'';
+    if(slot===1)displayUrl=hubState.photo_url||ownPhotoSignedBySlot[1]||'';
     else displayUrl=ownPhotoSignedBySlot[slot]||'';
-    html+='<div class="photo-slot"><div class="photo-slot-title">'+label+(slot===1?' (read-only)':'')+'</div>';
+    html+='<div class="photo-slot"><div class="photo-slot-title">'+label+'</div>';
     if(slot===1){
       if(displayUrl)html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
-      else html+='<div class="subtle">Zelfde als je profielfoto op Mij (read-only).</div>';
+      else html+='<div class="subtle">Nog geen profielfoto gevonden. Upload of vervang hieronder.</div>';
+      html+='<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">';
+      html+='<button class="btn btn-muted btn-small" type="button" onclick="openPhotoSlotPicker(1)">'+(displayUrl?'Vervang foto':'Upload')+'</button>';
+      if(row&&row.storage_path){
+        var reBusy1=window.__ownsenseSlotReanalyzeBusy===1;
+        html+='<button class="btn btn-muted btn-small" type="button" '+(reBusy1?'disabled ':'')+'onclick="reanalyzeOwnPhotoSlot(1)">'+(reBusy1?'Bezig…':'Analyseer opnieuw')+'</button>';
+      }
+      html+='</div>';
     }else{
       if(displayUrl)html+='<img src="'+escHTML(displayUrl)+'" alt="Slot '+slot+'">';
       else if(row&&row.storage_path)html+='<div class="subtle">Foto opgeslagen · preview wordt geladen…</div>';
