@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="20-04-2026 13:25">
+<meta name="ds-build" content="22-04-2026 10:09">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1827,8 +1827,16 @@ function isFamilyTaggedMeta(meta){
   // Strikte scheiding: elk dossier met family-scope blijft uit DateSense.
   return scopes.indexOf('fs')>=0;
 }
+function isSystemMirrorDossierName(name){
+  var raw=String(name||'').trim();
+  if(!raw||raw==='OWN Sense')return false;
+  var base=raw.replace(/Sense$/i,'').trim().toLowerCase();
+  return base==='date'||base==='family'||base==='friend'||base==='self';
+}
 function isDateSenseVisibleContact(name){
   if(!name||name==='OWN Sense')return false;
+  // Verberg systeemdossiers uit centrale OWN Sense mirrors.
+  if(isSystemMirrorDossierName(name))return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
   return !isFamilyTaggedMeta(m);
 }
@@ -3692,6 +3700,7 @@ async function loadAll(){
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
+  try{await cleanupSystemMirrorDossiers();}catch(e){console.warn('cleanupSystemMirrorDossiers',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   try{await hydrateOwnSensePhotoMetaFromStorage();}catch(e){console.warn('OWN foto-urls',e);}
 }
@@ -3719,6 +3728,32 @@ async function normalizeLegacyFamilyScopes(){
     changed++;
   }
   if(changed>0)console.log('[DateSense] scope cleanup aangepast:',changed);
+}
+async function cleanupSystemMirrorDossiers(){
+  if(!S.user||!Array.isArray(S.profiles)||!S.profiles.length)return;
+  var changed=0;
+  for(var i=0;i<S.profiles.length;i++){
+    var name=S.profiles[i];
+    if(!isSystemMirrorDossierName(name))continue;
+    var d=S.pdata[name];
+    if(!d)continue;
+    var meta=Object.assign({},d.meta||{});
+    var nextStatus=String(meta.lifecycle_status||'active').toLowerCase();
+    if(nextStatus!=='on_hold'&&nextStatus!=='closed')nextStatus='on_hold';
+    var needsUpdate=(meta.lifecycle_status!==nextStatus)
+      ||(!meta.notifications_muted)
+      ||(meta.ds_cleanup_system_hidden!=='1');
+    if(!needsUpdate)continue;
+    meta.lifecycle_status=nextStatus;
+    meta.notifications_muted=true;
+    meta.ds_cleanup_system_hidden='1';
+    meta.ds_cleanup_system_hidden_at=new Date().toISOString();
+    d.meta=meta;
+    S.pdata[name]=d;
+    await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+    changed++;
+  }
+  if(changed>0)console.log('[DateSense] systeemdossiers op on hold gezet:',changed);
 }
 
 async function ensureP(name){
@@ -4932,7 +4967,7 @@ function quickSetUsageMode(mode){
   if(mode==='single'){
     var focus=getFocusDossier();
     if(!focus){
-      var first=(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';})[0]||'';
+      var first=getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';})[0]||'';
       if(first)setFocusDossier(first);
     }
   }else{
@@ -5755,7 +5790,7 @@ function rHome(el){
         <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+(S.profiles||[]).filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
         :(modeDraft==='single'&&!hasContacts
           ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
           :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
@@ -7203,7 +7238,7 @@ function rSenses(el){
       var aandachtStyle=aandachtspunten>=3
         ?'color:#7A1A1A;background:#FDECEC;border-color:#E9B5B5'
         :'color:#8A4B00;background:#FFF4E5;border-color:#F7D7A8';
-      var aandachtBadge=(aandachtspunten>=2)?(' <span class="senses-actief-badge" style="'+aandachtStyle+'">'+aandachtspunten+' aandachtspunt'+(aandachtspunten>1?'en':'')+'</span>'):'';
+      var aandachtBadge=(aandachtspunten>=2)?(' <span class="senses-actief-badge" style="'+aandachtStyle+'">'+aandachtspunten+' red flag'+(aandachtspunten>1?'s':'')+'</span>'):'';
       var disp=escHTML(dn(p));
       h+=`<div class="srow srow-dossier" `+(S.compareMode?'':'onclick="viewDossier(\''+escJsStr(p)+'\')"')+`>
         <div class="srow-dossier-main">
@@ -7678,16 +7713,16 @@ async function loadTab(name,tab,d){
     }
 
     if(!isOwnDossier){
+      html+='<div style="font-size:11px;color:#8a8f97;margin:0 0 12px;line-height:1.45">Overzicht blijft compact: vuldetails en themavragen beheer je op tab <strong>Profiel</strong>.</div>';
       html+=buildInvulvragenStripHtml(name);
-      html+=buildContactCategoryPreviewRows(d,name);
     }
 
     if(isOwnDossier){
+      html+='<div style="font-size:11px;color:#8a8f97;margin:0 0 12px;line-height:1.45">Overzicht toont enkel kerninfo. Voor alle invuldetails ga je naar tab <strong>Profiel</strong>.</div>';
       html+=buildInvulvragenStripHtml(name);
-      html+=buildOwnCategoryPreviewRows(d);
     }
 
-    // Contact: aandachtspunten (compact + uitklapbaar)
+    // Contact: red flags (compact + uitklapbaar)
     if(!isOwnDossier){
       var rf=((d.meta||{}).red_flags)||null;
       if(rf&&typeof rf.score==='number'){
@@ -7697,7 +7732,7 @@ async function loadTab(name,tab,d){
         html+='<div style="margin-bottom:14px">';
         html+='<button type="button" class="dossier-rf-row" aria-expanded="false" onclick="var w=document.getElementById(\'dossierRfAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
         html+='<span class="rf-dot" style="background:'+rv.dot+'"></span>';
-        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · aandachtspunten</span>';
+        html+='<span class="rf-mid" style="color:'+rv.txt+'">'+rv.lbl+' · red flags</span>';
         html+='<span class="rf-pct" style="color:'+rv.txt+'">'+rfs+'%</span>';
         html+='<span style="font-size:11px;color:#aaa;flex-shrink:0">▼</span>';
         html+='</button>';
@@ -7714,7 +7749,7 @@ async function loadTab(name,tab,d){
       }else{
         html+='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:14px;padding:14px 14px;margin:0 0 14px">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
-        html+='<div><div style="font-size:13px;font-weight:800;color:#7A5A00">Aandachtspunten nog niet berekend</div><div style="font-size:12px;color:#806A1A;margin-top:2px">Laat Advies één keer draaien voor score + uitleg op basis van gedrag en context.</div></div>';
+        html+='<div><div style="font-size:13px;font-weight:800;color:#7A5A00">Red flags nog niet berekend</div><div style="font-size:12px;color:#806A1A;margin-top:2px">Laat Advies één keer draaien voor score + uitleg op basis van gedrag en context.</div></div>';
         html+='<button class="btn-g" style="max-width:170px;padding:8px 12px" onclick="switchTab(\'advies\')">Naar Advies</button>';
         html+='</div></div>';
       }
@@ -8168,9 +8203,9 @@ async function genAdvies(name,forced){
       var redReasons=(seg[1]||'').split('|').map(function(x){return x.trim();}).filter(Boolean).slice(0,3);
       var rc=redScore>=65?'#C62828':redScore>=35?'#E07800':'#2E7D32';
       redHtml='<div style="background:#fff;border:1px solid var(--b);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:#333">Aandachtspunten-score</span><span style="font-size:18px;font-weight:800;color:'+rc+'">'+redScore+'%</span></div>'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:#333">Red flags-score</span><span style="font-size:18px;font-weight:800;color:'+rc+'">'+redScore+'%</span></div>'
         +'<div style="height:8px;background:#eceff3;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+redScore+'%;background:'+rc+'"></div></div>'
-        +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">0-34 laag · 35-64 aandacht · 65-100 hoog</div>'
+        +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">0-34 laag · 35-64 waakzaam · 65-100 hoog</div>'
         +(redReasons.length?'<div style="font-size:12px;color:#555;line-height:1.6;margin-top:8px"><strong>Waarom:</strong> '+redReasons.join(' · ')+'</div>':'')
         +'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:4px">Indicatief op basis van huidige data.</div>'
         +'</div>';
@@ -9180,7 +9215,7 @@ async function activateRelationshipFocusFromSettings(){
 
 // ══ Compare ══════════════════════════════════════════════════════
 function getCompareSelection(){
-  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var cs=getDateSenseContactNames();
   var saved=(S.compareSelection||[]).filter(function(n){return cs.indexOf(n)>=0;});
   var unique=[];
   saved.forEach(function(n){if(unique.indexOf(n)===-1)unique.push(n);});
@@ -9254,7 +9289,7 @@ function cmpBestWorst(names){
   };
 }
 function rCompare(el){
-  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var cs=getDateSenseContactNames();
   if(cs.length<2){el.innerHTML='<div style="text-align:center;padding:80px 30px;color:var(--m)"><div style="font-size:48px;margin-bottom:16px">⚖️</div><p style="font-size:15px;line-height:1.6">Je hebt minimaal 2 contactdossiers nodig.<br><br><span style="color:var(--r);cursor:pointer;font-weight:600" onclick="newSenseFromDrawer()">+ Nieuw Sense aanmaken</span></p></div>';return;}
   var picks=getCompareSelection().slice(0,3);
   if(picks.length<2){
