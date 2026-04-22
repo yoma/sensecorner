@@ -218,8 +218,12 @@
     .ob-code-wrap {
       display: flex;
       justify-content: center;
+      flex-wrap: wrap;
       gap: 8px;
       margin: 24px 0 16px;
+      max-width: 460px;
+      margin-left: auto;
+      margin-right: auto;
     }
     .ob-code-box {
       width: 48px;
@@ -665,7 +669,7 @@
       .ob-sensei { font-size: 26px; }
       .ob-sensei.smaller { font-size: 21px; }
       .ob-sensei.lg { font-size: 26px; }
-      .ob-code-box { width: 42px; height: 52px; font-size: 20px; }
+      .ob-code-box { width: 38px; height: 48px; font-size: 18px; }
       .ob-ripple, .ob-ripple-inner { width: 80px; height: 80px; }
     }
   </style>
@@ -709,7 +713,7 @@
       <section class="ob-screen" data-ob="acc3">
         <div class="ob-ripple"><div class="ob-ripple-inner"></div></div>
         <p class="ob-sensei" data-type="Wat is je e-mail?"></p>
-        <p class="ob-sensei smaller" data-type="Ik stuur je zo een code van 6 cijfers."></p>
+        <p class="ob-sensei smaller" data-type="Ik stuur je zo een verificatiecode."></p>
         <div class="ob-input-wrap" id="obWrapEmail" style="margin-top: 8px;">
           <input type="email" class="ob-text-input" id="obEmailInput" placeholder="jij@voorbeeld.be" autocomplete="email">
         </div>
@@ -723,7 +727,7 @@
       <section class="ob-screen" data-ob="acc4">
         <div class="ob-ripple"><div class="ob-ripple-inner"></div></div>
         <p class="ob-sensei" data-type="Check je mail."></p>
-        <p class="ob-sensei smaller" data-type="Ik stuurde een code van 6 cijfers naar <em>{{email}}</em>."></p>
+        <p class="ob-sensei smaller" data-type="Ik stuurde een code naar <em>{{email}}</em>."></p>
         <div class="ob-code-wrap" id="obCodeWrap">
           <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 1">
           <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 2">
@@ -731,6 +735,10 @@
           <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 4">
           <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 5">
           <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 6">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 7">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 8">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 9">
+          <input type="text" inputmode="numeric" maxlength="1" class="ob-code-box" aria-label="Cijfer 10">
         </div>
         <p class="ob-code-meta">De code is 10 minuten geldig.</p>
         <div class="ob-code-resend">
@@ -2285,6 +2293,20 @@
       if (errEl) errEl.textContent = "Verbinding wordt geladen. Even geduld en opnieuw.";
       return;
     }
+    try {
+      var mailCheck = await sb.rpc("onboarding_email_in_use", { p_email: userEmail });
+      var mailData = mailCheck && mailCheck.data ? mailCheck.data : null;
+      var inUse = !!(mailData && typeof mailData === "object" && mailData.in_use === true);
+      if (!mailCheck.error && inUse) {
+        if (errEl) {
+          errEl.textContent =
+            "Dit e-mailadres is al gekoppeld aan een actieve account. Log in met je bestaande account.";
+        }
+        return;
+      }
+    } catch (_mailCheckErr) {
+      // Fail-open: onboarding mag doorgaan als de check tijdelijk niet bereikbaar is.
+    }
     emailBtn.disabled = true;
     var res = await sb.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: true } });
     emailBtn.disabled = false;
@@ -2331,10 +2353,12 @@
   var codeBoxes = Array.from(document.querySelectorAll("#obCodeWrap .ob-code-box"));
   var codeBtn = document.getElementById("obBtnCode");
   function checkCodeComplete() {
-    var complete = codeBoxes.every(function (b) {
-      return b.value.length === 1;
-    });
-    codeBtn.disabled = !complete;
+    var len = codeBoxes
+      .map(function (b) { return b.value; })
+      .join("")
+      .replace(/\D/g, "")
+      .length;
+    codeBtn.disabled = !(len === 6 || len === 10);
   }
   async function verifyOtpAndContinue() {
     var errEl = document.getElementById("obCodeErr");
@@ -2344,7 +2368,7 @@
         return b.value;
       })
       .join("");
-    if (token.length !== 6 || !userEmail) return;
+    if ((token.length !== 6 && token.length !== 10) || !userEmail) return;
     if (!sb) {
       if (errEl) errEl.textContent = "Geen verbinding. Vernieuw de pagina.";
       return;
@@ -2400,7 +2424,7 @@
     });
     box.addEventListener("paste", function (e) {
       e.preventDefault();
-      var pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+      var pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 10);
       for (var p = 0; p < pasted.length; p++) {
         if (codeBoxes[p]) {
           codeBoxes[p].value = pasted.charAt(p);
@@ -2412,7 +2436,7 @@
         return !b.value;
       });
       if (nextEmpty >= 0) codeBoxes[nextEmpty].focus();
-      else codeBoxes[5].focus();
+      else codeBoxes[codeBoxes.length - 1].focus();
     });
   });
   codeBtn.addEventListener("click", function () {

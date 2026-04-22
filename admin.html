@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="17-04-2026 21:00">
+<meta name="admin-build" content="22-04-2026 11:25">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -42,6 +42,7 @@ a{color:inherit}
 .admin-action-btn{border:1px solid var(--b);background:var(--ivoor);color:var(--chocolade);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
 .admin-action-btn.revoke{background:var(--amberl);border-color:rgba(146,100,10,.4);color:var(--amber)}
+.admin-action-btn.delete{background:#FDECEC;border-color:#E9B5B5;color:#9F1D1D}
 .prompt-grid{display:grid;gap:10px}
 .prompt-card{border:1px solid var(--b);border-radius:12px;padding:10px;background:var(--ivoor)}
 .prompt-card h3{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:6px}
@@ -329,9 +330,10 @@ a{color:inherit}
       var statusHtml=enabled
         ?'<span class="admin-pill ok">✓ AI actief</span>'
         :'<span class="admin-pill warn">⏳ Wacht op approval</span>';
-      var btnHtml=enabled
+      var btnHtml=(enabled
         ?'<button class="admin-action-btn revoke" type="button" data-user="'+String(r.user_id||'')+'" data-enable="0">Revoke</button>'
-        :'<button class="admin-action-btn approve" type="button" data-user="'+String(r.user_id||'')+'" data-enable="1">Approve</button>';
+        :'<button class="admin-action-btn approve" type="button" data-user="'+String(r.user_id||'')+'" data-enable="1">Approve</button>')
+        +'<button class="admin-action-btn delete" type="button" data-delete-user="'+String(r.user_id||'')+'" data-delete-email="'+escHTML(email)+'">Verwijder volledig</button>';
       var meta=enabled
         ?('Goedgekeurd: '+(fmtDateTime(r.approved_at)||'onbekend'))
         :('Aangemaakt: '+(fmtDateTime(r.created_at)||'onbekend'));
@@ -355,6 +357,35 @@ a{color:inherit}
           await loadAdminAiPanel();
         }catch(e){
           setAdminAiState((e&&e.message)||'Opslaan mislukt.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      });
+    });
+    Array.prototype.slice.call(adminAiList.querySelectorAll('[data-delete-user]')).forEach(function(btn){
+      btn.addEventListener('click',async function(){
+        var uid=String(btn.getAttribute('data-delete-user')||'').trim();
+        var mail=String(btn.getAttribute('data-delete-email')||'').trim();
+        if(!uid)return;
+        var ok=confirm(
+          'Volledig verwijderen voor '+mail+'?\n\n'
+          +'- Alle app-data (dossiers, berichten, inzichten, ...) wordt verwijderd\n'
+          +'- Auth account wordt ook verwijderd\n'
+          +'- Dit kan je niet ongedaan maken'
+        );
+        if(!ok)return;
+        btn.disabled=true;
+        setAdminAiState('Volledig verwijderen…',false);
+        try{
+          var rs=await sb.rpc('admin_delete_user_full',{p_user_id:uid,p_delete_auth_user:true});
+          if(rs&&rs.error)throw new Error(rs.error.message||'Verwijderen mislukt');
+          var info=rs&&rs.data&&typeof rs.data==='object'?rs.data:null;
+          var rows=info&&info.public_rows_deleted!=null?info.public_rows_deleted:'?';
+          var authGone=info&&info.auth_user_deleted===1?'ja':'nee';
+          setAdminAiState('Gebruiker verwijderd. public rows: '+rows+' · auth verwijderd: '+authGone,false);
+          await loadAdminAiPanel();
+        }catch(e){
+          setAdminAiState((e&&e.message)||'Verwijderen mislukt.',true);
         }finally{
           btn.disabled=false;
         }
