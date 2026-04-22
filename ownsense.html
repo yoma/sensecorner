@@ -2678,10 +2678,11 @@ async function loadOwnFromSupabase(){
       // Vernieuw signed URLs als we paden hebben opgeslagen.
       if(hubState.photo_paths.length)await refreshSignedPhotoUrls();
       if(!hubState.photo_url)hubState.photo_url=String(pm.photo_url||'').trim();
-      if(!restrictExternalCategorySources&&p.categories&&typeof p.categories==='object'){
-        hubState.categories=Object.assign({},hubState.categories,p.categories);
+      /* Per categorie alleen wat de server stuurt; ontbrekende keys worden leeg (geen restanten van mirror/ander account). */
+      if(p.categories&&typeof p.categories==='object'){
         ALL_CATS.forEach(function(c){
-          hubState.categories[c.id]=normalizeCategoryObject(c,hubState.categories[c.id]||{});
+          var raw=(p.categories[c.id]&&typeof p.categories[c.id]==='object')?p.categories[c.id]:{};
+          hubState.categories[c.id]=normalizeCategoryObject(c,raw);
         });
       }
       PK.forEach(function(k){
@@ -2920,7 +2921,7 @@ function tryConsumeOwnsenseHandoff(user,opts){
   try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
 }
 
-/** restrictExternalCategorySources: geen server/mirror/flat16-categorie-merge alleen bij uitsluitend geaccepteerde onboarding-own_facts. */
+/** restrictExternalCategorySources: blokkeer alleen lokale mirror + flat16 (+ handoff zonder DS/FS); DB-categorieën komen altijd uit sense_profiles. */
 function loadHubState(user,opts){
   opts=opts||{};
   var blockExternalCats=!!opts.restrictExternalCategorySources;
@@ -2952,7 +2953,7 @@ function loadHubState(user,opts){
   }
   if(mirror&&Array.isArray(mirror.entries)){
     if(!blockExternalCats){
-      mergeMirrorEntriesIntoCategories(mirror.entries);
+      mergeMirrorEntriesIntoCategories(mirror.entries,{fillOnly:true});
     }
     if(!hubState.display_name)hubState.display_name=String(mirror.display_name||'').trim();
     if(!hubState.photo_url)hubState.photo_url=String(mirror.photo_url||'').trim();
