@@ -2289,25 +2289,30 @@
       if (errEl) errEl.textContent = "Verbinding wordt geladen. Even geduld en opnieuw.";
       return;
     }
+    var existingActive = false;
     try {
       var mailCheck = await sb.rpc("onboarding_email_in_use", { p_email: userEmail });
       var mailData = mailCheck && mailCheck.data ? mailCheck.data : null;
       var inUse = !!(mailData && typeof mailData === "object" && mailData.in_use === true);
       if (!mailCheck.error && inUse) {
+        existingActive = true;
         if (errEl) {
-          errEl.textContent =
-            "Dit e-mailadres is al gekoppeld aan een actieve account. Log in met je bestaande account.";
+          errEl.style.color = "#6b6f76";
+          errEl.textContent = "Bestaande account gevonden. We sturen een inlogcode naar dit e-mailadres.";
         }
-        return;
       }
     } catch (_mailCheckErr) {
       // Fail-open: onboarding mag doorgaan als de check tijdelijk niet bereikbaar is.
     }
     emailBtn.disabled = true;
-    var res = await sb.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: true } });
+    var res = await sb.auth.signInWithOtp({
+      email: userEmail,
+      options: { shouldCreateUser: !existingActive }
+    });
     emailBtn.disabled = false;
     if (res && res.error) {
       if (errEl) {
+        errEl.style.color = "";
         errEl.textContent =
           String(res.error.message || "").indexOf("rate") >= 0
             ? "Je hebt net al een code aangevraagd. Wacht even en probeer opnieuw."
