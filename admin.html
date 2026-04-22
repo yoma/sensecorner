@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="22-04-2026 11:25">
+<meta name="admin-build" content="22-04-2026 14:12">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -317,6 +317,12 @@ a{color:inherit}
     return dt.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})
       +' '+dt.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
   }
+  function toTs(iso){
+    if(!iso)return 0;
+    var dt=new Date(iso);
+    var t=dt.getTime();
+    return isNaN(t)?0:t;
+  }
 
   function renderAdminAiRows(rows){
     if(!adminAiList)return;
@@ -337,8 +343,9 @@ a{color:inherit}
       var meta=enabled
         ?('Goedgekeurd: '+(fmtDateTime(r.approved_at)||'onbekend'))
         :('Aangemaakt: '+(fmtDateTime(r.created_at)||'onbekend'));
+      var loginMeta='Laatste login: '+(fmtDateTime(r.last_sign_in_at)||'nog niet');
       return '<div class="admin-row">'
-        +'<div class="admin-row-main"><div class="admin-email">'+email+'</div><div class="admin-meta">'+meta+'</div></div>'
+        +'<div class="admin-row-main"><div class="admin-email">'+email+'</div><div class="admin-meta">'+meta+' · '+loginMeta+'</div></div>'
         +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+statusHtml+btnHtml+'</div>'
         +'</div>';
     }).join('');
@@ -401,7 +408,13 @@ a{color:inherit}
     try{
       var rs=await sb.rpc('admin_list_ai_access');
       if(rs&&rs.error)throw new Error(rs.error.message||'Admin lijst laden mislukt');
-      renderAdminAiRows(Array.isArray(rs&&rs.data)?rs.data:[]);
+      var rows=Array.isArray(rs&&rs.data)?rs.data:[];
+      rows.sort(function(a,b){
+        var ka=toTs(a&&a.last_sign_in_at)||toTs(a&&a.updated_at)||toTs(a&&a.created_at);
+        var kb=toTs(b&&b.last_sign_in_at)||toTs(b&&b.updated_at)||toTs(b&&b.created_at);
+        return kb-ka;
+      });
+      renderAdminAiRows(rows);
       setAdminAiState('Klik Approve/Revoke om toegang te beheren.',false);
     }catch(e){
       setAdminAiState((e&&e.message)||'Laden mislukt.',true);

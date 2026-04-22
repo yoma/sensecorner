@@ -285,6 +285,31 @@
       cursor: pointer;
     }
     .ob-cta-secondary:hover { color: var(--chocolade); }
+    .ob-cta-oauth {
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--chocolade);
+      border: 1px solid var(--ob-border);
+      padding: 14px 18px;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s, box-shadow 0.2s;
+      backdrop-filter: blur(6px);
+    }
+    .ob-cta-oauth:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: #fff;
+      box-shadow: 0 4px 16px rgba(42, 24, 16, 0.12);
+    }
+    .ob-cta-oauth:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+    .ob-cta-split {
+      text-align: center;
+      font-size: 12px;
+      color: var(--ob-muted);
+      margin: 2px 0;
+    }
     .ob-success-check {
       width: 72px;
       height: 72px;
@@ -722,6 +747,8 @@
         </div>
         <div class="ob-cta-wrap" id="obCtaEmail">
           <button type="button" class="ob-cta-primary" id="obBtnEmail" disabled>Stuur code</button>
+          <div class="ob-cta-split">of</div>
+          <button type="button" class="ob-cta-oauth" id="obBtnGoogle">Verder met Google</button>
           <button type="button" class="ob-cta-secondary" id="obBtnEmailBack">← Terug</button>
         </div>
         <p class="ob-inline-error" id="obEmailErr" aria-live="polite"></p>
@@ -2326,11 +2353,41 @@
     goToStatic("acc4");
     startResendTimer();
   }
+  function oauthRedirectToOnboarding() {
+    return window.location.origin + window.location.pathname;
+  }
+  async function signInWithGoogle() {
+    var errEl = document.getElementById("obEmailErr");
+    if (errEl) {
+      errEl.style.color = "";
+      errEl.textContent = "";
+    }
+    if (!sb) {
+      if (errEl) errEl.textContent = "Verbinding wordt geladen. Even geduld en opnieuw.";
+      return;
+    }
+    var googleBtn = document.getElementById("obBtnGoogle");
+    var emailBtnLocal = document.getElementById("obBtnEmail");
+    if (googleBtn) googleBtn.disabled = true;
+    if (emailBtnLocal) emailBtnLocal.disabled = true;
+    var out = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: oauthRedirectToOnboarding() }
+    });
+    if (out && out.error && errEl) {
+      errEl.textContent = "Google aanmelden lukt nu niet. Probeer opnieuw of kies e-mailcode.";
+    }
+    if (googleBtn) googleBtn.disabled = false;
+    if (emailBtnLocal) emailBtnLocal.disabled = !emailOk();
+  }
   emailInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !emailBtn.disabled) sendOtpAndGoToCode();
   });
   emailBtn.addEventListener("click", function () {
     sendOtpAndGoToCode();
+  });
+  document.getElementById("obBtnGoogle").addEventListener("click", function () {
+    signInWithGoogle();
   });
   document.getElementById("obBtnEmailBack").addEventListener("click", function () {
     goToStatic("acc2");
