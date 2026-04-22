@@ -2638,8 +2638,10 @@ async function loadOwnFromSupabase(){
     ownInsights=[];
     ownPhotos=[];
     ownGrowthEvents=[];
+    purgeCrossUserOwnsenseLocalCaches(user.id);
     mergeHubStateFromLocalStorage(user);
     tryConsumeOwnsenseHandoff(user);
+    loadHubState(user);
     var res=await client.from('sense_profiles').select('*').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
     if(res&&res.data){
       var row=res.data;
@@ -2676,7 +2678,13 @@ async function loadOwnFromSupabase(){
       __ownSensePropsMetaCache=Object.assign({},pm);
       try{
         var mSlot=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
-        if(mSlot&&Array.isArray(mSlot.entries)&&mSlot.entries.some(function(e){return e&&e.cat!=null&&e.slot!=null;})){
+        var mOk=String((mSlot&&mSlot.user_id)||(mSlot&&mSlot.__uid)||'').trim()===String(user.id);
+        if(
+          mOk &&
+          mSlot &&
+          Array.isArray(mSlot.entries) &&
+          mSlot.entries.some(function(e){return e&&e.cat!=null&&e.slot!=null;})
+        ){
           mergeMirrorEntriesIntoCategories(mSlot.entries,{fillOnly:true});
         }
       }catch(_eSlot){}
@@ -2809,14 +2817,40 @@ async function saveOwnToSupabase(){
   }catch(e){}
 }
 
+function purgeCrossUserOwnsenseLocalCaches(uid){
+  if(!uid)return;
+  var u=String(uid);
+  function purgeKey(key){
+    try{
+      var raw=localStorage.getItem(key);
+      if(!raw)return;
+      var j=safeJsonParse(raw);
+      if(!j||typeof j!=='object'){
+        localStorage.removeItem(key);
+        return;
+      }
+      var ju=String(j.__ownsense_uid||j.__uid||j.user_id||'').trim();
+      if(!ju||ju!==u)localStorage.removeItem(key);
+    }catch(_e){
+      try{
+        localStorage.removeItem(key);
+      }catch(__){}
+    }
+  }
+  purgeKey('ownsense_profile_v1');
+  purgeKey('ownsense_datesense_v1');
+}
+
 function mergeHubStateFromLocalStorage(user){
   if(!user||!user.id)return;
   window.__ownSenseUid=String(user.id);
   var local=safeJsonParse(localStorage.getItem(HUB_KEY)||'');
   if(!local||typeof local!=='object')return;
-  var tag=String(local.__ownsense_uid||'');
-  if(tag&&tag!==String(user.id)){
-    try{localStorage.removeItem(HUB_KEY);}catch(_e){}
+  var tag=String(local.__ownsense_uid||'').trim();
+  if(!tag||tag!==String(user.id)){
+    try{
+      localStorage.removeItem(HUB_KEY);
+    }catch(_e){}
     return;
   }
   var localClean={};
@@ -2853,14 +2887,34 @@ function tryConsumeOwnsenseHandoff(user){
   try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
 }
 
-function loadHubState(){
+function loadHubState(user){
+  if(!user||!user.id)return;
+  var uid=String(user.id);
   var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  if(old&&typeof old==='object'){
+    var ptag=String(old.__uid||old.user_id||'').trim();
+    if(!ptag||ptag!==uid){
+      try{
+        localStorage.removeItem('ownsense_profile_v1');
+      }catch(_e){}
+      old=null;
+    }
+  }
   if(old&&Array.isArray(old.answers)){
     hubState.display_name=String(old.name||'').trim();
     hubState.photo_url=String(old.photo||'').trim();
   }
   delete hubState.phone;
   var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+  if(mirror&&typeof mirror==='object'){
+    var mtag=String(mirror.user_id||mirror.__uid||'').trim();
+    if(!mtag||mtag!==uid){
+      try{
+        localStorage.removeItem('ownsense_datesense_v1');
+      }catch(_e2){}
+      mirror=null;
+    }
+  }
   if(mirror&&Array.isArray(mirror.entries)){
     mergeMirrorEntriesIntoCategories(mirror.entries);
     if(!hubState.display_name)hubState.display_name=String(mirror.display_name||'').trim();
@@ -2870,6 +2924,15 @@ function loadHubState(){
     }
   }
   var v1flat=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  if(v1flat&&typeof v1flat==='object'){
+    var vtag=String(v1flat.__uid||v1flat.user_id||'').trim();
+    if(!vtag||vtag!==uid){
+      try{
+        localStorage.removeItem('ownsense_profile_v1');
+      }catch(_e3){}
+      v1flat=null;
+    }
+  }
   if(v1flat&&String(v1flat.ownsenseSlotLayout||'')==='flat16v2'&&Array.isArray(v1flat.answers)&&v1flat.answers.length>=16){
     var fi=0;
     OWN_CATS.forEach(function(cat){
@@ -3910,7 +3973,6 @@ document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'no
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
 initPhotoPreview();
-loadHubState();
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
   .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})

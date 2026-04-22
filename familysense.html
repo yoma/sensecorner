@@ -11254,6 +11254,7 @@ function matchOwnsenseQIndex(label){
 }
 function syncOwnsenseProfileV1FromCategoryEntries(entries){
   if(!entries||!entries.length)return;
+  if(!S.user||!S.user.id)return;
   try{
     var raw=localStorage.getItem('ownsense_profile_v1')||'';
     var profile={};
@@ -11291,6 +11292,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
     profile.totalQ=n;
     profile.syncedFromAppAt=new Date().toISOString();
     profile.syncedFromApp='familysense';
+    profile.__uid=String(S.user.id);
     localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));
   }catch(_e){}
 }
@@ -11303,6 +11305,7 @@ async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
     if(!raw)return;
     var prof=JSON.parse(raw);
     if(!prof||!Array.isArray(prof.answers))return;
+    if(String(prof.__uid||prof.user_id||'')!==String(S.user.id))return;
     if(String(prof.ownsenseSlotLayout||'')!=='flat16v2')return;
     var expect=OWN_CATS.reduce(function(n,c){return n+c.prompts.length;},0);
     if(prof.answers.length<expect)return;
@@ -11353,6 +11356,7 @@ function mirrorOwnSenseCatsToLocalStorage(){
     if(!entries.length)return;
     localStorage.setItem('ownsense_datesense_v1',JSON.stringify({
       updatedAt:new Date().toISOString(),
+      user_id:String(S.user.id),
       entries:entries,
       display_name:String((((S.pdata||{})['OWN Sense']||{}).meta||{}).display_name||'').trim(),
       photo_url:String((((S.pdata||{})['OWN Sense']||{}).meta||{}).photo_url||'').trim(),
@@ -11371,8 +11375,9 @@ function getOwnSenseOnboardingBlock(){
   /* Bron 1: ownsense.html standalone onboarding */
   try{
     var raw=localStorage.getItem('ownsense_profile_v1')||'';
-    if(raw){
+    if(raw&&S.user&&S.user.id){
       var p=JSON.parse(raw);
+      if(String((p&&p.__uid)||(p&&p.user_id)||'')!==String(S.user.id))p=null;
       if(p&&Array.isArray(p.answers)&&p.answers.some(function(a){return a&&String(a).trim().length>10;})){
         var labels=['Kernidentiteit','Wanneer echt levend','Relatiestijl',
           'Dieptepatroon','Energiepatroon','Schaduwkant',
@@ -11396,10 +11401,11 @@ function getOwnSenseOnboardingBlock(){
     var appHasContent=ownInApp&&Object.values(ownInApp).some(function(c){
       return c&&Object.values(c).some(function(v){return String(v||'').trim().length>5;});
     });
-    if(!appHasContent){
+    if(!appHasContent&&S.user&&S.user.id){
       var raw2=localStorage.getItem('ownsense_datesense_v1')||'';
       if(raw2){
         var d2=JSON.parse(raw2);
+        if(String((d2&&d2.user_id)||(d2&&d2.__uid)||'')!==String(S.user.id))d2=null;
         if(d2&&Array.isArray(d2.entries)&&d2.entries.length){
           var src=String(d2.source||'andere app').trim();
           var dlines=['OWN Sense (eerder ingevuld in '+src+'):'];

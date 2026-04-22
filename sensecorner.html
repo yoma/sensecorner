@@ -827,11 +827,8 @@ a{text-decoration:none;color:inherit}
     }catch(_e){}
     return currentAdminRole;
   }
-  var totalQ=(profile&&parseInt(profile.totalQ,10))||11;
+  var totalQ=11;
   var filledAnswers=0;
-  if(profile&&Array.isArray(profile.answers)){
-    filledAnswers=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
-  }
   /* Zelfde categorieën als ownsense.html - voorkomt PC vs mobile mismatch (localStorage ≠ server). */
   var SC_OWN_CATS=[
     {id:'karakter',prompts:[0,0,0,0]},
@@ -862,6 +859,32 @@ a{text-decoration:none;color:inherit}
   if(!userSession){
     profile=null;
     hubProfile=null;
+  }
+  if(userSession){
+    var sid=String(userSession.id||'').trim();
+    if(profile&&typeof profile==='object'){
+      var pOwn=String(profile.__uid||profile.user_id||'').trim();
+      if(!pOwn||pOwn!==sid){
+        profile=null;
+        try{
+          localStorage.removeItem('ownsense_profile_v1');
+        }catch(_pe){}
+      }
+    }
+    if(hubProfile&&typeof hubProfile==='object'){
+      var hOwn=String(hubProfile.__ownsense_uid||hubProfile.__uid||'').trim();
+      if(!hOwn||hOwn!==sid){
+        hubProfile=null;
+        try{
+          localStorage.removeItem('ownsense_hub_profile_v2');
+        }catch(_he){}
+      }
+    }
+  }
+  totalQ=(profile&&parseInt(profile.totalQ,10))||11;
+  filledAnswers=0;
+  if(profile&&Array.isArray(profile.answers)){
+    filledAnswers=profile.answers.filter(function(a){return a&&String(a).trim();}).length;
   }
   if(userSession&&sb){
     try{
@@ -895,6 +918,7 @@ a{text-decoration:none;color:inherit}
   if(profile&&profile.status==='completed'&&filledAnswers===0){
     profile.status='empty';
     profile.completionPct=0;
+    if(userSession&&userSession.id)profile.__uid=String(userSession.id);
     try{localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));}catch(_e){}
   }
   var ownPhotoUrl='';
@@ -1868,6 +1892,11 @@ a{text-decoration:none;color:inherit}
           localStorage.setItem(SC_QUOTE_PREV_KEY,String(senseCornerQuoteIndex(uOut)));
         }catch(_e){}
       }
+      try{
+        localStorage.removeItem('ownsense_hub_profile_v2');
+        localStorage.removeItem('ownsense_profile_v1');
+        localStorage.removeItem('ownsense_datesense_v1');
+      }catch(_ls){}
       if(sb)await sb.auth.signOut();
       closeHubDock();
       await refreshAuthUi();
