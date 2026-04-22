@@ -818,6 +818,16 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     return typeof res.count==='number'?res.count:0;
   }
 
+  function lpDisplayNameFromUser(u){
+    if(!u)return'';
+    var m=(u.user_metadata&&typeof u.user_metadata==='object')?u.user_metadata:{};
+    var n=String(m.roepnaam||m.display_name||m.full_name||m.name||'').trim();
+    if(n)return n;
+    var em=String(u.email||'').trim();
+    if(em.indexOf('@')>0)return em.split('@')[0];
+    return '';
+  }
+
   secondary.addEventListener('click',function(){rememberHideForSession();hide();});
   if(backdrop)backdrop.addEventListener('click',function(){rememberHideForSession();hide();});
 
@@ -839,8 +849,11 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var done=await hasOnboardingCompleted(sb,uid);
     if(done){
       try{if(sessionStorage.getItem(K_HUB_HIDE)==='1')return;}catch(_e2){}
-      titleEl.textContent='Welkom terug';
-      descEl.textContent='Je bent al ingelogd. Wil je naar je SenseCorner-hub, of wil je deze pagina rustig verder lezen?';
+      var nm=lpDisplayNameFromUser(session.user);
+      titleEl.textContent=nm?('Welkom terug, '+nm):'Welkom terug';
+      descEl.textContent=nm
+        ?('Je bent al ingelogd als '+nm+'. Wil je naar je SenseCorner-hub, of wil je deze pagina rustig verder lezen?')
+        :('Je bent al ingelogd. Wil je naar je SenseCorner-hub, of wil je deze pagina rustig verder lezen?');
       primary.textContent='Naar mijn SenseCorner-hub';
       primary.href='sensecorner.html';
       secondary.textContent='Blijf op deze pagina';
