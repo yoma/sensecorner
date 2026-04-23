@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="23-04-2026 16:10">
+<meta name="fs-build" content="23-04-2026 16:17">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -932,7 +932,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 23-04-2026 16:10</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 23-04-2026 16:17</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -6254,7 +6254,9 @@ async function runAdviceHubCompare(){
     var usageLine=buildUsageModeContextLine();
     if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
     if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
-    var user='Data:\n'+JSON.stringify(payload);
+    var ownLensLines=[];
+    appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
+    var user='Data:\n'+JSON.stringify(payload)+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
     var t=await callAPI(sys,[{role:'user',content:user}],760);
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
@@ -6294,7 +6296,9 @@ async function runAdviceHubOpenPrompt(){
   try{
     var sys='Je bent FamilySensei. Geef concreet, empathisch familieadvies in het Nederlands. '
       +'Schrijf 5-8 korte zinnen met duidelijke actiepunten. Houd het praktisch.';
-    var ctx='Gebruikersinput: '+prompt;
+    var ownLensLines=[];
+    appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
+    var ctx='Gebruikersinput: '+prompt+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
     var t=await callAPI(sys,[{role:'user',content:ctx}],620);
     st.resultHtml=formatAiCard(String(t||'').trim());
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
@@ -8225,7 +8229,13 @@ function buildAdviceContextPayload(name,d,msgs){
   }
   var recentFacts=userTexts.slice(-16).map(function(t){return '- '+t.substring(0,220);});
   if(recentFacts.length)lines.push('Recente signalen (chronologisch, onderaan het nieuwst):\n'+recentFacts.join('\n'));
-  if(name==='OWN Sense')appendOwnHubMirrorCoachContext(lines,meta);
+  var ownMetaForLens=null;
+  if(name==='OWN Sense'){
+    ownMetaForLens=meta;
+  }else{
+    ownMetaForLens=(((S.pdata||{})['OWN Sense']||{}).meta)||null;
+  }
+  appendOwnHubMirrorCoachContext(lines,ownMetaForLens);
   var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
   if(name!=='OWN Sense'&&famRel)payload+='\nRol in je gezin: '+famRel;
   if(lines.length)payload+='\n'+lines.join('\n');
@@ -11179,6 +11189,11 @@ async function askAdviceNow(){
     var msgs=await loadMsgs(p);
     var recent=msgs.slice(-3).filter(m=>m.role==='user').map(m=>m.html.replace(/<[^>]*>/g,' ').trim()).join(' ');
     if(recent)allCtx+=`[${p}]: ${recent}\n`;
+  }
+  var ownLensLines=[];
+  appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
+  if(ownLensLines.length){
+    allCtx+='\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n');
   }
   var sys='Je bent FamilySensei, empathische AI gezinscoach. Geef concreet eerlijk advies op basis van de recente input. Max 3-4 zinnen, 2 actiestappen. Warm maar direct. Nederlands.';
   try{
