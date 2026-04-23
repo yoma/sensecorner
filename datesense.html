@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="23-04-2026 15:25">
+<meta name="ds-build" content="23-04-2026 15:44">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -998,7 +998,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </style>
 </head>
 <body>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 23-04-2026 15:25</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 23-04-2026 15:44</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -7460,65 +7460,279 @@ function rSenses(el){
   refreshOwnAppDepthHintMounts();
 }
 
+function getAdviceHubState(){
+  if(!S.adviceHubState||typeof S.adviceHubState!=='object'){
+    S.adviceHubState={route:'',person:'',compare:[],topic:'',question:'',resultHtml:'',resultTitle:'',resultTs:''};
+  }
+  return S.adviceHubState;
+}
 function rAdviceHub(el){
   var contacts=getDateSenseContactNames().filter(function(n){return n&&n!=='OWN Sense';});
+  var st=getAdviceHubState();
   var depth=(S&&S.adviceHubDepthMode)||'standard';
   function depthBtn(id,label){
     var on=depth===id;
     return '<button type="button" class="'+(on?'btn-r':'btn-g')+' advice-depth-btn" onclick="setAdviceHubDepthMode(\''+id+'\')">'+label+'</button>';
+  }
+  function renderResultCard(){
+    if(!st.resultHtml)return'';
+    var ts=st.resultTs?('<div style="font-size:11px;color:#8a8f97;margin-top:8px">'+escHTML(st.resultTs)+'</div>'):'';
+    return '<div style="margin-top:14px;background:#fff;border:1px solid #EAECEF;border-radius:14px;padding:14px 14px">'
+      +'<div style="font-size:13px;font-weight:800;color:#333;margin-bottom:8px">'+escHTML(st.resultTitle||'Advies')</div>'
+      +'<div style="font-size:14px;color:#333;line-height:1.65">'+st.resultHtml+'</div>'
+      +ts
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="openAdviceHubResultInVertel()">Bespreek in Vertel</button>'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="resetAdviceHubFlow()">Nieuwe vraag kiezen</button>'
+      +'</div>'
+      +'</div>';
+  }
+  function personOptions(){
+    var sel=String(st.person||'').trim();
+    return '<option value="">Kies een dossier...</option>'+contacts.map(function(n){
+      return '<option value="'+escHTML(n)+'" '+(sel===n?'selected':'')+'>'+escHTML(dn(n))+'</option>';
+    }).join('');
+  }
+  function compareChecklist(){
+    if(!contacts.length)return'<div style="font-size:12px;color:#8a8f97">Nog geen dossiers beschikbaar.</div>';
+    return contacts.map(function(n){
+      var id='cmp_'+String(n).toLowerCase().replace(/[^a-z0-9]+/g,'_');
+      var on=Array.isArray(st.compare)&&st.compare.indexOf(n)>=0;
+      return '<label for="'+id+'" style="display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;background:'+(on?'#FFF7F4':'#fff')+';cursor:pointer">'
+        +'<input id="'+id+'" type="checkbox" '+(on?'checked':'')+' onchange="toggleAdviceHubCompare(\''+escJsStr(n)+'\',this.checked)"/>'
+        +'<span style="font-size:13px;color:#333">'+escHTML(dn(n))+'</span>'
+        +'</label>';
+    }).join('');
+  }
+  var routeBody='';
+  if(st.route==='person'){
+    routeBody='<div style="margin-top:6px">'
+      +'<div style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:6px">Over welke persoon wil je advies?</div>'
+      +'<select id="adviceHubPersonSelect" class="form-input" style="margin:0 0 10px">'+personOptions()+'</select>'
+      +'<textarea id="adviceHubPersonQuestion" class="form-input" placeholder="Eventuele focusvraag (optioneel)" style="min-height:84px;resize:vertical;margin:0 0 10px">'+escHTML(st.question||'')+'</textarea>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button type="button" class="btn-r" style="max-width:240px;padding:10px 12px" onclick="runAdviceHubPerson()">Genereer advies</button>'
+      +'<button type="button" class="btn-g" style="max-width:200px;padding:10px 12px" onclick="resetAdviceHubFlow()">Terug</button>'
+      +'</div>'
+      +renderResultCard()
+      +'</div>';
+  }else if(st.route==='compare'){
+    routeBody='<div style="margin-top:6px">'
+      +'<div style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:6px">Kies 2 of 3 personen voor gecombineerd advies</div>'
+      +'<div style="display:grid;gap:8px;margin-bottom:10px">'+compareChecklist()+'</div>'
+      +'<textarea id="adviceHubCompareQuestion" class="form-input" placeholder="Wat wil je exact vergelijken? (optioneel)" style="min-height:84px;resize:vertical;margin:0 0 10px">'+escHTML(st.question||'')+'</textarea>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button type="button" class="btn-r" style="max-width:280px;padding:10px 12px" onclick="runAdviceHubCompare()">Genereer vergelijk-advies</button>'
+      +'<button type="button" class="btn-g" style="max-width:200px;padding:10px 12px" onclick="resetAdviceHubFlow()">Terug</button>'
+      +'</div>'
+      +renderResultCard()
+      +'</div>';
+  }else if(st.route==='topic'||st.route==='question'){
+    var isTopic=st.route==='topic';
+    routeBody='<div style="margin-top:6px">'
+      +'<div style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:6px">'+(isTopic?'Welk thema wil je uitdiepen?':'Wat is je losse vraag?')+'</div>'
+      +'<textarea id="adviceHubOpenPrompt" class="form-input" placeholder="'+(isTopic?'Bijv. grenzen aangeven zonder conflict':'Typ je vraag zo concreet mogelijk')+'" style="min-height:104px;resize:vertical;margin:0 0 10px">'+escHTML(isTopic?(st.topic||''):(st.question||''))+'</textarea>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button type="button" class="btn-r" style="max-width:300px;padding:10px 12px" onclick="runAdviceHubOpenPrompt()">Genereer en open in Vertel</button>'
+      +'<button type="button" class="btn-g" style="max-width:200px;padding:10px 12px" onclick="resetAdviceHubFlow()">Terug</button>'
+      +'</div>'
+      +renderResultCard()
+      +'</div>';
+  }else{
+    routeBody='<div class="advice-route-grid">'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'person\')"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies dossier, stel je focusvraag en krijg meteen advies.</span></span></button>'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 dossiers en geef direct advies.</span></span></button>'
+      +'<button type="button" class="advice-route-card" onclick="openOwnSenseEntryPoint()"><span class="advice-route-icon">🪞</span><span class="advice-route-copy"><span class="advice-route-title">Met mijn OwnSense-lens</span><span class="advice-route-desc">Open OwnSense om je lens meteen te verrijken.</span></span></button>'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en stuur het advies door naar Vertel.</span></span></button>'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en ga direct verder in Vertel.</span></span></button>'
+      +'</div>';
   }
   el.innerHTML=''
     +'<div class="home-shell advice-hub-shell" style="text-align:left">'
     +'<div class="advice-hub-kicker">Advies</div>'
     +'<div class="advice-hub-icon">💡</div>'
     +'<h2 class="advice-hub-title">Waar heb je vandaag zicht op nodig?</h2>'
-    +'<p class="advice-hub-sub">Kies je route en krijg gericht advies. Per dossier blijft alles apart bewaard.</p>'
-    +'<div class="advice-route-grid">'
-    +'<button type="button" class="advice-route-card" onclick="openAdviceForOneDossier()"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Advies voor een dossier, met updates op context.</span></span></button>'
-    +'<button type="button" class="advice-route-card" onclick="goScreen(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Patronen, verschillen en keuzehulp.</span></span></button>'
-    +'<button type="button" class="advice-route-card" onclick="openOwnSenseEntryPoint()"><span class="advice-route-icon">🪞</span><span class="advice-route-copy"><span class="advice-route-title">Met mijn OwnSense-lens</span><span class="advice-route-desc">Kijk met je eigen profiel mee naar situaties.</span></span></button>'
-    +'<button type="button" class="advice-route-card" onclick="goScreen(\'vertel\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Los van een persoon, zoals grenzen of communicatie.</span></span></button>'
-    +'<button type="button" class="advice-route-card" onclick="goScreen(\'vertel\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Ad hoc advies, ook zonder dossiercontext.</span></span></button>'
-    +'</div>'
-    +'<div class="advice-depth-wrap">'
+    +'<p class="advice-hub-sub">Beslis hier je route. Ik genereer advies vanuit dit scherm.</p>'
+    +routeBody
+    +'<div class="advice-depth-wrap" style="margin-top:14px">'
     +'<div class="advice-depth-label">Diepgang</div>'
-    +'<p class="advice-depth-help">Kies hoe diep je advies mag gaan. Je kan nadien in het dossier nog steeds wisselen.</p>'
+    +'<p class="advice-depth-help">Kies hoe diep je advies mag gaan.</p>'
     +'<div class="advice-depth-row">'
     +depthBtn('standard','Gewoon advies')
     +depthBtn('extra','Met extra expertise')
+    +depthBtn('both','Beide tegelijk')
     +'</div>'
     +'</div>'
     +(contacts.length?'<div class="advice-hub-footnote">Beschikbare dossiers: '+escHTML(contacts.slice(0,4).map(dn).join(', '))+(contacts.length>4?'…':'')+'</div>':'<div class="advice-hub-footnote">Nog geen dossier gevonden. Maak er eerst één in Senses.</div>')
     +'</div>';
 }
-
-function setAdviceHubDepthMode(mode){
-  S.adviceHubDepthMode=(mode==='extra')?'extra':'standard';
+function resetAdviceHubFlow(){
+  var st=getAdviceHubState();
+  st.route='';
+  st.resultHtml='';
+  st.resultTitle='';
+  st.resultTs='';
   if(S.screen==='advice'){
     var mc=document.getElementById('mainContent');
     if(mc)rAdviceHub(mc);
   }
 }
-
-function openAdviceForOneDossier(){
-  var target='';
-  if(S.screen==='dossier'&&S.viewDossier)target=String(S.viewDossier||'').trim();
-  if(!target){
-    var focus='';
-    try{focus=(typeof getRelationshipFocusName==='function'?getRelationshipFocusName():'');}catch(_f){}
-    if(focus&&focus!=='OWN Sense')target=String(focus);
+function setAdviceHubRoute(route){
+  var st=getAdviceHubState();
+  st.route=String(route||'').trim();
+  st.resultHtml='';
+  st.resultTitle='';
+  st.resultTs='';
+  if(S.screen==='advice'){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdviceHub(mc);
   }
-  if(!target){
-    var contacts=getDateSenseContactNames().filter(function(p){return p&&p!=='OWN Sense';});
-    if(contacts.length)target=String(contacts[0]);
+}
+function setAdviceHubDepthMode(mode){
+  var m=String(mode||'').trim().toLowerCase();
+  S.adviceHubDepthMode=(m==='extra'||m==='both')?m:'standard';
+  if(S.screen==='advice'){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdviceHub(mc);
   }
-  if(!target){
-    goScreen('senses');
-    toast('Kies eerst een dossier voor advies.');
-    return;
+}
+function toggleAdviceHubCompare(name,on){
+  var st=getAdviceHubState();
+  if(!Array.isArray(st.compare))st.compare=[];
+  var i=st.compare.indexOf(name);
+  if(on){
+    if(i<0&&st.compare.length<3)st.compare.push(name);
+  }else if(i>=0){
+    st.compare.splice(i,1);
   }
-  viewDossier(target);
-  setTimeout(function(){try{switchTab('advies');}catch(_e){}},120);
+}
+async function runAdviceHubPerson(){
+  var st=getAdviceHubState();
+  var sel=document.getElementById('adviceHubPersonSelect');
+  var q=document.getElementById('adviceHubPersonQuestion');
+  var name=sel?String(sel.value||'').trim():'';
+  st.person=name;
+  st.question=q?String(q.value||'').trim():'';
+  S.adviceHubPendingFocus={name:name,question:st.question};
+  if(!name){toast('Kies eerst een dossier.');return;}
+  st.resultTitle='Advies over '+dn(name);
+  st.resultHtml=renderAdviceLoadingCard();
+  st.resultTs='';
+  var mc=document.getElementById('mainContent');
+  if(mc)rAdviceHub(mc);
+  try{
+    await genAdvies(name,true);
+    if(S.adviceHubDepthMode==='extra'||S.adviceHubDepthMode==='both')await genAdviesOnderbouwd(name);
+    var cache=(S.adviesCache&&S.adviesCache[name])||{};
+    var html=String(cache.html||'');
+    if((S.adviceHubDepthMode==='extra'||S.adviceHubDepthMode==='both')&&cache.extra_html){
+      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid #ECEEF1"><div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:6px">Extra expertise</div>'+cache.extra_html+'</div>';
+    }
+    st.resultHtml=html||'<div style="color:#b91c1c">Nog geen advies gegenereerd.</div>';
+    st.resultTs=cache.ts||'';
+  }catch(e){
+    st.resultHtml='<div style="color:#b91c1c">Kon geen advies genereren: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
+  }
+  if(mc)rAdviceHub(mc);
+}
+async function runAdviceHubCompare(){
+  var st=getAdviceHubState();
+  var q=document.getElementById('adviceHubCompareQuestion');
+  st.question=q?String(q.value||'').trim():'';
+  var names=(st.compare||[]).filter(Boolean).slice(0,3);
+  if(names.length<2){toast('Kies minimaal 2 dossiers.');return;}
+  if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
+  st.resultTitle='Vergelijk-advies';
+  st.resultHtml=renderAdviceLoadingCard();
+  st.resultTs='';
+  var mc=document.getElementById('mainContent');
+  if(mc)rAdviceHub(mc);
+  try{
+    var payload=await Promise.all(names.map(async function(n){
+      var stCmp=compareDataStats(n);
+      var d=stCmp.d||{};
+      var catSnips=[];
+      Object.values(d.categories||{}).forEach(function(cat){
+        Object.values(cat||{}).forEach(function(v){
+          var t=String(v||'').trim();
+          if(t)catSnips.push(t);
+        });
+      });
+      var msgs=[];
+      try{msgs=await loadMsgs(n,{limit:30});}catch(_e){}
+      var recentFacts=msgs.filter(function(m){return m.role==='user';})
+        .slice(-10)
+        .map(function(m){return String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
+        .filter(Boolean)
+        .slice(-4);
+      return {
+        naam:dn(n),
+        props:d.props||{},
+        berichten:stCmp.msgCount,
+        profielvelden:stCmp.catFilled,
+        confidence:stCmp.confidence,
+        low_data:stCmp.lowData,
+        relatie_type:((d.meta||{}).relationship_type)||'',
+        context_input:catSnips.join(' | ').substring(0,1100),
+        recent_events:recentFacts
+      };
+    }));
+    var sys=getPromptText('compare_core');
+    var usageLine=buildUsageModeContextLine();
+    if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
+    if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
+    var user='Data:\n'+JSON.stringify(payload);
+    var t=await callAPI(sys,[{role:'user',content:user}],760);
+    st.resultHtml=formatAiCard(cleanCompareAiText(t));
+    st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){
+    st.resultHtml='<div style="color:#b91c1c">Vergelijk-advies mislukt: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
+  }
+  if(mc)rAdviceHub(mc);
+}
+async function runAdviceHubOpenPrompt(){
+  var st=getAdviceHubState();
+  var inp=document.getElementById('adviceHubOpenPrompt');
+  var prompt=inp?String(inp.value||'').trim():'';
+  if(!prompt){toast('Vul eerst je vraag of thema in.');return;}
+  if(st.route==='topic')st.topic=prompt;else st.question=prompt;
+  if(!S.apiKey){toast('⚠️ Eerst API key instellen!');return;}
+  st.resultTitle=(st.route==='topic'?'Thema-advies':'Antwoord op je vraag');
+  st.resultHtml=renderAdviceLoadingCard();
+  st.resultTs='';
+  var mc=document.getElementById('mainContent');
+  if(mc)rAdviceHub(mc);
+  try{
+    var sys='Je bent DateSensei. Geef concreet, empathisch advies in het Nederlands. '
+      +'Schrijf 5-8 korte zinnen met duidelijke actiepunten. Houd het praktisch.';
+    var ctx='Gebruikersinput: '+prompt;
+    var t=await callAPI(sys,[{role:'user',content:ctx}],620);
+    st.resultHtml=formatAiCard(String(t||'').trim());
+    st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    openAdviceHubResultInVertel(true);
+  }catch(e){
+    st.resultHtml='<div style="color:#b91c1c">Kon geen antwoord genereren: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
+    if(mc)rAdviceHub(mc);
+  }
+}
+function openAdviceHubResultInVertel(skipRender){
+  var st=getAdviceHubState();
+  var plain=stripTagsPlainExport(String(st.resultHtml||'')).replace(/\s+/g,' ').trim();
+  if(!plain){toast('Nog geen advies om te bespreken.');return;}
+  var name=String(st.person||'').trim()||'OWN Sense';
+  S.vertelPendingAdvice={
+    intro:'Kan je me hiermee verder helpen?',
+    text:plain.length>1200?(plain.substring(0,1200)+'\n\n[Ingekort voor leesbaarheid.]'):plain,
+    mode:'core',
+    at:Date.now()
+  };
+  S.vertelFrom=name;
+  S.vertelGesprekDossier=name;
+  goScreen('vertel');
+  if(!skipRender){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdviceHub(mc);
+  }
 }
 
 function toggleCompareMode(){
@@ -8385,6 +8599,12 @@ async function genAdvies(name,forced){
   var usageLine=buildUsageModeContextLine();
   if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
   var userContent=buildAdviceContextPayload(name,d,msgs);
+  var hubFocus='';
+  if(S.adviceHubPendingFocus&&S.adviceHubPendingFocus.name===name){
+    hubFocus=String(S.adviceHubPendingFocus.question||'').trim();
+    S.adviceHubPendingFocus=null;
+  }
+  if(hubFocus)userContent+='\nSpecifieke focusvraag gebruiker: '+hubFocus;
   var boost=buildRelationshipBoost(name);
   if(boost){
     userContent+='\nRelationship boost categorieen: '+boost.categories.join(', ');
