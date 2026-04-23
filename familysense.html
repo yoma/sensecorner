@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="23-04-2026 15:44">
+<meta name="fs-build" content="23-04-2026 15:47">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -932,7 +932,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 23-04-2026 15:44</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 23-04-2026 15:47</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -6218,6 +6218,7 @@ async function runAdviceHubCompare(){
         .filter(Boolean)
         .slice(-4);
       return {
+        dossier:n,
         naam:dn(n),
         props:d.props||{},
         berichten:stCmp.msgCount,
@@ -6235,7 +6236,23 @@ async function runAdviceHubCompare(){
     if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
     var user='Data:\n'+JSON.stringify(payload);
     var t=await callAPI(sys,[{role:'user',content:user}],760);
-    st.resultHtml=formatAiCard(cleanCompareAiText(t));
+    var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
+      +payload.map(function(item){
+        var conf=Math.max(0,Math.min(100,parseInt(item.confidence,10)||0));
+        var confTone=conf>=70?'#0f766e':conf>=45?'#9a6700':'#b42318';
+        return '<div style="border:1px solid #E5E7EB;border-radius:10px;padding:9px 10px;background:#fff">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+          +'<strong style="font-size:13px;color:#374151">'+escHTML(item.naam)+'</strong>'
+          +'<span style="font-size:11px;color:'+confTone+';font-weight:700">Confidence '+conf+'%</span>'
+          +'</div>'
+          +'<div style="font-size:12px;color:#6b7280;margin-top:4px">'
+          +'Berichten: '+(parseInt(item.berichten,10)||0)+' · Profielvelden: '+(parseInt(item.profielvelden,10)||0)
+          +(item.low_data?' · <span style="color:#b42318">beperkte data</span>':'')
+          +'</div>'
+          +'</div>';
+      }).join('')
+      +'</div>';
+    st.resultHtml=summaryHtml+formatAiCard(cleanCompareAiText(t));
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
   }catch(e){
     st.resultHtml='<div style="color:#b91c1c">Vergelijk-advies mislukt: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
