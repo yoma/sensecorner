@@ -1071,7 +1071,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
   <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
     <button type="button" class="quick-nav-btn" id="backAppBtn" hidden>Terug naar je huidige app</button>
     <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('home')}else{window.location.href='datesense.html'}">Home DateSense</button>
-    <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('compare')}">Advies</button>
+    <button type="button" class="quick-nav-btn" onclick="openAdviceQuickNav()">Advies</button>
     <button type="button" class="quick-nav-btn" onclick="window.location.href='sensecorner.html'">Home Sensecorner</button>
   </div>
   <div class="app-scroll" id="appScroll">
@@ -3479,6 +3479,32 @@ function initQuickNavBackToApp(){
     back.removeAttribute('hidden');
     back.onclick=function(){window.location.href=rt;};
   }catch(_e){}
+}
+function openAdviceQuickNav(){
+  if(!S||!S.user){redirectToSenseCornerAuth();return;}
+  var target='';
+  try{
+    if(S.screen==='dossier'&&S.viewDossier)target=String(S.viewDossier||'').trim();
+    if(!target){
+      var focus='';
+      try{focus=(typeof getRelationshipFocusName==='function'?getRelationshipFocusName():'');}catch(_f){}
+      if(focus&&focus!=='OWN Sense')target=String(focus);
+    }
+    if(!target){
+      var contacts=(S.profiles||[]).filter(function(p){return p&&p!=='OWN Sense';});
+      if(contacts.length)target=String(contacts[0]);
+    }
+    if(!target&&Array.isArray(S.profiles)&&S.profiles.indexOf('OWN Sense')>=0)target='OWN Sense';
+    if(!target){
+      goScreen('senses');
+      try{toast('Kies eerst een dossier voor advies.');}catch(_t){}
+      return;
+    }
+    viewDossier(target);
+    setTimeout(function(){try{switchTab('advies');}catch(_e2){}},120);
+  }catch(_e){
+    goScreen('senses');
+  }
 }
 function redirectToSenseCornerAuth(){
   var target='datesense.html';
