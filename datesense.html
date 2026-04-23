@@ -1071,6 +1071,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
   <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
     <button type="button" class="quick-nav-btn" id="backAppBtn" hidden>Terug naar je huidige app</button>
     <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('home')}else{window.location.href='datesense.html'}">Home DateSense</button>
+    <button type="button" class="quick-nav-btn" onclick="if(window.goScreen){goScreen('compare')}">Advies</button>
     <button type="button" class="quick-nav-btn" onclick="window.location.href='sensecorner.html'">Home Sensecorner</button>
   </div>
   <div class="app-scroll" id="appScroll">
@@ -3484,6 +3485,25 @@ function redirectToSenseCornerAuth(){
   var url='sensecorner.html?returnTo='+encodeURIComponent(target);
   window.location.href=url;
 }
+function showFriendlyAuthGate(reason){
+  var mc=document.getElementById('mainContent');
+  if(!mc){redirectToSenseCornerAuth();return;}
+  var msg=String(reason||'Je sessie kon nog niet bevestigd worden.');
+  mc.innerHTML=''
+    +'<div style="padding:22px;max-width:520px;margin:0 auto">'
+    +'<div style="font-size:18px;font-weight:800;color:#333;margin-bottom:8px">Bijna klaar</div>'
+    +'<div style="font-size:14px;line-height:1.6;color:#555;margin-bottom:12px">We konden je login nog niet meteen bevestigen. '
+    +'Klik hieronder om door te gaan via SenseCorner, of probeer nog eens.</div>'
+    +'<div style="font-size:12px;color:#7a7f88;line-height:1.45;margin-bottom:14px">'+escHTML(msg)+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button type="button" id="authGateLoginBtn" class="btn-r" style="padding:10px 14px">Inloggen via SenseCorner</button>'
+    +'<button type="button" id="authGateRetryBtn" class="btn-g" style="padding:10px 14px">Opnieuw proberen</button>'
+    +'</div></div>';
+  var b1=document.getElementById('authGateLoginBtn');
+  if(b1)b1.onclick=function(){redirectToSenseCornerAuth();};
+  var b2=document.getElementById('authGateRetryBtn');
+  if(b2)b2.onclick=function(){init();};
+}
 /** Na actief afmelden: landingspagina, niet opnieuw op de hub. */
 function redirectToLandingAfterSignOut(){
   try{window.location.replace('index.html');}
@@ -3542,7 +3562,13 @@ async function init(){
   ensureSessionTables();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var {data:{session}}=await sb.auth.getSession();
+    var sessionRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden time-out');
+    var session=sessionRes&&sessionRes.data&&sessionRes.data.session;
+    if(!session){
+      await new Promise(function(r){setTimeout(r,900);});
+      var retryRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden retry time-out');
+      session=retryRes&&retryRes.data&&retryRes.data.session;
+    }
     if(session){
       S.user=session.user;
       if(!S.apiKey)S.apiKey='hub_server_managed';
@@ -3552,12 +3578,12 @@ async function init(){
       goScreen('home');
       applySenseDeepLinkFromUrl();
     } else {
-      redirectToSenseCornerAuth();
+      showFriendlyAuthGate('Geen actieve sessie gevonden.');
       return;
     }
   }catch(e){
     console.error('init error:',e);
-    redirectToSenseCornerAuth();
+    showFriendlyAuthGate(String((e&&e.message)||e||'Onbekende sessiefout.'));
     return;
   }
   sb.auth.onAuthStateChange(async(ev,ses)=>{
