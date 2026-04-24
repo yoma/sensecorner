@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="23-04-2026 16:17">
+<meta name="fs-build" content="24-04-2026 09:54">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -932,7 +932,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 23-04-2026 16:17</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 24-04-2026 09:54</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -6187,6 +6187,22 @@ async function runAdviceHubPerson(){
   st.question=q?String(q.value||'').trim():'';
   S.adviceHubPendingFocus={name:name,question:st.question};
   if(!name){toast('Kies eerst een dossier.');return;}
+  if(!dossierHasAdviceInput(name)){
+    var escN=escJsStr(name);
+    st.resultTitle='Advies over '+dn(name);
+    st.resultHtml='<div style="background:#FFF8E0;border:1px solid #F5D7A8;border-radius:12px;padding:12px 13px;color:#5f4b1f;font-size:13px;line-height:1.55">'
+      +'<strong>Te weinig info over '+escHTML(dn(name))+' om advies te genereren.</strong><br>'
+      +'Voeg eerst een paar contextpunten toe via Vertel of vul de profielvakken van dit dossier aan.'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="S.vertelFrom=\''+escN+'\';S.vertelGesprekDossier=\''+escN+'\';goScreen(\'vertel\')">Open Vertel voor '+escHTML(dn(name))+'</button>'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="viewDossier(\''+escN+'\');setTimeout(function(){try{switchTab(\'profiel\');}catch(_e){}},120)">Open profiel van '+escHTML(dn(name))+'</button>'
+      +'</div>'
+      +'</div>';
+    st.resultTs='';
+    var mcEarly=document.getElementById('mainContent');
+    if(mcEarly)rAdviceHub(mcEarly);
+    return;
+  }
   st.resultTitle='Advies over '+dn(name);
   st.resultHtml=renderAdviceLoadingCard();
   st.resultTs='';
@@ -6200,7 +6216,14 @@ async function runAdviceHubPerson(){
     if((S.adviceHubDepthMode==='extra'||S.adviceHubDepthMode==='both')&&cache.extra_html){
       html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid #ECEEF1"><div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:6px">Extra expertise</div>'+cache.extra_html+'</div>';
     }
-    st.resultHtml=html||'<div style="color:#b91c1c">Nog geen advies gegenereerd.</div>';
+    st.resultHtml=html||('<div style="background:#FFF8E0;border:1px solid #F5D7A8;border-radius:12px;padding:12px 13px;color:#5f4b1f;font-size:13px;line-height:1.55">'
+      +'<strong>Nog geen advies beschikbaar.</strong><br>'
+      +'Er is vermoedelijk nog te weinig input voor '+escHTML(dn(name))+'. Voeg extra context toe en probeer opnieuw.'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="S.vertelFrom=\''+escJsStr(name)+'\';S.vertelGesprekDossier=\''+escJsStr(name)+'\';goScreen(\'vertel\')">Open Vertel voor '+escHTML(dn(name))+'</button>'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:8px 10px" onclick="viewDossier(\''+escJsStr(name)+'\');setTimeout(function(){try{switchTab(\'profiel\');}catch(_e){}},120)">Open profiel van '+escHTML(dn(name))+'</button>'
+      +'</div>'
+      +'</div>');
     st.resultTs=cache.ts||'';
   }catch(e){
     st.resultHtml='<div style="color:#b91c1c">Kon geen advies genereren: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
