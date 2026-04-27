@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="24-04-2026 16:39">
+<meta name="fs-build" content="27-04-2026 20:54">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -978,7 +978,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 24-04-2026 16:39</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 27-04-2026 20:54</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1561,19 +1561,70 @@ function getOwnAppDepthProgress(){
   }
   return{filled:filled,total:n,pct:Math.round(filled*100/Math.max(1,n))};
 }
+/** Zelfde brug als OWN Sense-hub: onboarding-feiten → eerste slots van familysense_focus. */
+var OWN_APP_DEPTH_FACT_SUB_MAP={family_meaning:0,family_friction:1};
+async function hydrateOwnAppDepthFromOnboardingFacts(){
+  if(!S.user||!sb)return;
+  var own=S.pdata&&S.pdata['OWN Sense'];
+  if(!own)return;
+  var cid=OWN_APP_DEPTH_CAT.id;
+  own.categories=own.categories||{};
+  var cat=JSON.parse(JSON.stringify(own.categories[cid]||{}));
+  var n=OWN_APP_DEPTH_CAT.slots;
+  for(var i=0;i<n;i++){if(cat['a'+i]==null)cat['a'+i]='';}
+  var needSubs=Object.keys(OWN_APP_DEPTH_FACT_SUB_MAP).filter(function(sub){
+    var idx=OWN_APP_DEPTH_FACT_SUB_MAP[sub];
+    return!String(cat['a'+idx]||'').trim();
+  });
+  if(!needSubs.length)return;
+  try{
+    var r=await withTimeout(
+      sb.from('own_facts').select('subcategory,fact_text,updated_at,created_at').eq('user_id',S.user.id).eq('status','accepted').in('subcategory',needSubs),
+      9000,
+      'own_facts hydrate depth'
+    );
+    if(r&&r.error)throw new Error(r.error.message||'own_facts');
+    var rows=Array.isArray(r&&r.data)?r.data:[];
+    var bySub={};
+    rows.forEach(function(row){
+      var sub=String(row.subcategory||'').trim();
+      if(!sub)return;
+      var t=new Date(row.updated_at||row.created_at||0).getTime();
+      var prev=bySub[sub];
+      var pt=prev?new Date(prev.updated_at||prev.created_at||0).getTime():0;
+      if(!prev||t>=pt)bySub[sub]=row;
+    });
+    var changed=false;
+    needSubs.forEach(function(sub){
+      var hit=bySub[sub];
+      if(!hit)return;
+      var idx=OWN_APP_DEPTH_FACT_SUB_MAP[sub];
+      var txt=String(hit.fact_text||'').trim();
+      if(!txt)return;
+      if(String(cat['a'+idx]||'').trim())return;
+      cat['a'+idx]=txt;
+      changed=true;
+    });
+    if(!changed)return;
+    own.categories[cid]=cat;
+    S.pdata['OWN Sense']=own;
+    await saveP('OWN Sense',own.props,own.count,own.categories,own.summary,own.meta);
+  }catch(e){console.warn('hydrateOwnAppDepthFromOnboardingFacts',e);}
+  try{refreshOwnAppDepthHintMounts();}catch(_rh){}
+}
 function renderOwnAppDepthHintHtml(opt){
   var st=getOwnAppDepthProgress();
   if(!st)return'';
   var cls='app-depth-hint'+(opt&&opt.profiel?' app-depth-hint--ownprofiel':'');
   if(st.pct>=100){
     return'<div class="'+cls+' app-depth-hint--done" role="status">'
-      +'<span class="app-depth-hint-txt">'+escHTML(OWN_APP_DEPTH_CAT.appLabel)+' in OWN Sense: klaar ✓</span>'
+      +'<span class="app-depth-hint-txt">'+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'-verdieping in OWN Sense: klaar ✓</span>'
       +'</div>';
   }
-  var _hintGo='Open OWN Sense - '+OWN_APP_DEPTH_CAT.appLabel+' verdieping invullen';
+  var _hintGo='Open OWN Sense · '+OWN_APP_DEPTH_CAT.appLabel+' verdiepingsvragen aanvullen';
   return'<button type="button" class="'+cls+' app-depth-hint--open" title="'+escHTML(_hintGo)+'" aria-label="'+escHTML(_hintGo)+'" onclick="(window.openOwnSenseEntryPoint||openOwnSenseEntryPoint)({cat:\''+OWN_APP_DEPTH_CAT.id+'\'})">'
     +'<span class="app-depth-hint-badge" aria-hidden="true">OWN Sense</span>'
-    +'<span class="app-depth-hint-main"><strong>'+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'</strong> aanvullen</span>'
+    +'<span class="app-depth-hint-main"><strong>'+escHTML(OWN_APP_DEPTH_CAT.appLabel)+'</strong> verdiepingsvragen</span>'
     +'<span class="app-depth-hint-count" aria-hidden="true">'+st.filled+'/'+st.total+'</span>'
     +'<span class="app-depth-hint-cta" aria-hidden="true">›</span>'
     +'</button>';
@@ -4128,6 +4179,7 @@ async function loadAll(){
   updateNavTabIndicators();
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
+  try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
