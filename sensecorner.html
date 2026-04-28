@@ -200,47 +200,47 @@ a{text-decoration:none;color:inherit}
 .hero-import-title{font-size:12px;font-weight:600;color:var(--chocolade);margin-bottom:4px}
 .hero-import-sub{font-size:12px;color:var(--m);line-height:1.45;margin-bottom:8px}
 .own-mini-dashboard{
-  margin-top:12px;padding:11px 12px;border:1px solid rgba(107,142,111,.28);border-radius:12px;
-  background:linear-gradient(180deg,rgba(200,212,181,.22) 0%,var(--ivoor) 100%);
+  margin-top:10px;padding:2px 0 0;border:none;border-radius:0;background:transparent;
 }
 .own-mini-dashboard.low{
-  border-color:rgba(186,86,84,.34);
-  background:linear-gradient(180deg,rgba(232,187,185,.24) 0%,var(--ivoor) 100%);
+  border:none;background:transparent;
 }
 .own-mini-dashboard.mid{
-  border-color:rgba(146,100,10,.34);
-  background:linear-gradient(180deg,rgba(235,220,183,.30) 0%,var(--ivoor) 100%);
+  border:none;background:transparent;
 }
 .own-mini-dashboard.high{
-  border-color:rgba(30,126,52,.32);
-  background:linear-gradient(180deg,rgba(200,230,206,.30) 0%,var(--ivoor) 100%);
+  border:none;background:transparent;
 }
 .own-mini-title{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:4px}
 .own-mini-sub{font-size:12px;color:var(--m);line-height:1.45}
 .own-scope-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
 .own-scope-item{text-align:center}
 .own-scope-ring{
-  --pct:0;
+  --pct:0; /* 0..100 */
   --ring-color:var(--sage-donker);
-  width:52px;height:52px;border-radius:50%;margin:0 auto 6px;
-  background:conic-gradient(var(--ring-color) calc(var(--pct) * 1%), rgba(61,47,31,.12) 0);
-  position:relative;
+  width:62px;height:62px;position:relative;margin:0 auto 6px;
+  display:flex;align-items:center;justify-content:center;
 }
-.own-scope-ring::before{
-  content:'';
-  position:absolute;inset:-5px;border-radius:50%;
-  background:color-mix(in srgb,var(--ring-color) 22%,#fff);
-  z-index:0;
+.own-scope-rip{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;
 }
-.own-scope-ring::after{
-  content:'';
-  position:absolute;inset:6px;border-radius:50%;
-  background:var(--ivoor);border:1px solid rgba(61,47,31,.08);
-  z-index:0;
+.own-scope-rip--l{width:100%;height:100%;background:color-mix(in srgb,var(--ring-color) 18%,#fff)}
+.own-scope-rip--m{width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:color-mix(in srgb,var(--ring-color) 30%,#fff)}
+.own-scope-rip--d{width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:color-mix(in srgb,var(--ring-color) 45%,#fff)}
+.own-scope-svg{
+  position:relative;z-index:1;display:block;width:50px;height:50px;
+  transform:rotate(-90deg);
+}
+.own-scope-track{
+  fill:none;stroke:rgba(61,47,31,.15);stroke-width:4;
+}
+.own-scope-fg{
+  fill:none;stroke:var(--ring-color);stroke-width:4.5;stroke-linecap:round;
 }
 .own-scope-pct{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:700;color:var(--chocolade);z-index:1;
+  font-size:11px;font-weight:700;color:var(--chocolade);z-index:2;
 }
 .own-scope-label{font-size:11px;font-weight:700;color:var(--chocolade);line-height:1.2}
 .own-scope-left{font-size:10px;color:var(--m);line-height:1.3}
@@ -850,8 +850,11 @@ a{text-decoration:none;color:inherit}
     if(ownScopeGrid){
       ownScopeGrid.innerHTML=scopes.map(function(s){
         var p=s.total>0?Math.max(0,Math.min(100,Math.round((s.filled/s.total)*100))):0;
+        var radius=16;
+        var c=2*Math.PI*radius;
+        var off=c*(1-p/100);
         var leftTxt=s.total>0?(Math.max(0,s.total-s.filled)+' open'):'later';
-        return '<div class="own-scope-item scope-'+s.key+'"><div class="own-scope-ring" style="--pct:'+p+'"><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
+        return '<div class="own-scope-item scope-'+s.key+'"><div class="own-scope-ring" style="--pct:'+p+'"><span class="own-scope-rip own-scope-rip--l" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--m" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--d" aria-hidden="true"></span><svg class="own-scope-svg" viewBox="0 0 50 50" aria-hidden="true"><circle class="own-scope-track" cx="25" cy="25" r="'+radius+'"></circle><circle class="own-scope-fg" cx="25" cy="25" r="'+radius+'" style="stroke-dasharray:'+c.toFixed(2)+';stroke-dashoffset:'+off.toFixed(2)+'"></circle></svg><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
       }).join('');
     }
     if(ownMiniSub)ownMiniSub.textContent=left+' OWN-vragen nog in te vullen. Hoe hoger het percentage, hoe beter Sensei kan adviseren.';
