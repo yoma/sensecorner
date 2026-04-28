@@ -507,6 +507,10 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 .qrow-bar{width:66px;height:4px;border-radius:2px;background:rgba(61,47,31,.15);overflow:hidden}
 .qrow-bar-fill{height:100%;background:var(--app-donker)}
 .qrow-arrow{font-size:18px;color:var(--muted)}
+.qcard{border:0.5px solid var(--border);border-radius:14px;background:var(--white)}
+.qcard>summary{list-style:none;cursor:pointer}
+.qcard>summary::-webkit-details-marker{display:none}
+.qbody{padding:2px 14px 12px}
 .qlist-foot{text-align:center;margin-top:10px}
 .qlist-repair{
   font-size:11px;color:var(--muted);padding:6px 12px;border-radius:999px;
@@ -2749,11 +2753,14 @@ function focusBootQuestionCategory(){
     activateTab('bron');
     if(typeof renderBronTab==='function')renderBronTab();
     var el=document.getElementById('cat-'+urlBootFocusCat);
-    if(!el)return;
-    el.scrollIntoView({behavior:'smooth',block:'start'});
-    if(typeof openOwnQuestionsModal==='function'){
-      setTimeout(function(){try{openOwnQuestionsModal(urlBootFocusCat);}catch(_e){}},120);
+    if(!el){
+      __openQuestionCatId=urlBootFocusCat;
+      if(typeof renderQuestions==='function')renderQuestions();
+      el=document.getElementById('cat-'+urlBootFocusCat);
+      if(!el)return;
     }
+    el.setAttribute('open','open');
+    el.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(_e){}
 }
 
@@ -4041,6 +4048,7 @@ function renderPhotoSection(){
   document.getElementById('reanalyzeBtn').addEventListener('click',runPhotoAnalysis);
 }
 
+var __openQuestionCatId='';
 function renderQuestions(){
   function hasAnswersInCatId(catId){
     var catDef=ALL_CATS.find(function(x){return x.id===catId;});
@@ -4075,12 +4083,24 @@ function renderQuestions(){
     var totalQ=cat.prompts.length;
     var pct=Math.round((filled*100)/Math.max(1,totalQ));
     var scopeCls=(cat.app==='ds'?' scope-ds':(cat.app==='fs'?' scope-fs':''));
-    html+='<button type="button" class="qrow'+scopeCls+'" id="cat-'+cat.id+'" onclick="openOwnQuestionsModal(\''+String(cat.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+    var openAttr=(String(__openQuestionCatId||'')===String(cat.id))?' open':'';
+    html+='<details class="qcard" id="cat-'+cat.id+'"'+openAttr+'><summary class="qrow'+scopeCls+'">'
       +'<div class="qrow-icon">'+escHTML(cat.icon||'•')+'</div>'
       +'<div class="qrow-meta">'
       +'<div class="qrow-title">'+escHTML(cat.title)+'</div>'
       +'<div class="qrow-progress"><div class="qrow-bar"><div class="qrow-bar-fill" style="width:'+pct+'%"></div></div>'+filled+'/'+totalQ+' vragen · '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
-      +'</div><span class="qrow-arrow">›</span></button>';
+      +'</div><span class="qrow-arrow">›</span></summary><div class="qbody">';
+    cat.prompts.forEach(function(p,idx){
+      var key='a'+idx;
+      var qtext=ownHubPromptQ(p);
+      var phtext=ownHubPromptPh(p);
+      var phUse=(phtext&&phtext.trim())?phtext.trim():'Tip: een paar zinnen uit je eigen ervaring zijn genoeg.';
+      var badge=(p&&p.fromOnboarding)?'<span class="own-onb-badge" title="Antwoord uit SenseCorner-onboarding">uit onboarding</span>':'';
+      html+='<div class="qprompt">'+escHTML(qtext)+badge+'</div>'
+        +'<textarea class="qta" id="qi-'+cat.id+'-'+key+'" placeholder="'+escHTML(phUse)+'">'+escHTML(c[key]||'')+'</textarea>';
+    });
+    html+='<div style="margin-top:10px"><button type="button" class="btn btn-primary btn-small" onclick="saveOwnQuestionsInline(\''+String(cat.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">Opslaan</button></div>'
+      +'</div></details>';
   });
   html+='</div>'
     +'<div class="qlist-foot"><button type="button" class="qlist-repair" id="ownSlotRepairBtn"'+(ownAnyAns?'':' disabled')+'><span style="color:var(--app-donker)">✨</span> AI: antwoorden laten passen bij vragen</button>'
@@ -4088,6 +4108,40 @@ function renderQuestions(){
   el.innerHTML=html;
   var repairBtn=document.getElementById('ownSlotRepairBtn');
   if(repairBtn)repairBtn.addEventListener('click',function(){runOwnSlotRepairAi();});
+  var cards=el.querySelectorAll('details.qcard');
+  cards.forEach(function(card){
+    card.addEventListener('toggle',function(){
+      if(!card.open)return;
+      __openQuestionCatId=String(card.id||'').replace(/^cat-/,'');
+      cards.forEach(function(other){
+        if(other!==card&&other.open)other.removeAttribute('open');
+      });
+    });
+  });
+}
+function saveOwnQuestionsInline(catId){
+  catId=String(catId||'').trim();
+  if(!catId)return;
+  var cat=ALL_CATS.find(function(x){return x.id===catId;});
+  if(!cat)return;
+  if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
+  var changed=false;
+  cat.prompts.forEach(function(_,idx){
+    var key='a'+idx;
+    var ta=document.getElementById('qi-'+cat.id+'-'+key);
+    var next=String((ta&&ta.value)||'');
+    if(String(hubState.categories[cat.id][key]||'')!==next){
+      hubState.categories[cat.id][key]=next;
+      changed=true;
+    }
+  });
+  if(changed){
+    hubState.cat_updated[cat.id]=new Date().toISOString();
+    saveHubState();
+    renderProps();
+  }
+  __openQuestionCatId=cat.id;
+  renderQuestions();
 }
 
 var __ownQuestionsModalCatId='';
