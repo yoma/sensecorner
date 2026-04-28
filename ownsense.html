@@ -4049,6 +4049,7 @@ function renderPhotoSection(){
 }
 
 var __openQuestionCatId='';
+var __questionAutosaveTimers={};
 function renderQuestions(){
   function hasAnswersInCatId(catId){
     var catDef=ALL_CATS.find(function(x){return x.id===catId;});
@@ -4118,12 +4119,25 @@ function renderQuestions(){
       });
     });
   });
+  var areas=el.querySelectorAll('textarea.qta[id^="qi-"]');
+  areas.forEach(function(ta){
+    ta.addEventListener('input',function(){
+      var m=String(ta.id||'').match(/^qi-([^-]+)-a\d+$/);
+      if(!m||!m[1])return;
+      var catId=m[1];
+      if(__questionAutosaveTimers[catId])clearTimeout(__questionAutosaveTimers[catId]);
+      __questionAutosaveTimers[catId]=setTimeout(function(){
+        saveOwnQuestionsForCategory(catId,{silent:true,rerender:false});
+      },700);
+    });
+  });
 }
-function saveOwnQuestionsInline(catId){
+function saveOwnQuestionsForCategory(catId,opt){
+  opt=opt||{};
   catId=String(catId||'').trim();
-  if(!catId)return;
+  if(!catId)return false;
   var cat=ALL_CATS.find(function(x){return x.id===catId;});
-  if(!cat)return;
+  if(!cat)return false;
   if(!hubState.categories[cat.id])hubState.categories[cat.id]=emptySlotsObjectForCategory(cat);
   var changed=false;
   cat.prompts.forEach(function(_,idx){
@@ -4140,8 +4154,16 @@ function saveOwnQuestionsInline(catId){
     saveHubState();
     renderProps();
   }
+  if(opt.rerender!==false){
+    __openQuestionCatId=cat.id;
+    renderQuestions();
+  }
+  return changed;
+}
+function saveOwnQuestionsInline(catId){
+  if(__questionAutosaveTimers[catId])clearTimeout(__questionAutosaveTimers[catId]);
+  saveOwnQuestionsForCategory(catId,{silent:false,rerender:true});
   __openQuestionCatId=cat.id;
-  renderQuestions();
 }
 
 var __ownQuestionsModalCatId='';
