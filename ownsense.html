@@ -130,6 +130,17 @@ a.top-title-wrap{text-decoration:none;color:inherit}
   color:var(--chocolade);
   min-width:0;
 }
+.top-pills{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:10px;padding-bottom:10px;
+}
+.top-pill{
+  border:0.5px solid var(--border);border-radius:999px;background:#fff;color:var(--chocolade);
+  font:inherit;font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.top-pill[hidden]{display:none!important}
+.top-pill-dot{font-size:16px;line-height:1;letter-spacing:1px}
 .onboarding-shell{
   margin-top:14px;
   border:0.5px solid var(--border);
@@ -214,12 +225,22 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 }
 .hero-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mini-actions{display:flex;align-items:center;gap:8px}
-.mini-vertel-btn{
-  width:32px;height:32px;border-radius:999px;border:0.5px solid var(--border);
-  background:rgba(255,255,255,.9);display:inline-flex;align-items:center;justify-content:center;
-  color:var(--chocolade);cursor:pointer;
+.hero-vertel{display:flex;align-items:center;gap:8px}
+.hero-vertel-wrap{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  width:48px;height:48px;--mic-d:var(--sage-donker);--mic-m:var(--sage-medium);--mic-l:var(--sage-licht);
 }
-.mini-vertel-btn svg{width:16px;height:16px;stroke:currentColor}
+.hero-vertel-rip{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none}
+.hero-vertel-wrap .hero-vertel-rip:nth-child(1){width:100%;height:100%;background:var(--mic-l)}
+.hero-vertel-wrap .hero-vertel-rip:nth-child(2){width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--mic-m)}
+.hero-vertel-wrap .hero-vertel-rip:nth-child(3){width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--mic-d)}
+.hero-vertel-btn{
+  position:relative;z-index:2;width:24px;height:24px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;background:var(--app-donker);color:#fff;
+}
+.hero-vertel-btn svg{width:14px;height:14px;stroke:currentColor;fill:none}
+.hero-vertel-link{border:none;background:none;cursor:pointer;font:inherit;font-size:12px;font-weight:700;color:var(--sage-donker)}
+.hero-vertel-link:hover{text-decoration:underline;text-underline-offset:2px}
 .cat-mini{margin-top:10px}
 .cat-mini summary{cursor:pointer;font-weight:700}
 .cat-mini-body{margin-top:8px}
@@ -653,6 +674,10 @@ a.top-title-wrap{text-decoration:none;color:inherit}
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </a>
     </div>
+    <div class="top-pills">
+      <button type="button" class="top-pill" id="topBackPill" hidden>← Terug</button>
+      <button type="button" class="top-pill" id="topMenuPill"><span class="top-pill-dot">···</span> Menu</button>
+    </div>
   </header>
 
   <!-- Alleen shell in stap 1: data wiring volgt in latere stappen -->
@@ -676,7 +701,6 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 
     <section id="vragenlijstenAnchor">
       <div class="sh">Vragenlijsten</div>
-      <article class="card" id="sourceCard"></article>
       <div id="vragenlijstenContainer">
         <article class="card" id="questionsCard"></article>
       </div>
@@ -691,9 +715,6 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 
     <section id="photosStrip">
       <article class="card" id="photosSlotsCard"></article>
-    </section>
-    <section id="photoAnalysis">
-      <article class="card" id="photosPatternCard"></article>
     </section>
 
     <section id="categoriesContainer">
@@ -1446,7 +1467,7 @@ function renderMijTab(){
   if(!topEl||!heroEl||!progressEl||!catsEl)return;
   var pending=getPendingFacts().length;
   var avInit=escHTML((hubState.display_name||'J').trim().charAt(0).toUpperCase()||'J');
-  topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3><div class="mini-actions"><button type="button" class="mini-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div></div><div class="hero" style="margin-top:10px"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'" data-fallback="'+avInit+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="" onerror="var p=this.parentNode;if(p){this.remove();p.classList.remove(\'has-photo\');p.textContent=p.getAttribute(\'data-fallback\')||\'J\';}">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
+  topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3><div class="mini-actions"><div class="hero-vertel"><div class="hero-vertel-wrap"><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><button type="button" class="hero-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><button type="button" class="hero-vertel-link" onclick="openOwnVertelModal()">Vertel of typ</button></div></div></div><div class="hero" style="margin-top:10px"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'" data-fallback="'+avInit+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="" onerror="var p=this.parentNode;if(p){this.remove();p.classList.remove(\'has-photo\');p.textContent=p.getAttribute(\'data-fallback\')||\'J\';}">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
   var q=String(hubState.profile_quote||'').trim();
   if(!q)q=ownQuoteRichCount()<2?ownQuoteFallbackText():'Nog geen quote. Tik Vernieuw.';
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
@@ -2257,8 +2278,7 @@ async function computePhotoPatterns(){
 
 function renderFotosTab(){
   var slotsEl=document.getElementById('photosSlotsCard');
-  var patternEl=document.getElementById('photosPatternCard');
-  if(!slotsEl||!patternEl)return;
+  if(!slotsEl)return;
   var hints={
     2:'Een foto waarin je je echt jezelf voelt',
     3:'Een foto in actie of hobby',
@@ -2289,7 +2309,6 @@ function renderFotosTab(){
     html+='</div>';
   }
   html+='</div>';
-  slotsEl.innerHTML=html;
   var photoStat='';
   if(window.__ownsensePhotoPatternBusy){
     photoStat='<span class="os-spin-row"><span class="os-inline-spin" aria-hidden="true"></span><span>Bezig met patroonanalyse…</span></span>';
@@ -2297,12 +2316,13 @@ function renderFotosTab(){
     photoStat=escHTML(String(window.__photoPatternLastStatus));
     window.__photoPatternLastStatus='';
   }
-  patternEl.innerHTML='<h3>Patronen in je foto’s</h3>'
+  html+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #E7DBD6"><h3>Patronen in je foto’s</h3>'
     +'<p class="subtle" style="margin-bottom:6px">Werkt al met 1 foto, rijker met 2 of 3 beelden.</p>'
     +'<div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div>'
     +'<p class="subtle" style="margin-top:8px">Tip: upload 2 of 3 foto’s voor sterkere patronen.</p>'
     +'<div id="photoPatternStatus" class="subtle" style="margin-top:8px">'+photoStat+'</div>'
-    +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsensePhotoPatternBusy?'disabled ':'')+'onclick="computePhotoPatterns()">↻ Vernieuw</button></div>';
+    +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsensePhotoPatternBusy?'disabled ':'')+'onclick="computePhotoPatterns()">↻ Vernieuw</button></div></div>';
+  slotsEl.innerHTML=html;
 }
 
 function renderGroeiTab(){
@@ -2314,9 +2334,6 @@ function renderGroeiTab(){
 }
 
 function renderBronTab(){
-  var el=document.getElementById('sourceCard');
-  if(!el)return;
-  el.innerHTML='';
   try{
     if(typeof renderQuestions==='function')renderQuestions();
   }catch(_e){}
@@ -2326,26 +2343,19 @@ function initQuickNav(){
     var qp=new URLSearchParams(window.location.search||'');
     returnToApp=String(qp.get('returnTo')||'').trim();
   }catch(_e){returnToApp='';}
-  var ownHomeBtn=document.getElementById('ownHomeBtn');
-  var backAppBtn=document.getElementById('backAppBtn');
-  var cornerBtn=document.getElementById('cornerBtn');
-  if(ownHomeBtn){
-    ownHomeBtn.onclick=function(){window.location.href='ownsense.html';};
-  }
-  if(backAppBtn&&returnToApp){
-    backAppBtn.removeAttribute('hidden');
-    backAppBtn.style.display='inline-flex';
+  var backPill=document.getElementById('topBackPill');
+  var menuPill=document.getElementById('topMenuPill');
+  if(backPill&&returnToApp){
+    backPill.removeAttribute('hidden');
     var rt=String(returnToApp||'').toLowerCase();
-    if(rt.indexOf('datesense')>=0)backAppBtn.textContent='Terug naar je huidige app: DateSense';
-    else if(rt.indexOf('familysense')>=0)backAppBtn.textContent='Terug naar je huidige app: FamilySense';
-    else if(rt.indexOf('sensecorner')>=0)backAppBtn.textContent='Terug naar je huidige app: SenseCorner';
-    else backAppBtn.textContent='Terug naar je huidige app';
-    backAppBtn.title=backAppBtn.textContent;
-    backAppBtn.setAttribute('aria-label',backAppBtn.textContent);
-    backAppBtn.onclick=function(){window.location.href=returnToApp;};
+    if(rt.indexOf('datesense')>=0)backPill.textContent='← DateSense';
+    else if(rt.indexOf('familysense')>=0)backPill.textContent='← FamilySense';
+    else if(rt.indexOf('sensecorner')>=0)backPill.textContent='← SenseCorner';
+    else backPill.textContent='← Terug';
+    backPill.onclick=function(){window.location.href=returnToApp;};
   }
-  if(cornerBtn){
-    cornerBtn.onclick=function(){window.location.href='sensecorner.html';};
+  if(menuPill){
+    menuPill.onclick=function(){openAanvullenSheet();};
   }
 }
 
