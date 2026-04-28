@@ -220,10 +220,6 @@ a.top-title-wrap{text-decoration:none;color:inherit}
   color:var(--chocolade);cursor:pointer;
 }
 .mini-vertel-btn svg{width:16px;height:16px;stroke:currentColor}
-.mini-import-btn{
-  border:0.5px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;
-  background:#fff;color:var(--chocolade);cursor:pointer;
-}
 .cat-mini{margin-top:10px}
 .cat-mini summary{cursor:pointer;font-weight:700}
 .cat-mini-body{margin-top:8px}
@@ -676,10 +672,6 @@ a.top-title-wrap{text-decoration:none;color:inherit}
       <article class="card" id="mijHeroCard"></article>
     </section>
 
-    <section id="categoriesContainer">
-      <article class="card" id="mijCategoriesCard"></article>
-    </section>
-
     <section id="vragenlijstenAnchor">
       <div class="sh">Vragenlijsten</div>
       <article class="card" id="sourceCard"></article>
@@ -700,6 +692,10 @@ a.top-title-wrap{text-decoration:none;color:inherit}
     </section>
     <section id="photoAnalysis">
       <article class="card" id="photosPatternCard"></article>
+    </section>
+
+    <section id="categoriesContainer">
+      <article class="card" id="mijCategoriesCard"></article>
     </section>
 
     <section id="activityList">
@@ -801,6 +797,7 @@ a.top-title-wrap{text-decoration:none;color:inherit}
       <p class="own-vertel-mic-hint" id="ownVertelMicHint">Micro: ingedrukt houden = praten · loslaten = stoppen (zelfde als Vertel in DateSense).</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn btn-muted" onclick="openAiImportModal()">Context uit chat importeren</button>
       <button type="button" class="btn btn-primary" onclick="submitOwnVertel()">Opslaan en verwerken</button>
       <button type="button" class="btn btn-muted" onclick="closeOwnVertelModal()">Sluiten</button>
     </div>
@@ -1447,7 +1444,7 @@ function renderMijTab(){
   if(!topEl||!heroEl||!progressEl||!catsEl)return;
   var pending=getPendingFacts().length;
   var avInit=escHTML((hubState.display_name||'J').trim().charAt(0).toUpperCase()||'J');
-  topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3><div class="mini-actions"><button type="button" class="mini-import-btn" onclick="openAiImportModal()">Chat import</button><button type="button" class="mini-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div></div><div class="hero" style="margin-top:10px"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'" data-fallback="'+avInit+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="" onerror="var p=this.parentNode;if(p){this.remove();p.classList.remove(\'has-photo\');p.textContent=p.getAttribute(\'data-fallback\')||\'J\';}">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
+  topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3><div class="mini-actions"><button type="button" class="mini-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div></div><div class="hero" style="margin-top:10px"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'" data-fallback="'+avInit+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="" onerror="var p=this.parentNode;if(p){this.remove();p.classList.remove(\'has-photo\');p.textContent=p.getAttribute(\'data-fallback\')||\'J\';}">':'J')+'</div><div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div>';
   var q=String(hubState.profile_quote||'').trim();
   if(!q)q=ownQuoteRichCount()<2?ownQuoteFallbackText():'Nog geen quote. Tik Vernieuw.';
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
@@ -2317,7 +2314,7 @@ function renderGroeiTab(){
 function renderBronTab(){
   var el=document.getElementById('sourceCard');
   if(!el)return;
-  el.innerHTML='<div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-small" type="button" onclick="openAiImportModal()">Chat importeren</button></div>';
+  el.innerHTML='';
   try{
     if(typeof renderQuestions==='function')renderQuestions();
   }catch(_e){}
