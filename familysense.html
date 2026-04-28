@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="28-04-2026 11:14">
+<meta name="fs-build" content="28-04-2026 11:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -978,7 +978,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 28-04-2026 11:14</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 28-04-2026 11:34</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -5776,24 +5776,26 @@ function coachTaskSnooze(id,hours){
   _saveCoachState(s);
   goScreen('home');
 }
-function coachTaskStartVertel(id){
+function coachTaskStartVertel(id,msgText,dossierName,taskType){
   var tid=String(id||'').trim();
   if(!tid)return;
   var task=null;
   try{
     task=(getCoachTasks()||[]).find(function(t){return String((t&&t.id)||'')===tid;})||null;
   }catch(_e){task=null;}
-  var msg='';
-  if(task&&task.msg)msg=stripHtml(task.msg);
+  var msg=String(msgText||'').trim();
+  if(!msg&&task&&task.msg)msg=stripHtml(task.msg);
   if(!msg)msg=humanTaskLabel(tid)||'Coachmelding';
   msg=String(msg||'').replace(/\s+/g,' ').trim();
-  if(task&&task.dossier){
-    S.vertelFrom=task.dossier;
-    S.vertelGesprekDossier=task.dossier;
+  var dossier=String(dossierName||'').trim()||(task&&task.dossier?String(task.dossier):'');
+  if(dossier){
+    S.vertelFrom=dossier;
+    S.vertelGesprekDossier=dossier;
   }
-  var tLabel=(task&&task.type==='a'?'Actie':(task&&task.type==='c'?'Check':'Sense'));
+  var t=String(taskType||'').trim()||(task&&task.type?String(task.type):'');
+  var tLabel=(t==='a'?'Actie':(t==='c'?'Check':'Sense'));
   var intro='Context uit coachmelding · '+tLabel;
-  if(task&&task.dossier)intro+=' · '+dn(task.dossier);
+  if(dossier)intro+=' · '+dn(dossier);
   S.vertelPendingAdvice={
     intro:intro,
     text:'Coachmelding: '+msg+'\n\nKan je me helpen hiermee verder te gaan?',
@@ -6204,7 +6206,7 @@ function rHome(el){
         <div class="ntext">${n.msg}</div>
         <span class="nlink" onclick="${n.action}">${escHTML(n.link)}</span>
         <div class="home-note-actions">
-          <button class="coach-save-other" style="font-size:12px;padding:6px 8px;border-color:color-mix(in srgb,var(--app-medium) 38%,#fff);background:color-mix(in srgb,var(--app-licht) 28%,#fff);color:var(--app-donker)" onclick="coachTaskStartVertel('${escJsStr(n.id)}')">🎙 Vertel</button>
+          <button class="coach-save-other" style="font-size:12px;padding:6px 8px;border-color:color-mix(in srgb,var(--app-medium) 38%,#fff);background:color-mix(in srgb,var(--app-licht) 28%,#fff);color:var(--app-donker)" onclick="coachTaskStartVertel('${escJsStr(n.id)}','${escJsStr(stripHtml(n.msg||''))}','${escJsStr(n.dossier||'')}','${escJsStr(n.type||'')}')">🎙 Vertel</button>
           <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','done')">✓ Klaar</button>
           <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','dismiss')">Weg</button>
         </div>
@@ -7609,7 +7611,7 @@ function rNotifications(el){
       <div class="ntext">${n.msg}</div>
       <span class="nlink" onclick="${n.action}">${escHTML(n.link)}</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="coach-save-other" style="font-size:12px;padding:6px 8px;border-color:color-mix(in srgb,var(--app-medium) 38%,#fff);background:color-mix(in srgb,var(--app-licht) 28%,#fff);color:var(--app-donker)" onclick="coachTaskStartVertel('${escJsStr(n.id)}')">🎙 Vertel</button>
+        <button class="coach-save-other" style="font-size:12px;padding:6px 8px;border-color:color-mix(in srgb,var(--app-medium) 38%,#fff);background:color-mix(in srgb,var(--app-licht) 28%,#fff);color:var(--app-donker)" onclick="coachTaskStartVertel('${escJsStr(n.id)}','${escJsStr(stripHtml(n.msg||''))}','${escJsStr(n.dossier||'')}','${escJsStr(n.type||'')}')">🎙 Vertel</button>
         <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','done');goScreen('notifications')">✓ Done</button>
         <button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck('${escJsStr(n.id)}','dismiss');goScreen('notifications')">Weg</button>
       </div>
