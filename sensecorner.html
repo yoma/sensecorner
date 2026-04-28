@@ -96,6 +96,7 @@ a{text-decoration:none;color:inherit}
 .hero{background:var(--card);border:1px solid var(--b);border-radius:22px;padding:22px;box-shadow:0 2px 10px rgba(74,58,42,.05),0 10px 28px rgba(74,58,42,.06);margin-bottom:12px;overflow:hidden;position:relative}
 .hero::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(107,142,111,.05) 0%,transparent 72%);pointer-events:none}
 .hero-inner{display:flex;align-items:flex-start;gap:clamp(14px,4vw,22px);flex-wrap:nowrap}
+.hero-ring-col{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:10px}
 .hero-body{flex:1;min-width:0}
 /* Hub / OWN: zachte rimpels (lage dekking) + kern - minder visueel gewicht */
 .hero-ring-stack{position:relative;flex:0 0 auto;width:108px;height:108px;margin:0;display:flex;align-items:center;justify-content:center}
@@ -216,18 +217,26 @@ a{text-decoration:none;color:inherit}
 }
 .own-mini-title{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:4px}
 .own-mini-sub{font-size:12px;color:var(--m);line-height:1.45}
-.own-scope-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:8px}
+.own-scope-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
 .own-scope-item{text-align:center}
 .own-scope-ring{
   --pct:0;
+  --ring-color:var(--sage-donker);
   width:52px;height:52px;border-radius:50%;margin:0 auto 6px;
-  background:conic-gradient(var(--sage-donker) calc(var(--pct) * 1%), rgba(61,47,31,.12) 0);
+  background:conic-gradient(var(--ring-color) calc(var(--pct) * 1%), rgba(61,47,31,.12) 0);
   position:relative;
+}
+.own-scope-ring::before{
+  content:'';
+  position:absolute;inset:-5px;border-radius:50%;
+  background:color-mix(in srgb,var(--ring-color) 22%,#fff);
+  z-index:0;
 }
 .own-scope-ring::after{
   content:'';
   position:absolute;inset:6px;border-radius:50%;
   background:var(--ivoor);border:1px solid rgba(61,47,31,.08);
+  z-index:0;
 }
 .own-scope-pct{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -235,9 +244,14 @@ a{text-decoration:none;color:inherit}
 }
 .own-scope-label{font-size:11px;font-weight:700;color:var(--chocolade);line-height:1.2}
 .own-scope-left{font-size:10px;color:var(--m);line-height:1.3}
+.own-scope-item.scope-own .own-scope-ring{--ring-color:var(--sage-donker)}
+.own-scope-item.scope-ds .own-scope-ring{--ring-color:var(--date-donker)}
+.own-scope-item.scope-fs .own-scope-ring{--ring-color:var(--family-donker)}
 @media (max-width:620px){
-  .own-scope-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .own-scope-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+.own-status-row,.own-hero-bar-wrap{display:none!important}
+.hero-ring-action .btn{padding:8px 12px;font-size:12px}
 .hub-settings{background:var(--card);border:1px solid var(--hub-line);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 8px rgba(74,58,42,.05);margin-bottom:0}
 .hub-settings.ok{border-color:#B7E4C7;box-shadow:0 1px 8px rgba(30,126,52,.08)}
 .hub-settings.warn{border-color:rgba(146,100,10,.4);box-shadow:0 1px 10px rgba(146,100,10,.12)}
@@ -474,19 +488,27 @@ a{text-decoration:none;color:inherit}
     <div class="hero-inner">
 
       <!-- Voortgang + rimpel-ensemble (sage, zoals OWN Sense-hub) -->
-      <div class="hero-ring-stack" id="heroRingStack" aria-hidden="true">
-        <span class="hero-rip hero-rip--l" aria-hidden="true"></span>
-        <span class="hero-rip hero-rip--m" aria-hidden="true"></span>
-        <span class="hero-rip hero-rip--d" aria-hidden="true"></span>
-        <div class="hero-ring">
-          <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
-            <circle class="ring-bg" cx="36" cy="36" r="30"/>
-            <circle class="ring-fg" id="ringFg" cx="36" cy="36" r="30"/>
-          </svg>
-          <div class="ring-center-wrap">
-            <span class="ring-pct" id="ringPct"></span>
-            <div class="ring-icon" id="ringIcon"></div>
+      <div class="hero-ring-col">
+        <div class="hero-ring-stack" id="heroRingStack" aria-hidden="true">
+          <span class="hero-rip hero-rip--l" aria-hidden="true"></span>
+          <span class="hero-rip hero-rip--m" aria-hidden="true"></span>
+          <span class="hero-rip hero-rip--d" aria-hidden="true"></span>
+          <div class="hero-ring">
+            <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
+              <circle class="ring-bg" cx="36" cy="36" r="30"/>
+              <circle class="ring-fg" id="ringFg" cx="36" cy="36" r="30"/>
+            </svg>
+            <div class="ring-center-wrap">
+              <span class="ring-pct" id="ringPct"></span>
+              <div class="ring-icon" id="ringIcon"></div>
+            </div>
           </div>
+        </div>
+        <div class="hero-ring-action">
+          <a class="btn btn-primary" href="ownsense.html" id="btnMain" data-app-link="ownsense.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Open OWN Sense
+          </a>
         </div>
       </div>
 
@@ -511,12 +533,6 @@ a{text-decoration:none;color:inherit}
           </div>
         </div>
 
-        <div class="cta-row" id="ctaRow">
-          <a class="btn btn-primary" href="ownsense.html" id="btnMain" data-app-link="ownsense.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            Start OWN Sense
-          </a>
-        </div>
         <div class="own-mini-dashboard" id="ownMiniDashboard">
           <div class="own-mini-title" id="ownMiniTitle">Dashboard vragen per domein</div>
           <div class="own-scope-grid" id="ownScopeGrid"></div>
@@ -814,11 +830,10 @@ a{text-decoration:none;color:inherit}
       fsFilled=countFilledAnswersInCategory(cats.familysense_focus||{});
     }
     return [
-      {label:'OWN',filled:ownFilled,total:ownTotal},
-      {label:'DateSense',filled:dsFilled,total:dsTotal},
-      {label:'FamilySense',filled:fsFilled,total:fsTotal},
-      {label:'Toekomst',filled:0,total:0}
-    ];
+      {key:'own',label:'OWN',filled:ownFilled,total:ownTotal},
+      {key:'ds',label:'DateSense',filled:dsFilled,total:dsTotal},
+      {key:'fs',label:'FamilySense',filled:fsFilled,total:fsTotal}
+    ].filter(function(x){return x.total>0;});
   }
   function renderOwnCompletionDashboard(filled,total){
     var scopes=calcOwnScopeStats(filled,total);
@@ -836,7 +851,7 @@ a{text-decoration:none;color:inherit}
       ownScopeGrid.innerHTML=scopes.map(function(s){
         var p=s.total>0?Math.max(0,Math.min(100,Math.round((s.filled/s.total)*100))):0;
         var leftTxt=s.total>0?(Math.max(0,s.total-s.filled)+' open'):'later';
-        return '<div class="own-scope-item"><div class="own-scope-ring" style="--pct:'+p+'"><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
+        return '<div class="own-scope-item scope-'+s.key+'"><div class="own-scope-ring" style="--pct:'+p+'"><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
       }).join('');
     }
     if(ownMiniSub)ownMiniSub.textContent=left+' OWN-vragen nog in te vullen. Hoe hoger het percentage, hoe beter Sensei kan adviseren.';
