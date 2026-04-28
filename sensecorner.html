@@ -215,6 +215,7 @@ a{text-decoration:none;color:inherit}
 .own-mini-sub{font-size:12px;color:var(--m);line-height:1.45}
 .own-scope-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
 .own-scope-item{text-align:center}
+.own-scope-item[data-app-link]{cursor:pointer}
 .own-scope-ring{
   --pct:0; /* 0..100 */
   --ring-color:var(--sage-donker);
@@ -252,6 +253,7 @@ a{text-decoration:none;color:inherit}
 }
 .own-status-row,.own-hero-bar-wrap{display:none!important}
 .hero-ring-action .btn{padding:8px 12px;font-size:12px}
+.own-mini-sub{color:var(--sage-donker);text-align:center;margin-top:8px}
 .hub-settings{background:var(--card);border:1px solid var(--hub-line);border-radius:16px;padding:14px 14px 12px;box-shadow:0 1px 8px rgba(74,58,42,.05);margin-bottom:0}
 .hub-settings.ok{border-color:#B7E4C7;box-shadow:0 1px 8px rgba(30,126,52,.08)}
 .hub-settings.warn{border-color:rgba(146,100,10,.4);box-shadow:0 1px 10px rgba(146,100,10,.12)}
@@ -815,6 +817,17 @@ a{text-decoration:none;color:inherit}
     });
     return n;
   }
+  function countTotalAnswersInCategory(catObj,fallbackTotal){
+    if(!catObj||typeof catObj!=='object')return Math.max(1,parseInt(fallbackTotal,10)||1);
+    var keys=Object.keys(catObj).filter(function(k){return /^a\d+$/.test(String(k||''));});
+    if(!keys.length)return Math.max(1,parseInt(fallbackTotal,10)||1);
+    var maxIdx=0;
+    keys.forEach(function(k){
+      var idx=parseInt(String(k).slice(1),10);
+      if(!isNaN(idx)&&idx>maxIdx)maxIdx=idx;
+    });
+    return Math.max(1,maxIdx+1);
+  }
   function calcOwnScopeStats(fallbackFilled,fallbackTotal){
     var ownTotal=Math.max(1,parseInt(fallbackTotal,10)||11);
     var ownFilled=Math.max(0,Math.min(ownTotal,parseInt(fallbackFilled,10)||0));
@@ -823,9 +836,16 @@ a{text-decoration:none;color:inherit}
     if(hubProfile&&hubProfile.categories&&typeof hubProfile.categories==='object'){
       var cats=hubProfile.categories;
       var ownIds=['karakter','interesses','relatie','gevoels','algemeen'];
-      ownTotal=20;
+      ownTotal=0;
       ownFilled=0;
-      ownIds.forEach(function(id){ownFilled+=countFilledAnswersInCategory(cats[id]||{});});
+      ownIds.forEach(function(id){
+        var c=cats[id]||{};
+        ownFilled+=countFilledAnswersInCategory(c);
+        ownTotal+=countTotalAnswersInCategory(c,4);
+      });
+      ownTotal=Math.max(1,ownTotal);
+      dsTotal=countTotalAnswersInCategory(cats.datesense_focus||{},5);
+      fsTotal=countTotalAnswersInCategory(cats.familysense_focus||{},5);
       dsFilled=countFilledAnswersInCategory(cats.datesense_focus||{});
       fsFilled=countFilledAnswersInCategory(cats.familysense_focus||{});
     }
@@ -854,8 +874,24 @@ a{text-decoration:none;color:inherit}
         var c=2*Math.PI*radius;
         var off=c*(1-p/100);
         var leftTxt=s.total>0?(Math.max(0,s.total-s.filled)+' open'):'later';
-        return '<div class="own-scope-item scope-'+s.key+'"><div class="own-scope-ring" style="--pct:'+p+'"><span class="own-scope-rip own-scope-rip--l" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--m" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--d" aria-hidden="true"></span><svg class="own-scope-svg" viewBox="0 0 50 50" aria-hidden="true"><circle class="own-scope-track" cx="25" cy="25" r="'+radius+'"></circle><circle class="own-scope-fg" cx="25" cy="25" r="'+radius+'" style="stroke-dasharray:'+c.toFixed(2)+';stroke-dashoffset:'+off.toFixed(2)+'"></circle></svg><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
+        var link='ownsense.html?tab=bron';
+        if(s.key==='ds')link='ownsense.html?tab=bron&cat=datesense_focus';
+        else if(s.key==='fs')link='ownsense.html?tab=bron&cat=familysense_focus';
+        return '<div class="own-scope-item scope-'+s.key+'" data-app-link="'+link+'"><div class="own-scope-ring" style="--pct:'+p+'"><span class="own-scope-rip own-scope-rip--l" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--m" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--d" aria-hidden="true"></span><svg class="own-scope-svg" viewBox="0 0 50 50" aria-hidden="true"><circle class="own-scope-track" cx="25" cy="25" r="'+radius+'"></circle><circle class="own-scope-fg" cx="25" cy="25" r="'+radius+'" style="stroke-dasharray:'+c.toFixed(2)+';stroke-dashoffset:'+off.toFixed(2)+'"></circle></svg><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
       }).join('');
+      Array.prototype.slice.call(ownScopeGrid.querySelectorAll('[data-app-link]')).forEach(function(el){
+        var target=el.getAttribute('data-app-link');
+        if(!target)return;
+        el.setAttribute('role','button');
+        el.setAttribute('tabindex','0');
+        el.onclick=function(){openAppWithAuth(target);};
+        el.onkeydown=function(e){
+          if(e.key==='Enter'||e.key===' '){
+            e.preventDefault();
+            openAppWithAuth(target);
+          }
+        };
+      });
     }
     if(ownMiniSub)ownMiniSub.textContent=left+' OWN-vragen nog in te vullen. Hoe hoger het percentage, hoe beter Sensei kan adviseren.';
   }
