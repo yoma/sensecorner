@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="29-04-2026 14:04">
+<meta name="os-build" content="29-04-2026 14:33">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2316,6 +2316,18 @@ function renderFotosTab(){
     html+='</div>';
   }
   html+='</div>';
+  var filledSlots=0;
+  for(var c=1;c<=5;c++){
+    var rr=getOwnPhotoSlot(c);
+    var hasUrl=(c===1)?!!(hubState.photo_url||ownPhotoSignedBySlot[1]):!!ownPhotoSignedBySlot[c];
+    var hasSaved=!!(rr&&rr.storage_path)||hasUrl;
+    if(hasSaved)filledSlots++;
+  }
+  var patternHint='Tip: upload 2 of 3 foto’s voor sterkere patronen.';
+  if(filledSlots>=3)patternHint='Je hebt genoeg foto’s voor sterke patronen. Klik op Vernieuw om de analyse te herberekenen.';
+  else if(filledSlots===2)patternHint='Met 2 foto’s werkt dit al goed. Een derde foto kan je patroon nog scherper maken.';
+  else if(filledSlots===1)patternHint='Werkt al met 1 foto. Voeg 1 of 2 extra foto’s toe voor rijkere patronen.';
+  else if(filledSlots===0)patternHint='Upload eerst minimaal 1 foto om patronen te kunnen zien.';
   var photoStat='';
   if(window.__ownsensePhotoPatternBusy){
     photoStat='<span class="os-spin-row"><span class="os-inline-spin" aria-hidden="true"></span><span>Bezig met patroonanalyse…</span></span>';
@@ -2326,7 +2338,7 @@ function renderFotosTab(){
   html+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #E7DBD6"><h3>Patronen in je foto’s</h3>'
     +'<p class="subtle" style="margin-bottom:6px">Werkt al met 1 foto, rijker met 2 of 3 beelden.</p>'
     +'<div class="mij-summary">'+escHTML(hubState.foto_patroon_text||'Nog geen overstijgende patroonanalyse.')+'</div>'
-    +'<p class="subtle" style="margin-top:8px">Tip: upload 2 of 3 foto’s voor sterkere patronen.</p>'
+    +'<p class="subtle" style="margin-top:8px">'+escHTML(patternHint)+'</p>'
     +'<div id="photoPatternStatus" class="subtle" style="margin-top:8px">'+photoStat+'</div>'
     +'<div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsensePhotoPatternBusy?'disabled ':'')+'onclick="computePhotoPatterns()">↻ Vernieuw</button></div></div>';
   slotsEl.innerHTML=html;
