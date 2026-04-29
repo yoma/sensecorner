@@ -122,6 +122,21 @@ a{color:inherit}
     </div>
   </details>
 
+  <details class="panel collapsible" aria-label="SelfSense instellingen">
+    <summary class="collapsible-head">
+      <h2>SelfSense · AI instellingen</h2>
+      <span class="collapse-kicker">Inklappen/uitklappen</span>
+    </summary>
+    <div class="collapsible-body">
+      <p>Specifieke SelfSense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <div id="selfSensePromptGrid" class="prompt-grid"></div>
+      <div class="prompt-controls">
+        <button id="saveSelfPromptsBtn" type="button" class="prompt-save-btn">Opslaan SelfSense</button>
+        <div id="saveSelfPromptsState" class="prompt-save-state"></div>
+      </div>
+    </div>
+  </details>
+
   <footer class="footer" role="contentinfo">Sense Admin · prototype · alleen voor beheerdersaccounts</footer>
 </div>
 
@@ -143,10 +158,13 @@ a{color:inherit}
   var adminAiList=document.getElementById('adminAiList');
   var dateSensePromptGrid=document.getElementById('dateSensePromptGrid');
   var familySensePromptGrid=document.getElementById('familySensePromptGrid');
+  var selfSensePromptGrid=document.getElementById('selfSensePromptGrid');
   var saveDatePromptsBtn=document.getElementById('saveDatePromptsBtn');
   var saveFamilyPromptsBtn=document.getElementById('saveFamilyPromptsBtn');
+  var saveSelfPromptsBtn=document.getElementById('saveSelfPromptsBtn');
   var saveDatePromptsState=document.getElementById('saveDatePromptsState');
   var saveFamilyPromptsState=document.getElementById('saveFamilyPromptsState');
+  var saveSelfPromptsState=document.getElementById('saveSelfPromptsState');
 
   var DATE_PROMPTS={
     advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Geen bullets en geen extra kopjes. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
@@ -165,6 +183,15 @@ a{color:inherit}
     tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
     compare_core:'Je bent FamilySensei. Analyseer de dossiers en geef concrete, praktische adviezen over de familiedynamiek en hoe de gebruiker beter kan omgaan met de genoemde personen. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea over de dynamiek), "Aandachtspunten:" (2-3 bullets met concrete observaties), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
     photo_analysis_core:'Je bent FamilySensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
+  };
+  var SELF_PROMPTS={
+    vraag_core:'Je bent SelfSensei. Schrijf warm, rustig en duidelijk in het Nederlands. Gebruik nooit Unicode U+2014. Houd het kort en menselijk. Geen markdown, geen lijstjes, geen tabellen.',
+    crisis_block:'CRISIS-DETECTIE, BELANGRIJK: Als de gebruiker iets uit, ook subtiel of impliciet, dat wijst op gedachten aan zelfdoding, zichzelf iets aandoen, niet meer kunnen, niet meer willen, acuut gevaar of ernstige zelfbeschadiging. Antwoord dan niet met gewone adviezen. Start met [CRISIS] en geef direct veilige doorverwijzing.',
+    spiegel_praat_opening:'Je bent Sensei in de Praat-modus van SelfSense. Genereer EEN korte, zachte openingsvraag in 1 zin. Geen clichés zoals hoe gaat het. Gebruik context.',
+    spiegel_gesprek_opening:'Je bent Sensei in de Gesprek-modus van SelfSense. Genereer EEN korte openingsvraag of uitnodiging in 1 tot 2 zinnen, samenwerkings-toon, geen clichés, gebruik context.',
+    spiegel_praat_round:'Je bent Sensei in de Praat-modus van SelfSense. Luister en reflecteer zacht terug. Geen advies, geen oplossingen, geen oefeningen. Antwoord in 2 tot 3 zinnen. Optioneel een rustige doorvraag.',
+    spiegel_gesprek_round:'Je bent Sensei in de Gesprek-modus. Samen denken, geen advies-relatie. Reflecteer terug, vraag door, deel observaties als ze passen. Antwoord in 2 tot 4 zinnen. Geen lijstjes, geen interpretaties van betekenis.',
+    spiegel_summary:'Je krijgt een sessie-transcript van een SelfSense Spiegel-sessie. Maak een samenvatting van 2 tot 3 zinnen in derde persoon, vanuit het perspectief van de gebruiker. Geen interpretaties, geen advies, geen Sensei zei. Max 200 tekens.'
   };
 
   function escHTML(s){
@@ -441,21 +468,26 @@ a{color:inherit}
     var legacyOverrides=readLegacyPromptOverrides(user);
     var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
     var savedFamilyPrompts=await loadSavedPromptSet('prompts_familysense');
+    var savedSelfPrompts=await loadSavedPromptSet('prompts_selfsense');
     var legacyKeys=Object.keys(legacyOverrides);
     var hasLegacy=legacyKeys.length>0;
     var datePrompts=Object.assign({},DATE_PROMPTS);
     var familyPrompts=Object.assign({},FAMILY_PROMPTS);
+    var selfPrompts=Object.assign({},SELF_PROMPTS);
     if(savedDatePrompts&&typeof savedDatePrompts==='object')datePrompts=Object.assign({},datePrompts,savedDatePrompts);
     if(savedFamilyPrompts&&typeof savedFamilyPrompts==='object')familyPrompts=Object.assign({},familyPrompts,savedFamilyPrompts);
+    if(savedSelfPrompts&&typeof savedSelfPrompts==='object')selfPrompts=Object.assign({},selfPrompts,savedSelfPrompts);
     legacyKeys.forEach(function(k){
       var v=String(legacyOverrides[k]||'').trim();
       if(!v)return;
       if(!savedDatePrompts&&Object.prototype.hasOwnProperty.call(datePrompts,k))datePrompts[k]=v;
       if(!savedFamilyPrompts&&Object.prototype.hasOwnProperty.call(familyPrompts,k))familyPrompts[k]=v;
+      if(!savedSelfPrompts&&Object.prototype.hasOwnProperty.call(selfPrompts,k))selfPrompts[k]=v;
     });
     var note='Bron: centrale admin settings'+(hasLegacy?' (fallback naar legacy browser-overrides als er nog niets centraal staat).':'.');
     renderPromptGrid(dateSensePromptGrid,datePrompts,note,'datesense');
     renderPromptGrid(familySensePromptGrid,familyPrompts,note,'familysense');
+    renderPromptGrid(selfSensePromptGrid,selfPrompts,note,'selfsense');
     if(saveDatePromptsBtn){
       saveDatePromptsBtn.onclick=function(){
         savePromptSet('prompts_datesense','datesense',dateSensePromptGrid,saveDatePromptsState,saveDatePromptsBtn,user);
@@ -464,6 +496,11 @@ a{color:inherit}
     if(saveFamilyPromptsBtn){
       saveFamilyPromptsBtn.onclick=function(){
         savePromptSet('prompts_familysense','familysense',familySensePromptGrid,saveFamilyPromptsState,saveFamilyPromptsBtn,user);
+      };
+    }
+    if(saveSelfPromptsBtn){
+      saveSelfPromptsBtn.onclick=function(){
+        savePromptSet('prompts_selfsense','selfsense',selfSensePromptGrid,saveSelfPromptsState,saveSelfPromptsBtn,user);
       };
     }
     await loadAdminAiPanel();
