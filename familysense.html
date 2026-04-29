@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="28-04-2026 11:34">
+<meta name="fs-build" content="29-04-2026 11:58">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1406,6 +1406,9 @@ function escJsStr(s){
     .replace(/\n/g,' ')
     .replace(/\u2028/g,' ')
     .replace(/\u2029/g,' ');
+}
+function stripHtml(s){
+  return String(s||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 }
 function showFatalUi(msg){
   try{
@@ -3920,6 +3923,7 @@ async function init(){
       if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      try{await refreshOwnFactsCoachContext();}catch(_e){}
       initSessie(); // Na auth - sessie aanmaken
       goScreen('home');
       applySenseDeepLinkFromUrl();
@@ -3938,6 +3942,7 @@ async function init(){
       if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      try{await refreshOwnFactsCoachContext();}catch(_e){}
       goScreen('home');
       applySenseDeepLinkFromUrl();
     } else if(ev==='SIGNED_OUT'){
@@ -12118,6 +12123,10 @@ function getOwnSenseOnboardingBlock(){
 
 function buildCoachContext(){
   var lines=[];
+  if(_ownFactsCoachContext){
+    lines.push(_ownFactsCoachContext);
+    lines.push('');
+  }
   /* Contacten eerst: bij afkappen op max. lengte verdwijnen ze anders vaak (OWN-blok is lang). */
   var contacts=getActiveContactNames();
   if(contacts.length){
@@ -12179,6 +12188,47 @@ function buildCoachContext(){
   var onboardingBlock=getOwnSenseOnboardingBlock();
   if(onboardingBlock){lines.push('');lines.push(onboardingBlock);}
   return lines.join('\n');
+}
+
+var _ownFactsCoachContext='';
+async function refreshOwnFactsCoachContext(){
+  if(!sb||!S.user){_ownFactsCoachContext='';return;}
+  var data=[];
+  try{
+    var r=await sb.from('own_facts')
+      .select('category,fact_text,is_constraint,confidence,status')
+      .eq('user_id',S.user.id)
+      .eq('status','accepted')
+      .order('confidence',{ascending:false})
+      .limit(60);
+    if(r&&r.error)throw r.error;
+    data=(r&&r.data)||[];
+  }catch(e){
+    _ownFactsCoachContext='';
+    return;
+  }
+  if(!data.length){_ownFactsCoachContext='';return;}
+  var constraints=data.filter(function(f){return !!f.is_constraint&&String(f.fact_text||'').trim();});
+  var regular=data.filter(function(f){return !f.is_constraint&&String(f.fact_text||'').trim();});
+  var out=[];
+  if(constraints.length){
+    out.push('HARDE CONSTRAINTS, NOOIT OVERSCHRIJDEN:');
+    out.push('De gebruiker gaf expliciet aan dat dit niet werkt:');
+    constraints.slice(0,12).forEach(function(c){out.push('- '+String(c.fact_text||'').trim());});
+    out.push('Stel dit nooit voor, ook niet als kleine oefening.');
+    out.push('');
+  }
+  if(regular.length){
+    out.push('WAT IK WEET OVER DE GEBRUIKER:');
+    var by={};
+    regular.forEach(function(f){var k=String(f.category||'algemeen').trim()||'algemeen';if(!by[k])by[k]=[];by[k].push(String(f.fact_text||'').trim());});
+    Object.keys(by).forEach(function(cat){
+      out.push('['+cat+']');
+      by[cat].slice(0,8).forEach(function(t){if(t)out.push('- '+t);});
+      out.push('');
+    });
+  }
+  _ownFactsCoachContext=out.join('\n').trim();
 }
 
 function buildContactNamesLine(){

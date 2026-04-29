@@ -632,6 +632,28 @@
       font-family: var(--font-serif);
       font-style: italic;
     }
+    .ob-answer-options {
+      display: grid;
+      gap: 10px;
+    }
+    .ob-opt-btn {
+      width: 100%;
+      text-align: left;
+      padding: 13px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--ob-border);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--chocolade);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .ob-opt-btn.is-active {
+      background: var(--self-licht);
+      border-color: var(--self-donker);
+      color: #2f3f35;
+      font-weight: 700;
+    }
     .ob-ripple-q { width: 72px; height: 72px; margin: 0 auto 24px; }
     .ob-ripple-q .ob-ripple-inner { width: 72px; height: 72px; }
     .ob-ripple-q.big, .ob-ripple-q.big .ob-ripple-inner { width: 96px; height: 96px; }
@@ -1019,8 +1041,11 @@
     family_2: "family_friction",
     friend_1: "friend_values",
     friend_2: "friend_conflict",
-    self_1: "self_coping",
-    self_2: "self_need"
+    self_1: "actuele_situatie",
+    self_2: "goede_dag",
+    self_3: "doelen",
+    self_4: "constraint",
+    self_6: "steunbronnen"
   };
 
   var PROFILE_NAME_BY_MIRROR = {
@@ -1055,8 +1080,38 @@
     date: { letter: "D", name: "DateSense", intro: "Nu iets over daten.", q1: "Wat heb je nodig om je veilig te voelen bij iemand?", h1: "Denk aan hoe iemand met je praat, kijkt, luistert", q2: "Wanneer voel je je rond dating het snelst onrustig of onzeker?", h2: "Mag heel klein zijn: voor een afspraak, na een app, als het even stil wordt", sum: "Je merkt waar rust of duidelijkheid voor je telt. Je voelt ook momenten waar dating onzeker wordt. Dat neem ik mee." },
     family: { letter: "F", name: "FamilySense", intro: "Nu iets over familie.", q1: "Wat betekent familie voor jou?", h1: "Je eigen definitie: bloedband of keuze of allebei", q2: "Zijn er problemen thuis waar je vaak op terugbotst?", h2: "Het mag een situatie zijn, niet per se een persoon.", sum: "Wat je over familie en thuis zei, neem ik mee zoals je het zelf formuleerde." },
     friend: { letter: "V", name: "FriendSense", intro: "Nu iets over vriendschap.", q1: "Wat vind je belangrijk in een vriendschap?", h1: "Denk aan wat je mist als het er niet is.", q2: "Hoe ga je om met meningsverschillen met een vriend?", h2: "Denk aan een recent voorbeeld.", sum: "Je weet wat een vriendschap voor jou écht maakt. En je merkt dat wrijving je iets kost. Dat neem ik mee." },
-    self: { letter: "S", name: "SelfSense", intro: "Nu iets over jezelf, in moeilijke momenten.", q1: "Hoe ga je doorgaans om met moeilijke periodes?", h1: "Er is geen juist antwoord. Alleen jouw antwoord", q2: "Wat heb je het liefst als het even niet goed gaat: luisteren, advies, of ruimte?", h2: "Kies wat meest klopt, ook als het varieert", sum: "Je hebt een eigen manier om door zware dagen te komen, en je weet wat je dan nodig hebt. Daar houd ik rekening mee." }
+    self: {
+      letter: "S",
+      name: "SelfSense",
+      intro: "Nu iets over jezelf. Dit is de intake van SelfSense.",
+      questions: [
+        { q: "Wat houdt je op dit moment het meest bezig? Wat heeft je hierheen gebracht?", h: "Beschrijf wat nu het meest op de voorgrond staat." },
+        { q: "Wat zou voor jou nu een goede dag zijn? Of een dag die meevalt?", h: "Een klein teken van ademruimte is ook goed." },
+        { q: "Wat wil je graag bereiken? Of voelt bereiken te veel als druk?", h: "Je mag ook zeggen dat je vooral rust zoekt." },
+        { q: "Wat werkt absoluut niet voor jou?", h: "Noem dingen die Sensei nooit moet voorstellen." },
+        {
+          q: "Hoe voel je je op dit moment?",
+          options: [
+            { id: "hetzelfde", label: "Ik voel me oké" },
+            { id: "minder goed", label: "Het weegt soms" },
+            { id: "heel zwaar", label: "Het is zwaar" },
+            { id: "heel zwaar", label: "Het is overweldigend" }
+          ]
+        },
+        { q: "Heb je dingen waar je op kan terugvallen? Mensen, gewoontes, plekken, professionele hulp, wat voor jou werkt.", h: "Alles wat je ondersteunt mag hier staan." }
+      ],
+      sum: "Je bracht helder in kaart wat nu speelt, wat je nodig hebt en wat niet werkt voor jou. Dat is sterke basisinformatie voor SelfSense."
+    }
   };
+  function getMirrorQuestions(mirrorId, meta) {
+    if (!meta) return [];
+    if (Array.isArray(meta.questions) && meta.questions.length) return meta.questions;
+    return [
+      { q: meta.q1, h: meta.h1 },
+      { q: meta.q2, h: meta.h2 }
+    ];
+  }
+
 
   var CORE_SUMMARY = "Je vrienden zien een betrouwbare, aandachtige kant van je. Je haalt energie uit rustige momenten, en na drukte zoek je liever ruimte dan gezelschap. Over gevoelens doe je het op jouw manier, en ergens loop je weleens tegenaan. Dat neem ik mee.";
   var FINAL_IMPRESSION = "Ik zie iemand die aandachtig is voor de mensen om zich heen, die rust zoekt in het kleine, en die voelt waar grenzen schuiven. Alles wat je deelde staat nu in jouw profiel. Vanaf hier groeit het mee met elk gesprek.";
@@ -1695,9 +1750,10 @@
     );
   }
 
-  function buildMirrorSummarySystemPrompt(spiegelNaam) {
+  function buildMirrorSummarySystemPrompt(spiegelNaam, questionCount) {
+    var n = Math.max(1, Number(questionCount || 0));
     return (
-      "Je bent Sensei. De gebruiker heeft zojuist twee vragen beantwoord over " +
+      "Je bent Sensei. De gebruiker heeft zojuist " + n + " vragen beantwoord over " +
       obSanitizeForPrompt(spiegelNaam) +
       ". Schrijf een korte, warme terugblik van 2 tot 3 zinnen, alsof je het even rustig naleest.\n\n" +
       "Regels:\n" +
@@ -1716,21 +1772,18 @@
   }
 
   function buildMirrorSummaryUserMessage(mirrorId, meta) {
-    var k1 = mirrorId + "_1";
-    var k2 = mirrorId + "_2";
+    var qs = getMirrorQuestions(mirrorId, meta);
+    var lines = [];
+    for (var i = 0; i < qs.length; i++) {
+      var k = mirrorId + "_" + String(i + 1);
+      var qtxt = qs[i] && qs[i].q ? qs[i].q : ("Vraag " + String(i + 1));
+      lines.push(String(i + 1) + ". " + qtxt + "\n→ " + obSanitizeForPrompt(answers[k]));
+    }
     return (
       "De gebruiker heeft in het " +
       obSanitizeForPrompt(meta.name) +
       "-blok geantwoord:\n\n" +
-      "1. " +
-      meta.q1 +
-      "\n→ " +
-      obSanitizeForPrompt(answers[k1]) +
-      "\n\n" +
-      "2. " +
-      meta.q2 +
-      "\n→ " +
-      obSanitizeForPrompt(answers[k2]) +
+      lines.join("\n\n") +
       "\n\nSchrijf je korte terugblik."
     );
   }
@@ -1738,7 +1791,7 @@
   function buildFinalImpressionSystemPrompt() {
     return (
       "Je bent Sensei. De gebruiker heeft zojuist een volledige onboarding doorlopen: vijf kernvragen over zichzelf " +
-      "plus twee vragen per gekozen spiegel. Geef een afsluitende impressie die begint met: Ik zie iemand die\n\n" +
+      "plus spiegelvragen per gekozen app. Geef een afsluitende impressie die begint met: Ik zie iemand die\n\n" +
       "Regels:\n" +
       "- Begin met Ik zie iemand die (zonder dubbele punt aan het einde van die zin)\n" +
       "- Nederlands (Vlaams toegestaan)\n" +
@@ -1763,8 +1816,11 @@
       var mid = order[m];
       if (!selectedMirrors.has(mid) || !MIRROR_META[mid]) continue;
       var mm = MIRROR_META[mid];
-      parts.push(mm.name + " - " + mm.q1 + ": " + obSanitizeForPrompt(answers[mid + "_1"]));
-      parts.push(mm.name + " - " + mm.q2 + ": " + obSanitizeForPrompt(answers[mid + "_2"]));
+      var qs = getMirrorQuestions(mid, mm);
+      for (var q = 0; q < qs.length; q++) {
+        var qt = qs[q] && qs[q].q ? qs[q].q : ("Vraag " + String(q + 1));
+        parts.push(mm.name + " - " + qt + ": " + obSanitizeForPrompt(answers[mid + "_" + String(q + 1)]));
+      }
     }
     return (
       "De gebruiker heeft de onboarding afgerond. Alle antwoorden:\n\n" +
@@ -1853,6 +1909,28 @@
     return html
       .replace(/\{\{name\}\}/g, userName || "vriend")
       .replace(/\{\{email\}\}/g, userEmail || "jij@voorbeeld.be");
+  }
+
+  function inferSelfSenseCheckinAnswer(text) {
+    var t = String(text || "").toLowerCase().trim();
+    if (!t) return null;
+    if (/\bniet\s*vandaag\b/.test(t)) return "niet vandaag";
+    if (/\boverweldig|overwelmd|heel\s*zwaar|zeer\s*zwaar|ik\s+kan\s+niet\s+meer|te\s+veel\b/.test(t)) return "heel zwaar";
+    if (/\bweegt|moeilijk|lastig|minder\s*goed|matig\b/.test(t)) return "minder goed";
+    if (/\bbeter|goed|ok|oke|oké|prima|rustig|stabiel\b/.test(t)) return "hetzelfde";
+    return null;
+  }
+
+  async function saveSelfSenseCheckinFromOnboarding(userId, rawText) {
+    var answer = inferSelfSenseCheckinAnswer(rawText);
+    if (!answer) return { skipped: true };
+    var ins = await sb.from("selfsense_checkins").insert({
+      user_id: userId,
+      answer: answer,
+      note: String(rawText || "").trim().slice(0, 240) || null
+    });
+    if (ins && ins.error) throw ins.error;
+    return { saved: true, answer: answer };
   }
 
   /** Splits HTML into typing steps: whole tags at once, otherwise single characters (valid partial HTML at each step). */
@@ -2064,8 +2142,10 @@
       var id = order[o];
       if (!selectedMirrors.has(id)) continue;
       var meta = MIRROR_META[id];
-      r.push({ kind: "q", mirror: id, key: id + "_1", idx: 0, meta: meta });
-      r.push({ kind: "q", mirror: id, key: id + "_2", idx: 1, meta: meta });
+      var qs = getMirrorQuestions(id, meta);
+      for (var qi = 0; qi < qs.length; qi++) {
+        r.push({ kind: "q", mirror: id, key: id + "_" + String(qi + 1), idx: qi, meta: meta });
+      }
       r.push({ kind: "sum", mirror: id, text: meta.sum, meta: meta });
     }
     r.push({ kind: "final" });
@@ -2125,7 +2205,7 @@
     var mirror = step.mirror;
     var letter = mirror === "own" ? "O" : step.meta ? step.meta.letter : "O";
     var blokLabel = mirror === "own" ? "Over jou · basis" : step.meta.name;
-    var total = mirror === "own" ? 5 : 2;
+    var total = mirror === "own" ? 5 : getMirrorQuestions(mirror, step.meta).length;
     var num = mirror === "own" ? step.idx + 1 : step.idx + 1;
     var introHtml = "";
     if (mirror !== "own" && step.idx === 0) {
@@ -2138,12 +2218,30 @@
     }
     var qtext = "";
     var hint = "";
+    var options = null;
     if (mirror === "own") {
       qtext = CORE_QUESTIONS[step.idx].q;
       hint = CORE_QUESTIONS[step.idx].hint;
     } else {
-      qtext = step.idx === 0 ? step.meta.q1 : step.meta.q2;
-      hint = step.idx === 0 ? step.meta.h1 : step.meta.h2;
+      var qset = getMirrorQuestions(mirror, step.meta);
+      var qobj = qset[step.idx] || {};
+      qtext = qobj.q || "";
+      hint = qobj.h || "";
+      options = Array.isArray(qobj.options) ? qobj.options : null;
+    }
+
+    var answerInputHtml = "";
+    if (options && options.length) {
+      answerInputHtml =
+        '<div class="ob-answer-options" id="obAnsOpts">' +
+        options.map(function (op) {
+          return '<button type="button" class="ob-opt-btn" data-opt="' + escapeAttr(op.id) + '" data-label="' + escapeAttr(op.label) + '">' + escapeHtml(op.label) + "</button>";
+        }).join("") +
+        "</div>";
+    } else {
+      answerInputHtml =
+        '<textarea class="ob-answer-input" id="obAns" rows="3" placeholder="' + escapeAttr(hint) + '"></textarea>' +
+        '<div class="ob-answer-hint">Neem je tijd. Één of twee zinnen is genoeg.</div>';
     }
 
     host.innerHTML =
@@ -2154,8 +2252,7 @@
       overgang +
       '<p class="ob-sensei lg" data-type="' + escapeAttr(qtext) + '"></p>' +
       '<div class="ob-answer-wrap" id="obAnsWrap">' +
-      '<textarea class="ob-answer-input" id="obAns" rows="3" placeholder="' + escapeAttr(hint) + '"></textarea>' +
-      '<div class="ob-answer-hint">Neem je tijd. Één of twee zinnen is genoeg.</div></div>' +
+      answerInputHtml + "</div>" +
       '<div class="ob-cta-wrap" id="obAnsCta">' +
       '<button type="button" class="ob-cta-primary" id="obAnsBtn" disabled>Antwoord opslaan</button></div>' +
       (routeIndex > 0
@@ -2164,17 +2261,36 @@
 
     var existing = answers[step.key] || "";
     var ta = document.getElementById("obAns");
-    ta.value = existing;
     var btn = document.getElementById("obAnsBtn");
-    btn.disabled = !ta.value.trim();
-    ta.addEventListener("input", function () {
+    var selectedOpt = null;
+    if (ta) {
+      ta.value = existing;
       btn.disabled = !ta.value.trim();
-    });
-    ta.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !btn.disabled) {
-        btn.click();
-      }
-    });
+      ta.addEventListener("input", function () {
+        btn.disabled = !ta.value.trim();
+      });
+      ta.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !btn.disabled) {
+          btn.click();
+        }
+      });
+    } else {
+      var optBtns = host.querySelectorAll(".ob-opt-btn");
+      btn.disabled = true;
+      optBtns.forEach(function (ob) {
+        if (ob.getAttribute("data-label") === existing) {
+          selectedOpt = { id: ob.getAttribute("data-opt"), label: ob.getAttribute("data-label") };
+          ob.classList.add("is-active");
+          btn.disabled = false;
+        }
+        ob.addEventListener("click", function () {
+          optBtns.forEach(function (x) { x.classList.remove("is-active"); });
+          ob.classList.add("is-active");
+          selectedOpt = { id: ob.getAttribute("data-opt"), label: ob.getAttribute("data-label") };
+          btn.disabled = false;
+        });
+      });
+    }
     var ansBack = document.getElementById("obAnsBack");
     if (ansBack) {
       ansBack.addEventListener("click", function () {
@@ -2182,8 +2298,34 @@
       });
     }
     btn.addEventListener("click", async function () {
-      var text = ta.value.trim();
+      var text = ta ? ta.value.trim() : (selectedOpt ? String(selectedOpt.label || "").trim() : "");
       if (!text) return;
+      if (step.key === "self_5") {
+        btn.disabled = true;
+        try {
+          var gu5 = await sb.auth.getUser();
+          var uid5 = gu5 && gu5.data && gu5.data.user && gu5.data.user.id;
+          if (!sb || !uid5) throw new Error("Geen sessie");
+          var checkinAnswer = selectedOpt ? String(selectedOpt.id || "").trim() : inferSelfSenseCheckinAnswer(text);
+          if (!checkinAnswer) {
+            showToast("Kies een van de vier opties.");
+            btn.disabled = false;
+            return;
+          }
+          var ins5 = await sb.from("selfsense_checkins").insert({
+            user_id: uid5,
+            answer: checkinAnswer,
+            note: text.slice(0, 240) || null
+          });
+          if (ins5 && ins5.error) throw ins5.error;
+          answers[step.key] = text;
+          advanceRoute();
+        } catch (_save5) {
+          showToast("Even een haperingetje. Ik probeer het opnieuw.");
+          btn.disabled = !(ta ? ta.value.trim() : selectedOpt);
+        }
+        return;
+      }
       var sub = ANSWER_KEY_TO_SUB[step.key];
       if (!sub) {
         answers[step.key] = text;
@@ -2281,7 +2423,7 @@
             usrU = buildCoreSummaryUserMessage();
             summaryText = await callSenseiOnboarding(sysU, usrU, 420);
           } else if (step.meta) {
-            sysU = buildMirrorSummarySystemPrompt(step.meta.name);
+            sysU = buildMirrorSummarySystemPrompt(step.meta.name, getMirrorQuestions(step.mirror, step.meta).length);
             usrU = buildMirrorSummaryUserMessage(step.mirror, step.meta);
             summaryText = await callSenseiOnboarding(sysU, usrU, 380);
           }

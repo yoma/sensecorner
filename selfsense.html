@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" href="data:,">
+<meta name="theme-color" content="#4a6b50">
+<title>SelfSense · SelfSensei</title>
+<meta name="self-build" content="29-04-2026 11:58">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/sense-theme.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overflow:hidden}
+:root{--app-donker:var(--self-donker);--app-medium:var(--self-medium);--app-licht:var(--self-licht);--r:var(--app-donker);--rl:rgba(188,205,192,.42);--g:rgba(255,255,255,.75);--b:rgba(61,47,31,.12)}
+.app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(188,205,192,.45) 0%,var(--cream) 150px,var(--cream) 100%);position:relative;overflow:hidden}
+.topbar{position:relative;z-index:2;display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(242,232,213,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 1px 0 rgba(61,47,31,.08)}
+.tb-title{flex:1;font-size:var(--fs-md);font-weight:700;text-align:center;color:var(--t);font-family:var(--font-serif)}
+.tb-actions{display:flex;align-items:center;gap:2px}
+.ico{width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none;border-radius:19px;font-size:16px}
+.ico:active{background:var(--g)}
+.app-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
+.main{padding:14px 14px 20px}
+.card{background:#fff;border:1px solid var(--b);border-radius:16px;padding:14px}
+.card h2{font-family:var(--font-serif);font-size:22px;color:var(--t);margin-bottom:8px}
+.card p{font-size:14px;color:#666;line-height:1.6}
+.help-card{background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:12px 13px;cursor:pointer;margin-bottom:10px}
+.help-card strong{display:block;font-size:15px;color:#2f2f2f}
+.help-card span{display:block;margin-top:3px;font-size:13px;color:#666}
+.coach-msg{font-size:14px;line-height:1.6;color:#2f2f2f;background:#fff;border:1px solid var(--b);border-radius:14px;padding:12px 13px;margin-bottom:10px;white-space:pre-wrap}
+.input-wrap{display:flex;gap:8px;margin-top:10px}
+.txt{flex:1;border:1px solid var(--b);border-radius:12px;padding:12px 11px;min-height:92px;resize:vertical;font:inherit;font-size:14px;background:#fff}
+.form-btn{padding:11px 12px;border-radius:12px;border:none;background:var(--r);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.form-btn.sec{background:#f2f2ef;color:#444;border:1px solid rgba(0,0,0,.1)}
+.form-input{width:100%;padding:13px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:15px;font-family:inherit;margin-bottom:10px}
+.auth-card{max-width:560px;margin:0 auto;background:#fff;border:1px solid var(--b);border-radius:16px}
+.pw-input-wrap{position:relative}
+.pw-input-wrap .form-input{padding-right:48px}
+.pw-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-60%);border:1px solid var(--b);background:#fff;border-radius:9px;padding:3px 8px;cursor:pointer}
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none}
+.overlay.show{display:block}
+.drawer{position:absolute;top:0;left:0;width:83%;max-width:310px;height:100%;background:#fff;z-index:51;overflow-y:auto;transform:translateX(-100%);transition:transform .26s ease;box-shadow:4px 0 24px rgba(0,0,0,.12);border-radius:0 20px 20px 0}
+.drawer.open{transform:translateX(0)}
+.dr-in{padding:calc(24px + var(--st)) 20px 32px}
+.drow{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #F2F2F2;cursor:pointer}
+.nav{background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.08);display:flex;padding:6px 0;padding-bottom:calc(6px + var(--sb));flex-shrink:0;position:relative;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 4px;cursor:pointer;color:var(--m);background:none;border:none;position:relative;transition:color .16s ease;font-family:inherit}
+.tab.active{color:var(--r)}
+.tab svg{width:22px;height:22px}
+.tab span{font-size:var(--fs-xs);font-weight:600}
+.toast{position:fixed;left:50%;bottom:calc(68px + var(--sb));transform:translateX(-50%);z-index:140;background:#1f2937;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.modal-ovl{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:130}
+.modal-ovl.show{display:flex}
+.modal{width:min(720px,100%);background:#fff;border-radius:18px 18px 0 0;padding:18px 14px calc(14px + var(--sb));box-shadow:0 -8px 28px rgba(0,0,0,.18)}
+.modal h3{font-family:var(--font-serif);font-size:23px;color:var(--t);margin-bottom:10px}
+.modal p{font-size:14px;color:#555;line-height:1.55;margin-bottom:14px}
+.checkin-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.checkin-btn{padding:12px 10px;border-radius:12px;border:1px solid rgba(0,0,0,.12);background:#fff;color:#2d2d2d;cursor:pointer;font-size:14px;font-weight:700;font-family:inherit}
+.help-list{display:grid;gap:8px}
+.help-item{border:1px solid var(--b);border-radius:12px;padding:10px;background:#fff}
+.help-item-title{font-weight:800;color:#2f2f2f;font-size:14px}
+.help-item-sub{font-size:12px;color:#666;line-height:1.5;margin-top:4px}
+.opt-btn{width:100%;text-align:left;padding:10px 11px;border:1px solid var(--b);background:#fff;border-radius:11px;font:inherit;font-size:14px;cursor:pointer;margin-bottom:8px}
+.detail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.detail-link{font-size:13px;color:var(--r);font-weight:700;text-decoration:underline}
+.crisis-card{background:#fff;border:1px solid rgba(122,42,42,.25);border-radius:16px;padding:14px}
+.crisis-msg{font-size:15px;color:#3a2f2f;line-height:1.65;white-space:pre-wrap;margin-bottom:12px}
+.crisis-actions{display:grid;gap:8px}
+.crisis-continue{margin-top:10px;font-size:12px}
+.qa-card{background:#fff;border:1px solid var(--b);border-radius:14px;padding:12px;margin-bottom:10px}
+.qa-title{font-size:12px;font-weight:800;color:#6a6a6a;letter-spacing:.03em;text-transform:uppercase;margin-bottom:6px}
+.qa-q{font-size:16px;color:#2f2f2f;line-height:1.45;margin-bottom:8px}
+.qa-options{display:grid;gap:8px}
+.qa-opt{border:1px solid var(--b);background:#fff;border-radius:10px;padding:10px 11px;font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.qa-top-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.mini-sum{background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 11px;margin-bottom:10px}
+.mini-sum-title{font-size:12px;font-weight:800;color:#6a6a6a;letter-spacing:.03em;text-transform:uppercase;margin-bottom:6px}
+.mini-sum-item{font-size:13px;color:#3a3a3a;line-height:1.45;margin-bottom:4px}
+.timeline-card{background:#fff;border:1px solid var(--b);border-radius:12px;padding:10px 11px;margin-bottom:10px}
+.timeline-title{font-size:12px;font-weight:800;color:#6a6a6a;letter-spacing:.03em;text-transform:uppercase;margin-bottom:6px}
+.timeline-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.timeline-chip{border:1px solid var(--b);background:#fff;border-radius:999px;padding:4px 9px;font-size:12px;color:#4a4a4a;cursor:pointer}
+.timeline-chip.active{background:var(--self-licht);border-color:var(--self-donker);color:#2f3f35;font-weight:700}
+.timeline-empty{font-size:13px;color:#6a6a6a}
+.timeline-item{padding:7px 0;border-top:1px solid rgba(0,0,0,.06)}
+.timeline-item:first-of-type{border-top:none;padding-top:0}
+.timeline-line{font-size:13px;color:#2f2f2f;line-height:1.45}
+.timeline-meta{margin-top:2px;font-size:11px;color:#7a7a7a}
+.kicker{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#7b7b7b}
+.tb-title-wrap{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.tb-main{font-size:var(--fs-md);font-weight:700;color:var(--t);font-family:var(--font-serif);margin-top:2px}
+.sp-card{background:#fff;border:1px solid var(--b);border-radius:18px;padding:14px}
+.sp-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.sp-head-title{font-family:var(--font-serif);font-size:22px;color:var(--self-donker)}
+.sp-info-btn{width:26px;height:26px;border-radius:13px;border:1px solid var(--b);background:#fff;color:var(--self-donker);font-weight:700;cursor:pointer}
+.sp-center{position:relative;height:220px;display:flex;align-items:center;justify-content:center}
+@keyframes spBreathe1{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.55}50%{transform:translate(-50%,-50%) scale(1.06);opacity:.9}}
+@keyframes spBreathe2{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.45}50%{transform:translate(-50%,-50%) scale(1.08);opacity:.8}}
+.sp-r1{position:absolute;top:50%;left:50%;width:190px;height:190px;border:1px solid var(--self-donker);border-radius:50%;animation:spBreathe1 5s ease-in-out infinite}
+.sp-r2{position:absolute;top:50%;left:50%;width:146px;height:146px;border:1px solid var(--self-medium);border-radius:50%;animation:spBreathe2 5s ease-in-out infinite .3s}
+.sp-r3{position:absolute;top:50%;left:50%;width:94px;height:94px;border-radius:50%;background:var(--self-licht);display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%)}
+.sp-tag{text-align:center;color:#6b7280;font-size:13px;margin-top:-6px;margin-bottom:10px}
+.sp-mode{width:100%;padding:12px 14px;background:#fff;border:1px solid var(--b);border-radius:12px;text-align:left;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.sp-mode.highlight{background:var(--self-licht);border-color:var(--self-donker)}
+.sp-mode-name{font-size:14px;font-weight:700;color:var(--self-donker)}
+.sp-mode-sub{font-size:12px;color:#5b6470}
+.sp-recent{margin-top:8px;padding-top:10px;border-top:1px solid var(--b)}
+.sp-recent-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px}
+.sp-recent-item{font-size:12px;color:#5f6873;padding:2px 0}
+.mirror-ovl{position:fixed;inset:0;background:rgba(16,18,20,.55);display:none;align-items:stretch;justify-content:center;z-index:220}
+.mirror-ovl.show{display:flex}
+.mirror-sheet{width:min(820px,100%);height:100%;background:#F9F7F1;display:flex;flex-direction:column}
+.mirror-top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--b);background:rgba(255,255,255,.85)}
+.mirror-x{border:1px solid var(--b);background:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;font:inherit}
+.mirror-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;position:relative}
+.mirror-big{position:relative;width:250px;height:250px}
+.mirror-big .sp-r1{width:250px;height:250px}
+.mirror-big .sp-r2{width:196px;height:196px}
+.mirror-big .sp-r3{width:132px;height:132px}
+.mirror-breath-line{margin-top:14px;font-size:16px;color:#4f5b57}
+.mirror-count{margin-top:8px;font-size:34px;font-family:var(--font-serif);color:#2d3f35}
+.mirror-cam{position:absolute;right:16px;bottom:16px;width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.9);box-shadow:0 8px 24px rgba(0,0,0,.2);background:#d9d9d9}
+.mirror-end{max-width:520px;background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px}
+.mirror-note{width:100%;min-height:96px;border:1px solid var(--b);border-radius:10px;padding:10px;font:inherit;font-size:14px;margin-top:8px}
+.mirror-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.mirror-praat-wrap{width:min(620px,100%);background:#fff;border:1px solid var(--b);border-radius:14px;padding:14px}
+.mirror-praat-circle{position:relative;width:180px;height:180px;margin:0 auto 10px}
+.mirror-praat-circle .sp-r1{width:180px;height:180px}
+.mirror-praat-circle .sp-r2{width:140px;height:140px}
+.mirror-praat-circle .sp-r3{width:90px;height:90px}
+.mirror-praat-text{font-size:14px;color:#2f3f35;line-height:1.55;background:#FAFBF8;border:1px solid var(--b);border-radius:10px;padding:10px;min-height:72px;white-space:pre-wrap}
+.mirror-transcript{margin-top:8px;padding:10px;border:1px dashed var(--b);border-radius:10px;background:#fff;font-size:13px;color:#4a4a4a;min-height:44px}
+.mirror-ptt{margin-top:10px;width:64px;height:64px;border-radius:32px;border:none;background:var(--self-donker);color:#fff;font-size:24px;font-weight:700;cursor:pointer}
+.mirror-ptt.on{filter:brightness(.85)}
+.mirror-gesprek-video{width:200px;height:200px;border-radius:14px;object-fit:cover;display:block;margin:0 auto 10px;border:1px solid var(--b);background:#d9d9d9}
+.mirror-gesprek-placeholder{width:200px;height:200px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;border:1px dashed var(--b);background:#f5f7f3;color:#5a6a60;font-size:13px;text-align:center;padding:8px}
+.mirror-chat{max-height:210px;overflow:auto;border:1px solid var(--b);border-radius:10px;padding:8px;background:#fff}
+.mirror-chat-row{display:flex;margin-bottom:6px}
+.mirror-chat-row.user{justify-content:flex-end}
+.mirror-chat-bubble{max-width:82%;padding:8px 10px;border-radius:10px;font-size:13px;line-height:1.45}
+.mirror-chat-bubble.assistant{background:#F4F6F2;border:1px solid var(--b);color:#2f3f35}
+.mirror-chat-bubble.user{background:var(--self-licht);border:1px solid var(--self-donker);color:#2f3f35}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="overlay" id="ovl" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer"><div class="dr-in" id="drIn"></div></div>
+  <div class="topbar">
+    <button class="ico" onclick="openDrawer()" aria-label="Menu">☰</button>
+    <div class="tb-title-wrap">
+      <div class="kicker" id="pgKicker" style="display:none">SelfSense</div>
+      <div class="tb-main" id="pgTitle">Vragen</div>
+    </div>
+    <div class="tb-actions">
+      <button class="ico" id="btnSpiegelInfo" type="button" onclick="openSpiegelInfo()" aria-label="Info" style="display:none">i</button>
+      <button class="ico" type="button" onclick="openTopbarHelp()" aria-label="Hulp">❤+</button>
+      <button class="ico" type="button" onclick="goScreen('settings')" aria-label="Instellingen">⚙</button>
+    </div>
+  </div>
+  <div class="app-scroll" id="appScroll"><main class="main" id="mainContent"></main></div>
+  <nav class="nav" aria-label="SelfSense tabs">
+    <button class="tab" id="tab-spiegel" onclick="goScreen('spiegel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2"></circle></svg><span>Spiegel</span></button>
+    <button class="tab" id="tab-vragen" onclick="goScreen('vragen')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v10H8l-4 4V5z"></path><circle cx="12" cy="10" r="1"></circle></svg><span>Vragen</span></button>
+    <button class="tab" id="tab-own" onclick="window.location.href='ownsense.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 6v10H4V9l8-6z"></path></svg><span>OWN</span></button>
+  </nav>
+</div>
+<div id="checkinModal" class="modal-ovl" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Dagelijkse check-in">
+    <h3>Hoe is het vandaag met jou?</h3><p>Vergeleken met gisteren?</p>
+    <div class="checkin-grid">
+      <button class="checkin-btn" data-answer="beter" onclick="saveCheckin(this.dataset.answer)">Beter</button>
+      <button class="checkin-btn" data-answer="hetzelfde" onclick="saveCheckin(this.dataset.answer)">Hetzelfde</button>
+      <button class="checkin-btn" data-answer="minder goed" onclick="saveCheckin(this.dataset.answer)">Minder goed</button>
+      <button class="checkin-btn" data-answer="heel zwaar" onclick="saveCheckin(this.dataset.answer)">Heel zwaar</button>
+      <button class="checkin-btn" data-answer="niet vandaag" onclick="saveCheckin(this.dataset.answer)">Niet vandaag</button>
+    </div>
+  </div>
+</div>
+<div id="helpModal" class="modal-ovl" aria-hidden="true"><div class="modal" id="helpModalBody"></div></div>
+<div id="mirrorOverlay" class="mirror-ovl" aria-hidden="true">
+  <div class="mirror-sheet">
+    <div class="mirror-top">
+      <div>
+        <div class="kicker">SelfSense</div>
+        <div style="font-size:18px;font-family:var(--font-serif);color:var(--self-donker)">Spiegel · Adem</div>
+      </div>
+      <button class="mirror-x" type="button" onclick="stopMirrorSession()">X</button>
+    </div>
+    <div class="mirror-main" id="mirrorMain"></div>
+  </div>
+</div>
+<script>
+const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
+const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+const CRISIS_PATTERNS=[/\bzelfmoord/i,/\bzelfdod/i,/\been\s+eind(e)?\s+(aan\s+)?(mijn|m'n|me|mn)?\s*leven/i,/\bniet\s+meer\s+(willen\s+)?leven/i,/\buit\s+het\s+leven\s+stappen/i,/\bmezelf\s+(iets|wat)\s+aandoen/i,/\bmezelf\s+(pijn(igen)?|kwetsen)/i,/\bdood\s+(wil(len)?|gaan)/i,/\bsterven\s+wil/i,/\bvan\s+de\s+(brug|toren|trap)/i,/\bsuicid/i,/\bsuïcid/i];
+const HELPLINES=[{key:'tele_onthaal',name:'Tele-Onthaal',number:'106',chat:'https://www.tele-onthaal.be/chat/',description:'Voor elke zorg, klein of groot. Gratis en anoniem.',hours:'24 uur per dag, 7 dagen op 7. Chat s avonds.',primary:true},{key:'zelfmoordlijn',name:'Zelfmoordlijn',number:'1813',chat:'https://www.zelfmoord1813.be/',description:'Voor wie aan zelfdoding denkt of zich zorgen maakt om iemand.',hours:'24 uur per dag, 7 dagen op 7.',crisis_only:true},{key:'caw',name:'CAW',number:'0800 13 500',chat:'https://www.caw.be/contacteer-ons/',description:'Welzijnsvragen, relaties, financieel, juridisch, opvang.',hours:'Werkdagen 13u tot 17u via chat, telefoon ruimer.'},{key:'huisarts_wacht',name:'Huisarts van wacht',number:'1733',description:'Medische ingang, ook bij psychische klachten.',hours:'24 uur per dag, 7 dagen op 7.'},{key:'noodnummer',name:'Acute noodsituatie',number:'112',description:'Bel bij acuut gevaar.',hours:'24 uur per dag, 7 dagen op 7.',crisis_only:true},{key:'awel',name:'Awel (jongeren)',number:'102',chat:'https://awel.be/',description:'Voor kinderen en jongeren.',hours:'Elke dag 16u tot 22u, niet op zon- en feestdagen.',youth_only:true}];
+const CRISIS_TEXT='Wat je net schreef raakt iets belangrijks. Ik wil even pauzeren met wat we deden.\n\nEr is iemand die hier 24 uur per dag voor kan luisteren, gratis en anoniem. Zelfmoordlijn op 1813. Of als bellen te veel is, kan je chatten via zelfmoord1813.be.\n\nAls het nu acuut is, bel 112.\n\nIk blijf hier ook, maar ik ben geen vervanging voor een echt mens op zo n moment.';
+var sb=null;try{if(window.supabase&&typeof window.supabase.createClient==='function')sb=window.supabase.createClient(SURL,SKEY);}catch(e){console.warn('Supabase client init:',e);}
+var S={user:null,apiKey:'',screen:'vragen',prev:'vragen',busy:false,conversation:[],crisisMode:false,crisisStartedAt:0,lastCrisisLogId:null,userState:null,checkins:[],greeting:'',ownFactsContext:'',qaFlow:null,ownFactsRows:[],mirrorSessions:[],timelineEvents:[],timelineFilter:'all',mirror:{active:false,mode:'',secondsLeft:0,timer:null,startTs:0,stream:null,camEnabled:false,endState:'',noteDraft:'',messages:[],userTurns:0,isListening:false,speechEnabled:false,speechRec:null,currentTranscript:'',summaryDraft:'',paused:false,pauseReason:''}};
+var _loginInFlight=false,_loginAttemptId=0;
+const SELFSENSE_QUESTION_MAPPING={
+  intake_q1:{category:'gevoels',subcategory:'actuele_situatie'},
+  intake_q2:{category:'interesses',subcategory:'goede_dag'},
+  intake_q3:{category:'algemeen',subcategory:'doelen'},
+  intake_q4:{category:'karakter',subcategory:'constraint'},
+  intake_q5:{skip_own_facts:true},
+  intake_q6:{category:'algemeen',subcategory:'steunbronnen'},
+  verdieping_q1:{category:'gevoels',subcategory:'recent_veranderd'},
+  verdieping_q2:{category:'gevoels',subcategory:'lichaam'},
+  verdieping_q3:{category:'interesses',subcategory:'energie_balans'},
+  verdieping_q4:{category:'karakter',subcategory:'eigen_wijsheid'}
+};
+const SELFSENSE_QA={
+  intake:[
+    {id:'intake_q1',q:'Wat houdt je op dit moment het meest bezig? Wat heeft je hierheen gebracht?'},
+    {id:'intake_q2',q:'Wat zou voor jou nu een goede dag zijn? Of een dag die meevalt?'},
+    {id:'intake_q3',q:'Wat wil je graag bereiken? Of voelt bereiken te veel als druk?'},
+    {id:'intake_q4',q:'Wat werkt absoluut niet voor jou?'},
+    {id:'intake_q5',q:'Hoe voel je je op dit moment?',options:[
+      {id:'hetzelfde',label:'Ik voel me oké'},
+      {id:'minder goed',label:'Het weegt soms'},
+      {id:'heel zwaar',label:'Het is zwaar'},
+      {id:'heel zwaar',label:'Het is overweldigend'}
+    ]},
+    {id:'intake_q6',q:'Heb je dingen waar je op kan terugvallen? Mensen, gewoontes, plekken, professionele hulp, wat voor jou werkt.'}
+  ],
+  verdieping:[
+    {id:'verdieping_q1',q:'Wat is er veranderd in of voor jou het laatste jaar?'},
+    {id:'verdieping_q2',q:'Hoe voelt je lichaam de laatste tijd?'},
+    {id:'verdieping_q3',q:'Wat kost je op dit moment veel? En is er iets dat je iets oplaadt, al is het maar een beetje?'},
+    {id:'verdieping_q4',q:'Wat heb jij geleerd dat je een goede vriend(in) zou willen meegeven?'}
+  ]
+};
+function escHTML(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escJsStr(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r/g,' ').replace(/\n/g,' ').replace(/\u2028/g,' ').replace(/\u2029/g,' ');}
+function withTimeout(promise,ms,msg){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error(msg||('Timeout na '+ms+'ms')));},ms);})]);}
+function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},2500);}
+function dsSaveSpinnerHtml(onDark){return '<span class="ds-inline-spin'+(onDark?' on-dark':'')+'" aria-hidden="true"></span>';}
+function cleanAiProseForStore(s){
+  return String(s||'').replace(/\s+/g,' ').trim().substring(0,1600);
+}
+function setButtonSaveBusy(btn,busy,opts){opts=opts||{};if(!btn)return;var label=String(opts.busyLabel!=null?opts.busyLabel:'Bezig...');var onDark=opts.spinnerOnDark;if(onDark===undefined)onDark=!!(btn.classList.contains('form-btn')&&!btn.classList.contains('sec'));if(busy){if(btn.getAttribute('data-ds-saving')==='1')return;if(!btn.getAttribute('data-ds-rest-html'))btn.setAttribute('data-ds-rest-html',btn.innerHTML);btn.setAttribute('data-ds-saving','1');btn.disabled=true;btn.style.opacity=(onDark?'0.92':'0.88');btn.innerHTML='<span class="ds-save-busy-inner">'+dsSaveSpinnerHtml(onDark)+'<span>'+label+'</span></span>';btn.setAttribute('aria-busy','true');}else{btn.removeAttribute('data-ds-saving');var h=btn.getAttribute('data-ds-rest-html');if(h!=null){btn.innerHTML=h;btn.removeAttribute('data-ds-rest-html');}btn.disabled=false;btn.style.opacity='';btn.removeAttribute('aria-busy');}}
+function isMobile(){return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent||'');}
+function detectCrisis(text){var t=String(text||'').toLowerCase();return CRISIS_PATTERNS.some(function(re){return re.test(t);});}
+function visibleHelplines(opt){opt=opt||{};return HELPLINES.filter(function(h){if(h.youth_only)return false;if(opt.excludeCrisis&&h.crisis_only)return false;return true;});}
+async function callOrCopy(number){var n=String(number||'').trim();if(!n)return;var tel='tel:'+n.replace(/\s+/g,'');if(isMobile()){window.location.href=tel;return;}try{await navigator.clipboard.writeText(n);toast('Nummer gekopieerd');}catch(e){window.location.href=tel;}}
+function helpDetailView(line,backMode){return '<h3>'+escHTML(line.name)+'</h3><p><strong>'+escHTML(line.number)+'</strong></p><div class="help-item"><div class="help-item-sub">'+escHTML(line.description||'')+'<br>'+escHTML(line.hours||'')+'</div><div class="detail-actions"><button class="form-btn" type="button" onclick="callOrCopy(\''+escJsStr(line.number)+'\')">Bel '+escHTML(line.number)+'</button>'+(line.chat?('<a class="detail-link" href="'+escHTML(line.chat)+'" target="_blank" rel="noopener">Open chat</a>'):'')+'</div></div><div class="detail-actions"><button class="form-btn sec" type="button" onclick="openHelpFlow(\''+escJsStr(backMode||'choice')+'\')">Terug</button></div>';}
+function openTopbarHelp(){openHelpFlow('topbar');}
+function openHelpFlow(mode){
+  var modal=document.getElementById('helpModal'),body=document.getElementById('helpModalBody');if(!modal||!body)return;
+  if(mode==='topbar'){
+    var list=HELPLINES.filter(function(h){if(h.youth_only)return false;if(h.key==='noodnummer')return false;return true;});
+    body.innerHTML='<h3>Sensei is er om mee te denken. Als je liever met een mens praat, dan kan dat hier.</h3><div class="help-list">'+list.map(function(h){return '<div class="help-item"><div class="help-item-title">'+escHTML(h.name)+' - '+escHTML(h.number)+'</div><div class="help-item-sub">'+escHTML(h.description||'')+'<br>'+escHTML(h.hours||'')+'</div><div class="detail-actions"><button class="form-btn" type="button" onclick="callOrCopy(\''+escJsStr(h.number)+'\')">Bel</button>'+(h.chat?('<a class="detail-link" href="'+escHTML(h.chat)+'" target="_blank" rel="noopener">Chat openen</a>'):'')+'</div></div>';}).join('')+'</div><div class="detail-actions"><button class="form-btn sec" type="button" onclick="closeHelpModal()">Sluiten</button></div>';
+  }else if(mode==='all'){
+    var all=visibleHelplines({excludeCrisis:false});
+    body.innerHTML='<h3>Alle hulplijnen</h3><div class="help-list">'+all.map(function(h){return '<div class="help-item"><div class="help-item-title">'+escHTML(h.name)+' - '+escHTML(h.number)+'</div><div class="help-item-sub">'+escHTML(h.description||'')+'<br>'+escHTML(h.hours||'')+'</div><div class="detail-actions"><button class="form-btn" type="button" onclick="callOrCopy(\''+escJsStr(h.number)+'\')">Bel</button>'+(h.chat?('<a class="detail-link" href="'+escHTML(h.chat)+'" target="_blank" rel="noopener">Chat openen</a>'):'')+'</div></div>';}).join('')+'</div><div class="detail-actions"><button class="form-btn sec" type="button" onclick="openHelpFlow(\'choice\')">Terug</button></div>';
+  }else if(mode==='choice'){
+    body.innerHTML='<h3>Wat past bij wat je nu nodig hebt?</h3><button class="opt-btn" type="button" onclick="openHelpFlow(\'tele\')">1. Iemand om mee te praten, nu meteen</button><button class="opt-btn" type="button" onclick="openHelpFlow(\'suicide\')">2. Ik denk aan zelfdoding</button><button class="opt-btn" type="button" onclick="openHelpFlow(\'caw\')">3. Praktische hulp (wonen, geld, geweld, scheiding)</button><button class="opt-btn" type="button" onclick="openHelpFlow(\'all\')">4. Ik weet het niet, toon alles</button><div class="detail-actions"><button class="form-btn sec" type="button" onclick="closeHelpModal()">Sluiten</button></div>';
+  }else if(mode==='tele'){body.innerHTML=helpDetailView(HELPLINES.find(function(h){return h.key==='tele_onthaal';}),'choice');
+  }else if(mode==='suicide'){body.innerHTML=helpDetailView(HELPLINES.find(function(h){return h.key==='zelfmoordlijn';}),'choice');
+  }else if(mode==='caw'){body.innerHTML=helpDetailView(HELPLINES.find(function(h){return h.key==='caw';}),'choice');}
+  modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+}
+function closeHelpModal(){var modal=document.getElementById('helpModal');if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');}
+function openSpiegelInfo(){
+  var modal=document.getElementById('helpModal'),body=document.getElementById('helpModalBody');if(!modal||!body)return;
+  body.innerHTML='<h3>De drie modi van de Spiegel</h3><div class="help-list"><div class="help-item"><div class="help-item-title">Adem</div><div class="help-item-sub">60 seconden zonder woorden. Een ademoefening om weer in je lichaam te komen.</div></div><div class="help-item"><div class="help-item-title">Praat</div><div class="help-item-sub">Vertel iets, je camera blijft uit. Sensei luistert en reflecteert kort terug.</div></div><div class="help-item"><div class="help-item-title">Gesprek</div><div class="help-item-sub">Een gesprek met Sensei terwijl je jezelf in beeld ziet. Voor wanneer je iets wil onderzoeken samen.</div></div></div><div class="detail-actions"><button class="form-btn sec" type="button" onclick="closeHelpModal()">Begrepen</button></div>';
+  modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+}
+async function logCrisis(triggerType){if(!sb||!S.user)return;try{var r=await sb.from('selfsense_crisis_log').insert({user_id:S.user.id,trigger_type:triggerType}).select('id').limit(1);if(r&&r.data&&r.data[0])S.lastCrisisLogId=r.data[0].id;await loadTimelineEvents();}catch(e){console.warn('log crisis',e);}}
+async function acknowledgeLastCrisis(){if(!sb||!S.user||!S.lastCrisisLogId)return;try{await sb.from('selfsense_crisis_log').update({acknowledged_at:new Date().toISOString()}).eq('id',S.lastCrisisLogId).eq('user_id',S.user.id);}catch(e){console.warn('ack crisis',e);}}
+function setCrisisMode(on,msg){S.crisisMode=!!on;if(on){S.crisisStartedAt=Date.now();S.greeting=String(msg||CRISIS_TEXT);}goScreen('vragen');}
+function canExitCrisis(){return Date.now()-S.crisisStartedAt>=5000;}
+async function continueAfterCrisis(){if(!canExitCrisis())return;S.crisisMode=false;await acknowledgeLastCrisis();goScreen('vragen');}
+async function openSelfHelpFromCard(){await logCrisis('user_self');openHelpFlow('choice');}
+function supportsGetUserMedia(){return !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);}
+function mirrorPromptKey(mode){return 'selfsense.mirror.prompt.'+String(mode||'');}
+function hasSeenMirrorPrompt(mode){
+  try{return localStorage.getItem(mirrorPromptKey(mode))==='1';}catch(e){return false;}
+}
+function setSeenMirrorPrompt(mode){
+  try{localStorage.setItem(mirrorPromptKey(mode),'1');}catch(e){}
+}
+function stopActiveMediaStream(){
+  try{
+    if(S.mirror&&S.mirror.stream){
+      S.mirror.stream.getTracks().forEach(function(t){try{t.stop();}catch(_e){}});
+    }
+  }catch(_e){}
+  if(S.mirror)S.mirror.stream=null;
+}
+function openMirrorOverlay(){var ov=document.getElementById('mirrorOverlay');if(!ov)return;ov.classList.add('show');ov.setAttribute('aria-hidden','false');}
+function closeMirrorOverlay(){var ov=document.getElementById('mirrorOverlay');if(!ov)return;ov.classList.remove('show');ov.setAttribute('aria-hidden','true');}
+function renderMirrorAdemMain(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  var breath=((60-S.mirror.secondsLeft)%5)<3?'Adem in...':'Adem uit...';
+  main.innerHTML='<div class="mirror-big"><div class="sp-r1"></div><div class="sp-r2"></div><div class="sp-r3"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="9" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></div></div><div class="mirror-breath-line">'+breath+'</div><div class="mirror-count">'+S.mirror.secondsLeft+'</div>'+(S.mirror.camEnabled?'<video id="mirrorCamVideo" class="mirror-cam" autoplay muted playsinline></video>':'');
+  if(S.mirror.camEnabled&&S.mirror.stream){
+    var v=document.getElementById('mirrorCamVideo');
+    if(v){v.srcObject=S.mirror.stream;}
+  }
+}
+function renderMirrorAdemEndAsk(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  main.innerHTML='<div class="mirror-end"><div style="font-size:20px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:6px">Hoe was dat? Heb je iets opgemerkt?</div><div class="mirror-row"><button class="form-btn" type="button" onclick="openMirrorNoteInput()">Een woord toevoegen</button><button class="form-btn sec" type="button" onclick="finishMirrorAdem(null)">Niks</button></div></div>';
+}
+function openMirrorNoteInput(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  main.innerHTML='<div class="mirror-end"><div style="font-size:20px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:6px">Een woord of korte zin</div><div style="font-size:13px;color:#666">Max 200 tekens</div><textarea id="mirrorNoteInput" maxlength="200" class="mirror-note" placeholder="Bijvoorbeeld: rust, spanning zakte, helder..."></textarea><div class="mirror-row"><button class="form-btn" type="button" onclick="saveMirrorNote()">Opslaan</button><button class="form-btn sec" type="button" onclick="finishMirrorAdem(null)">Niks</button></div></div>';
+}
+function saveMirrorNote(){
+  var el=document.getElementById('mirrorNoteInput');
+  var txt=String((el&&el.value)||'').trim();
+  finishMirrorAdem(txt||null);
+}
+async function finishMirrorAdem(note){
+  var dur=Math.max(0,Math.round((Date.now()-S.mirror.startTs)/1000));
+  stopActiveMediaStream();
+  if(S.mirror.timer){clearInterval(S.mirror.timer);S.mirror.timer=null;}
+  try{
+    if(sb&&S.user){
+      var ins=await sb.from('selfsense_mirror_sessions').insert({
+        user_id:S.user.id,
+        mode:'adem',
+        duration_seconds:dur,
+        messages_count:null,
+        note:note?String(note).substring(0,200):null
+      });
+      if(ins&&ins.error)throw ins.error;
+    }
+  }catch(e){
+    toast('Sessie kon niet volledig opgeslagen worden');
+  }
+  S.mirror.active=false;
+  closeMirrorOverlay();
+  await loadTimelineEvents();
+  await loadMirrorSessions();
+  if(S.screen==='spiegel')goScreen('spiegel');
+}
+function speechRecognitionCtor(){
+  return window.SpeechRecognition||window.webkitSpeechRecognition||null;
+}
+function resetMirrorSpeech(){
+  try{
+    if(S.mirror.speechRec){
+      S.mirror.speechRec.onresult=null;
+      S.mirror.speechRec.onend=null;
+      S.mirror.speechRec.onerror=null;
+      S.mirror.speechRec.stop();
+    }
+  }catch(_e){}
+  S.mirror.speechRec=null;
+  S.mirror.isListening=false;
+}
+function renderMirrorPraat(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  var lastSensei='';var i;
+  for(i=(S.mirror.messages||[]).length-1;i>=0;i--){
+    if(S.mirror.messages[i].role==='assistant'){lastSensei=S.mirror.messages[i].text;break;}
+  }
+  var transcript=S.mirror.currentTranscript||'Houd de knop vast en spreek.';
+  var listeningCls=S.mirror.isListening?' on':'';
+  var turns='Ronde '+Math.min(3,Math.max(1,S.mirror.userTurns+1))+' van 3';
+  main.innerHTML='<div class="mirror-praat-wrap"><div class="kicker">Praat · '+turns+'</div><div class="mirror-praat-circle"><div class="sp-r1"></div><div class="sp-r2"></div><div class="sp-r3"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></div></div><div class="mirror-praat-text">'+escHTML(lastSensei||'Even wachten...')+'</div><div class="mirror-transcript">'+escHTML(transcript)+'</div><div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px"><button id="mirrorPttBtn" class="mirror-ptt'+listeningCls+'" type="button" onpointerdown="startMirrorListening()" onpointerup="stopMirrorListening(true)" onpointerleave="stopMirrorListening(false)">🎙</button></div><div class="mirror-row"><button class="form-btn sec" type="button" onclick="openMirrorTypeFallback()">Typen in plaats van spreken</button></div></div>';
+}
+function renderMirrorGesprek(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  var transcript=S.mirror.currentTranscript||'Houd de knop vast en spreek.';
+  var listeningCls=S.mirror.isListening?' on':'';
+  var turns='Ronde '+Math.min(4,Math.max(1,S.mirror.userTurns+1))+' van 4';
+  var hasVideo=!!(S.mirror.stream&&S.mirror.stream.getVideoTracks&&S.mirror.stream.getVideoTracks().length);
+  var chat=(S.mirror.messages||[]).slice(-10).map(function(m){
+    var who=m.role==='assistant'?'assistant':'user';
+    return '<div class="mirror-chat-row '+who+'"><div class="mirror-chat-bubble '+who+'">'+escHTML(m.text||'')+'</div></div>';
+  }).join('');
+  var mediaBlock=hasVideo?'<video id="mirrorGesprekVideo" class="mirror-gesprek-video" autoplay muted playsinline></video>':'<div class="mirror-gesprek-placeholder">Gesprek zonder camera<br>Je microfoon en transcript blijven bruikbaar.</div>';
+  main.innerHTML='<div class="mirror-praat-wrap"><div class="kicker">Gesprek · '+turns+'</div>'+mediaBlock+'<div class="mirror-chat">'+(chat||'<div class="mirror-chat-row assistant"><div class="mirror-chat-bubble assistant">Even wachten...</div></div>')+'</div><div class="mirror-transcript">'+escHTML(transcript)+'</div><div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px"><button id="mirrorPttBtn" class="mirror-ptt'+listeningCls+'" type="button" onpointerdown="startMirrorListening()" onpointerup="stopMirrorListening(true)" onpointerleave="stopMirrorListening(false)">🎙</button></div><div class="mirror-row"><button class="form-btn sec" type="button" onclick="openMirrorTypeFallback()">Typen in plaats van spreken</button></div></div>';
+  var v=document.getElementById('mirrorGesprekVideo');
+  if(v&&S.mirror.stream){try{v.srcObject=S.mirror.stream;}catch(_e){}}
+}
+function renderMirrorConversation(){
+  if(S.mirror.mode==='gesprek'){renderMirrorGesprek();return;}
+  renderMirrorPraat();
+}
+function renderMirrorPausePrompt(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  main.innerHTML='<div class="mirror-end"><div style="font-size:18px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:8px">Sessie is gepauzeerd</div><div style="font-size:14px;color:#555;margin-bottom:10px">Je wisselde van tab. Wil je doorgaan of stoppen?</div><div class="mirror-row"><button class="form-btn" type="button" onclick="resumeMirrorAfterPause()">Doorgaan</button><button class="form-btn sec" type="button" onclick="stopMirrorAfterPause()">Stoppen</button></div></div>';
+}
+async function resumeMirrorAfterPause(){
+  if(!S.mirror.active)return;
+  S.mirror.paused=false;
+  S.mirror.pauseReason='';
+  if(S.mirror.mode==='gesprek'&&supportsGetUserMedia()&&!S.mirror.stream){
+    try{
+      var c=S.mirror.camEnabled?{video:true,audio:true}:{audio:true};
+      S.mirror.stream=await navigator.mediaDevices.getUserMedia(c);
+    }catch(e){
+      S.mirror.stream=null;
+      toast('Geen camera deze keer, geen probleem.');
+    }
+  }
+  renderMirrorConversation();
+}
+async function stopMirrorAfterPause(){
+  if(!S.mirror.active)return;
+  await finalizeMirrorConversation('[Sessie gepauzeerd en gestopt]',false);
+}
+function openMirrorTypeFallback(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  main.innerHTML='<div class="mirror-end"><div style="font-size:18px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:6px">Typ je antwoord</div><textarea id="mirrorTypeInput" class="mirror-note" maxlength="600" placeholder="Schrijf hier wat je wil zeggen..."></textarea><div class="mirror-row"><button class="form-btn" type="button" onclick="sendMirrorTypedInput()">Verstuur</button><button class="form-btn sec" type="button" onclick="renderMirrorConversation()">Terug</button></div></div>';
+}
+async function sendMirrorTypedInput(){
+  var el=document.getElementById('mirrorTypeInput');
+  var txt=String((el&&el.value)||'').trim();
+  if(!txt)return;
+  await handleMirrorUserInput(txt);
+}
+async function handleMirrorUserInput(text){
+  var t=String(text||'').trim();
+  if(!t)return;
+  if(S.mirror.paused){renderMirrorPausePrompt();return;}
+  var mode=S.mirror.mode==='gesprek'?'gesprek':'praat';
+  var maxTurns=mode==='gesprek'?4:3;
+  var modeLabel=mode==='gesprek'?'Gesprek':'Praat';
+  S.mirror.currentTranscript=t;
+  S.mirror.messages.push({role:'user',text:t});
+  S.mirror.userTurns++;
+  if(detectCrisis(t)){
+    await logCrisis('keyword');
+    await finalizeMirrorConversation('[Sessie onderbroken]',true);
+    setCrisisMode(true,CRISIS_TEXT);
+    return;
+  }
+  var convo=(S.mirror.messages||[]).slice(-8).map(function(m){return {role:m.role==='assistant'?'assistant':'user',content:m.text};});
+  var sys=mode==='gesprek'
+    ?'Je bent Sensei in de Gesprek-modus van SelfSense. Dit is samen-denken, geen advies-relatie. Reflecteer terug, vraag door, deel observaties als ze passen. Antwoord in 2-4 zinnen. Geen lijstjes, geen oplossingen, geen interpretaties van patronen of betekenis. Houd in de gaten: de sessie wordt afgerond na 4 gebruikersronden, dus laat de laatste 1-2 ronden zacht afronden.\n\nCRITISCH: pas crisis-detectie toe zoals eerder. Als crisis, start antwoord met [CRISIS].'+(S.ownFactsContext?('\n\nCONTEXT:\n'+S.ownFactsContext):'')
+    :'Je bent Sensei in de Praat-modus van SelfSense. De gebruiker spreekt iets uit, jij luistert en reflecteert zacht terug. Geen advies, geen oplossingen, geen oefeningen. Antwoord in 2-3 zinnen, warm. Optioneel een doorvraag als het natuurlijk past.\n\nCRITISCH: pas crisis-detectie toe zoals eerder. Als crisis, start antwoord met [CRISIS].'+(S.ownFactsContext?('\n\nCONTEXT:\n'+S.ownFactsContext):'');
+  try{
+    var ai=await callSensei(sys,convo,500,30000);
+    if(String(ai||'').trim().indexOf('[CRISIS]')===0){
+      await logCrisis('ai');
+      ai=String(ai||'').replace(/^\[CRISIS\]\s*/,'');
+      await finalizeMirrorConversation('[Sessie onderbroken]',true);
+      setCrisisMode(true,ai||CRISIS_TEXT);
+      return;
+    }
+    S.mirror.messages.push({role:'assistant',text:ai});
+    S.mirror.currentTranscript='';
+    if(S.mirror.userTurns>=maxTurns){
+      await startMirrorSummaryFlow();
+      return;
+    }
+    renderMirrorConversation();
+  }catch(e){
+    toast('Sensei kan even niet antwoorden, probeer opnieuw');
+    renderMirrorConversation();
+  }
+}
+function startMirrorListening(){
+  if(!S.mirror.speechEnabled){toast('Transcribe niet beschikbaar, typ je antwoord.');openMirrorTypeFallback();return;}
+  if(S.mirror.isListening)return;
+  S.mirror.currentTranscript='';
+  var Ctor=speechRecognitionCtor();
+  if(!Ctor){S.mirror.speechEnabled=false;openMirrorTypeFallback();return;}
+  var rec=new Ctor();
+  S.mirror.speechRec=rec;
+  rec.lang='nl-BE';
+  rec.interimResults=true;
+  rec.continuous=true;
+  rec.onresult=function(ev){
+    var txt='';
+    for(var i=ev.resultIndex;i<ev.results.length;i++)txt+=ev.results[i][0].transcript||'';
+    S.mirror.currentTranscript=String(txt||'').trim();
+    renderMirrorConversation();
+  };
+  rec.onerror=function(){S.mirror.isListening=false;renderMirrorConversation();};
+  rec.onend=function(){S.mirror.isListening=false;renderMirrorConversation();};
+  try{rec.start();S.mirror.isListening=true;renderMirrorConversation();}catch(e){S.mirror.isListening=false;openMirrorTypeFallback();}
+}
+function stopMirrorListening(commit){
+  if(!S.mirror.isListening){if(commit&&S.mirror.currentTranscript)handleMirrorUserInput(S.mirror.currentTranscript);return;}
+  try{if(S.mirror.speechRec)S.mirror.speechRec.stop();}catch(_e){}
+  S.mirror.isListening=false;
+  var txt=S.mirror.currentTranscript;
+  if(commit&&txt)handleMirrorUserInput(txt);
+  else renderMirrorConversation();
+}
+async function startMirrorSummaryFlow(){
+  var userLines=(S.mirror.messages||[]).filter(function(m){return m.role==='user';}).map(function(m){return m.text;});
+  var transcript=userLines.join('\n');
+  var main=document.getElementById('mirrorMain');
+  if(main)main.innerHTML='<div class="mirror-end"><div style="font-size:16px;color:#555">Sensei maakt een samenvatting...</div></div>';
+  var sum='';
+  try{
+    var sys='Je krijgt een sessie-transcript van een SelfSense Spiegel-sessie. Maak een samenvatting van 2-3 zinnen in derde persoon, vanuit het perspectief van de gebruiker. Geen interpretaties, geen advies, geen "Sensei zei". Alleen wat de gebruiker uitsprak en wat naar boven kwam. Max 200 tekens.';
+    sum=await callSensei(sys,[{role:'user',content:transcript}],220,30000);
+    sum=String(sum||'').replace(/\s+/g,' ').trim().substring(0,200);
+  }catch(e){
+    sum='';
+  }
+  S.mirror.summaryDraft=sum;
+  renderMirrorSummaryChoice();
+}
+function renderMirrorSummaryChoice(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  var s=String(S.mirror.summaryDraft||'').trim();
+  main.innerHTML='<div class="mirror-end"><div style="font-size:18px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:8px">Sensei vat samen:</div><div class="mirror-praat-text">'+escHTML(s||'Geen samenvatting beschikbaar')+'</div><div class="mirror-row"><button class="form-btn" type="button" onclick="finalizeMirrorConversation(S.mirror.summaryDraft,false)">Bewaren</button><button class="form-btn sec" type="button" onclick="openMirrorSummaryEdit()">Aanpassen</button><button class="form-btn sec" type="button" onclick="finalizeMirrorConversation(null,false)">Niet bewaren</button></div></div>';
+}
+function openMirrorSummaryEdit(){
+  var main=document.getElementById('mirrorMain');if(!main)return;
+  var s=String(S.mirror.summaryDraft||'').trim();
+  main.innerHTML='<div class="mirror-end"><div style="font-size:18px;font-family:var(--font-serif);color:#2f3f35;margin-bottom:8px">Pas de samenvatting aan</div><textarea id="mirrorSummaryEdit" class="mirror-note" maxlength="200">'+escHTML(s)+'</textarea><div class="mirror-row"><button class="form-btn" type="button" onclick="saveMirrorSummaryEdit()">Opslaan</button><button class="form-btn sec" type="button" onclick="renderMirrorSummaryChoice()">Terug</button></div></div>';
+}
+function saveMirrorSummaryEdit(){
+  var el=document.getElementById('mirrorSummaryEdit');
+  S.mirror.summaryDraft=String((el&&el.value)||'').replace(/\s+/g,' ').trim().substring(0,200);
+  finalizeMirrorConversation(S.mirror.summaryDraft,false);
+}
+async function finalizeMirrorConversation(note,interrupted){
+  resetMirrorSpeech();
+  stopActiveMediaStream();
+  if(S.mirror.timer){clearInterval(S.mirror.timer);S.mirror.timer=null;}
+  var dur=Math.max(0,Math.round((Date.now()-S.mirror.startTs)/1000));
+  var msgCount=(S.mirror.messages||[]).length||null;
+  var mode=S.mirror.mode==='gesprek'?'gesprek':'praat';
+  var finalNote=interrupted?'[Sessie onderbroken]':(note?String(note).substring(0,200):null);
+  try{
+    if(sb&&S.user){
+      var ins=await sb.from('selfsense_mirror_sessions').insert({user_id:S.user.id,mode:mode,duration_seconds:dur,messages_count:msgCount,note:finalNote});
+      if(ins&&ins.error)throw ins.error;
+    }
+  }catch(e){toast('Sessie kon niet volledig opgeslagen worden');}
+  S.mirror.active=false;
+  S.mirror.mode='';
+  S.mirror.paused=false;
+  S.mirror.pauseReason='';
+  closeMirrorOverlay();
+  await loadTimelineEvents();
+  await loadMirrorSessions();
+  if(S.screen==='spiegel')goScreen('spiegel');
+}
+async function stopMirrorSession(){
+  if(!S.mirror.active){closeMirrorOverlay();return;}
+  if(S.mirror.mode==='adem'){await finishMirrorAdem(null);return;}
+  if(S.mirror.mode==='praat'||S.mirror.mode==='gesprek'){await startMirrorSummaryFlow();return;}
+  closeMirrorOverlay();
+}
+async function startMirrorAdem(camChoice){
+  S.mirror.active=true;S.mirror.mode='adem';S.mirror.secondsLeft=60;S.mirror.startTs=Date.now();S.mirror.camEnabled=false;S.mirror.noteDraft='';S.mirror.paused=false;S.mirror.pauseReason='';
+  openMirrorOverlay();
+  if(camChoice&&supportsGetUserMedia()){
+    try{
+      var stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      S.mirror.stream=stream;S.mirror.camEnabled=true;
+    }catch(e){
+      S.mirror.camEnabled=false;S.mirror.stream=null;toast('Geen camera deze keer, geen probleem.');
+    }
+  }
+  renderMirrorAdemMain();
+  S.mirror.timer=setInterval(function(){
+    S.mirror.secondsLeft--;
+    if(S.mirror.secondsLeft<=0){
+      clearInterval(S.mirror.timer);S.mirror.timer=null;renderMirrorAdemEndAsk();return;
+    }
+    renderMirrorAdemMain();
+  },1000);
+}
+async function startMirrorPraat(){
+  S.mirror.active=true;S.mirror.mode='praat';S.mirror.startTs=Date.now();S.mirror.messages=[];S.mirror.userTurns=0;S.mirror.currentTranscript='';S.mirror.summaryDraft='';S.mirror.paused=false;S.mirror.pauseReason='';
+  S.mirror.speechEnabled=!!speechRecognitionCtor();
+  resetMirrorSpeech();
+  openMirrorOverlay();
+  var main=document.getElementById('mirrorMain');
+  if(main)main.innerHTML='<div class="mirror-end"><div style="font-size:16px;color:#555">Sensei bereidt een openingsvraag voor...</div></div>';
+  var openQ='Wat houdt je vandaag het meest bezig?';
+  try{
+    var sys='Je bent Sensei in de Praat-modus van SelfSense. Genereer EEN korte, zachte openingsvraag in 1 zin. Geen clichés zoals hoe gaat het. Gebruik context.'+(S.ownFactsContext?('\n\nCONTEXT:\n'+S.ownFactsContext):'');
+    openQ=await callSensei(sys,[{role:'user',content:'Start Praat modus'}],180,25000);
+    openQ=String(openQ||'').replace(/\s+/g,' ').trim().substring(0,220)||openQ;
+  }catch(e){}
+  S.mirror.messages.push({role:'assistant',text:openQ});
+  renderMirrorPraat();
+}
+async function startMirrorGesprek(noCamera){
+  S.mirror.active=true;S.mirror.mode='gesprek';S.mirror.startTs=Date.now();S.mirror.messages=[];S.mirror.userTurns=0;S.mirror.currentTranscript='';S.mirror.summaryDraft='';S.mirror.paused=false;S.mirror.pauseReason='';
+  S.mirror.speechEnabled=!!speechRecognitionCtor();
+  resetMirrorSpeech();
+  S.mirror.stream=null;S.mirror.camEnabled=!noCamera;
+  openMirrorOverlay();
+  var main=document.getElementById('mirrorMain');
+  if(main)main.innerHTML='<div class="mirror-end"><div style="font-size:16px;color:#555">Camera en microfoon starten...</div></div>';
+  try{
+    if(!supportsGetUserMedia()){
+      toast('Camera/microfoon werkt niet in deze browser. Probeer Chrome of Safari.');
+    }else if(noCamera){
+      S.mirror.stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      S.mirror.camEnabled=false;
+    }else{
+      S.mirror.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+      S.mirror.camEnabled=!!(S.mirror.stream&&S.mirror.stream.getVideoTracks&&S.mirror.stream.getVideoTracks().length);
+    }
+  }catch(e){
+    try{
+      if(supportsGetUserMedia()){
+        S.mirror.stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        S.mirror.camEnabled=false;
+        toast('Geen camera deze keer, geen probleem.');
+      }
+    }catch(e2){
+      S.mirror.stream=null;
+      S.mirror.camEnabled=false;
+      toast('Camera of microfoon niet beschikbaar, je kan wel typen.');
+    }
+  }
+  var openQ='Wat wil je dat ik als eerste van je hoor?';
+  try{
+    var sys='Je bent Sensei in de Gesprek-modus van SelfSense. Genereer EEN korte, zachte openingsvraag in 1 zin voor live gesprek. Geen clichés zoals hoe gaat het. Gebruik context.'+(S.ownFactsContext?('\n\nCONTEXT:\n'+S.ownFactsContext):'');
+    openQ=await callSensei(sys,[{role:'user',content:'Start Gesprek modus'}],180,25000);
+    openQ=String(openQ||'').replace(/\s+/g,' ').trim().substring(0,220)||openQ;
+  }catch(e){}
+  S.mirror.messages.push({role:'assistant',text:openQ});
+  renderMirrorGesprek();
+}
+function startSpiegelMode(mode){
+  if(mode==='praat'){
+    if(hasSeenMirrorPrompt('praat')){startMirrorPraat();return;}
+    var modalMic=document.getElementById('helpModal'),bodyMic=document.getElementById('helpModalBody');
+    if(!modalMic||!bodyMic)return;
+    bodyMic.innerHTML='<h3>Microfoon gebruiken in Praat</h3><p>Sensei luistert naar wat je zegt. Wat je spreekt blijft op jouw apparaat behalve het transcript dat naar Sensei gaat voor zijn antwoord.</p><div class="detail-actions"><button class="form-btn" type="button" onclick="setSeenMirrorPrompt(\'praat\');closeHelpModal();startMirrorPraat()">Begrepen</button><button class="form-btn sec" type="button" onclick="closeHelpModal()">Annuleer</button></div>';
+    modalMic.classList.add('show');modalMic.setAttribute('aria-hidden','false');
+    return;
+  }
+  if(mode==='gesprek'){
+    if(hasSeenMirrorPrompt('gesprek')){startMirrorGesprek();return;}
+    var modalTalk=document.getElementById('helpModal'),bodyTalk=document.getElementById('helpModalBody');
+    if(!modalTalk||!bodyTalk)return;
+    bodyTalk.innerHTML='<h3>Camera en microfoon in Gesprek</h3><p>Je ziet jezelf live en praat met Sensei. Er wordt niets opgenomen of opgeslagen als media. Alleen teksttranscript en gekozen samenvatting worden bewaard.</p><div class="detail-actions"><button class="form-btn" type="button" onclick="setSeenMirrorPrompt(\'gesprek\');closeHelpModal();startMirrorGesprek(false)">Begrepen</button><button class="form-btn sec" type="button" onclick="setSeenMirrorPrompt(\'gesprek\');closeHelpModal();startMirrorGesprek(true)">Geen camera deze keer</button><button class="form-btn sec" type="button" onclick="closeHelpModal()">Annuleer</button></div>';
+    modalTalk.classList.add('show');modalTalk.setAttribute('aria-hidden','false');
+    return;
+  }
+  if(mode!=='adem'){toast('Deze modus komt in de volgende fase.');return;}
+  if(!supportsGetUserMedia()){
+    toast('Camera werkt niet in deze browser. Adem start zonder camera.');
+    startMirrorAdem(false);
+    return;
+  }
+  var modal=document.getElementById('helpModal'),body=document.getElementById('helpModalBody');if(!modal||!body)return;
+  body.innerHTML='<h3>Camera gebruiken in Spiegel</h3><p>De Spiegel gebruikt je camera om jezelf in beeld te zien. Wat je ziet blijft op jouw apparaat. Niets wordt opgenomen, opgeslagen of verstuurd.</p><div class="detail-actions"><button class="form-btn" type="button" onclick="closeHelpModal();startMirrorAdem(true)">Begrepen, ga verder</button><button class="form-btn sec" type="button" onclick="closeHelpModal();startMirrorAdem(false)">Geen camera deze keer</button></div>';
+  modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+}
+function latestFactTextBySubcategory(sub){
+  var rows=S.ownFactsRows||[];
+  for(var i=0;i<rows.length;i++){
+    if(String(rows[i].subcategory||'')===String(sub||'')){
+      return String(rows[i].fact_text||'').trim();
+    }
+  }
+  return'';
+}
+function buildMiniSummaryHtml(){
+  var checkin=(S.checkins&&S.checkins[0])?String(S.checkins[0].answer||'').trim():'';
+  var map=[
+    {label:'Wat speelt nu',sub:'actuele_situatie'},
+    {label:'Goede dag',sub:'goede_dag'},
+    {label:'Doelen',sub:'doelen'},
+    {label:'Constraint',sub:'constraint'},
+    {label:'Steunbronnen',sub:'steunbronnen'},
+    {label:'Recent veranderd',sub:'recent_veranderd'},
+    {label:'Lichaam',sub:'lichaam'},
+    {label:'Energiebalans',sub:'energie_balans'},
+    {label:'Eigen wijsheid',sub:'eigen_wijsheid'}
+  ];
+  var lines=[];
+  map.forEach(function(m){
+    var txt=latestFactTextBySubcategory(m.sub);
+    if(txt){
+      lines.push('<div class="mini-sum-item"><strong>'+escHTML(m.label)+':</strong> '+escHTML(txt.substring(0,120))+(txt.length>120?'...':'')+'</div>');
+    }
+  });
+  if(checkin){
+    lines.unshift('<div class="mini-sum-item"><strong>Laatste check-in:</strong> '+escHTML(checkin)+'</div>');
+  }
+  if(!lines.length)return'';
+  return '<div class="mini-sum"><div class="mini-sum-title">Al ingevuld</div>'+lines.join('')+'</div>';
+}
+function formatTimelineWhen(iso){
+  var d=new Date(iso||new Date().toISOString());
+  var now=new Date();
+  var same=d.toDateString()===now.toDateString();
+  if(same)return d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+}
+function buildTimelineHtml(){
+  var f=String(S.timelineFilter||'all');
+  var allItems=(S.timelineEvents||[]);
+  var counts={all:allItems.length,checkin:0,crisis:0,mirror:0};
+  allItems.forEach(function(it){
+    var t=String(it.type||'');
+    if(t==='checkin'||t==='crisis'||t==='mirror')counts[t]++;
+  });
+  var items=allItems.filter(function(it){
+    if(f==='all')return true;
+    return String(it.type||'')===f;
+  }).slice(0,12);
+  var filters=[
+    {id:'all',label:'Alles'},
+    {id:'checkin',label:'Check-ins'},
+    {id:'crisis',label:'Crisis'},
+    {id:'mirror',label:'Spiegel'}
+  ];
+  var chips='<div class="timeline-filters">'+filters.map(function(x){
+    var active=x.id===f?' active':'';
+    var n=counts[x.id]||0;
+    return '<button class="timeline-chip'+active+'" type="button" onclick="setTimelineFilter(\''+escJsStr(x.id)+'\')">'+escHTML(x.label+' ('+n+')')+'</button>';
+  }).join('')+'</div>';
+  if(!items.length)return '<div class="timeline-card"><div class="timeline-title">Tijdlijn</div>'+chips+'<div class="timeline-empty">Geen gebeurtenissen voor deze filter.</div></div>';
+  var rows=items.map(function(it){
+    return '<div class="timeline-item"><div class="timeline-line">'+escHTML(it.label||'')+'</div><div class="timeline-meta">'+escHTML(formatTimelineWhen(it.created_at))+'</div></div>';
+  }).join('');
+  return '<div class="timeline-card"><div class="timeline-title">Tijdlijn</div>'+chips+rows+'</div>';
+}
+function setTimelineFilter(filterId){
+  var id=String(filterId||'all');
+  if(['all','checkin','crisis','mirror'].indexOf(id)===-1)id='all';
+  S.timelineFilter=id;
+  if(S.screen==='vragen')goScreen('vragen');
+}
+function startQaFlow(layer){
+  if(layer!=='intake'&&layer!=='verdieping')return;
+  S.qaFlow={layer:layer,idx:0};
+  goScreen('vragen');
+}
+function cancelQaFlow(){S.qaFlow=null;goScreen('vragen');}
+async function saveQaCurrent(){
+  if(!S.qaFlow||!S.user)return;
+  var layer=S.qaFlow.layer;
+  var list=SELFSENSE_QA[layer]||[];
+  var cur=list[S.qaFlow.idx];
+  if(!cur)return;
+  var text='';
+  if(cur.options&&cur.options.length){
+    var sel=document.querySelector('input[name="qaOpt"]:checked');
+    if(!sel){toast('Kies eerst een optie.');return;}
+    text=String(sel.value||'').trim();
+  }else{
+    var el=document.getElementById('qaAnswer');
+    text=String((el&&el.value)||'').trim();
+    if(!text){toast('Vul je antwoord in.');return;}
+  }
+  if(cur.id==='intake_q5'){
+    await saveCheckin(text);
+  }else{
+    await saveSelfSenseAnswer(cur.id,text,cur.id==='intake_q4');
+  }
+  S.qaFlow.idx++;
+  if(S.qaFlow.idx>=list.length){
+    if(layer==='intake')await saveUserState({intake_completed_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+    if(layer==='verdieping')await saveUserState({verdieping_completed_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+    S.qaFlow=null;
+    toast(layer==='intake'?'Intake opgeslagen':'Verdieping opgeslagen');
+  }
+  goScreen('vragen');
+}
+function formatMirrorRecent(item){
+  var mode=String(item.mode||'').trim()||'spiegel';
+  var dur=Number(item.duration_seconds||0);
+  var mc=item.messages_count==null?'':String(item.messages_count);
+  var info=(mode==='adem'||!mc)?(Math.max(1,Math.round(dur/60))+' min'):(mc+' msgs');
+  var d=new Date(item.created_at||new Date().toISOString());
+  var now=new Date();
+  var sameDay=d.toDateString()===now.toDateString();
+  var when=sameDay?d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
+  return mode+', '+info+' · '+when;
+}
+async function loadMirrorSessions(){
+  if(!sb||!S.user){S.mirrorSessions=[];return;}
+  try{
+    var r=await sb.from('selfsense_mirror_sessions')
+      .select('mode,duration_seconds,messages_count,created_at')
+      .eq('user_id',S.user.id)
+      .order('created_at',{ascending:false})
+      .limit(3);
+    if(r&&r.error)throw r.error;
+    S.mirrorSessions=(r&&r.data)||[];
+  }catch(e){
+    S.mirrorSessions=[];
+  }
+}
+function rVragen(el){
+  if(S.crisisMode){
+    var left=Math.max(0,5-Math.floor((Date.now()-S.crisisStartedAt)/1000));
+    el.innerHTML='<div class="crisis-card"><div class="crisis-msg">'+escHTML(S.greeting||CRISIS_TEXT)+'</div><div class="crisis-actions"><button class="form-btn" type="button" onclick="callOrCopy(\'1813\')">Bel 1813 (Zelfmoordlijn)</button><button class="form-btn" type="button" onclick="callOrCopy(\'106\')">Bel 106 (Tele-Onthaal)</button><button class="form-btn" type="button" onclick="callOrCopy(\'112\')">Bel 112 (acuut)</button><a class="detail-link" href="https://www.zelfmoord1813.be/" target="_blank" rel="noopener">Chat via zelfmoord1813.be</a></div><div class="crisis-continue"><button id="crisisContinueBtn" class="form-btn sec" '+(left>0?'disabled':'')+' type="button" onclick="continueAfterCrisis()">Sensei verder laten praten'+(left>0?' ('+left+'s)':'')+'</button></div></div>';
+    if(left>0)setTimeout(function(){if(S.crisisMode)rVragen(el);},1000);
+    return;
+  }
+  var msgs=S.conversation.map(function(m){return '<div class="coach-msg">'+escHTML(m)+'</div>';}).join('');
+  var greet=S.greeting?('<div class="coach-msg">'+escHTML(S.greeting)+'</div>'):'';
+  var flowHtml='';
+  if(S.qaFlow){
+    var list=SELFSENSE_QA[S.qaFlow.layer]||[];
+    var cur=list[S.qaFlow.idx];
+    if(cur){
+      var optHtml='';
+      if(cur.options&&cur.options.length){
+        optHtml='<div class="qa-options">'+cur.options.map(function(o,i){
+          return '<label class="qa-opt"><input type="radio" name="qaOpt" value="'+escHTML(o.id)+'" '+(i===0?'':'')+' style="margin-right:8px"/>'+escHTML(o.label)+'</label>';
+        }).join('')+'</div>';
+      }else{
+        optHtml='<textarea id="qaAnswer" class="txt" placeholder="Schrijf je antwoord..." style="min-height:120px"></textarea>';
+      }
+      flowHtml='<div class="qa-card"><div class="qa-title">'+(S.qaFlow.layer==='intake'?'Laag A - intake':'Laag B - verdieping')+' · vraag '+(S.qaFlow.idx+1)+' van '+list.length+'</div><div class="qa-q">'+escHTML(cur.q)+'</div>'+optHtml+'<div class="detail-actions"><button class="form-btn" type="button" onclick="saveQaCurrent()">Opslaan en verder</button><button class="form-btn sec" type="button" onclick="cancelQaFlow()">Stoppen</button></div></div>';
+    }
+  }else{
+    var intakeDone=!!(S.userState&&S.userState.intake_completed_at);
+    var verdDone=!!(S.userState&&S.userState.verdieping_completed_at);
+    flowHtml='<div class="qa-card"><div class="qa-title">Vragensets</div><p style="margin-bottom:10px">Start met intake en vul later verdieping aan op je eigen tempo.</p><div class="qa-top-actions"><button class="form-btn" type="button" onclick="startQaFlow(\'intake\')">'+(intakeDone?'Intake opnieuw openen':'Start intake (Laag A)')+'</button><button class="form-btn sec" type="button" onclick="startQaFlow(\'verdieping\')">'+(verdDone?'Verdieping opnieuw openen':'Start verdieping (Laag B)')+'</button></div></div>';
+  }
+  var miniSum=buildMiniSummaryHtml();
+  var timeline=buildTimelineHtml();
+  el.innerHTML='<div class="help-card" onclick="openSelfHelpFromCard()"><strong>Praat met iemand online of telefonisch</strong><span>Bekijk hulplijnen en plekken waar je terecht kan.</span></div>'+flowHtml+miniSum+timeline+greet+msgs+'<div class="card"><h2>Vragen</h2><p>Vertel wat je bezighoudt. Als iets zwaar aanvoelt, reageert Sensei direct met passende hulp.</p><div class="input-wrap"><textarea id="vraagInput" class="txt" placeholder="Schrijf hier wat je voelt of waar je mee zit..."></textarea><button id="sendBtn" class="form-btn" type="button" onclick="sendVraag()">Verstuur</button></div></div>';
+}
+function rSpiegel(el){
+  var recent=(S.mirrorSessions||[]).map(function(s){return '<div class="sp-recent-item">'+escHTML(formatMirrorRecent(s))+'</div>';}).join('');
+  if(!recent)recent='<div class="sp-recent-item">Nog geen sessies</div>';
+  el.innerHTML='<div class="sp-card"><div class="sp-head"><div><div class="kicker">SelfSense</div><div class="sp-head-title">Spiegel</div></div><button class="sp-info-btn" type="button" onclick="openSpiegelInfo()">i</button></div><div class="sp-center"><div class="sp-r1"></div><div class="sp-r2"></div><div class="sp-r3"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="9" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></div></div><div class="sp-tag">Een moment voor jezelf</div><button class="sp-mode" type="button" onclick="startSpiegelMode(\'adem\')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v6"/><circle cx="12" cy="14" r="6"/><path d="M12 14a3 3 0 0 0 3-3"/></svg><div><div class="sp-mode-name">Adem</div><div class="sp-mode-sub">Adem even met me mee.</div></div></button><button class="sp-mode" type="button" onclick="startSpiegelMode(\'praat\')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg><div><div class="sp-mode-name">Praat</div><div class="sp-mode-sub">Praat tegen me, ik luister.</div></div></button><button class="sp-mode highlight" type="button" onclick="startSpiegelMode(\'gesprek\')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--self-donker)" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="3"/><path d="M3 20c0-3 2.7-5.5 6-5.5"/><circle cx="17" cy="11" r="2.5"/><path d="M14 20c0-2.5 1.5-4.5 3-4.5"/></svg><div><div class="sp-mode-name">Gesprek</div><div class="sp-mode-sub">Laten we samen denken.</div></div></button><div class="sp-recent"><div class="sp-recent-title">Recent</div>'+recent+'</div></div>';
+}
+function rSettings(el){el.innerHTML='<div class="card"><h2>Instellingen</h2><p>SelfSense is een hulpmiddel om mee te denken, niet een vervanging voor professionele zorg. Als je in crisis bent, dringend hulp nodig hebt, of langdurig vastzit, raden we aan om te bellen met een hulplijn (zie het hartje rechtsboven of de knop "Praat met iemand") of contact op te nemen met je huisarts of een psycholoog.</p><div class="detail-actions"><button class="form-btn sec" type="button" onclick="openSelfHelpFromCard()">Praat met iemand online of telefonisch</button></div></div>';}
+function rForgotPassword(el){el.innerHTML='<div class="auth-card"><div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Wachtwoord vergeten</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Vul je email in, dan sturen we een reset-link.</p><input class="form-input" id="fEmail" type="email" autocomplete="username" placeholder="jouw@email.com"/><button type="button" class="form-btn" id="fBtn" onclick="doForgotPasswordFromScreen()">Reset-link sturen</button><div id="fErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button type="button" class="form-btn sec" onclick="goScreen(\'login\')">Terug naar inloggen</button></div></div>';}
+function rLogin(el){el.innerHTML=`<div class="auth-card"><div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen - overal, op elk apparaat.</p><form class="ds-auth-form" onsubmit="event.preventDefault();doLogin();return false;" autocomplete="on"><input class="form-input" id="lEmail" name="email" type="email" autocomplete="username" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" name="password" type="password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/><button type="button" id="pwToggleBtn" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button type="submit" id="lLoginBtn" class="form-btn">Inloggen</button></form><div style="text-align:center;margin-top:8px"><button type="button" class="form-btn sec" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button type="button" class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div></div>`;}
+function rRegister(el){el.innerHTML=`<div class="auth-card"><div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in FamilySense.</div><form class="ds-auth-form" onsubmit="event.preventDefault();doRegister();return false;" autocomplete="on"><input class="form-input" id="rEmail" name="email" type="email" autocomplete="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" name="new-password" type="password" placeholder="Wachtwoord (min. 6 tekens)" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button type="submit" id="rRegisterBtn" class="form-btn">Maak mijn account aan</button></form><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button type="button" class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div></div>`;}
+function goScreen(sc){
+  if(sc==='home')sc='vragen';
+  if(!S.user&&['vragen','spiegel','settings'].includes(sc))sc='login';
+  S.prev=S.screen;S.screen=sc;
+  var titleMap={vragen:'Vragen',spiegel:'Spiegel',login:'Inloggen',register:'Registreren','forgot-password':'Wachtwoord vergeten',settings:'Instellingen'};
+  document.getElementById('pgTitle').textContent=titleMap[sc]||'SelfSense';
+  var kicker=document.getElementById('pgKicker'),infoBtn=document.getElementById('btnSpiegelInfo');
+  if(kicker)kicker.style.display=(sc==='spiegel'?'block':'none');
+  if(infoBtn)infoBtn.style.display=(sc==='spiegel'?'':'none');
+  ['spiegel','vragen'].forEach(function(t){var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
+  var mc=document.getElementById('mainContent');mc.innerHTML='';
+  var screens={vragen:rVragen,spiegel:rSpiegel,login:rLogin,register:rRegister,'forgot-password':rForgotPassword,settings:rSettings};
+  if(sc==='spiegel'&&S.user){loadMirrorSessions().finally(function(){if(S.screen==='spiegel')rSpiegel(mc);});}
+  if(screens[sc])screens[sc](mc);
+}
+function rDrawer(){var h='<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">SelfSense</div><div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Jouw persoonlijke ruimte voor herstel en groei.</div>';h+='<div class="drow" onclick="goScreen(\'vragen\');closeDrawer()"><div style="font-size:15px;font-weight:600">Vragen</div></div>';h+='<div class="drow" onclick="goScreen(\'spiegel\');closeDrawer()"><div style="font-size:15px;font-weight:600">Spiegel</div></div>';h+='<div class="drow" onclick="goScreen(\'settings\');closeDrawer()"><div style="font-size:15px;font-weight:600">Instellingen</div></div>';h+='<div class="drow" onclick="window.location.href=\'ownsense.html\'"><div style="font-size:15px;font-weight:600">Naar OWN Sense</div></div>';if(S.user)h+='<div style="margin-top:22px;padding-top:14px;border-top:1px solid var(--b);font-size:13px;color:#666">'+escHTML(S.user.email||'')+'</div><div style="margin-top:10px"><button type="button" class="form-btn sec" onclick="doSignOut()">Uitloggen</button></div>';document.getElementById('drIn').innerHTML=h;}
+function openDrawer(){rDrawer();document.getElementById('drawer').classList.add('open');document.getElementById('ovl').classList.add('show');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('ovl').classList.remove('show');}
+function getAuthRedirectUrl(){var isGitHubPages=/github\.io$/i.test(window.location.hostname||'');if(isGitHubPages)return 'https://yoma.github.io/sensecorner/selfsense.html';return window.location.origin+window.location.pathname;}
+function getAuthHashParams(){var hash=String(window.location.hash||'').replace(/^#/,'').trim();if(!hash)return{};return hash.split('&').reduce(function(acc,part){var bits=part.split('=');var k=decodeURIComponent(bits[0]||'');var v=decodeURIComponent(bits.slice(1).join('=')||'');if(k)acc[k]=v;return acc;},{});}
+function clearAuthHash(){if(window.location.hash)history.replaceState(null,'',window.location.pathname+window.location.search);}
+async function handlePendingAuthFromUrl(){if(!sb)return;var hashParams=getAuthHashParams();if(!hashParams||!Object.keys(hashParams).length)return;var type=String(hashParams.type||'').toLowerCase();var accessToken=hashParams.access_token;var refreshToken=hashParams.refresh_token;var errBox=document.getElementById('lErr');try{if(accessToken&&refreshToken){await sb.auth.setSession({access_token:accessToken,refresh_token:refreshToken});clearAuthHash();if(type==='recovery'&&errBox){errBox.style.color='#2E7D32';errBox.textContent='Je reset-link is bevestigd. Stel nu een nieuw wachtwoord in via Supabase of log opnieuw in.';}return;}if(hashParams.error_description&&errBox){errBox.style.color='var(--r)';errBox.textContent='Je activatielink is ongeldig of verlopen. Vraag indien nodig een nieuwe bevestigingsmail aan.';clearAuthHash();}}catch(e){if(errBox){errBox.style.color='var(--r)';errBox.textContent='De activatie of login-link kon niet correct verwerkt worden. Probeer opnieuw in te loggen.';}clearAuthHash();}}
+async function doLogin(){if(_loginInFlight)return;var token=++_loginAttemptId;_loginInFlight=true;var eEl=document.getElementById('lEmail');var pEl=document.getElementById('lPw');var err=document.getElementById('lErr');var e=eEl?eEl.value.trim():'';var p=pEl?pEl.value:'';if(!e||!p){if(err){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';}_loginInFlight=false;return;}var btn=document.getElementById('lLoginBtn');setButtonSaveBusy(btn,true,{busyLabel:'Inloggen…'});if(err){err.textContent='Even wachten...';err.style.color='#888';}var uiTimer=setTimeout(function(){if(token!==_loginAttemptId)return;_loginInFlight=false;setButtonSaveBusy(btn,false);var e2=document.getElementById('lErr')||err;if(e2){e2.style.color='var(--r)';e2.textContent='Inloggen time-out (5s). Probeer opnieuw.';}},5000);try{var signRes=await withTimeout(sb.auth.signInWithPassword({email:e,password:p}),5000,'Inloggen time-out (5s). Probeer opnieuw.');if(signRes&&signRes.error)throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');}catch(x){if(token!==_loginAttemptId)return;var msg=(x&&x.message?String(x.message):'').toLowerCase();var friendly='Inloggen mislukt. Probeer opnieuw.';if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';var e3=document.getElementById('lErr')||err;if(e3){e3.style.color='var(--r)';e3.textContent=friendly;}}finally{clearTimeout(uiTimer);if(token===_loginAttemptId){_loginInFlight=false;setButtonSaveBusy(btn,false);}}}
+async function forgotPassword(){var emailEl=document.getElementById('lEmail');var err=document.getElementById('lErr');var email=(emailEl&&emailEl.value?emailEl.value.trim():'');if(!email){if(err){err.style.color='var(--r)';err.textContent='Vul eerst je email in.';}return;}if(err){err.style.color='#888';err.textContent='Reset mail versturen...';}try{await withTimeout(sb.auth.resetPasswordForEmail(email,{redirectTo:getAuthRedirectUrl()}),20000,'Reset time-out. Probeer opnieuw.');if(err){err.style.color='#2E7D32';err.textContent='Reset-link verzonden. Controleer je mailbox.';}}catch(e){if(err){err.style.color='var(--r)';err.textContent='Kon reset-mail niet versturen. Probeer opnieuw.';}}}
+async function doForgotPasswordFromScreen(){var emailEl=document.getElementById('fEmail'),err=document.getElementById('fErr'),btn=document.getElementById('fBtn');var email=(emailEl&&emailEl.value?emailEl.value.trim():'');if(!email){if(err){err.style.color='var(--r)';err.textContent='Vul eerst je email in.';}return;}setButtonSaveBusy(btn,true,{busyLabel:'Versturen…'});if(err){err.style.color='#888';err.textContent='Reset mail versturen...';}try{await withTimeout(sb.auth.resetPasswordForEmail(email,{redirectTo:getAuthRedirectUrl()}),20000,'Reset time-out. Probeer opnieuw.');if(err){err.style.color='#2E7D32';err.textContent='Reset-link verzonden. Controleer je mailbox.';}}catch(e){if(err){err.style.color='var(--r)';err.textContent='Kon reset-mail niet versturen. Probeer opnieuw.';}}finally{setButtonSaveBusy(btn,false);}}
+function togglePwVis(){var inp=document.getElementById('lPw');var btn=document.getElementById('pwToggleBtn');if(!inp)return;var show=inp.type==='password';inp.type=show?'text':'password';if(btn)btn.textContent=show?'🙈':'👁';}
+function toggleRegisterPw(id,btn){var inp=document.getElementById(id);if(!inp)return;var show=inp.type==='password';inp.type=show?'text':'password';if(btn)btn.textContent=show?'🙈':'👁';}
+async function doRegister(){var emailEl=document.getElementById('rEmail');var pwEl=document.getElementById('rPw');var pw2El=document.getElementById('rPw2');var err=document.getElementById('rErr');var btn=document.getElementById('rRegisterBtn');var e=emailEl?emailEl.value.trim():'';var p=pwEl?pwEl.value:'';var p2=pw2El?pw2El.value:'';if(!e||!p||!p2){err.style.color='var(--r)';err.textContent='Vul email, wachtwoord en herhaal wachtwoord in.';return;}if(p.length<6){err.style.color='var(--r)';err.textContent='Wachtwoord moet minstens 6 tekens hebben.';return;}if(p!==p2){err.style.color='var(--r)';err.textContent='Wachtwoorden komen niet overeen.';return;}setButtonSaveBusy(btn,true,{busyLabel:'Account aanmaken…'});err.textContent='Account wordt aangemaakt...';err.style.color='#888';try{await sb.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl()}});err.style.color='#2E7D32';err.textContent='Controleer je mailbox en klik op de activatielink. Daarna kan je meteen inloggen.';}catch(x){var msg=String((x&&x.message)||'Registreren mislukt.');if(msg.toLowerCase().includes('user already registered'))msg='Voor dit emailadres bestaat al een account. Probeer in te loggen.';err.style.color='var(--r)';err.textContent=msg;}finally{setButtonSaveBusy(btn,false);}}
+async function doSignOut(){closeDrawer();try{if(sb){var res=await sb.auth.signOut();if(res&&res.error)console.warn('auth.signOut error:',res.error);}}catch(e){console.warn('doSignOut:',e);}S.user=null;S.apiKey='';S.conversation=[];S.crisisMode=false;goScreen('login');}
+async function callSensei(sys,msgs,maxTok,customTimeoutMs){if(!sb)throw new Error('Supabase is niet beschikbaar.');var sess=await withTimeout(sb.auth.getSession(),15000,'Sessie laden duurt te lang.');var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in.');var controller=new AbortController();var timeoutMs=customTimeoutMs||30000;var timer=setTimeout(function(){controller.abort();},timeoutMs);try{var res=await fetch(SURL+'/functions/v1/sensei-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),signal:controller.signal});clearTimeout(timer);timer=null;var raw=await withTimeout(res.text(),Math.min(120000,Math.max(10000,timeoutMs-4000)),'Het antwoord van de AI werd niet volledig ontvangen.');var data;try{data=JSON.parse(raw);}catch(pe){throw new Error('Ongeldig antwoord van API (geen JSON).');}if(!res.ok){var apiMsg=(data&&data.error&&data.error.message)||('HTTP '+res.status);throw new Error(apiMsg);}if(data.error)throw new Error(data.error.message);var txt=(data.content&&data.content[0]&&data.content[0].text)||'';if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');return txt;}catch(e){if(e&&e.name==='AbortError')throw new Error('AI request timeout ('+Math.round(timeoutMs/1000)+'s). Probeer opnieuw.');throw e;}finally{if(timer)clearTimeout(timer);}}
+async function buildSelfSenseContext(){
+  if(!sb||!S.user)return'';
+  var factsRes=await sb.from('own_facts').select('category,fact_text,is_constraint,confidence,status').eq('user_id',S.user.id).eq('status','accepted').order('confidence',{ascending:false}).limit(60);
+  if(factsRes&&factsRes.error)return'';
+  var rows=(factsRes&&factsRes.data)||[];
+  if(!rows.length)return'';
+  var constraints=rows.filter(function(f){return !!f.is_constraint;});
+  var regular=rows.filter(function(f){return !f.is_constraint;});
+  var context='';
+  if(constraints.length){
+    context+='HARDE CONSTRAINTS, NOOIT OVERSCHRIJDEN:\n';
+    context+='De gebruiker heeft expliciet aangegeven dat dit niet werkt:\n';
+    constraints.slice(0,12).forEach(function(c){context+='- '+String(c.fact_text||'').trim()+'\n';});
+    context+='\nStel deze dingen nooit voor, ook niet als oefening of als chip.\n\n';
+  }
+  if(regular.length){
+    context+='WAT IK WEET OVER DE GEBRUIKER:\n';
+    var byCat={};
+    regular.forEach(function(f){var k=String(f.category||'algemeen').trim()||'algemeen';if(!byCat[k])byCat[k]=[];byCat[k].push(String(f.fact_text||'').trim());});
+    Object.keys(byCat).forEach(function(cat){
+      context+='\n['+cat+']\n';
+      byCat[cat].slice(0,8).forEach(function(t){if(t)context+='- '+t+'\n';});
+    });
+  }
+  return context.trim();
+}
+async function refreshSelfSenseOwnContext(){
+  try{
+    S.ownFactsContext=await buildSelfSenseContext();
+    var r=await sb.from('own_facts')
+      .select('subcategory,fact_text,source_app,status,updated_at,created_at')
+      .eq('user_id',S.user.id)
+      .eq('source_app','selfsense')
+      .eq('status','accepted')
+      .order('updated_at',{ascending:false})
+      .limit(120);
+    if(r&&r.error)throw r.error;
+    S.ownFactsRows=(r&&r.data)||[];
+  }catch(e){
+    S.ownFactsContext='';
+    S.ownFactsRows=[];
+  }
+}
+async function saveSelfSenseAnswer(question_id,answer_text,is_constraint){
+  if(!sb||!S.user)return;
+  var mapping=SELFSENSE_QUESTION_MAPPING[question_id];
+  if(!mapping||mapping.skip_own_facts)return;
+  var text=cleanAiProseForStore(answer_text);
+  if(!text)return;
+  await sb.from('own_facts').insert({
+    user_id:S.user.id,
+    category:mapping.category,
+    subcategory:mapping.subcategory,
+    fact_text:text,
+    source_app:'selfsense',
+    source_dossier:'OWN Sense',
+    source_session_id:null,
+    confidence:0.95,
+    status:'accepted',
+    is_constraint:!!is_constraint
+  });
+  await refreshSelfSenseOwnContext();
+}
+window.saveSelfSenseAnswer=saveSelfSenseAnswer;
+function crisisSystemBlock(){return 'CRISIS-DETECTIE, BELANGRIJK:\nAls de gebruiker iets uit, ook subtiel of impliciet, dat wijst op gedachten aan zelfdoding, zichzelf iets aandoen, niet meer kunnen, niet meer willen, acuut gevaar of ernstige zelfbeschadiging.\nAntwoord dan niet met gewone adviezen. Antwoord exact met crisisboodschap en voeg token [CRISIS] vooraan toe.\nStel geen verdere vragen, geen oefeningen, geen chips, geen suggesties.';}
+async function sendVraag(){
+  if(!S.user||S.crisisMode)return;
+  var inp=document.getElementById('vraagInput'),btn=document.getElementById('sendBtn');if(!inp||!btn)return;var text=String(inp.value||'').trim();if(!text)return;
+  inp.value='';S.conversation.push('Jij: '+text);goScreen('vragen');
+  if(detectCrisis(text)){await logCrisis('keyword');setCrisisMode(true,CRISIS_TEXT);return;}
+  setButtonSaveBusy(btn,true,{busyLabel:'Sensei denkt...'});
+  try{
+    var sys='Je bent SelfSensei. Schrijf warm, rustig en duidelijk in het Nederlands. Gebruik nooit Unicode U+2014. Houd het kort en menselijk.\n\n'+crisisSystemBlock()+(S.ownFactsContext?('\n\nCONTEXT UIT OWN FACTS:\n'+S.ownFactsContext):'');
+    var ai=await callSensei(sys,[{role:'user',content:text}],700,30000);
+    if(String(ai||'').trim().indexOf('[CRISIS]')===0){await logCrisis('ai');ai=String(ai||'').replace(/^\[CRISIS\]\s*/,'');setCrisisMode(true,ai||CRISIS_TEXT);return;}
+    S.conversation.push('Sensei: '+ai);
+  }catch(e){S.conversation.push('Sensei: Sorry, ik kon nu niet antwoorden. Probeer opnieuw.');}
+  finally{goScreen('vragen');}
+}
+function showCheckinModal(show){var m=document.getElementById('checkinModal');if(!m)return;m.classList.toggle('show',!!show);m.setAttribute('aria-hidden',show?'false':'true');}
+function isSameLocalDate(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function dateOnly(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function areConsecutiveDays(a,b){var x=new Date(a.getFullYear(),a.getMonth(),a.getDate());var y=new Date(b.getFullYear(),b.getMonth(),b.getDate());var diff=Math.abs(x-y)/(1000*60*60*24);return diff===1;}
+async function loadRecentCheckins(){if(!sb||!S.user){S.checkins=[];return;}try{var q=await sb.from('selfsense_checkins').select('created_at,answer').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(40);S.checkins=(q&&q.data)||[];}catch(e){S.checkins=[];}}
+async function loadTimelineEvents(){
+  if(!sb||!S.user){S.timelineEvents=[];return;}
+  try{
+    var qCheck=sb.from('selfsense_checkins').select('created_at,answer').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(12);
+    var qCrisis=sb.from('selfsense_crisis_log').select('created_at,trigger_type').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(12);
+    var qMirror=sb.from('selfsense_mirror_sessions').select('created_at,mode,duration_seconds,messages_count').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(12);
+    var res=await Promise.all([qCheck,qCrisis,qMirror]);
+    var checks=((res[0]&&res[0].data)||[]).map(function(r){return {type:'checkin',created_at:r.created_at,label:'Check-in: '+String(r.answer||'').trim()};});
+    var crises=((res[1]&&res[1].data)||[]).map(function(r){
+      var tt=String(r.trigger_type||'').trim()||'onbekend';
+      return {type:'crisis',created_at:r.created_at,label:'Crisisflow geactiveerd ('+tt+')'};
+    });
+    var mirrors=((res[2]&&res[2].data)||[]).map(function(r){
+      var mode=String(r.mode||'spiegel').trim();
+      var dur=Math.max(0,Number(r.duration_seconds||0));
+      var mins=Math.max(1,Math.round(dur/60));
+      var extra=(mode==='adem')?(' ('+mins+' min)'):'';
+      return {type:'mirror',created_at:r.created_at,label:'Spiegel '+mode+extra};
+    });
+    var all=checks.concat(crises).concat(mirrors).filter(function(x){return !!x.created_at;});
+    all.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});
+    S.timelineEvents=all.slice(0,30);
+  }catch(e){
+    S.timelineEvents=[];
+  }
+}
+async function loadUserState(){if(!sb||!S.user){S.userState=null;return;}try{var r=await sb.from('selfsense_user_state').select('*').eq('user_id',S.user.id).maybeSingle();S.userState=r&&r.data?r.data:{user_id:S.user.id};}catch(e){S.userState={user_id:S.user.id};}}
+async function saveUserState(patch){if(!sb||!S.user)return;S.userState=Object.assign({},S.userState||{user_id:S.user.id},patch||{});try{await sb.from('selfsense_user_state').upsert(S.userState,{onConflict:'user_id'});}catch(e){console.warn('save user state',e);}}
+async function maybeShowDailyCheckin(){if(!sb||!S.user)return;try{var q=await sb.from('selfsense_checkins').select('created_at').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(1);var rows=(q&&q.data)||[];if(rows.length&&isSameLocalDate(new Date(rows[0].created_at),new Date()))return;showCheckinModal(true);}catch(e){console.warn('daily checkin check:',e);}}
+async function saveCheckin(answer){showCheckinModal(false);if(!sb||!S.user)return;try{var ins=await sb.from('selfsense_checkins').insert({user_id:S.user.id,answer:String(answer||''),note:null});if(ins&&ins.error)throw ins.error;toast('Check-in opgeslagen');await loadRecentCheckins();await loadTimelineEvents();await maybeApplySoftTriggers();goScreen('vragen');}catch(e){toast('Check-in kon niet opgeslagen worden');}}
+async function maybeApplySoftTriggers(){
+  if(!S.user)return;var rows=S.checkins||[];var greeting='';
+  var latestAnswer=rows.length?String(rows[0].answer||'').toLowerCase():'';
+  if(latestAnswer==='beter'||latestAnswer==='hetzelfde'){
+    if(S.userState&&S.userState.heavy2_blocked){
+      await saveUserState({heavy2_blocked:false});
+    }
+  }
+  if(rows.length>=2){
+    var d0=new Date(rows[0].created_at),d1=new Date(rows[1].created_at);
+    if(String(rows[0].answer||'').toLowerCase()==='heel zwaar'&&String(rows[1].answer||'').toLowerCase()==='heel zwaar'&&areConsecutiveDays(d0,d1)){
+      var streakKey=dateOnly(d0);
+      var blocked=!!(S.userState&&S.userState.heavy2_blocked);
+      if(!blocked){
+        greeting='Ik wil dat je weet, als dit blijft drukken, kan je ook even bellen of chatten met iemand. Tele-Onthaal op 106 is 24 uur bereikbaar. Het is gratis en je hoeft je naam niet te zeggen.';
+        await saveUserState({heavy2_last_shown_for:streakKey,heavy2_blocked:true});
+      }
+    }
+  }
+  if(!greeting&&rows.length){
+    var now=Date.now(),windowRows=rows.filter(function(r){var t=new Date(r.created_at).getTime();return now-t<=14*24*60*60*1000;});
+    if(windowRows.length&&windowRows.every(function(r){return String(r.answer||'').toLowerCase()!=='beter';})){
+      var lastShown=S.userState&&S.userState.no_improvement_last_shown_at?new Date(S.userState.no_improvement_last_shown_at).getTime():0;
+      if(!lastShown||now-lastShown>=30*24*60*60*1000){greeting='Twee weken zonder beweging is een signaal. Als je dit met iemand wil bespreken, dan kan dat. Tele-Onthaal (106) of een huisarts is een goede start.';await saveUserState({no_improvement_last_shown_at:new Date().toISOString()});}
+    }
+  }
+  S.greeting=greeting;
+}
+async function initUserContext(){await loadUserState();await loadRecentCheckins();await loadTimelineEvents();await maybeApplySoftTriggers();await refreshSelfSenseOwnContext();}
+async function init(){goScreen('vragen');if(!sb){toast('Supabase niet beschikbaar');goScreen('login');return;}try{await handlePendingAuthFromUrl();}catch(_e){}try{var sessionRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden time-out');var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(session){S.user=session.user;S.apiKey='hub_server_managed';await initUserContext();goScreen('vragen');rDrawer();await maybeShowDailyCheckin();}else goScreen('login');}catch(e){goScreen('login');}
+  sb.auth.onAuthStateChange(async function(ev,ses){if(ev==='SIGNED_IN'&&ses){S.user=ses.user;S.apiKey='hub_server_managed';S.conversation=[];await initUserContext();goScreen('vragen');rDrawer();await maybeShowDailyCheckin();}else if(ev==='SIGNED_OUT'){S.user=null;S.apiKey='';goScreen('login');}});
+}
+document.getElementById('helpModal').addEventListener('click',function(ev){if(ev.target&&ev.target.id==='helpModal')closeHelpModal();});
+document.addEventListener('visibilitychange',function(){
+  if(!S.mirror||!S.mirror.active)return;
+  if(document.visibilityState==='hidden'){
+    if(S.mirror.mode==='praat'||S.mirror.mode==='gesprek'){
+      S.mirror.paused=true;
+      S.mirror.pauseReason='tab_hidden';
+    }
+    stopActiveMediaStream();
+    resetMirrorSpeech();
+    return;
+  }
+  if(document.visibilityState==='visible'&&S.mirror.paused){
+    renderMirrorPausePrompt();
+  }
+});
+window.addEventListener('beforeunload',function(){stopActiveMediaStream();resetMirrorSpeech();});
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
