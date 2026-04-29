@@ -17,12 +17,26 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overflow:hidden}
 :root{--app-donker:var(--self-donker);--app-medium:var(--self-medium);--app-licht:var(--self-licht);--r:var(--app-donker);--rl:rgba(188,205,192,.42);--g:rgba(255,255,255,.75);--b:rgba(61,47,31,.12)}
-.app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(188,205,192,.45) 0%,var(--cream) 150px,var(--cream) 100%);position:relative;overflow:hidden}
-.bg-art{position:fixed;inset:0;z-index:0;pointer-events:none}
+.app{width:100vw;height:100vh;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(188,205,192,.45) 0%,var(--cream) 150px,var(--cream) 100%);position:relative;overflow:hidden;isolation:isolate}
+.pad-corner{position:fixed;pointer-events:none;z-index:-1;line-height:0}
+.pad-corner svg{display:block;width:100%;height:100%}
+.pad-corner--tr.pad-corner--self{
+  top:-28px;right:0;
+  width:min(220px,46vw);height:min(220px,46vw);
+  padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);
+  box-sizing:content-box;
+  z-index:0;
+}
+.pad-corner--bl.pad-corner--self{
+  bottom:0;left:0;
+  width:min(220px,48vw);height:min(220px,48vw);
+  padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);
+  box-sizing:content-box;
+}
 .topbar{position:relative;z-index:2;display:flex;align-items:center;padding:12px 14px 8px;padding-top:calc(12px + var(--st));flex-shrink:0;background:rgba(242,232,213,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 1px 0 rgba(61,47,31,.08)}
 .tb-title{flex:1;font-size:var(--fs-md);font-weight:700;text-align:center;color:var(--t);font-family:var(--font-serif)}
-.tb-actions{display:flex;align-items:center;gap:2px}
 .ico{width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:none;border:none;border-radius:19px;touch-action:manipulation}
+.ico{transition:background .18s ease}
 .ico:active{background:var(--g)}
 .quick-nav{position:relative;z-index:2;display:flex;justify-content:flex-end;gap:6px;padding:6px 14px 8px;background:rgba(242,232,213,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(61,47,31,.06);flex-shrink:0}
 .quick-nav-btn{border:1px solid var(--b);background:#fff;color:#555;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;touch-action:manipulation}
@@ -76,6 +90,9 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .home-notes{margin-top:24px;width:100%;max-width:100%;text-align:left}
 .home-mini-card{width:100%;max-width:340px;min-height:94px;text-align:left;margin:0 0 10px;padding:10px 12px;display:flex;align-items:center}
 .mobile-soft-card{border-radius:16px;box-shadow:0 4px 16px rgba(20,20,20,.05)}
+.home-focus-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:4px 6px;border:1px solid rgba(61,47,31,.14);border-radius:11px;background:linear-gradient(180deg,#F8F6FB,#F2EEF9);box-shadow:0 3px 10px rgba(61,47,31,.08)}
+.home-focus-chip{border:1px solid rgba(61,47,31,.16);background:#fff;color:#4d4d4d;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:700;font-family:inherit;line-height:1}
+.home-focus-count{margin-left:auto;min-width:26px;text-align:center;border:1px solid rgba(61,47,31,.14);background:#fff;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:800;color:#666;line-height:1}
 .card{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px 15px;box-shadow:0 4px 16px rgba(20,20,20,.05)}
 .card h2{font-family:var(--font-serif);font-size:21px;color:var(--t);margin-bottom:7px}
 .card p{font-size:13px;color:#666;line-height:1.55}
@@ -106,7 +123,7 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .tab span{font-size:var(--fs-xs);font-weight:600}
 .nav-tab-rimpel{
   position:absolute;top:1px;left:50%;transform:translateX(-50%);
-  width:28px;height:28px;pointer-events:none;z-index:1;
+  width:22px;height:22px;pointer-events:none;z-index:1;
   opacity:0;transition:opacity .18s ease;
 }
 .tab.active .nav-tab-rimpel{opacity:1}
@@ -117,9 +134,9 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .nav-tab-rimpel>span:nth-child(1){width:100%;height:100%;background:var(--app-licht)}
 .nav-tab-rimpel>span:nth-child(2){width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--app-medium)}
 .nav-tab-rimpel>span:nth-child(3){width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--app-donker)}
-.tab.active .nav-tab-rimpel>span:nth-child(1){opacity:.38}
-.tab.active .nav-tab-rimpel>span:nth-child(2){opacity:.3}
-.tab.active .nav-tab-rimpel>span:nth-child(3){opacity:.24}
+.tab.active .nav-tab-rimpel>span:nth-child(1){opacity:.26}
+.tab.active .nav-tab-rimpel>span:nth-child(2){opacity:.2}
+.tab.active .nav-tab-rimpel>span:nth-child(3){opacity:.14}
 .tab.active .nav-tab-rimpel::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(100% * 20 / 72);height:calc(100% * 20 / 72);min-width:5px;min-height:5px;border-radius:50%;background:var(--app-donker);z-index:2;opacity:.38}
 .tab svg,.tab span{position:relative;z-index:2}
 .input-bar{background:#fff;border-top:2px solid var(--b);flex-shrink:0;padding:10px 14px;padding-bottom:calc(10px + var(--sb))}
@@ -245,6 +262,9 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
   .advice-hub-title{font-size:31px}
   .advice-hub-sub{font-size:14px;margin-bottom:14px}
   .advice-route-card{padding:12px 12px;gap:10px}
+  .advice-depth-wrap{padding:11px 10px}
+  .advice-depth-btn{min-width:0}
+  .vertel-shell .vertel-mood-strip{margin:4px 8px 4px!important;padding:5px 8px!important}
 }
 .sp-mode.highlight{background:var(--self-licht);border-color:var(--self-donker)}
 .sp-mode-name{font-size:14px;font-weight:700;color:var(--self-donker)}
@@ -265,6 +285,7 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .vertel-btn-new{border:1px solid rgba(61,47,31,.2);background:rgba(188,205,192,.2);cursor:pointer;border-radius:10px;padding:7px 10px;color:#2f3f35;font-family:inherit}
 .advice-hub-shell{max-width:560px;padding-top:22px;gap:0}
 .advice-hub-kicker{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--app-medium);text-align:left;margin-bottom:8px}
+.advice-hub-icon{font-size:42px;line-height:1;margin-bottom:4px}
 .advice-hub-title{font-family:var(--font-serif);font-size:46px;line-height:1.02;letter-spacing:-.02em;color:#1f2937;margin:0 0 8px}
 .advice-hub-sub{font-size:15px;line-height:1.55;color:#6b7280;margin:0 0 16px}
 .advice-route-grid{display:grid;gap:10px}
@@ -274,6 +295,17 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .advice-route-copy{display:flex;flex-direction:column;min-width:0;line-height:1.45}
 .advice-route-title{display:block;font-size:14px;font-weight:800;color:#1f2937;line-height:1.35}
 .advice-route-desc{display:block;font-size:12px;font-weight:500;color:#6b7280;line-height:1.5;margin-top:3px}
+.advice-depth-wrap{border:1px solid #ECEEF1;border-radius:14px;background:#fff;padding:12px 12px 11px}
+.advice-depth-label{font-size:13px;font-weight:700;color:#58606A;margin:0 0 3px}
+.advice-depth-help{font-size:11px;color:#8a8f97;line-height:1.45;margin:0}
+.advice-depth-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.advice-depth-btn{flex:1;min-width:170px;padding:10px 12px;border-radius:10px;border:1px solid #d9dce2;background:#fff;color:#3f4650;font-weight:700;font-family:inherit;cursor:pointer}
+.advice-depth-btn.active{background:var(--app-donker);color:#fff;border-color:var(--app-donker)}
+.advice-hub-footnote{font-size:12px;color:#8a8f97;margin-top:12px;line-height:1.5}
+.vertel-mood-strip{margin:0 12px 4px;padding:6px 10px;background:linear-gradient(180deg,rgba(245,243,250,.95) 0%,#fff 100%);border:1px solid rgba(125,106,171,.22);border-radius:10px}
+.vertel-mood-strip .mbtn{padding:4px 8px;border-radius:14px;border:1px solid var(--b);background:#fff;font-size:11px;line-height:1.2;font-family:inherit;cursor:pointer}
+.vertel-empty-tip{padding:0 16px 10px}
+.vertel-welcome-card{background:#f4f0fb;border:1px solid rgba(125,106,171,.28)}
 .mirror-ovl{position:fixed;inset:0;background:rgba(16,18,20,.55);display:none;align-items:stretch;justify-content:center;z-index:220}
 .mirror-ovl.show{display:flex}
 .mirror-sheet{width:min(820px,100%);height:100%;background:#F9F7F1;display:flex;flex-direction:column}
@@ -310,30 +342,36 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 </style>
 </head>
 <body>
-<div class="bg-art" aria-hidden="true">
-  <svg width="100%" height="100%" viewBox="0 0 1440 1024" preserveAspectRatio="none">
-    <g opacity="0.9">
-      <circle cx="1320" cy="82" r="210" fill="var(--self-licht)"/>
-      <circle cx="1320" cy="82" r="152" fill="var(--self-medium)" fill-opacity="0.58"/>
-      <circle cx="1320" cy="82" r="92" fill="var(--self-donker)" fill-opacity="0.2"/>
-    </g>
-    <g opacity="0.9">
-      <circle cx="0" cy="220" r="177.22" fill="var(--self-licht)" fill-opacity="0.55"/>
-      <circle cx="0" cy="220" r="134.44" fill="var(--self-medium)" fill-opacity="0.45"/>
-      <circle cx="0" cy="220" r="73.33" fill="var(--self-donker)" fill-opacity="0.08"/>
-    </g>
-  </svg>
-</div>
 <div class="app" id="app">
+  <div class="pad-corner pad-corner--tr pad-corner--self" aria-hidden="true">
+    <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
+      <defs><clipPath id="selfCornerTrClip"><rect width="220" height="220"/></clipPath></defs>
+      <g clip-path="url(#selfCornerTrClip)">
+        <circle cx="220" cy="0" r="220" fill="var(--self-licht)" fill-opacity="0.75"/>
+        <circle cx="220" cy="0" r="177.22" fill="var(--self-medium)" fill-opacity="0.78"/>
+        <circle cx="220" cy="0" r="134.44" fill="var(--self-donker)" fill-opacity="0.82"/>
+        <circle cx="220" cy="0" r="73.33" fill="var(--app-donker)" fill-opacity="0.12"/>
+      </g>
+    </svg>
+  </div>
+  <div class="pad-corner pad-corner--bl pad-corner--self" aria-hidden="true">
+    <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" focusable="false">
+      <defs><clipPath id="selfCornerBlClip"><rect width="220" height="220"/></clipPath></defs>
+      <g clip-path="url(#selfCornerBlClip)">
+        <circle cx="0" cy="220" r="220" fill="var(--zand-licht)" fill-opacity="0.7"/>
+        <circle cx="0" cy="220" r="177.22" fill="var(--zand-medium)" fill-opacity="0.55"/>
+        <circle cx="0" cy="220" r="134.44" fill="#D4C4A5" fill-opacity="0.45"/>
+        <circle cx="0" cy="220" r="73.33" fill="var(--app-donker)" fill-opacity="0.08"/>
+      </g>
+    </svg>
+  </div>
   <div class="topbar">
     <button class="ico" id="btnBack" type="button" onclick="goScreen('home')" style="visibility:hidden" aria-label="Terug">
       <svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.5" width="22" height="22"><polyline points="15,18 9,12 15,6"/></svg>
     </button>
     <div class="tb-title" id="pgTitle">Home</div>
-    <div class="tb-actions">
-      <button class="ico" id="btnSpiegelInfo" type="button" onclick="openSpiegelInfo()" aria-label="Hulp"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
-      <button class="ico" type="button" onclick="goScreen('settings')" aria-label="Instellingen"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg></button>
-    </div>
+    <button class="ico" id="btnSpiegelInfo" type="button" onclick="openSpiegelInfo()" aria-label="Hulp"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17H8v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></button>
+    <button class="ico" type="button" onclick="goScreen('settings')" aria-label="Instellingen"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
   <div class="quick-nav" role="navigation" aria-label="Snel naar hub">
     <button type="button" class="quick-nav-btn" onclick="goScreen('home')">Home SelfSense</button>
@@ -970,14 +1008,29 @@ function rHome(el){
     return '<div class="timeline-item"><div class="timeline-line">'+escHTML(it.label||'Melding')+'</div><div class="timeline-meta">'+escHTML(formatTimelineWhen(it.created_at))+'</div></div>';
   }).join('');
   if(!notifHtml)notifHtml='<div class="timeline-empty">Nog geen meldingen.</div>';
+  var focusCount=((S.timelineEvents||[]).filter(function(it){return it&&it.type==='crisis';}).length)||0;
   var notesHtml='<div class="home-notes">'
     +'<div style="margin:0 0 10px"><button type="button" class="form-btn sec" style="margin:0;padding:9px 12px;font-size:13px" onclick="goScreen(\'meldingen\')">Open alle meldingen</button></div>'
+    +'<div style="font-size:12px;color:#5f6b67;line-height:1.45;margin-bottom:8px">Openstaande coachmeldingen (max. <strong>5 tegelijk</strong> op dit scherm): <strong>Sense</strong> = context, <strong>Actie</strong> = iets doen, <strong>Check</strong> = even stilstaan.</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--r);background:#FFF1F1;border:1px solid #FFD9D9;border-radius:999px;padding:4px 8px">🔴 SENSE</span>'
+      +'<span style="font-size:11px;font-weight:700;color:#A55B00;background:#FFF6EA;border:1px solid #FFE1BE;border-radius:999px;padding:4px 8px">🟡 ACTIE</span>'
+      +'<span style="font-size:11px;font-weight:700;color:#005A9E;background:#EEF7FF;border:1px solid #CFE7FF;border-radius:999px;padding:4px 8px">🔵 CHECK</span>'
+    +'</div>'
     +'<div class="card mobile-soft-card"><h2 style="margin-bottom:4px">Start</h2><p>Kies je route. Ik help je stap voor stap verder vanuit dit scherm.</p><div class="detail-actions"><button class="form-btn sec" type="button" onclick="goScreen(\'vragen\')">Naar vragen</button><button class="form-btn sec" type="button" onclick="goScreen(\'advies\')">Naar advies</button><button class="form-btn sec" type="button" onclick="goScreen(\'spiegel\')">Naar spiegel</button><button class="form-btn sec" type="button" onclick="startQaFlow(\'verdieping\')">Verdiepingsvragen</button></div></div>'
     +'<div class="mini-sum mobile-soft-card" style="margin-top:10px"><div class="mini-sum-title">Vandaag</div><div class="mini-sum-item"><strong>Laatste check-in:</strong> '+escHTML(checkin)+'</div></div>'
     +'<div class="card notice-card mobile-soft-card" style="margin-top:10px"><div class="notice-head">Meldingen center</div>'+notifHtml+'</div>'
     +greet
     +'</div>';
-  el.innerHTML='<div class="home-shell"><div class="home-greeting">'+(firstName?'Hoi <strong style="color:var(--t)">'+escHTML(firstName)+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?')+'</div><div class="home-stack"><div class="home-mini-card mobile-soft-card" style="background:#fff"><p style="font-size:13px;color:var(--m);line-height:1.5;margin:0">SelfSense ondersteunt je bij herstel en helderheid. Kort, menselijk en op jouw tempo.</p></div><div class="mic-wrap"><span class="mic-ripple" aria-hidden="true"></span><span class="mic-ripple" aria-hidden="true"></span><span class="mic-ripple" aria-hidden="true"></span><button class="mic-btn" type="button" onclick="goScreen(\'vertel\')" aria-label="Snel vertellen"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><div class="home-vertel-copy" style="font-size:13px;color:var(--m);margin:8px 0 16px">Tik om te vertellen</div>'+notesHtml+'</div></div>';
+  el.innerHTML=''
+    +'<div class="home-shell">'
+    +'<div class="home-greeting">'+(firstName?'Hoi <strong style="color:var(--t)">'+escHTML(firstName)+'</strong>, wat speelt er vandaag?':'Wat speelt er vandaag?')+'</div>'
+    +'<div class="home-stack">'
+    +'<div class="home-focus-strip"><button type="button" class="home-focus-chip" onclick="goScreen(\'spiegel\')">OWN lens</button><button type="button" class="home-focus-chip" onclick="startQaFlow(\'verdieping\')">SelfSense verdieping</button><span class="home-focus-count">'+String(focusCount)+'</span></div>'
+    +'<div class="mic-wrap"><span class="mic-ripple" aria-hidden="true"></span><span class="mic-ripple" aria-hidden="true"></span><span class="mic-ripple" aria-hidden="true"></span><button class="mic-btn" type="button" onclick="goScreen(\'vertel\')" aria-label="Snel vertellen"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div>'
+    +'<div class="home-vertel-copy" style="font-size:13px;color:var(--m);margin:8px 0 16px">Tik om te vertellen</div>'
+    +notesHtml
+    +'</div></div>';
 }
 function renderChatRows(list){
   if(!list||!list.length)return '<div class="timeline-empty">Nog geen berichten.</div>';
@@ -1147,7 +1200,40 @@ async function sendAdviceFromBar(){
   }finally{setButtonSaveBusy(btn,false);}
 }
 function rAdvies(el){
-  el.innerHTML='<div class="card advice-hub-shell"><div class="advice-hub-kicker">Advies</div><h2 class="advice-hub-title">Waar heb je vandaag zicht op nodig?</h2><p class="advice-hub-sub">Stel je vraag via de onderste balk. Ik geef meteen gericht advies.</p><div class="advice-route-grid"><button class="advice-route-card" type="button"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over jezelf nu</span><span class="advice-route-desc">Concreet advies op je huidige situatie.</span></span></button><button class="advice-route-card" type="button"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Focus op 1 thema waar je mee zit.</span></span></button></div><div class="detail-actions"><button class="form-btn sec" type="button" onclick="resetConversation(\'advies\')">Nieuw adviesgesprek</button><button class="form-btn sec" type="button" onclick="exportConversation(\'advies\')">Export</button></div><div id="adviesOut" class="chat" style="margin-top:10px">'+renderBubbleThread(S.adviceHistory||[],'SELFSENSE')+'</div></div>';
+  var depth=(S&&S.adviceDepthMode)||'standard';
+  function depthBtn(id,label){
+    var cls='advice-depth-btn'+(depth===id?' active':'');
+    return '<button type="button" class="'+cls+'" onclick="setAdviceDepthMode(\''+id+'\')">'+label+'</button>';
+  }
+  el.innerHTML=''
+    +'<div class="home-shell advice-hub-shell" style="text-align:left">'
+    +'<div class="advice-hub-kicker">Advies</div>'
+    +'<div class="advice-hub-icon">💡</div>'
+    +'<h2 class="advice-hub-title">Waar heb je vandaag zicht op nodig?</h2>'
+    +'<p class="advice-hub-sub">Beslis hier je route. Ik genereer advies vanuit dit scherm.</p>'
+    +'<div class="advice-route-grid">'
+    +'<button type="button" class="advice-route-card"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies context, stel je focusvraag en krijg meteen advies.</span></span></button>'
+    +'<button type="button" class="advice-route-card"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 contexten en geef direct advies.</span></span></button>'
+    +'<button type="button" class="advice-route-card"><span class="advice-route-icon">🪞</span><span class="advice-route-copy"><span class="advice-route-title">Met mijn OwnSense-lens</span><span class="advice-route-desc">Open OwnSense om je lens meteen te verrijken.</span></span></button>'
+    +'<button type="button" class="advice-route-card"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en stuur het advies door naar Vertel.</span></span></button>'
+    +'<button type="button" class="advice-route-card"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en ga direct verder in Vertel.</span></span></button>'
+    +'</div>'
+    +'<div class="advice-depth-wrap" style="margin-top:14px">'
+    +'<div class="advice-depth-label">Diepgang</div>'
+    +'<p class="advice-depth-help">Kies hoe diep je advies mag gaan.</p>'
+    +'<div class="advice-depth-row">'+depthBtn('standard','Gewoon advies')+depthBtn('extra','Met extra expertise')+depthBtn('both','Beide tegelijk')+'</div>'
+    +'</div>'
+    +'<div class="advice-hub-footnote">Gebruik onderaan het invoerveld om je vraag direct te stellen.</div>'
+    +'<div id="adviesOut" class="chat" style="margin-top:10px">'+renderBubbleThread(S.adviceHistory||[],'SELFSENSE')+'</div>'
+    +'</div>';
+}
+function setAdviceDepthMode(mode){
+  var m=String(mode||'').trim().toLowerCase();
+  S.adviceDepthMode=(m==='extra'||m==='both')?m:'standard';
+  if(S.screen==='advies'){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdvies(mc);
+  }
 }
 async function sendVertel(){
   if(!S.user||S.crisisMode)return;
@@ -1177,7 +1263,26 @@ async function sendVertel(){
   }finally{setButtonSaveBusy(btn,false);}
 }
 function renderVertelMain(el){
-  el.innerHTML='<div class="vertel-shell"><div class="vertel-top-bar"><button type="button" class="vertel-history-btn" onclick="openVertelHistoryPanel()">⏲ Geschiedenis</button><button type="button" class="vertel-btn-new" onclick="resetConversation(\'vertel\')">Nieuw gesprek</button><button type="button" class="vertel-history-btn" onclick="exportConversation(\'vertel\')">Export</button><div class="vertel-title-block"><div style="font-weight:700;color:var(--t)">Nieuw gesprek</div><div style="color:#666;font-size:12px">Vrij vertellen en veilig herlezen</div></div></div><div id="vertelOut" class="chat">'+renderBubbleThread(S.vertelHistory||[],'SELFSENSE')+'</div></div>';
+  el.innerHTML=''
+    +'<div class="vertel-shell">'
+    +'<div style="flex:1;min-height:0;overflow-y:auto;padding:0 0 4px" id="chatWrap">'
+    +'<div class="mobile-soft-card vertel-top-bar">'
+    +'<button type="button" class="vertel-history-btn" onclick="openVertelHistoryPanel()">Geschiedenis</button>'
+    +'<button type="button" class="vertel-btn-new" onclick="resetConversation(\'vertel\')">Nieuw gesprek</button>'
+    +'<button type="button" class="vertel-history-btn" onclick="exportConversation(\'vertel\')">Export</button>'
+    +'<div class="vertel-title-block">'
+    +'<div style="font-weight:700;color:var(--t)">Nieuw gesprek</div>'
+    +'<div style="color:#666;font-size:12px">Opslagmodus: Altijd vragen</div>'
+    +'<div id="vertelSaveHint" style="color:#9aa0a8">Na elk AI-antwoord kies jij eerst in welk dossier je opslaat.</div>'
+    +'</div>'
+    +'<button type="button" class="vertel-history-btn">Opslag</button>'
+    +'</div>'
+    +'<div class="vertel-mood-strip"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:#777">Mijn stemming vandaag</span><button type="button" class="mbtn">Goed</button><button type="button" class="mbtn">Ok</button><button type="button" class="mbtn">Moe</button><button type="button" class="mbtn">Sterk</button><button type="button" class="mbtn">Verward</button></div></div>'
+    +'<div class="home-focus-strip" style="margin:0 12px 6px"><button type="button" class="home-focus-chip" onclick="goScreen(\'vragen\')">OWN Sense</button><button type="button" class="home-focus-chip" onclick="startQaFlow(\'verdieping\')">SelfSense vragenvuur</button><span class="home-focus-count">2/5</span></div>'
+    +'<div id="vertelOut" class="chat">'+(S.vertelHistory&&S.vertelHistory.length
+      ?renderBubbleThread(S.vertelHistory,'SELFSENSE')
+      :'<div class="msg-ai"><div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">SELFSENSE</div>Hoi! Vertel is je vrije gesprek met je coach. Onder Geschiedenis staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm. Je oude gesprekken blijven bewaard in de lijst.<br><br><strong>Advies vs Vertel:</strong> het tabblad Advies geeft gericht coachadvies. Hier in Vertel praat je vrij en kan je opnieuw om advies vragen.</div></div>')+'</div>'
+    +'</div></div>';
 }
 function handleMsgKey(ev){
   if(!ev)return;
