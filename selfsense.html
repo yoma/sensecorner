@@ -673,6 +673,8 @@ a:focus-visible,
 .spiegel-chip-long .spiegel-progress-fill{background:#76a378}
 .spiegel-program-card{border:1px solid var(--b);border-radius:14px;background:#fff;padding:10px}
 .spiegel-program-title{font-size:12px;font-weight:800;color:#5a6470;margin-bottom:8px}
+.spiegel-program-help{font-size:11px;line-height:1.45;color:#6b7280;margin:-2px 0 8px}
+.spiegel-program-result{font-size:11px;line-height:1.45;color:#4b5563;margin:8px 0 0}
 .spiegel-program-mode{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .spiegel-program-mode button{padding:6px 10px;border-radius:999px;border:1px solid var(--b);background:#fff;color:#555;font-size:11px;font-weight:700;cursor:pointer}
 .spiegel-program-mode button.active{background:color-mix(in srgb,var(--app-licht) 35%,#fff);border-color:color-mix(in srgb,var(--app-medium) 50%,#fff);color:var(--app-donker)}
@@ -720,6 +722,8 @@ a:focus-visible,
 .spiegel-adem-count{margin-top:8px;font-size:34px;font-family:var(--font-serif);color:#2d3f35}
 .spiegel-adem-start-wrap{margin-top:10px;display:none;justify-content:center}
 .spiegel-adem-start-wrap.show{display:flex}
+.spiegel-adem-duration-wrap{display:flex;justify-content:center;margin:2px 0 8px}
+.spiegel-adem-duration-wrap .spiegel-duration-row{justify-content:center}
 .spiegel-adem-start-btn{border:1px solid var(--b);background:color-mix(in srgb,var(--app-licht) 32%,#fff);color:var(--app-donker);border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 .spiegel-info-overlay{position:fixed;inset:0;background:rgba(16,18,20,.5);display:none;align-items:center;justify-content:center;z-index:322;padding:16px}
 .spiegel-info-overlay.show{display:flex}
@@ -6414,9 +6418,16 @@ function rSpiegel(el){
     +statChip('four_seven_eight','spiegel-chip-478')
     +statChip('long_exhale','spiegel-chip-long')
     +'</div></div>';
+  var programModeHelp=prog.mode==='daily'
+    ?'Dagelijks: je kiest 1 techniek die elke dag als advies verschijnt.'
+    :'Weekritme: je kiest per dag welke techniek je wil doen. Tik op een dag om te wisselen.';
+  var programEffect=prog.mode==='daily'
+    ?('Nu ingesteld: elke dag <strong>'+escHTML(getSpiegelAdemPatternInfo(prog.daily).label)+'</strong>.')
+    :('Nu ingesteld voor vandaag: <strong>'+escHTML(todayInfo.label)+'</strong>.');
   var programHtml=''
     +'<div class="spiegel-program-card">'
     +'<div class="spiegel-program-title">Programma</div>'
+    +'<div class="spiegel-program-help">'+programModeHelp+'</div>'
     +'<div class="spiegel-program-mode">'
     +'<button type="button" class="'+(prog.mode==='daily'?'active':'')+'" onclick="setSpiegelProgramMode(\'daily\')">Dagelijks</button>'
     +'<button type="button" class="'+(prog.mode==='week'?'active':'')+'" onclick="setSpiegelProgramMode(\'week\')">Weekritme</button>'
@@ -6436,7 +6447,8 @@ function rSpiegel(el){
         +'</div>'))
     +'<div class="spiegel-program-today'+(todayDone?' done':'')+(pulseToday?' pulse':'')+'">Vandaag: <strong>'+escHTML(todayInfo.label)+'</strong>'+(todayDone?' ✓ gedaan':'')+'</div>'
     +'<div class="spiegel-program-streak">Streak: <strong>'+String(streak)+' dag'+(streak===1?'':'en')+'</strong> op rij</div>'
-    +'<button type="button" class="spiegel-program-apply" onclick="applyTodaySpiegelProgram()">Gebruik vandaag in Adem</button>'
+    +'<button type="button" class="spiegel-program-apply" onclick="applyTodaySpiegelProgram()">Zet deze keuze klaar in je Adem-popup</button>'
+    +'<div class="spiegel-program-result">'+programEffect+'</div>'
     +'</div>';
   var recent=(S.spiegelRecent&&Array.isArray(S.spiegelRecent)?S.spiegelRecent:[]).slice(0,3);
   var recentHtml=recent.length
@@ -6454,16 +6466,16 @@ function rSpiegel(el){
     +'<div class="spiegel-sub">Ademruimte voor je zenuwstelsel</div>'
     +'<div class="spiegel-actions">'
     +'<div class="spiegel-startzone">'
-    +'<div class="spiegel-startzone-top"><div class="spiegel-startzone-label">Kies je ademritme en tijd</div><div class="spiegel-duration-row"><button class="spiegel-duration-btn'+(_spiegelAdemDurationSec===60?' active':'')+'" type="button" onclick="setSpiegelAdemDuration(60)">1 min</button><button class="spiegel-duration-btn'+(_spiegelAdemDurationSec===180?' active':'')+'" type="button" onclick="setSpiegelAdemDuration(180)">3 min</button><button class="spiegel-duration-btn'+(_spiegelAdemDurationSec===300?' active':'')+'" type="button" onclick="setSpiegelAdemDuration(300)">5 min</button></div></div>'
+    +'<div class="spiegel-startzone-top"><div class="spiegel-startzone-label">Kies je ademritme</div></div>'
     +'<button class="spiegel-mode-btn'+(_spiegelAdemPatternKey==='box'?' pri':'')+'" type="button" onclick="startSpiegelAdemForPattern(\'box\')"><span>🟦</span><span><strong>Box 4-4-4-4</strong><span class="sub">Voor focus en kalmeren.</span></span></button>'
     +'<button class="spiegel-mode-btn'+(_spiegelAdemPatternKey==='four_seven_eight'?' pri':'')+'" type="button" onclick="startSpiegelAdemForPattern(\'four_seven_eight\')"><span>🌙</span><span><strong>4-7-8</strong><span class="sub">Voor diepe ontspanning en slapen.</span></span></button>'
     +'<button class="spiegel-mode-btn'+(_spiegelAdemPatternKey==='long_exhale'?' pri':'')+'" type="button" onclick="startSpiegelAdemForPattern(\'long_exhale\')"><span>🌿</span><span><strong>Verlengd uitademen 4-6</strong><span class="sub">Voor angst en overprikkeling.</span></span></button>'
     +'</div>'
-    +'<button type="button" class="spiegel-vertel-link" onclick="openVertelRegulatieShortcut()">Praat of ontlaad in Vertel</button>'
     +'</div>'
-    +programHtml
     +progressHtml
+    +programHtml
     +'<div class="timeline-card" style="margin-top:4px"><div class="timeline-title">Recent</div>'+recentHtml+'</div>'
+    +'<button type="button" class="spiegel-vertel-link" onclick="openVertelRegulatieShortcut()">Praat of ontlaad in Vertel</button>'
     +'</div>';
 }
 function setSpiegelAdemPattern(key){
@@ -6477,10 +6489,24 @@ function setSpiegelAdemDuration(sec){
   var s=Number(sec||60);
   if(s!==60&&s!==180&&s!==300)s=60;
   _spiegelAdemDurationSec=s;
+  syncSpiegelAdemDurationButtons();
+  var count=document.getElementById('spiegelAdemCount');
+  if(count&&!_spiegelAdemTimer)count.textContent=String(_spiegelAdemDurationSec);
+  var line=document.getElementById('spiegelAdemLine');
+  if(line&&!_spiegelAdemTimer){
+    line.textContent='Druk op Start nu ('+getSpiegelAdemPattern().label+', '+Math.round(_spiegelAdemDurationSec/60)+' min)';
+  }
   if(S.screen==='spiegel'){
     var mc=document.getElementById('mainContent');
     if(mc)rSpiegel(mc);
   }
+}
+function syncSpiegelAdemDurationButtons(){
+  var ids=[60,180,300];
+  ids.forEach(function(v){
+    var el=document.getElementById('spiegelDur'+String(v));
+    if(el)el.classList.toggle('active',_spiegelAdemDurationSec===v);
+  });
 }
 function openVertelRegulatieShortcut(){
   goScreen('vertel');
@@ -6490,6 +6516,7 @@ function openVertelRegulatieShortcut(){
 }
 async function startSpiegelAdemForPattern(key){
   _spiegelAdemPatternKey=getSpiegelAdemPatternInfo(key).key;
+  _spiegelAdemDurationSec=60;
   await startSpiegelAdem();
 }
 function openSpiegelInfo(){
@@ -6888,6 +6915,7 @@ async function startSpiegelAdem(){
   if(line)line.textContent='';
   var totalSec=Math.max(30,Number(_spiegelAdemDurationSec||60));
   if(count)count.textContent=String(totalSec);
+  syncSpiegelAdemDurationButtons();
   if(techNote)techNote.textContent=getSpiegelAdemPatternInfo(_spiegelAdemPatternKey).why;
   if(phaseCount)phaseCount.textContent='-';
   if(rings)rings.style.transform='scale(1)';
@@ -6895,7 +6923,7 @@ async function startSpiegelAdem(){
   ov.classList.add('show');
   renderSpiegelAdemIntroTyping(function(){
     if(token!==_spiegelAdemSessionToken)return;
-    if(line)line.textContent='Druk op Start nu ('+getSpiegelAdemPattern().label+')';
+    if(line)line.textContent='Druk op Start nu ('+getSpiegelAdemPattern().label+', '+Math.round(_spiegelAdemDurationSec/60)+' min)';
     setSpiegelAdemStartButtonVisible(true);
   });
 }
@@ -13591,6 +13619,13 @@ setTimeout(function(){
     <div class="spiegel-adem-main">
       <div class="spiegel-adem-intro" id="spiegelAdemIntro"></div>
       <div class="spiegel-adem-tech-note" id="spiegelAdemTechNote"></div>
+      <div class="spiegel-adem-duration-wrap">
+        <div class="spiegel-duration-row">
+          <button class="spiegel-duration-btn active" id="spiegelDur60" type="button" onclick="setSpiegelAdemDuration(60)">1 min</button>
+          <button class="spiegel-duration-btn" id="spiegelDur180" type="button" onclick="setSpiegelAdemDuration(180)">3 min</button>
+          <button class="spiegel-duration-btn" id="spiegelDur300" type="button" onclick="setSpiegelAdemDuration(300)">5 min</button>
+        </div>
+      </div>
       <div class="spiegel-adem-big">
         <div class="spiegel-adem-rings" id="spiegelAdemRings">
           <div class="spiegel-ring r1"></div>
