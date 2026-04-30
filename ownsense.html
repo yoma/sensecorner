@@ -248,6 +248,7 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 .cat-mini-body{margin-top:8px}
 .cat-mini-list{display:grid;gap:6px}
 .cat-mini-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:0.5px solid var(--border);border-radius:10px;background:#fff}
+button.cat-mini-row{width:100%;text-align:left;cursor:pointer;font-family:inherit;font-size:15px;color:inherit;appearance:none}
 .photo-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .photo-mini{border:0.5px dashed var(--border);border-radius:10px;padding:6px;background:#fff;text-align:center}
 .photo-mini img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;border:0.5px solid var(--border)}
@@ -899,12 +900,19 @@ var APP_CATS=[
     {q:'Is er iemand thuis met wie gesprekken vaak moeilijk verlopen?',ph:'Bv: mijn partner als we allebei moe zijn, of iemand die alles bagatelliseert als ik iets moeilijk vind…'},
     {q:'Als je één ding kon veranderen thuis, wat zou het zijn?',ph:'Bv: een vast moment om rustig bij te praten, rollen scherper afspreken, minder gehaast aan tafel…'}
   ]}
+  ,{id:'selfsense_focus',app:'ss',title:'SelfSense verdieping',icon:'🪞',prompts:[
+    {q:'Op welke momenten van de dag voelt het mentaal het zwaarst?',ph:'Bv: vooral in de avond, na veel prikkels, of wanneer ik alleen ben...'},
+    {q:'Welke signalen tonen dat je over je grens gaat?',ph:'Bv: piekeren, slecht slapen, sneller geïrriteerd, dichtklappen...'},
+    {q:'Wat helpt je het snelst om terug te landen in je lichaam?',ph:'Bv: ademen, wandelen, douchen, korte check-in met iemand...'},
+    {q:'Welke terugkerende struggle wil je zachter leren opvangen?',ph:'Bv: faalangst, verlatingsangst, schuldgevoel, uitputting...'},
+    {q:'Wat heb je in deze periode het meest nodig van jezelf?',ph:'Bv: zachtheid, rust, duidelijke grenzen, ritme...'}
+  ]}
   ,{id:'selfsense_spiegel',app:'ss',title:'SelfSense Spiegel-signalen',icon:'🪞',prompts:[
-    {q:'Wat merkt OwnSense nu als signaal?',ph:'Wordt automatisch bijgewerkt vanuit Spiegel-sessies.'},
-    {q:'Waar worstelt de gebruiker op dit moment mee?',ph:'Kernstrijd uit recente Praat- of Gesprek-sessie.'},
-    {q:'Wat helpt nu om te reguleren?',ph:'Kleine stappen of regulatie die nu werken.'},
-    {q:'Wanneer was de laatste update?',ph:'Tijdstempel van de meest recente Spiegel-sync.'},
-    {q:'Session context',ph:'Modus en berichtvolume uit de laatste Spiegel-sessie.'}
+    {q:'Welke signalen ziet OWN Sense nu in je regulatie?',ph:'Wordt automatisch bijgewerkt vanuit recente Adem-sessies.'},
+    {q:'Waar worstel je op dit moment het meest mee?',ph:'Kernthema dat momenteel het meeste weegt.'},
+    {q:'Wat helpt nu concreet om te reguleren?',ph:'Kleine stappen die op dit moment echt werken.'},
+    {q:'Wanneer is dit voor het laatst bijgewerkt?',ph:'Tijd van de meest recente SelfSense-sync.'},
+    {q:'Wat was de context van de laatste sessie?',ph:'Techniek, duur en ritme van je laatste Adem-sessie.'}
   ]}
 ];
 var ALL_CATS=OWN_CATS.concat(APP_CATS);
@@ -1143,6 +1151,7 @@ function createEmptyHubState(){
     insight_all:'',
     insight_ds:'',
     insight_fs:'',
+    insight_ss:'',
     insight_gen:'',
     last_insight_count:0,
     last_insight_at:'',
@@ -1173,10 +1182,13 @@ var insightMeta={
   all:{tags:[],updated_at:''},
   ds:{tags:[],updated_at:''},
   fs:{tags:[],updated_at:''},
+  ss:{tags:[],updated_at:''},
   gen:{tags:[],updated_at:''}
 };
 var activeInsightScope='all';
 var hasNewInsightBadge=false;
+var __quoteAutoBusy=false;
+var __quoteAutoLastAt=0;
 
 PK.forEach(function(k){hubState.props[k]=0;});
 ALL_CATS.forEach(function(c){
@@ -1483,7 +1495,14 @@ function renderMijTab(){
     +'<div class="hero-vertel"><div class="hero-vertel-wrap"><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><button type="button" class="hero-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><button type="button" class="hero-vertel-link" onclick="openOwnVertelModal()">Vertel of typ</button></div>'
     +'</div><div style="margin-top:10px"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div></div>';
   var q=String(hubState.profile_quote||'').trim();
-  if(!q)q=ownQuoteRichCount()<2?ownQuoteFallbackText():'Nog geen quote. Tik Vernieuw.';
+  if(!q){
+    if(ownQuoteRichCount()>=2){
+      q='Je quote wordt automatisch opgebouwd...';
+      maybeAutoGenerateProfileQuote();
+    }else{
+      q=ownQuoteFallbackText();
+    }
+  }
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
   heroEl.innerHTML='<h3>Voor jou</h3><div class="mij-summary quote-text-v4" style="font-style:italic">“'+escHTML(q)+'”</div>'
     +'<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
@@ -1514,7 +1533,7 @@ function renderMijTab(){
     +cats.map(function(c){
       var sc=dimensionDepthScore(c.id);
       var lbl=(sc>=3?'Veel inhoud':(sc>=1?'Wat inhoud':'Nog leeg'));
-      return '<div class="cat-mini-row"><span>'+escHTML(c.label)+'</span><span class="subtle">'+lbl+'</span></div>';
+      return '<button type="button" class="cat-mini-row" onclick="openOwnQuestionsModal(\''+escHTML(c.id)+'\')"><span>'+escHTML(c.label)+'</span><span class="subtle">'+lbl+'</span></button>';
     }).join('')
     +'</div></div></details>';
 }
@@ -1945,7 +1964,13 @@ function insightCardHtml(title,badge,text,updatedIso,scopeKey){
   var body=String(text||'').trim();
   var display=cleanInsightCardProse(body);
   var t=display?escHTML(display):'<span class="subtle">Nog geen inzicht. Gebruik hierboven <strong>Ververs alle inzichten</strong>.</span>';
-  var when=updatedIso?fmtDateTime(updatedIso):'nog niet berekend';
+  var when='nog niet berekend';
+  if(updatedIso){
+    when=fmtDaysAgo(updatedIso)+' - '+fmtDateTime(updatedIso);
+  }else if(display){
+    var fallbackIso=String(hubState.last_summary_at||hubState.last_insight_at||hubState.updated_at||'').trim();
+    when=fallbackIso?(fmtDaysAgo(fallbackIso)+' - '+fmtDateTime(fallbackIso)):'onlangs bijgewerkt';
+  }
   var tags=((insightMeta[sk]&&insightMeta[sk].tags)||[]).slice(0,8).map(function(x){return String(x||'').trim();}).filter(Boolean);
   var tagRow='';
   if(tags.length){
@@ -1995,12 +2020,14 @@ function renderInzichtenV2(){
   var allText=insightTextByScope('all');
   var dsText=insightTextByScope('ds')||pickPerAppInsightText('datesense');
   var fsText=insightTextByScope('fs')||pickPerAppInsightText('familysense');
+  var ssText=insightTextByScope('ss')||pickPerAppInsightText('selfsense');
   var ownText=insightTextByScope('gen')||String(hubState.ai_summary_general||'').trim();
 
   var grid='<div class="insights-intro"><h3>Inzichten</h3><p class="subtle" style="margin-top:6px">Eén keer verversen om je 4 kerninzichten bij te werken.</p><div style="margin-top:10px"><button class="btn btn-primary btn-small" type="button" '+(window.__ownsenseInsightBusy?'disabled ':'')+'onclick="refreshAllAppInsights()">Ververs alle inzichten</button></div><div id="insightRefreshStatus" class="subtle" style="margin-top:6px">'+insightStat+'</div></div><div class="insights-grid">'
     +insightCardHtml('Alle apps samen','ALGEMEEN',allText,(insightMeta.all&&insightMeta.all.updated_at)||hubState.last_insight_at,'all')
     +insightCardHtml('DateSense','APP · datesense',dsText,insightMeta.ds&&insightMeta.ds.updated_at,'ds')
     +insightCardHtml('FamilySense','APP · familysense',fsText,insightMeta.fs&&insightMeta.fs.updated_at,'fs')
+    +insightCardHtml('SelfSense','APP · selfsense',ssText,insightMeta.ss&&insightMeta.ss.updated_at,'ss')
     +insightCardHtml('OWN profiel (intern)','OWN',ownText,insightMeta.gen&&insightMeta.gen.updated_at,'gen')
     +'</div>';
 
@@ -2470,11 +2497,13 @@ function detectSourceFromMsg(msg){
   var explicit=String(msg.app_source||msg.source_app||msg.app||'').toLowerCase();
   if(explicit.indexOf('date')>=0)return'ds';
   if(explicit.indexOf('family')>=0||explicit.indexOf('gezin')>=0)return'fs';
+  if(explicit.indexOf('self')>=0)return'ss';
   if(explicit.indexOf('own')>=0)return'gen';
 
   var t=(stripHtml(msg.html||msg.content||'')+' '+explicit+' '+lk).toLowerCase();
   if(t.indexOf('familysense')>=0||t.indexOf('family sense')>=0)return'fs';
   if(t.indexOf('datesense')>=0)return'ds';
+  if(t.indexOf('selfsense')>=0)return'ss';
   if(/gezin|\bfamily\b|familie|ouders|kinderen/.test(t))return'fs';
   if(/dating|relatie|partner|romantiek|liefdes|date\b/.test(t))return'ds';
 
@@ -2546,6 +2575,17 @@ function fmtDateTime(date){
   var d=new Date(date);
   if(isNaN(d.getTime()))return'';
   return d.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' · '+d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtDaysAgo(date){
+  var d=new Date(date);
+  if(isNaN(d.getTime()))return'';
+  var now=new Date();
+  var startNow=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var startD=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  var diff=Math.max(0,Math.round((startNow-startD)/(24*60*60*1000)));
+  if(diff===0)return'vandaag';
+  if(diff===1)return'1 dag geleden';
+  return String(diff)+' dagen geleden';
 }
 
 async function uploadPhotoToStorage(file){
@@ -2985,6 +3025,7 @@ function loadHubState(user,opts){
   hubState.insight_all=String(hubState.insight_all||'');
   hubState.insight_ds=String(hubState.insight_ds||'');
   hubState.insight_fs=String(hubState.insight_fs||'');
+  hubState.insight_ss=String(hubState.insight_ss||'');
   hubState.insight_gen=String(hubState.insight_gen||'');
   hubState.last_insight_count=parseInt(hubState.last_insight_count,10)||0;
   hubState.last_insight_at=String(hubState.last_insight_at||'');
@@ -3745,7 +3786,7 @@ function renderQuestions(){
     var list=OWN_CATS.slice();
     APP_CATS.forEach(function(cat){
       var active=appMessageCount(cat.app)>=1;
-      if(active||hasAnswersInCatId(cat.id))list.push(cat);
+      if(active||hasAnswersInCatId(cat.id)||cat.id==='selfsense_focus')list.push(cat);
     });
     if(urlBootFocusCat){
       var forced=APP_CATS.find(function(c){return c.id===urlBootFocusCat;});
@@ -3811,6 +3852,16 @@ function renderQuestions(){
       },700);
     });
   });
+}
+function maybeAutoGenerateProfileQuote(){
+  if(__quoteAutoBusy)return;
+  var now=Date.now();
+  if(now-__quoteAutoLastAt<12000)return;
+  if(String(hubState.profile_quote||'').trim())return;
+  if(ownQuoteRichCount()<2)return;
+  __quoteAutoBusy=true;
+  __quoteAutoLastAt=now;
+  generateProfileQuote().finally(function(){__quoteAutoBusy=false;});
 }
 function saveOwnQuestionsForCategory(catId,opt){
   opt=opt||{};
@@ -3989,6 +4040,7 @@ function renderTimelineTab(){
 function timelineByScope(scope){
   if(scope==='ds')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='ds';});
   if(scope==='fs')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='fs';});
+  if(scope==='ss')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='ss';});
   if(scope==='gen')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='gen';});
   return ownTimeline.slice();
 }
@@ -3996,6 +4048,7 @@ function timelineByScope(scope){
 function insightTextByScope(scope){
   if(scope==='ds')return hubState.insight_ds||'';
   if(scope==='fs')return hubState.insight_fs||'';
+  if(scope==='ss')return hubState.insight_ss||'';
   if(scope==='gen')return hubState.insight_gen||'';
   return hubState.insight_all||'';
 }
@@ -4003,6 +4056,7 @@ function insightTextByScope(scope){
 function setInsightTextByScope(scope,text){
   if(scope==='ds')hubState.insight_ds=text;
   else if(scope==='fs')hubState.insight_fs=text;
+  else if(scope==='ss')hubState.insight_ss=text;
   else if(scope==='gen')hubState.insight_gen=text;
   else hubState.insight_all=text;
 }
