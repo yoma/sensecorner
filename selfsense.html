@@ -650,6 +650,7 @@ a:focus-visible,
 .spiegel-adem-x{border:1px solid var(--b);background:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;font:inherit}
 .spiegel-adem-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;position:relative}
 .spiegel-adem-big{position:relative;width:250px;height:250px}
+.spiegel-adem-rings{position:relative;width:250px;height:250px;transform-origin:center center;transition:transform .12s linear}
 .spiegel-adem-big .spiegel-ring.r1{width:250px;height:250px}
 .spiegel-adem-big .spiegel-ring.r2{width:196px;height:196px}
 .spiegel-adem-big .spiegel-ring.r3{width:132px;height:132px;transition:transform .35s ease}
@@ -1746,6 +1747,7 @@ var _tourChain=null;
 var _tourSchedGen=0;
 var _spiegelAdemTimer=null;
 var _spiegelAdemStartedAt=0;
+var _spiegelAdemRaf=null;
 function bumpTourSchedGen(){_tourSchedGen++;}
 function navigateTourScreen(id){
   var k=String(id||'').trim();
@@ -6316,13 +6318,18 @@ function rSpiegel(el){
 function updateSpiegelAdemUi(secondsLeft){
   var line=document.getElementById('spiegelAdemLine');
   var count=document.getElementById('spiegelAdemCount');
-  var core=document.getElementById('spiegelAdemCore');
   if(count)count.textContent=String(secondsLeft);
-  var elapsed=60-secondsLeft;
+  var elapsed=((Date.now()-_spiegelAdemStartedAt)/1000);
   var cycle=elapsed%10;
   var inPhase=cycle<4;
   if(line)line.textContent=inPhase?'Adem in...':'Adem uit...';
-  if(core)core.style.transform=inPhase?'translate(-50%,-50%) scale(0.9)':'translate(-50%,-50%) scale(1.12)';
+  var tIn=Math.min(1,Math.max(0,cycle/4));              // 0..1 tijdens inademen
+  var tOut=Math.min(1,Math.max(0,(cycle-4)/6));         // 0..1 tijdens uitademen
+  var minScale=0.86;
+  var maxScale=1.16;
+  var scale=inPhase?(1-(1-minScale)*tIn):(minScale+(maxScale-minScale)*tOut);
+  var rings=document.getElementById('spiegelAdemRings');
+  if(rings)rings.style.transform='scale('+scale.toFixed(3)+')';
 }
 
 async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
@@ -6339,6 +6346,10 @@ async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
 }
 
 async function stopSpiegelAdemSession(saveRow){
+  if(_spiegelAdemRaf){
+    cancelAnimationFrame(_spiegelAdemRaf);
+    _spiegelAdemRaf=null;
+  }
   if(_spiegelAdemTimer){
     clearInterval(_spiegelAdemTimer);
     _spiegelAdemTimer=null;
@@ -6360,12 +6371,19 @@ async function startSpiegelAdem(){
   if(!ov){toast('Adem-overlay niet beschikbaar.');return;}
   if(_spiegelAdemTimer)await stopSpiegelAdemSession(false);
   _spiegelAdemStartedAt=Date.now();
+  var animate=function(){
+    if(!_spiegelAdemTimer)return;
+    var elapsed=(Date.now()-_spiegelAdemStartedAt)/1000;
+    var left=Math.max(0,Math.ceil(60-elapsed));
+    updateSpiegelAdemUi(left);
+    _spiegelAdemRaf=requestAnimationFrame(animate);
+  };
   var left=60;
   updateSpiegelAdemUi(left);
   ov.classList.add('show');
+  _spiegelAdemRaf=requestAnimationFrame(animate);
   _spiegelAdemTimer=setInterval(async function(){
     left--;
-    updateSpiegelAdemUi(Math.max(0,left));
     if(left<=0){
       await stopSpiegelAdemSession(true);
       toast('Adem-sessie afgerond.');
@@ -13066,9 +13084,11 @@ setTimeout(function(){
     </div>
     <div class="spiegel-adem-main">
       <div class="spiegel-adem-big">
-        <div class="spiegel-ring r1"></div>
-        <div class="spiegel-ring r2"></div>
-        <div class="spiegel-ring r3" id="spiegelAdemCore">◉</div>
+        <div class="spiegel-adem-rings" id="spiegelAdemRings">
+          <div class="spiegel-ring r1"></div>
+          <div class="spiegel-ring r2"></div>
+          <div class="spiegel-ring r3" id="spiegelAdemCore">◉</div>
+        </div>
       </div>
       <div class="spiegel-adem-line" id="spiegelAdemLine">Adem in...</div>
       <div class="spiegel-adem-count" id="spiegelAdemCount">60</div>
