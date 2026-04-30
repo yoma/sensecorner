@@ -654,7 +654,12 @@ a:focus-visible,
 .spiegel-adem-top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--b);background:rgba(255,255,255,.85)}
 .spiegel-adem-x{border:1px solid var(--b);background:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;font:inherit}
 .spiegel-adem-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;position:relative}
-.spiegel-adem-intro{max-width:560px;text-align:center;font-size:23px;line-height:1.35;color:var(--warm-bruin);margin:0 auto 22px;font-family:"Caveat",cursive;font-style:normal;font-weight:500;letter-spacing:.01em}
+.spiegel-adem-intro{max-width:520px;text-align:center;font-size:23px;line-height:1.35;color:var(--chocolade);margin:0 auto 24px;font-family:"Caveat",cursive;font-style:normal;font-weight:500;letter-spacing:.01em;min-height:68px;opacity:0;transform:translateY(4px);transition:opacity .28s ease,transform .28s ease}
+.spiegel-adem-intro.ready{opacity:1;transform:translateY(0)}
+.spiegel-adem-intro .name{color:var(--app-medium);font-weight:700}
+.spiegel-adem-intro .caret{display:inline-block;width:2px;height:.92em;background:var(--chocolade);margin-left:2px;vertical-align:-.08em;animation:spiegelIntroBlink .75s steps(2) infinite}
+.spiegel-adem-intro.typed .caret{display:none}
+@keyframes spiegelIntroBlink{0%,49%{opacity:1}50%,100%{opacity:0}}
 .spiegel-adem-big{position:relative;width:250px;height:250px}
 .spiegel-adem-rings{position:relative;width:250px;height:250px;transform-origin:center center;transition:transform .12s linear}
 .spiegel-adem-big .spiegel-ring.r1{width:250px;height:250px}
@@ -1754,6 +1759,8 @@ var _tourSchedGen=0;
 var _spiegelAdemTimer=null;
 var _spiegelAdemStartedAt=0;
 var _spiegelAdemRaf=null;
+var _spiegelAdemIntroTypeTimer=null;
+var _spiegelAdemIntroRunId=0;
 function bumpTourSchedGen(){_tourSchedGen++;}
 function navigateTourScreen(id){
   var k=String(id||'').trim();
@@ -6337,7 +6344,7 @@ function updateSpiegelAdemUi(secondsLeft){
   if(rings)rings.style.transform='scale('+scale.toFixed(3)+')';
 }
 
-function spiegelAdemIntroText(){
+function getSpiegelAdemIntroParts(){
   var n='';
   try{ if(typeof getUserHoofdNaam==='function')n=String(getUserHoofdNaam()||'').trim(); }catch(_e){}
   if(!n){
@@ -6346,8 +6353,68 @@ function spiegelAdemIntroText(){
       if(em&&em.indexOf('@')>0)n=em.slice(0,em.indexOf('@'));
     }catch(_e){}
   }
-  if(n)return 'Hey '+n+', we komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Ik geef het ademtempo aan.';
-  return 'We komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Ik geef het ademtempo aan.';
+  if(n)return{
+    beforeName:'Hey ',
+    name:n,
+    afterName:', we komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Ik geef het ademtempo aan.'
+  };
+  return{
+    beforeName:'',
+    name:'',
+    afterName:'We komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Ik geef het ademtempo aan.'
+  };
+}
+function clearSpiegelAdemIntroTyping(){
+  _spiegelAdemIntroRunId++;
+  if(_spiegelAdemIntroTypeTimer){
+    clearTimeout(_spiegelAdemIntroTypeTimer);
+    _spiegelAdemIntroTypeTimer=null;
+  }
+}
+function renderSpiegelAdemIntroTyping(){
+  var intro=document.getElementById('spiegelAdemIntro');
+  if(!intro)return;
+  clearSpiegelAdemIntroTyping();
+  var runId=++_spiegelAdemIntroRunId;
+  var p=getSpiegelAdemIntroParts();
+  intro.classList.remove('typed');
+  intro.classList.remove('ready');
+  intro.innerHTML='<span class="before"></span><span class="name"></span><span class="after"></span><span class="caret" aria-hidden="true"></span>';
+  var beforeEl=intro.querySelector('.before');
+  var nameEl=intro.querySelector('.name');
+  var afterEl=intro.querySelector('.after');
+  var segs=[{el:beforeEl,text:String(p.beforeName||'')}];
+  if(p.name)segs.push({el:nameEl,text:String(p.name||'')});
+  segs.push({el:afterEl,text:String(p.afterName||'')});
+  var si=0;
+  var ci=0;
+  requestAnimationFrame(function(){
+    if(runId!==_spiegelAdemIntroRunId)return;
+    intro.classList.add('ready');
+  });
+  function step(){
+    if(runId!==_spiegelAdemIntroRunId)return;
+    var seg=segs[si];
+    if(!seg){
+      intro.classList.add('typed');
+      _spiegelAdemIntroTypeTimer=null;
+      return;
+    }
+    if(ci<seg.text.length){
+      seg.el.textContent+=seg.text.charAt(ci);
+      var ch=seg.text.charAt(ci);
+      ci++;
+      var delay=24+Math.floor(Math.random()*18);
+      if(ch===' '){delay+=14;}
+      if(/[,.!?]/.test(ch)){delay+=95;}
+      _spiegelAdemIntroTypeTimer=setTimeout(step,delay);
+      return;
+    }
+    si++;
+    ci=0;
+    _spiegelAdemIntroTypeTimer=setTimeout(step,70);
+  }
+  _spiegelAdemIntroTypeTimer=setTimeout(step,160);
 }
 
 async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
@@ -6364,6 +6431,7 @@ async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
 }
 
 async function stopSpiegelAdemSession(saveRow){
+  clearSpiegelAdemIntroTyping();
   if(_spiegelAdemRaf){
     cancelAnimationFrame(_spiegelAdemRaf);
     _spiegelAdemRaf=null;
@@ -6387,9 +6455,8 @@ async function stopSpiegelAdemSession(saveRow){
 async function startSpiegelAdem(){
   var ov=document.getElementById('spiegelAdemOverlay');
   if(!ov){toast('Adem-overlay niet beschikbaar.');return;}
-  var intro=document.getElementById('spiegelAdemIntro');
-  if(intro)intro.innerHTML=spiegelAdemIntroText();
   if(_spiegelAdemTimer)await stopSpiegelAdemSession(false);
+  renderSpiegelAdemIntroTyping();
   _spiegelAdemStartedAt=Date.now();
   var animate=function(){
     if(!_spiegelAdemTimer)return;
@@ -13103,7 +13170,7 @@ setTimeout(function(){
       <button class="spiegel-adem-x" type="button" onclick="stopSpiegelAdemSession(true)">Sluiten</button>
     </div>
     <div class="spiegel-adem-main">
-      <div class="spiegel-adem-intro" id="spiegelAdemIntro">We komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Ik geef het ademtempo aan.</div>
+      <div class="spiegel-adem-intro" id="spiegelAdemIntro"></div>
       <div class="spiegel-adem-big">
         <div class="spiegel-adem-rings" id="spiegelAdemRings">
           <div class="spiegel-ring r1"></div>
