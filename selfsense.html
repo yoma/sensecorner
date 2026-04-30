@@ -628,6 +628,13 @@ a:focus-visible,
 .home-note-avatar{width:26px;height:26px;border-radius:13px;object-fit:cover;border:1px solid var(--b);flex-shrink:0;background:#f1f3f5}
 .home-note-avatar-fallback{width:26px;height:26px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
 .home-note-badge{font-size:11px;font-weight:700;color:#555;background:#fff;border:1px solid var(--b);border-radius:999px;padding:4px 8px;line-height:1}
+.spiegel-shell{display:grid;gap:10px}
+.spiegel-ring-wrap{position:relative;width:170px;height:170px;margin:8px auto 6px}
+.spiegel-ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%}
+.spiegel-ring.r1{width:100%;height:100%;background:var(--app-licht)}
+.spiegel-ring.r2{width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--app-medium)}
+.spiegel-ring.r3{width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--app-donker);display:flex;align-items:center;justify-content:center;color:#fff}
+.spiegel-sub{font-size:12px;color:#6b7280;text-align:center;margin-top:2px}
 .dossier-head-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dossier-head-actions button{min-height:38px}
 .dossier-tabs-wrap{background:#fff;position:sticky;top:0;z-index:3}
@@ -1153,6 +1160,11 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
     <button class="tab active" id="tab-home" data-tip="Terug naar je startscherm" onclick="if(window.goScreen){goScreen('home')}else{location.href='selfsense.html'}">
       <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg><span>Home</span>
+    </button>
+    <button class="tab" id="tab-spiegel" data-tip="Spiegel: rustig reflecteren" onclick="goScreen('spiegel')" title="Spiegel">
+      <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+      <span>Spiegel</span>
     </button>
     <button class="tab" id="tab-senses" data-tip="Senses: jouw connecties" onclick="if(window.goScreen){goScreen('senses')}else{location.href='selfsense.html'}" title="Mijn Senses">
       <span class="nav-tab-rimpel" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -4538,7 +4550,7 @@ function _goScreenBody(sc){
     sc='home';
   }
   // Protect screens when not authenticated
-  if(!S.user && ['senses','own','advice','vertel','compare','dossier','notifications'].includes(sc)){
+  if(!S.user && ['senses','spiegel','own','advice','vertel','compare','dossier','notifications'].includes(sc)){
     sc='login';
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
@@ -4553,7 +4565,7 @@ function _goScreenBody(sc){
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
   }
-  var T={home:'',senses:'Mijn Senses',own:'OWN Sense',advice:'Advies',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
+  var T={home:'',spiegel:'Spiegel',senses:'Mijn Senses',own:'OWN Sense',advice:'Advies',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
   var titleText=T[sc]||sc;
   if(sc==='dossier'&&S.viewDossier)titleText=dn(S.viewDossier);
   document.getElementById('pgTitle').textContent=titleText;
@@ -4566,9 +4578,9 @@ function _goScreenBody(sc){
   document.getElementById('inputBar').style.display=sc==='vertel'?'block':'none';
   var hide=['home','login','register'];
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
-  ['home','senses','own','advice','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
+  ['home','spiegel','senses','own','advice','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,senses:rSenses,own:rOWN,advice:rAdviceHub,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
+  var screens={home:rHome,spiegel:rSpiegel,senses:rSenses,own:rOWN,advice:rAdviceHub,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -4599,7 +4611,7 @@ function _goScreenBody(sc){
   }
 
   // Hide bottom-nav actions when not logged in
-  ['tab-senses','tab-own','tab-advice','tab-vertel'].forEach(function(id){
+  ['tab-spiegel','tab-senses','tab-own','tab-advice','tab-vertel'].forEach(function(id){
     var e=document.getElementById(id);
     if(!e)return;
     e.style.display=S.user?'':'none';
@@ -6249,6 +6261,29 @@ function rHome(el){
   </div>
 </div>`;
   refreshOwnAppDepthHintMounts();
+}
+
+function rSpiegel(el){
+  var recent=(S.spiegelRecent&&Array.isArray(S.spiegelRecent)?S.spiegelRecent:[]).slice(0,3);
+  var recentHtml=recent.length
+    ?recent.map(function(r){
+      var mode=String(r.mode||'sessie');
+      var meta=String(r.meta||'');
+      var when=String(r.when||'');
+      return '<div class="timeline-item"><div class="timeline-line">'+escHTML(mode)+(meta?(' - '+escHTML(meta)):'')+'</div><div class="timeline-meta">'+escHTML(when)+'</div></div>';
+    }).join('')
+    :'<div class="timeline-empty">Nog geen Spiegel-sessies.</div>';
+  el.innerHTML=''
+    +'<div class="card spiegel-shell">'
+    +'<div class="kicker">SelfSense</div>'
+    +'<h2 style="margin-bottom:2px">Spiegel</h2>'
+    +'<div class="spiegel-ring-wrap" aria-hidden="true"><div class="spiegel-ring r1"></div><div class="spiegel-ring r2"></div><div class="spiegel-ring r3">◉</div></div>'
+    +'<div class="spiegel-sub">Een moment voor jezelf</div>'
+    +'<button class="form-btn sec" type="button" onclick="toast(\'Adem komt zo\')">Adem - Adem even met me mee.</button>'
+    +'<button class="form-btn sec" type="button" onclick="toast(\'Praat komt zo\')">Praat - Praat tegen me, ik luister.</button>'
+    +'<button class="form-btn sec" type="button" onclick="toast(\'Gesprek komt zo\')">Gesprek - Laten we samen denken.</button>'
+    +'<div class="timeline-card" style="margin-top:4px"><div class="timeline-title">Recent</div>'+recentHtml+'</div>'
+    +'</div>';
 }
 
 function getAdviceHubState(){
@@ -12914,6 +12949,7 @@ setTimeout(function(){
   try{
     [
       ['tab-home','home'],
+      ['tab-spiegel','spiegel'],
       ['tab-senses','senses'],
       ['tab-vertel','vertel']
     ].forEach(function(pair){
