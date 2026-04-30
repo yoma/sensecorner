@@ -638,7 +638,12 @@ a:focus-visible,
 .spiegel-ring.r2{width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--app-medium)}
 .spiegel-ring.r3{width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--app-donker);display:flex;align-items:center;justify-content:center;color:#fff}
 .spiegel-sub{font-size:12px;color:#6b7280;text-align:center;margin-top:2px}
-.spiegel-breath-hint{font-size:12px;color:#4b5563;text-align:center;font-weight:600}
+.spiegel-ring-wrap.idle-breathe{animation:spiegelIdleBreath 10s ease-in-out infinite;transform-origin:center center}
+@keyframes spiegelIdleBreath{
+  0%{transform:scale(1.12)}
+  40%{transform:scale(0.90)}
+  100%{transform:scale(1.12)}
+}
 .spiegel-actions{display:grid;gap:8px;margin-top:4px}
 .spiegel-mode-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 13px;background:#fff;border:1px solid var(--b);border-radius:12px;font-size:14px;font-weight:700;color:#2f3f35;cursor:pointer;font-family:inherit;line-height:1.35}
 .spiegel-mode-btn .sub{display:block;font-size:12px;font-weight:500;color:#6b7280}
@@ -649,6 +654,7 @@ a:focus-visible,
 .spiegel-adem-top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--b);background:rgba(255,255,255,.85)}
 .spiegel-adem-x{border:1px solid var(--b);background:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;font:inherit}
 .spiegel-adem-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;position:relative}
+.spiegel-adem-intro{max-width:520px;text-align:center;font-size:14px;line-height:1.55;color:#4f5b57;margin:0 auto 14px}
 .spiegel-adem-big{position:relative;width:250px;height:250px}
 .spiegel-adem-rings{position:relative;width:250px;height:250px;transform-origin:center center;transition:transform .12s linear}
 .spiegel-adem-big .spiegel-ring.r1{width:250px;height:250px}
@@ -6303,9 +6309,8 @@ function rSpiegel(el){
   el.innerHTML=''
     +'<div class="card spiegel-shell">'
     +'<div class="spiegel-head"><div class="spiegel-kicker">SelfSense</div><div class="spiegel-title">Spiegel</div></div>'
-    +'<div class="spiegel-ring-wrap" aria-hidden="true"><div class="spiegel-ring r1"></div><div class="spiegel-ring r2"></div><div class="spiegel-ring r3">◉</div></div>'
+    +'<div class="spiegel-ring-wrap idle-breathe" aria-hidden="true"><div class="spiegel-ring r1"></div><div class="spiegel-ring r2"></div><div class="spiegel-ring r3">◉</div></div>'
     +'<div class="spiegel-sub">Een moment voor jezelf</div>'
-    +'<div class="spiegel-breath-hint">Adem in 4 tellen, adem uit 6 tellen.</div>'
     +'<div class="spiegel-actions">'
     +'<button class="spiegel-mode-btn" type="button" onclick="startSpiegelAdem()"><span>🫁</span><span><strong>Adem</strong><span class="sub">Kom tot rust, adem even met me mee.</span></span></button>'
     +'<button class="spiegel-mode-btn" type="button" onclick="toast(\'Praat komt zo\')"><span>🎙</span><span><strong>Praat</strong><span class="sub">Met microfoon, ik luister en reflecteer kort.</span></span></button>'
@@ -6330,6 +6335,19 @@ function updateSpiegelAdemUi(secondsLeft){
   var scale=inPhase?(1-(1-minScale)*tIn):(minScale+(maxScale-minScale)*tOut);
   var rings=document.getElementById('spiegelAdemRings');
   if(rings)rings.style.transform='scale('+scale.toFixed(3)+')';
+}
+
+function spiegelAdemIntroText(){
+  var n='';
+  try{ if(typeof getUserHoofdNaam==='function')n=String(getUserHoofdNaam()||'').trim(); }catch(_e){}
+  if(!n){
+    try{
+      var em=String((S.user&&S.user.email)||'').trim();
+      if(em&&em.indexOf('@')>0)n=em.slice(0,em.indexOf('@'));
+    }catch(_e){}
+  }
+  if(n)return 'Hey '+n+', we komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Adem gewoon mee op jouw tempo.';
+  return 'We komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Adem gewoon mee op jouw tempo.';
 }
 
 async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
@@ -6369,6 +6387,8 @@ async function stopSpiegelAdemSession(saveRow){
 async function startSpiegelAdem(){
   var ov=document.getElementById('spiegelAdemOverlay');
   if(!ov){toast('Adem-overlay niet beschikbaar.');return;}
+  var intro=document.getElementById('spiegelAdemIntro');
+  if(intro)intro.textContent=spiegelAdemIntroText();
   if(_spiegelAdemTimer)await stopSpiegelAdemSession(false);
   _spiegelAdemStartedAt=Date.now();
   var animate=function(){
@@ -13083,6 +13103,7 @@ setTimeout(function(){
       <button class="spiegel-adem-x" type="button" onclick="stopSpiegelAdemSession(true)">Sluiten</button>
     </div>
     <div class="spiegel-adem-main">
+      <div class="spiegel-adem-intro" id="spiegelAdemIntro">We komen even samen tot rust. Volg rustig mijn instructies, zonder druk. Adem gewoon mee op jouw tempo.</div>
       <div class="spiegel-adem-big">
         <div class="spiegel-adem-rings" id="spiegelAdemRings">
           <div class="spiegel-ring r1"></div>
