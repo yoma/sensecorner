@@ -638,10 +638,23 @@ a:focus-visible,
 .spiegel-ring.r2{width:calc(100% * 58 / 72);height:calc(100% * 58 / 72);background:var(--app-medium)}
 .spiegel-ring.r3{width:calc(100% * 44 / 72);height:calc(100% * 44 / 72);background:var(--app-donker);display:flex;align-items:center;justify-content:center;color:#fff}
 .spiegel-sub{font-size:12px;color:#6b7280;text-align:center;margin-top:2px}
+.spiegel-breath-hint{font-size:12px;color:#4b5563;text-align:center;font-weight:600}
 .spiegel-actions{display:grid;gap:8px;margin-top:4px}
 .spiegel-mode-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 13px;background:#fff;border:1px solid var(--b);border-radius:12px;font-size:14px;font-weight:700;color:#2f3f35;cursor:pointer;font-family:inherit;line-height:1.35}
 .spiegel-mode-btn .sub{display:block;font-size:12px;font-weight:500;color:#6b7280}
 .spiegel-mode-btn.pri{background:color-mix(in srgb,var(--app-licht) 35%,#fff);border-color:color-mix(in srgb,var(--app-medium) 50%,#fff)}
+.spiegel-adem-overlay{position:fixed;inset:0;background:rgba(16,18,20,.55);display:none;align-items:stretch;justify-content:center;z-index:320}
+.spiegel-adem-overlay.show{display:flex}
+.spiegel-adem-sheet{width:min(820px,100%);height:100%;background:#F9F7F1;display:flex;flex-direction:column}
+.spiegel-adem-top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--b);background:rgba(255,255,255,.85)}
+.spiegel-adem-x{border:1px solid var(--b);background:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;font:inherit}
+.spiegel-adem-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;position:relative}
+.spiegel-adem-big{position:relative;width:250px;height:250px}
+.spiegel-adem-big .spiegel-ring.r1{width:250px;height:250px}
+.spiegel-adem-big .spiegel-ring.r2{width:196px;height:196px}
+.spiegel-adem-big .spiegel-ring.r3{width:132px;height:132px;transition:transform .35s ease}
+.spiegel-adem-line{margin-top:14px;font-size:16px;color:#4f5b57}
+.spiegel-adem-count{margin-top:8px;font-size:34px;font-family:var(--font-serif);color:#2d3f35}
 .dossier-head-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dossier-head-actions button{min-height:38px}
 .dossier-tabs-wrap{background:#fff;position:sticky;top:0;z-index:3}
@@ -1731,6 +1744,8 @@ var _quickHelpTour={active:false,idx:0,steps:[],targetEl:null};
 var _tourChain=null;
 /** Verhoog bij annuleren/herstart om oude setTimeout-callbacks te negeren (anders startQuickHelpTour blokkeert). */
 var _tourSchedGen=0;
+var _spiegelAdemTimer=null;
+var _spiegelAdemStartedAt=0;
 function bumpTourSchedGen(){_tourSchedGen++;}
 function navigateTourScreen(id){
   var k=String(id||'').trim();
@@ -4546,6 +4561,9 @@ function goScreen(sc){
 }
 
 function _goScreenBody(sc){
+  try{
+    if(_spiegelAdemTimer&&sc!=='spiegel')stopSpiegelAdemSession(true);
+  }catch(_e){}
   var prevScreen=S.screen;
   var shadeEl=document.getElementById('helpTourShade');
   var cardEl=document.getElementById('helpTourCard');
@@ -6285,13 +6303,78 @@ function rSpiegel(el){
     +'<div class="spiegel-head"><div class="spiegel-kicker">SelfSense</div><div class="spiegel-title">Spiegel</div></div>'
     +'<div class="spiegel-ring-wrap" aria-hidden="true"><div class="spiegel-ring r1"></div><div class="spiegel-ring r2"></div><div class="spiegel-ring r3">◉</div></div>'
     +'<div class="spiegel-sub">Een moment voor jezelf</div>'
+    +'<div class="spiegel-breath-hint">Adem in 4 tellen, adem uit 6 tellen.</div>'
     +'<div class="spiegel-actions">'
-    +'<button class="spiegel-mode-btn" type="button" onclick="toast(\'Adem komt zo\')"><span>🫁</span><span><strong>Adem</strong><span class="sub">Adem even met me mee.</span></span></button>'
-    +'<button class="spiegel-mode-btn" type="button" onclick="toast(\'Praat komt zo\')"><span>🎙</span><span><strong>Praat</strong><span class="sub">Praat tegen me, ik luister.</span></span></button>'
-    +'<button class="spiegel-mode-btn pri" type="button" onclick="toast(\'Gesprek komt zo\')"><span>💬</span><span><strong>Gesprek</strong><span class="sub">Laten we samen denken.</span></span></button>'
+    +'<button class="spiegel-mode-btn" type="button" onclick="startSpiegelAdem()"><span>🫁</span><span><strong>Adem</strong><span class="sub">Kom tot rust, adem even met me mee.</span></span></button>'
+    +'<button class="spiegel-mode-btn" type="button" onclick="toast(\'Praat komt zo\')"><span>🎙</span><span><strong>Praat</strong><span class="sub">Met microfoon, ik luister en reflecteer kort.</span></span></button>'
+    +'<button class="spiegel-mode-btn pri" type="button" onclick="toast(\'Gesprek komt zo\')"><span>📷</span><span><strong>Gesprek</strong><span class="sub">Met webcam en gesprek, samen denken in rust.</span></span></button>'
     +'</div>'
     +'<div class="timeline-card" style="margin-top:4px"><div class="timeline-title">Recent</div>'+recentHtml+'</div>'
     +'</div>';
+}
+
+function updateSpiegelAdemUi(secondsLeft){
+  var line=document.getElementById('spiegelAdemLine');
+  var count=document.getElementById('spiegelAdemCount');
+  var core=document.getElementById('spiegelAdemCore');
+  if(count)count.textContent=String(secondsLeft);
+  var elapsed=60-secondsLeft;
+  var cycle=elapsed%10;
+  var inPhase=cycle<4;
+  if(line)line.textContent=inPhase?'Adem in...':'Adem uit...';
+  if(core)core.style.transform=inPhase?'translate(-50%,-50%) scale(1.06)':'translate(-50%,-50%) scale(0.94)';
+}
+
+async function saveSpiegelSession(mode,durationSeconds,messagesCount,note){
+  if(!S.user||!sb)return;
+  try{
+    await sb.from('selfsense_mirror_sessions').insert({
+      user_id:S.user.id,
+      mode:String(mode||'adem'),
+      duration_seconds:Number(durationSeconds||0),
+      messages_count:messagesCount==null?null:Number(messagesCount||0),
+      note:note==null?null:String(note||'').slice(0,200)
+    });
+  }catch(_e){}
+}
+
+async function stopSpiegelAdemSession(saveRow){
+  if(_spiegelAdemTimer){
+    clearInterval(_spiegelAdemTimer);
+    _spiegelAdemTimer=null;
+  }
+  var ov=document.getElementById('spiegelAdemOverlay');
+  if(ov)ov.classList.remove('show');
+  if(saveRow&&_spiegelAdemStartedAt>0){
+    var dur=Math.max(1,Math.round((Date.now()-_spiegelAdemStartedAt)/1000));
+    await saveSpiegelSession('adem',dur,null,null);
+    if(!Array.isArray(S.spiegelRecent))S.spiegelRecent=[];
+    S.spiegelRecent.unshift({mode:'Adem',meta:String(dur)+'s',when:new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})});
+    S.spiegelRecent=S.spiegelRecent.slice(0,10);
+  }
+  _spiegelAdemStartedAt=0;
+}
+
+async function startSpiegelAdem(){
+  var ov=document.getElementById('spiegelAdemOverlay');
+  if(!ov){toast('Adem-overlay niet beschikbaar.');return;}
+  if(_spiegelAdemTimer)await stopSpiegelAdemSession(false);
+  _spiegelAdemStartedAt=Date.now();
+  var left=60;
+  updateSpiegelAdemUi(left);
+  ov.classList.add('show');
+  _spiegelAdemTimer=setInterval(async function(){
+    left--;
+    updateSpiegelAdemUi(Math.max(0,left));
+    if(left<=0){
+      await stopSpiegelAdemSession(true);
+      toast('Adem-sessie afgerond.');
+      if(S.screen==='spiegel'){
+        var mc=document.getElementById('mainContent');
+        if(mc)rSpiegel(mc);
+      }
+    }
+  },1000);
 }
 
 function getAdviceHubState(){
@@ -12973,6 +13056,23 @@ setTimeout(function(){
   <div class="img-preview-card" role="dialog" aria-modal="true" aria-label="Foto preview">
     <img id="imgPreviewImage" class="img-preview-img" alt="Foto preview">
     <button id="imgPreviewCloseBtn" class="img-preview-close" type="button" aria-label="Sluiten">&times;</button>
+  </div>
+</div>
+<div id="spiegelAdemOverlay" class="spiegel-adem-overlay" aria-hidden="true">
+  <div class="spiegel-adem-sheet">
+    <div class="spiegel-adem-top">
+      <div style="font-weight:700;color:var(--t)">Adem</div>
+      <button class="spiegel-adem-x" type="button" onclick="stopSpiegelAdemSession(true)">Sluiten</button>
+    </div>
+    <div class="spiegel-adem-main">
+      <div class="spiegel-adem-big">
+        <div class="spiegel-ring r1"></div>
+        <div class="spiegel-ring r2"></div>
+        <div class="spiegel-ring r3" id="spiegelAdemCore">◉</div>
+      </div>
+      <div class="spiegel-adem-line" id="spiegelAdemLine">Adem in...</div>
+      <div class="spiegel-adem-count" id="spiegelAdemCount">60</div>
+    </div>
   </div>
 </div>
 </body>
