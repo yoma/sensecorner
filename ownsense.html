@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="03-05-2026 18:22">
+<meta name="os-build" content="03-05-2026 18:26">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2722,6 +2722,7 @@ async function loadOwnFromSupabase(){
       hubState.insight_all=String(row.insight_all||hubState.insight_all||'');
       hubState.insight_ds=String(row.insight_ds||hubState.insight_ds||'');
       hubState.insight_fs=String(row.insight_fs||hubState.insight_fs||'');
+      hubState.insight_ss=String(row.insight_ss||hubState.insight_ss||'');
       hubState.insight_gen=String(row.insight_gen||hubState.insight_gen||'');
       hubState.last_insight_count=parseInt(row.last_insight_count,10)||0;
       hubState.last_insight_at=String(row.last_insight_at||hubState.last_insight_at||'');
@@ -2787,6 +2788,7 @@ async function loadSenseProfileScopesForUser(userId){
       if(scopes.indexOf('fs')>=0&&scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='mix';
       else if(scopes.indexOf('fs')>=0)senseProfileScopeByName[lk]='fs';
       else if(scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='ds';
+      else if(scopes.indexOf('ss')>=0)senseProfileScopeByName[lk]='ss';
       else senseProfileScopeByName[lk]='unknown';
     });
   }catch(_e){}
@@ -2852,6 +2854,7 @@ async function saveOwnToSupabase(){
       insight_all:hubState.insight_all||null,
       insight_ds:hubState.insight_ds||null,
       insight_fs:hubState.insight_fs||null,
+      insight_ss:hubState.insight_ss||null,
       insight_gen:hubState.insight_gen||null,
       last_insight_count:parseInt(hubState.last_insight_count,10)||0,
       last_insight_at:hubState.last_insight_at||null,
@@ -3699,7 +3702,7 @@ function renderProps(){
   var el=document.getElementById('propsCard');
   if(!el)return;
   var hasData=calcPropsFromCategories();
-  var bars='<h3>Eigenschappen</h3><p class="subtle">'+(hasData?'Afgeleid uit je lijstantwoorden.':'Nog leeg: tab Invullen of werk even in DateSense/FamilySense.')+'</p>';
+  var bars='<h3>Eigenschappen</h3><p class="subtle">'+(hasData?'Afgeleid uit je lijstantwoorden.':'Nog leeg: tab Invullen of werk even in DateSense, FamilySense of SelfSense.')+'</p>';
   PK.forEach(function(k,i){
     var v=Math.max(0,Math.min(100,parseInt(hubState.props[k],10)||0));
     bars+='<div class="bar-row"><div class="bar-head"><span>'+PL[i]+'</span><strong>'+v+'%</strong></div>'
@@ -4087,7 +4090,7 @@ function buildInsightPrompt(scope,rows){
   }).join('\n');
   var scopeHint=scope==='all'?'':(' Begin met één zin die expliciet verwijst naar '+scopeLabel(scope)+' (niet hetzelfde openingsakkoord als voor «alle apps»). Herhaal geen algemene profielzin die even goed voor een andere scope zou kunnen.');
   var datasetHint=scope==='all'
-    ?'Onderstaande regels komen uit verschillende Sense-dossiers (DateSense, FamilySense, OWN Sense), door de gebruiker geschreven. '
+    ?'Onderstaande regels komen uit verschillende Sense-dossiers (DateSense, FamilySense, SelfSense, OWN Sense), door de gebruiker geschreven. '
     :'Onderstaande regels zijn al gefilterd op '+scopeLabel(scope)+' en kunnen uit meerdere dossiers binnen die app komen. ';
   return 'Je bent OWN Sensei. Schrijf een persoonlijk inzicht in het Nederlands voor scope "'
     +scopeLabel(scope)+'". '+datasetHint+'Gebruik 2-3 korte paragrafen, menselijk en concreet.'+scopeHint+' '
