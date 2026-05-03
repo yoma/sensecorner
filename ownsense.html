@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="os-build" content="29-04-2026 14:33">
+<meta name="os-build" content="03-05-2026 18:10">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2616,17 +2616,16 @@ async function refreshSignedPhotoUrls(){
   if(!client)return;
   var paths=hubState.photo_paths;
   if(!Array.isArray(paths)||!paths.length)return;
-  var fresh=[];
-  for(var i=0;i<paths.length;i++){
-    var p=String(paths[i]||'').trim();
-    if(!p){fresh.push(String(hubState.photo_urls[i]||''));continue;}
-    try{
-      var s=await client.storage.from('sense-photos').createSignedUrl(p,604800);
-      fresh.push(s&&s.data&&s.data.signedUrl?String(s.data.signedUrl):String(hubState.photo_urls[i]||''));
-    }catch(_e){
-      fresh.push(String(hubState.photo_urls[i]||''));
-    }
-  }
+  var bucket=client.storage.from('sense-photos');
+  var fresh=await Promise.all(paths.map(function(p,i){
+    var path=String(p||'').trim();
+    if(!path)return Promise.resolve(String(hubState.photo_urls[i]||''));
+    return bucket.createSignedUrl(path,604800).then(function(s){
+      return s&&s.data&&s.data.signedUrl?String(s.data.signedUrl):String(hubState.photo_urls[i]||'');
+    }).catch(function(){
+      return String(hubState.photo_urls[i]||'');
+    });
+  }));
   hubState.photo_urls=fresh.filter(Boolean);
   if(hubState.photo_urls.length){
     if(hubState.photo_paths.length)hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
@@ -2801,11 +2800,10 @@ async function loadOwnTimelineFromSupabase(){
       .select('*')
       .eq('user_id',user.id)
       .order('created_at',{ascending:false})
-      .limit(1000);
+      .limit(450);
     if(res&&res.error)throw new Error(res.error.message||'timeline fetch failed');
     var rows=Array.isArray(res&&res.data)?res.data:[];
     ownTimeline=rows;
-    renderTimelineTab();
   }catch(e){}
 }
 
@@ -2914,7 +2912,7 @@ function mergeHubStateFromLocalStorage(user){
   hubState=Object.assign(createEmptyHubState(),hubState,localClean);
 }
 
-/** DateSense/FamilySense hub-handoff: alleen voor dezelfde Supabase-user; nooit timeline (komt uit DB). */
+/** DateSense / FamilySense / SelfSense hub-handoff: zelfde Supabase-user; tijdlijn altijd uit DB (geen bulk in localStorage). */
 function tryConsumeOwnsenseHandoff(user,opts){
   opts=opts||{};
   if(!user||!user.id)return;
@@ -2925,7 +2923,7 @@ function tryConsumeOwnsenseHandoff(user,opts){
     return;
   }
   var src=String(handoff.source||'').toLowerCase();
-  var handoffFromSenseApp=src==='datesense'||src==='familysense';
+  var handoffFromSenseApp=src==='datesense'||src==='familysense'||src==='selfsense';
   if(!hubState.display_name)hubState.display_name=String(handoff.display_name||'').trim();
   if(!hubState.photo_url)hubState.photo_url=String(handoff.photo_url||'').trim();
   if(Array.isArray(handoff.photo_urls)&&handoff.photo_urls.length&&!hubState.photo_urls.length){
@@ -4168,8 +4166,7 @@ initQuickNav();
 initPhotoPreview();
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
-  .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})
-  .finally(function(){
+  .then(function(){
     hydrateAppDepthSlotsFromOwnFacts();
     if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();
     renderMijTab();
@@ -4182,6 +4179,18 @@ loadOwnFromSupabase()
     renderFotosTab();
     applyUrlTabBoot();
   })
+  .then(function(){return Promise.all([loadOwnTimelineFromSupabase(),loadOwnBrainTables()]);})
+  .finally(function(){
+    hydrateAppDepthSlotsFromOwnFacts();
+    if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();
+    renderMijTab();
+    renderInzichtenV2();
+    renderGroeiTab();
+    renderBronTab();
+    renderTimelineTab();
+    return refreshOwnPhotoSlotPreviews();
+  })
+  .then(function(){renderFotosTab();})
   .catch(function(){
     try{renderFotosTab();applyUrlTabBoot();}catch(_e){}
   });

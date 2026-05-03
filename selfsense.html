@@ -2226,12 +2226,25 @@ function isFamilyTaggedMeta(meta){
   var scopes=normalizeAppScopeList(m);
   return scopes.indexOf('fs')>=0;
 }
-/** Dossier in SelfSense laden tonen: expliciet ss, of legacy zonder scope en zonder FamilySense/DateSense-markering. */
+/** DateSense zet o.a. dating_stage; SelfSense gebruikt die sleutel niet op contextdossiers. */
+function isDateSenseTaggedMeta(meta){
+  var m=meta||{};
+  var scopes=normalizeAppScopeList(m);
+  if(scopes.indexOf('ds')>=0)return true;
+  if(String(m.dating_stage||'').trim())return true;
+  if(String(m.ds_cleanup_system_hidden||'').trim())return true;
+  if(String(m.ds_cleanup_system_hidden_at||'').trim())return true;
+  var rt=String(m.relationship_type||'').toLowerCase().trim();
+  if(rt==='exclusief daten'||rt==='prille relatie'||rt==='vaste relatie')return true;
+  return false;
+}
+/** Dossier in SelfSense tonen: expliciet ss, of legacy zonder scope en zonder FamilySense- of DateSense-markering. */
 function selfSenseShouldLoadProfileMeta(meta){
   var scopes=normalizeAppScopeList(meta||{});
   if(scopes.indexOf('ss')>=0)return true;
   if(scopes.indexOf('fs')>=0||scopes.indexOf('ds')>=0)return false;
-  if(!scopes.length&&!isFamilyTaggedMeta(meta))return true;
+  if(isFamilyTaggedMeta(meta)||isDateSenseTaggedMeta(meta))return false;
+  if(!scopes.length)return true;
   return false;
 }
 function isSelfSenseVisibleContact(name){
@@ -4840,14 +4853,11 @@ function ownSenseHubUrl(opt){
   }
   return base;
 }
-async function prepareOwnsenseHandoff(){
+/** Snel naar ownsense.html: geen netwerk; hub leest tijdlijn uit Supabase. */
+function prepareOwnsenseHandoff(){
   try{
     var own=(S.pdata&&S.pdata['OWN Sense'])||{};
     var meta=own.meta||{};
-    var msgs=[];
-    try{
-      msgs=await withTimeout(loadMsgs('OWN Sense',{limit:180,asc:false}),4500,'ownsense-handoff-msgs');
-    }catch(_e){msgs=[];}
     localStorage.setItem('ownsense_handoff_v1',JSON.stringify({
       at:new Date().toISOString(),
       user_id:(S.user&&S.user.id)||null,
@@ -4857,19 +4867,22 @@ async function prepareOwnsenseHandoff(){
       photo_urls:Array.isArray(meta.foto_urls)?meta.foto_urls.slice(0,4):[],
       categories:(own.categories&&typeof own.categories==='object')?own.categories:{},
       props:(own.props&&typeof own.props==='object')?own.props:{},
-      timeline:Array.isArray(msgs)?msgs:[]
+      timeline:[]
     }));
   }catch(_err){}
 }
 function ownSenseShowAsInAppDossier(){return false;}
 var _ownSenseHubNav=false;
-async function openOwnSenseEntryPoint(opt){
+function openOwnSenseEntryPoint(opt){
   if(_ownSenseHubNav)return;
   _ownSenseHubNav=true;
   try{
-    await withTimeout(prepareOwnsenseHandoff(),6500,'ownsense-handoff').catch(function(e){console.warn('prepareOwnsenseHandoff',e);});
-  }catch(e){console.warn('openOwnSenseEntryPoint',e);}
-  window.location.href=ownSenseHubUrl(opt);
+    prepareOwnsenseHandoff();
+    window.location.href=ownSenseHubUrl(opt);
+  }catch(e){
+    console.warn('openOwnSenseEntryPoint',e);
+    _ownSenseHubNav=false;
+  }
 }
 function computeDossierMatchSummary(name){
   var isOwn=name==='OWN Sense';
