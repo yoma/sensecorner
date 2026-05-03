@@ -2226,7 +2226,7 @@ function isFamilyTaggedMeta(meta){
   var scopes=normalizeAppScopeList(m);
   return scopes.indexOf('fs')>=0;
 }
-/** DateSense zet o.a. dating_stage; SelfSense gebruikt die sleutel niet op contextdossiers. */
+/** DateSense-markers op een dossier (SelfSense-contacten zonder intent/dating_stage na profiel-opslag). */
 function isDateSenseTaggedMeta(meta){
   var m=meta||{};
   var scopes=normalizeAppScopeList(m);
@@ -2234,16 +2234,18 @@ function isDateSenseTaggedMeta(meta){
   if(String(m.dating_stage||'').trim())return true;
   if(String(m.ds_cleanup_system_hidden||'').trim())return true;
   if(String(m.ds_cleanup_system_hidden_at||'').trim())return true;
+  if(String(m.intent||'').trim())return true;
   var rt=String(m.relationship_type||'').toLowerCase().trim();
   if(rt==='exclusief daten'||rt==='prille relatie'||rt==='vaste relatie')return true;
   return false;
 }
-/** Dossier in SelfSense tonen: expliciet ss, of legacy zonder scope en zonder FamilySense- of DateSense-markering. */
+/** Dossier in SelfSense: niet DateSense; wel expliciet ss, of legacy zonder app_scope en zonder alleen-FamilySense (fs). */
 function selfSenseShouldLoadProfileMeta(meta){
   var scopes=normalizeAppScopeList(meta||{});
+  if(scopes.indexOf('ds')>=0)return false;
+  if(isDateSenseTaggedMeta(meta))return false;
   if(scopes.indexOf('ss')>=0)return true;
-  if(scopes.indexOf('fs')>=0||scopes.indexOf('ds')>=0)return false;
-  if(isFamilyTaggedMeta(meta)||isDateSenseTaggedMeta(meta))return false;
+  if(scopes.indexOf('fs')>=0)return false;
   if(!scopes.length)return true;
   return false;
 }
@@ -2267,7 +2269,7 @@ function getOnboardingChecklist(){
   return [
     {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste contextdossier aan',action:'newSenseFromDrawer()'},
-    {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Kies per dossier een rol (kind, ouder, nonkel…)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
+    {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Vul per dossier je context (rol of relatie tot jou)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
   ];
 }
@@ -3188,7 +3190,7 @@ function needsOwnTabAttention(){
 }
 function needsSensesTabAttention(){
   if(!S.user)return false;
-  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';});
+  var contacts=getActiveContactNames();
   for(var i=0;i<contacts.length;i++){
     if(needsContactAttention(contacts[i]))return true;
   }
@@ -4799,7 +4801,7 @@ function rDrawer(){
   <div class="dbadge" onclick="event.stopPropagation();openOwnSenseEntryPoint()">Open</div>
 </div>`;
   if(cs.length){
-    h+='<div class="dlbl">Familieleden</div>';
+    h+='<div class="dlbl">Contextdossiers</div>';
     cs.forEach((p,i)=>{
       var d=S.pdata[p]||{count:0};
       var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
@@ -4942,7 +4944,7 @@ function getSensesCardMatchHtml(name,opts){
     ?'<div style="font-size:10px;color:#B00020;font-weight:600;margin-top:6px">Profiel '+filled+'/'+total+' · nog niet volledig ingevuld</div>'
     :'<div style="font-size:10px;color:#8a8f97;margin-top:6px">Profiel '+filled+'/'+total+'</div>';
   return'<div style="'+top+'">'
-    +(badge?'<div style="margin-bottom:6px">'+badge+'</div>':'<div style="font-size:11px;color:#8a8f97;margin-bottom:4px">Nog geen rol - vul bij profiel (bv. kind, ouder, nonkel, tante…)</div>')
+    +(badge?'<div style="margin-bottom:6px">'+badge+'</div>':'<div style="font-size:11px;color:#8a8f97;margin-bottom:4px">Nog geen rol - vul bij profiel (relatie tot jou of korte context)</div>')
     +line2
     +'</div>';
 }
@@ -5667,8 +5669,8 @@ async function activateRelationshipFocus(name){
   for(var i=0;i<targets.length;i++){
     await setDossierLifecycle(targets[i],'on_hold');
   }
-  if(targets.length)toast('🎯 Gezins-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
-  else toast('🎯 Gezins-focus op '+dn(name));
+  if(targets.length)toast('🎯 Zelf-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
+  else toast('🎯 Zelf-focus op '+dn(name));
   goScreen('senses');
 }
 
@@ -6092,11 +6094,11 @@ function renderHomeNotePerson(dossier){
   var d=S.pdata[name]||{};
   var meta=d.meta||{};
   var label=dn(name);
-  var ci=S.profiles.filter(function(p){return p!=='OWN Sense';}).indexOf(name);
+  var ci=Math.max(0,getSelfSenseContactNames().indexOf(name));
   var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
   var avatar=meta.photo_url
     ?'<img class="home-note-avatar" src="'+meta.photo_url+'" alt="'+escHTML(label)+'">'
-    :'<div class="home-note-avatar-fallback" style="background:'+avatarColors[(ci>=0?ci:0)%avatarColors.length]+'">'+escHTML(label.charAt(0).toUpperCase())+'</div>';
+    :'<div class="home-note-avatar-fallback" style="background:'+avatarColors[ci%avatarColors.length]+'">'+escHTML(label.charAt(0).toUpperCase())+'</div>';
   return '<div class="home-note-person">'+avatar+'<span class="home-note-badge">'+escHTML(label)+'</span></div>';
 }
 function humanTaskLabel(id){
@@ -8393,8 +8395,8 @@ function rSenses(el){
     h+='<div class="ai-rich-card" style="margin:0 0 12px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Zelf-focus actief</span></div><p class="ai-sec-text">Je hoeft niet meerdere dossiers te gebruiken. SelfSensei volgt nu jouw herstelcontext met <strong>'+(focusName?dn(focusName):'je focuspersoon')+'</strong>. Andere dossiers kan je op on hold laten.</p></div></div>';
   }
   if(cs.length){
-    h+='<div class="sh">Familieleden</div>';
-    h+='<p style="font-size:12px;color:#8a8f97;line-height:1.45;margin:0 0 10px">Deze lijst hoort bij <strong>jouw account</strong> (dezelfde dossiers als in DateSense als je die app ook gebruikt). Wil je ze hier niet? Zet ze op <strong>on hold</strong>, <strong>sluit af</strong> of verwijder ze definitief uit het archief.</p>';
+    h+='<div class="sh">Jouw context</div>';
+    h+='<p style="font-size:12px;color:#8a8f97;line-height:1.45;margin:0 0 10px">Alleen dossiers die je <strong>in SelfSense</strong> gebruikt (niet je DateSense- of FamilySense-lijsten). Zet iets op <strong>on hold</strong>, <strong>sluit af</strong> of wis het in het archief als je het hier niet meer wilt zien.</p>';
     h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
       +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
       
@@ -8527,7 +8529,7 @@ async function rDossier(el){
       header+='<img src="'+escHTML(pMeta.photo_url)+'" alt="'+escHTML(personName2)+'" style="width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid var(--b);flex-shrink:0">';
     }else{
       var initial=personName2.charAt(0).toUpperCase();
-      var ci2=S.profiles.filter(p=>p!=='OWN Sense').indexOf(name);
+      var ci2=Math.max(0,getSelfSenseContactNames().indexOf(name));
       var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
       var avatarCol=avatarColors[ci2%avatarColors.length];
       header+='<div style="width:44px;height:44px;border-radius:22px;background:'+avatarCol+';color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>';
@@ -8543,7 +8545,7 @@ async function rDossier(el){
   if(!isOwn){
     var fr=getContactRolBadgeText(d.meta);
     if(fr)header+='<div style="margin-top:6px"><span class="context-rel-badge">'+escHTML(fr)+'</span></div>';
-    else header+='<div style="font-size:12px;color:#8a8f97;margin-top:6px">Vul bij profielgegevens je rol (kind, ouder, nonkel…).</div>';
+    else header+='<div style="font-size:12px;color:#8a8f97;margin-top:6px">Vul bij profielgegevens hoe deze persoon in jouw context past.</div>';
   }
   if(!isOwn&&d.lastActive){
     header+='<div style="font-size:12px;color:var(--m);margin-top:2px">Laatste update: '+timeAgo(d.lastActive)+'</div>';
@@ -10230,7 +10232,7 @@ async function activateRelationshipFocusFromSettings(){
 
 // ══ Compare ══════════════════════════════════════════════════════
 function getCompareSelection(){
-  var cs=S.profiles.filter(function(p){return p!=='OWN Sense';});
+  var cs=getSelfSenseContactNames();
   var saved=(S.compareSelection||[]).filter(function(n){return cs.indexOf(n)>=0;});
   var unique=[];
   saved.forEach(function(n){if(unique.indexOf(n)===-1)unique.push(n);});
@@ -12953,10 +12955,10 @@ async function refreshOwnFactsCoachContext(){
 }
 
 function buildContactNamesLine(){
-  var contacts=S.profiles.filter(function(p){return p!=='OWN Sense'&&getDossierLifecycle(p)==='active';});
+  var contacts=getActiveContactNames();
   if(!contacts.length)return'';
   var parts=contacts.map(function(p){return dn(p)+' (dossier '+p+')';});
-  return'NAMEN VAN GEZINSLEDEN/NAASTEN (actieve dossiers): '+parts.join(', ')+'. Een voornaam in je tekst hoort bij het dossier met dezelfde voornaam (achtervoegsel «Sense»).';
+  return'NAMEN VAN ACTIEVE CONTEXTDOSSIERS: '+parts.join(', ')+'. Een voornaam in je tekst hoort bij het dossier met dezelfde voornaam (achtervoegsel «Sense»).';
 }
 
 async function buildDossierContextForAI(dosName){
