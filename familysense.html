@@ -1496,7 +1496,7 @@ const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 const PROMPT_DEFAULTS={
-  advice_core:'Je bent FamilySensei, een warme, directe familievriend met inhoudelijke kennis. Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Je advies is evidence-informed: je baseert je op algemeen erkende inzichten uit opvoeding, communicatie en gezinsdynamiek (zoals je die in boeken of officiele richtlijnen terugvindt), maar je legt alles uit in heel eenvoudige, niet-technische taal. Je geeft praktische adviezen, inzichten en concrete tips. Je werkt NOOIT met compatibiliteitscores of percentages. Je focust op communicatie, grenzen, patronen, verbinding en groei. Noem geen pseudo-bronnen of verzonnen studies; als iets onzeker is, benoem dat eerlijk en blijf praktisch. Je antwoordt altijd in het Nederlands. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Gebruik geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen vloeiend advies zonder aparte kopregels zoals AANDACHTSPUNTEN: of Inzicht:. Sluit daarna af met exact één aparte regel (zonder tekst erna) in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin. Geen extra tekst vóór of na de ACTIES-regel.',
+  advice_core:'Je bent FamilySensei. De gebruiker wil concreet gezinsadvies op basis van hun situatie, geen coaching waarin jij het werk teruggeeft met open vragen. Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Werk zo: begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context (naam, gevoel, scherp dilemma of feit uit het dossier). Geen lange herhaling van hun hele verhaal. Daarna geef je meteen jouw advies: wat zeg of doe jij in hun schoenen, waarom dat helpt, en wat is slim om te vermijden. Schrijf in gesproken Nederlands, vloeiend, zonder opschrift-koppen, zonder bulletlijsten en zonder afstandsbediende zinnen zoals "het is belangrijk om". Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden zonder die ontbrekende info; nooit een keten van vragen, en vraag nooit hoe zij het zelf zouden aanpakken of vergelijkbare omkering naar de gebruiker. Behandel ze als volwassen die zelf beslist; geen extra juridische of medische disclaimers tenzij er acute veiligheid is, dan wel kort en concreet. Baseer je op gezonde opvoed- en communicatieprincipes zonder pseudo-studies te citeren. Werk NOOIT met scores of percentages. Geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen zonder aparte kopregels zoals AANDACHTSPUNTEN: of Inzicht:. Sluit daarna af met exact één aparte regel (zonder tekst erna) in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin. Geen extra tekst vóór of na de ACTIES-regel.',
   tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
@@ -6556,12 +6556,14 @@ async function runAdviceHubOpenPrompt(){
   var mc=document.getElementById('mainContent');
   if(mc)rAdviceHub(mc);
   try{
-    var sys='Je bent FamilySensei. Geef concreet, empathisch familieadvies in het Nederlands. '
-      +'Schrijf 5-8 korte zinnen met duidelijke actiepunten. Houd het praktisch.';
+    var sys='Je bent FamilySensei. De gebruiker wil concreet gezinsadvies, geen coaching met open vragen. '
+      +'Begin met één of twee zinnen die tonen dat je hun situatie begrijpt (één concreet detail uit hun vraag). '
+      +'Geef daarna meteen jouw advies: wat zeg of doe je, waarom, wat vermijden. Gesproken Nederlands, geen bulletlijsten, geen "hoe zou jij dit aanpakken". '
+      +'Gebruik nooit Unicode U+2014 (em dash). Maximaal 8 zinnen.';
     var ownLensLines=[];
     appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
     var ctx='Gebruikersinput: '+prompt+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
-    var t=await callAPI(sys,[{role:'user',content:ctx}],620);
+    var t=await callAPI(sys,[{role:'user',content:ctx}],800,22000);
     st.resultHtml=formatAiCard(String(t||'').trim());
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
     openAdviceHubResultInVertel(true);
@@ -8470,7 +8472,7 @@ function buildAdviceContextPayload(name,d,msgs){
   var meta=(d&&d.meta)||{};
   var famRel=getContactRolBadgeText(meta);
   var summary=String((d&&d.summary)||'').trim();
-  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,900));
+  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,700));
   var catSnips=[];
   if(d&&d.categories){
     Object.values(d.categories).forEach(function(cat){
@@ -8480,7 +8482,7 @@ function buildAdviceContextPayload(name,d,msgs){
       });
     });
   }
-  if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,6).join(' | ').substring(0,900));
+  if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,5).join(' | ').substring(0,720));
   var userTexts=(msgs||[])
     .filter(function(m){return m.role==='user';})
     .map(function(m){return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();})
@@ -8489,7 +8491,7 @@ function buildAdviceContextPayload(name,d,msgs){
     var early=userTexts.slice(0,4).map(function(t){return '- '+t.substring(0,200);});
     lines.push('Langere tijdlijn - oudste kern uit dit venster:\n'+early.join('\n'));
   }
-  var recentFacts=userTexts.slice(-16).map(function(t){return '- '+t.substring(0,220);});
+  var recentFacts=userTexts.slice(-10).map(function(t){return '- '+t.substring(0,200);});
   if(recentFacts.length)lines.push('Recente signalen (chronologisch, onderaan het nieuwst):\n'+recentFacts.join('\n'));
   var ownMetaForLens=null;
   if(name==='OWN Sense'){
@@ -8501,7 +8503,7 @@ function buildAdviceContextPayload(name,d,msgs){
   var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
   if(name!=='OWN Sense'&&famRel)payload+='\nRol in je gezin: '+famRel;
   if(lines.length)payload+='\n'+lines.join('\n');
-  var maxPayload=42000;
+  var maxPayload=32000;
   if(payload.length>maxPayload){
     payload=payload.substring(0,maxPayload)+'\n\n[Context ingekort voor stabiele AI-koppeling; je volledige tijdlijn blijft in het dossier.]';
   }
@@ -8548,7 +8550,7 @@ async function genAdvies(name,forced){
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{
-    msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
+    msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
   }catch(e){
     msgs=[];
   }
@@ -8558,8 +8560,8 @@ async function genAdvies(name,forced){
   var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
   var toneInstr=getPromptText('tone_honest');
   var modeInstruction=isOwnAdv
-    ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten en 1-2 concrete volgende stappen in de vrije tekst; sluit af met de verplichte ACTIES-regel (2 of 3 stappen voor jezelf).'
-    :'Geef op basis van dit dossier over '+dn(name)+' concrete, praktische adviezen in de vrije tekst: wat werkt al, waar zit de uitdaging, volgende stappen; sluit af met de verplichte ACTIES-regel (2 of 3 gezins- of communicatiestappen). Geen scores of percentages.';
+    ?'OWN Sense: lees wat er in het profiel en de signalen staat, erken kort wat er leeft, geef daarna meteen 2 tot 4 concrete vervolgstappen voor de gebruiker. Geen coachingsvragen terug, geen "hoe zou jij dit aanpakken". Sluit af met de verplichte ACTIES-regel (2 of 3 stappen).'
+    :'Gezinsdossier '+dn(name)+': gebruik de context, erken kort wat er wringt, geef daarna meteen concreet advies (wat zeg of doe je, waarom, wat vermijden). Geen terugvragen hoe de gebruiker het zelf zou aanpakken. Sluit af met de verplichte ACTIES-regel (2 of 3 gezins- of communicatiestappen). Geen scores of percentages.';
   var relationshipGuard=name!=='OWN Sense'
     ?'Respecteer de familierelatie. Geef GEEN romantisch-georiënteerd of dating-advies. Geef advies dat past bij gezins- en familiedynamiek.'
     :'';
@@ -8577,7 +8579,7 @@ async function genAdvies(name,forced){
   }
   if(hubFocus)userContent+='\nSpecifieke focusvraag gebruiker: '+hubFocus;
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],900,36000);
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,22000);
     if(reqId!==_adviesReqSeq)return;
     var nowTs=new Date();
     var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -8690,19 +8692,18 @@ async function genAdviesOnderbouwd(name){
     }
     var msgs=[];
     try{
-      msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
+      msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
     }catch(_e){msgs=[];}
     var cache=(S.adviesCache&&S.adviesCache[name])||{};
     var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     var ctx=buildAdviceContextPayload(name,d,msgs);
-    var sys='Je bent FamilySensei. Geef extra onderbouwing voor het bestaande advies. '
-      +'Gebruik algemeen erkende opvoedkundige en relationele principes (zoals je die in betrouwbare boeken en officiele richtlijnen terugvindt), '
-      +'maar leg alles uit in heel eenvoudige, mensentaal zonder jargon. '
-      +'Noem geen specifieke studies of bronlinks als je die niet zeker weet. '
-      +'Als iets context-afhankelijk is, benoem dat kort. '
-      +'Schrijf maximaal 6 zinnen, warm en praktisch, in het Nederlands.';
-    var userContent='Bestaand advies (samengevat): '+adviesPlain+'\n\nDossiercontext:\n'+ctx;
-    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,30000);
+    var sys='Je bent FamilySensei. Het hoofdadvies staat al vast; jij vult alleen kort de waarom-laag aan in eenvoudige taal. '
+      +'Geen vragen naar de gebruiker, geen "hoe zou jij dit aanpakken". Maximaal 5 zinnen, warm en concreet, Nederlands. '
+      +'Gebruik nooit Unicode U+2014 (em dash).';
+    var advKort=adviesPlain.length>900?adviesPlain.substring(0,900)+'…':adviesPlain;
+    var ctxKort=ctx.length>9000?ctx.substring(0,9000)+'\n\n[Context ingekort.]':ctx;
+    var userContent='Bestaand advies (samengevat): '+advKort+'\n\nDossiercontext (ingekort):\n'+ctxKort;
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],380,18000);
     var txt=String(raw||'').trim();
     var card=formatAiCard(txt);
     var wrap=document.getElementById('advExtraWrap');
@@ -10787,10 +10788,10 @@ async function sendMsg(){
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier - zeg nooit dat je die persoon niet in de dossiers hebt.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
-    +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
+    +' Max 4 zinnen. Als de gebruiker om advies vraagt: geef meteen concrete stappen of formuleringen, geen slotvraag over hoe zij het zelf zouden aanpakken. Anders mag je hoogstens één gerichte vraag als iets essentieels ontbreekt. Nederlands.'
     +' Gebruik geen lange gedachtestreep ( - ); gebruik een komma of punt.'
     +' ROEPNAAM: Gebruik de roepnaam van de gebruiker spaarzaam (liefst 0×); hooguit 1× per antwoord en nooit geforceerd midden in een zin vlak na een komma. Spreek hem/haar bij voorkeur met «je»/«jij» aan.'
-    +' Als de gebruiker iets vertelt over een familielid: korte empathische reactie, eventueel een praktische tip, maximaal 1 verdiepende vraag. Geen oordeel, geen scores.'
+    +' Als de gebruiker iets vertelt over een familielid: korte empathische reactie en bij voorkeur een praktische tip. Vraag niet terug hoe zij het zelf zouden oplossen als ze duidelijk advies zoeken. Geen oordeel, geen scores.'
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
@@ -10828,13 +10829,13 @@ async function sendMsg(){
       fullSys+='\nRECENTE GEBRUIKER-INPUT UIT DIT VERTEL-GESPREK (kan meerdere personen raken; neem dit mee, ook wanneer het actieve dossier of de gespreksfocus wisselt):\n'+vertelUserDigest+'\n';
     }
     if(hadAdviceCtx){
-      fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder.';
+      fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder met concreet advies. Geen slotvraag hoe zij het zelf zouden aanpakken.';
     }
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
-    var raw=await callAPI(fullSys,messages,400,55000);
+    var raw=await callAPI(fullSys,messages,420,22000);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}

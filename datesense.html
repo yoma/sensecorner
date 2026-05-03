@@ -1530,7 +1530,7 @@ const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 const PROMPT_DEFAULTS={
-  advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Geen bullets en geen extra kopjes. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
+  advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Begin met 1-2 zinnen die tonen dat je hun concrete verhaal gehoord hebt (één detail uit de context), daarna meteen jouw standpunt en tips. Geen bullets en geen extra kopjes. Vraag nooit hoe zij het zelf zouden aanpakken; geef jouw concreet advies. Hoogstens één echte verduidelijkingsvraag als iets cruciaals ontbreekt. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
   tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
@@ -6287,7 +6287,7 @@ function buildAdviceContextPayload(name,d,msgs){
   var relType=String(meta.relationship_type||'').trim();
   var stageNow=(name!=='OWN Sense')?getDossierStage(name):'';
   var summary=String((d&&d.summary)||'').trim();
-  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,900));
+  if(summary)lines.push('Samenvatting dossier: '+summary.substring(0,700));
   var catSnips=[];
   if(d&&d.categories){
     Object.values(d.categories).forEach(function(cat){
@@ -6297,7 +6297,7 @@ function buildAdviceContextPayload(name,d,msgs){
       });
     });
   }
-  if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,6).join(' | ').substring(0,900));
+  if(catSnips.length)lines.push('Belangrijkste ingevulde info: '+catSnips.slice(0,5).join(' | ').substring(0,720));
   var userTexts=(msgs||[])
     .filter(function(m){return m.role==='user';})
     .map(function(m){return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();})
@@ -6306,7 +6306,7 @@ function buildAdviceContextPayload(name,d,msgs){
     var early=userTexts.slice(0,4).map(function(t){return '- '+t.substring(0,200);});
     lines.push('Langere tijdlijn - oudste kern uit dit venster:\n'+early.join('\n'));
   }
-  var recentFacts=userTexts.slice(-16).map(function(t){return '- '+t.substring(0,220);});
+  var recentFacts=userTexts.slice(-10).map(function(t){return '- '+t.substring(0,200);});
   if(recentFacts.length)lines.push('Recente signalen (chronologisch, onderaan het nieuwst):\n'+recentFacts.join('\n'));
   var ownMetaForLens=null;
   if(name==='OWN Sense'){
@@ -6321,7 +6321,7 @@ function buildAdviceContextPayload(name,d,msgs){
     if(relType)payload+='\nRelatietype: '+relType;
   }
   if(lines.length)payload+='\n'+lines.join('\n');
-  var maxPayload=42000;
+  var maxPayload=32000;
   if(payload.length>maxPayload){
     payload=payload.substring(0,maxPayload)+'\n\n[Context ingekort voor stabiele AI-koppeling; je volledige tijdlijn blijft in het dossier.]';
   }
@@ -8010,12 +8010,14 @@ async function runAdviceHubOpenPrompt(){
   var mc=document.getElementById('mainContent');
   if(mc)rAdviceHub(mc);
   try{
-    var sys='Je bent DateSensei. Geef concreet, empathisch advies in het Nederlands. '
-      +'Schrijf 5-8 korte zinnen met duidelijke actiepunten. Houd het praktisch.';
+    var sys='Je bent DateSensei. De gebruiker wil concreet advies, geen coaching met open vragen. '
+      +'Begin met één of twee zinnen die tonen dat je hun situatie begrijpt (één concreet detail uit hun vraag). '
+      +'Geef daarna meteen jouw advies: wat zeg of doe je, waarom, wat vermijden. Geen "hoe zou jij dit aanpakken". '
+      +'Gebruik nooit Unicode U+2014 (em dash). Maximaal 8 zinnen.';
     var ownLensLines=[];
     appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
     var ctx='Gebruikersinput: '+prompt+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
-    var t=await callAPI(sys,[{role:'user',content:ctx}],620);
+    var t=await callAPI(sys,[{role:'user',content:ctx}],800,22000);
     st.resultHtml=formatAiCard(String(t||'').trim());
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
     openAdviceHubResultInVertel(true);
@@ -8884,7 +8886,7 @@ async function genAdvies(name,forced){
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{
-    msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
+    msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
   }catch(e){
     msgs=[];
   }
@@ -8896,8 +8898,8 @@ async function genAdvies(name,forced){
   var autoStrict=priorRiskScore>=66;
   var toneInstr=autoStrict?getPromptText('tone_strict'):getPromptText('tone_honest');
   var modeInstruction=isOwnAdv
-    ?'Analyseer het OWN Sense profiel en geef persoonlijke inzichten + 2 concrete actiepunten.'
-    :'Analyseer dossier "'+dn(name)+'": karakter, patronen, jouw gevoel. Geef 2 concrete adviezen.';
+    ?'OWN Sense: erken kort wat er in het profiel leeft, geef daarna meteen concrete vervolgstappen. Geen coachingsvragen terug, geen "hoe zou jij dit aanpakken".'
+    :'Dossier '+dn(name)+': gebruik de signalen, erken kort wat er speelt, geef daarna meteen concreet datingadvies (wat zeg of doe je, waarom, wat vermijden). Geen terugvragen hoe de gebruiker het zelf zou aanpakken.';
   var relationshipGuard=name!=='OWN Sense'
     ?'Respecteer de relatie-fase. Als relatie al lopend is (bv. prille/vaste relatie of meerdere dates), geef GEEN advies zoals "plan eerste date".'
     :'';
@@ -8920,7 +8922,7 @@ async function genAdvies(name,forced){
     if(boost.prefs&&boostPrefsSummary())userContent+='\nBoost voorkeuren: '+boostPrefsSummary();
   }
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],900,36000);
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,22000);
     if(reqId!==_adviesReqSeq)return;
     var nowTs=new Date();
     var tsDate=nowTs.toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -9066,18 +9068,16 @@ async function genAdviesOnderbouwd(name){
     }
     var msgs=[];
     try{
-      msgs=await withTimeout(loadMsgsRecentChronological(name,120),6500,'Berichten laden duurde te lang.');
+      msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
     }catch(_e){msgs=[];}
     var cache=(S.adviesCache&&S.adviesCache[name])||{};
     var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     var ctx=buildAdviceContextPayload(name,d,msgs);
-    var sys='Je bent DateSensei. Geef extra onderbouwing voor het bestaande advies. '
-      +'Gebruik algemeen erkende principes uit relationele communicatie en grenzen (zoals in betrouwbare boeken/richtlijnen), '
-      +'maar leg alles uit in eenvoudige mensentaal zonder jargon. '
-      +'Noem geen specifieke studies of bronlinks als je die niet zeker weet. '
-      +'Schrijf maximaal 6 zinnen, warm en praktisch, in het Nederlands.';
-    var userContent='Bestaand advies (samengevat): '+adviesPlain+'\n\nDossiercontext:\n'+ctx;
-    var raw=await callAPI(sys,[{role:'user',content:userContent}],520,30000);
+    var sys='Je bent DateSensei. Het hoofdadvies staat al vast; jij vult alleen kort de waarom-laag aan in eenvoudige taal. Geen vragen naar de gebruiker, geen "hoe zou jij dit aanpakken". Maximaal 5 zinnen. Gebruik nooit Unicode U+2014 (em dash).';
+    var advKort=adviesPlain.length>900?adviesPlain.substring(0,900)+'…':adviesPlain;
+    var ctxKort=ctx.length>9000?ctx.substring(0,9000)+'\n\n[Context ingekort.]':ctx;
+    var userContent='Bestaand advies (samengevat): '+advKort+'\n\nDossiercontext (ingekort):\n'+ctxKort;
+    var raw=await callAPI(sys,[{role:'user',content:userContent}],380,18000);
     var txt=String(raw||'').trim();
     var card=formatAiCard(txt);
     var wrap=document.getElementById('advExtraWrap');
@@ -11334,7 +11334,7 @@ async function sendMsg(){
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier - zeg nooit dat je die persoon niet in de dossiers hebt.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
-    +' Max 3 zinnen. Stel 1 gerichte vraag als het past. Nederlands.'
+    +' Max 4 zinnen. Als de gebruiker om advies vraagt: geef meteen concrete stappen of formuleringen, geen slotvraag over hoe zij het zelf zouden aanpakken. Anders hoogstens één gerichte vraag als iets essentieels ontbreekt. Nederlands.'
     +' Gebruik geen lange gedachtestreep ( - ); gebruik een komma of punt.'
     +' ROEPNAAM: Gebruik de roepnaam van de gebruiker spaarzaam (liefst 0×); hooguit 1× per antwoord en nooit geforceerd midden in een zin vlak na een komma. Spreek hem/haar bij voorkeur met «je»/«jij» aan.'
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
@@ -11374,13 +11374,13 @@ async function sendMsg(){
       fullSys+='\nRECENTE GEBRUIKER-INPUT UIT DIT VERTEL-GESPREK (kan meerdere contacten raken; neem dit mee, ook wanneer het actieve dossier of de gespreksfocus wisselt):\n'+vertelUserDigest+'\n';
     }
     if(hadAdviceCtx){
-      fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder.';
+      fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder met concreet advies. Geen slotvraag hoe zij het zelf zouden aanpakken.';
     }
     if(txt.length>2800)fullSys+='\nLET OP: Laatste user-bericht is ingekort voor verwerking, hou antwoord compact en praktisch.';
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
-    var raw=await callAPI(fullSys,messages,400,55000);
+    var raw=await callAPI(fullSys,messages,420,22000);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}
