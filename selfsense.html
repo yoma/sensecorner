@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="03-05-2026 18:47">
+<meta name="fs-build" content="03-05-2026 18:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1083,7 +1083,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 03-05-2026 18:47</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 03-05-2026 18:59</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1611,6 +1611,7 @@ const PROMPT_DEFAULTS={
   tone_honest:'Wees warm, eerlijk en duidelijk. Benoem wat helpt en wat risico geeft, zonder hard of veroordelend te klinken.',
   tone_strict:'Wees duidelijk en begrenzend, maar menselijk en waardig. Bij duidelijke risico-signalen: benoem dit expliciet, vertraag, en stuur naar veiligheid en steun.',
   compare_core:'Je bent SelfSensei. Analyseer context en patronen met focus op zelfreflectie, herstel en persoonlijke groei. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, markdown-tabellen, ASCII of pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea), "Aandachtspunten:" (2-3 bullets), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
+  compare_extra_followup:'Je bent SelfSensei. De gebruiker ziet net een kort hoofd-vergelijk-advies over meerdere dossiers. Jouw taak is een tweede laag met extra expertise: patronen, grenzen, herstel en zelfzorg, en wat de gebruiker mogelijk over het hoofd ziet. Herhaal de hoofdconclusie niet uitgebreid (hoogstens één korte verwijzingszin). Gebruik GEEN tabellen of markdown. Max 7 zinnen. Nederlands. Gebruik nooit Unicode U+2014 (em dash); gebruik komma\'s of punten.',
   photo_analysis_core:'Je bent SelfSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
 };
 
@@ -7236,14 +7237,28 @@ async function runAdviceHubCompare(){
         recent_events:recentFacts
       };
     }));
-    var sys=getPromptText('compare_core');
+    var depthMode=String(S.adviceHubDepthMode||'standard').trim().toLowerCase();
+    if(depthMode!=='standard'&&depthMode!=='extra'&&depthMode!=='both')depthMode='standard';
     var usageLine=buildUsageModeContextLine();
-    if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
-    if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
     var ownLensLines=[];
     appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
-    var user='Data:\n'+JSON.stringify(payload)+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
-    var t=await callAPI(sys,[{role:'user',content:user}],760);
+    var userBase='Data:\n'+JSON.stringify(payload)+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
+    var coreText='';
+    var extraText='';
+    var sys=getPromptText('compare_core');
+    if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
+    if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
+    coreText=await callAPI(sys,[{role:'user',content:userBase}],760);
+    coreText=cleanCompareAiText(coreText);
+    if(depthMode==='extra'||depthMode==='both'){
+      var sysX=getPromptText('compare_extra_followup');
+      if(usageLine)sysX+=' CONTEXT GEBRUIKSMODE: '+usageLine;
+      var userX='Zojuist gegeven vergelijk-advies (hoofdtekst voor de gebruiker):\n'+coreText
+        +'\n\nBrondata (JSON):\n'+JSON.stringify(payload)
+        +(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
+      if(st.question)userX+='\n\nFocusvraag: '+st.question;
+      extraText=cleanCompareAiText(await callAPI(sysX,[{role:'user',content:userX}],520));
+    }
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
         var conf=Math.max(0,Math.min(100,parseInt(item.confidence,10)||0));
@@ -7260,7 +7275,24 @@ async function runAdviceHubCompare(){
           +'</div>';
       }).join('')
       +'</div>';
-    st.resultHtml=summaryHtml+formatAiCard(cleanCompareAiText(t));
+    var bodyHtml='';
+    if(depthMode==='extra'){
+      if(extraText){
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Extra expertise</div>'+formatAiCard(extraText)+'</div>';
+      }else{
+        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Extra expertise kon niet worden toegevoegd. Controleer je verbinding en probeer opnieuw.</div>';
+      }
+    }else{
+      if(coreText){
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Hoofdadvies</div>'+formatAiCard(coreText)+'</div>';
+      }
+      if((depthMode==='both')&&extraText){
+        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Extra expertise</div>'+formatAiCard(extraText)+'</div>';
+      }else if((depthMode==='both')&&!extraText){
+        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Extra expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Beide tegelijk</strong> of <strong>Met extra expertise</strong>.</div>';
+      }
+    }
+    st.resultHtml=summaryHtml+bodyHtml;
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
   }catch(e){
     st.resultHtml='<div style="color:#b91c1c">Vergelijk-advies mislukt: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
