@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="04-05-2026 13:15">
+<meta name="sc-build" content="04-05-2026 14:42">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -845,13 +845,17 @@ a{text-decoration:none;color:inherit}
     var ownFilled=Math.max(0,Math.min(ownTotal,parseInt(fallbackFilled,10)||0));
     var dsTotal=5,fsTotal=5;
     var dsFilled=0,fsFilled=0;
+    var cats={};
     if(hubProfile&&hubProfile.categories&&typeof hubProfile.categories==='object'){
-      var cats=hubProfile.categories;
-      dsTotal=countTotalAnswersInCategory(cats.datesense_focus||{},5);
-      fsTotal=countTotalAnswersInCategory(cats.familysense_focus||{},5);
-      dsFilled=countFilledAnswersInCategory(cats.datesense_focus||{});
-      fsFilled=countFilledAnswersInCategory(cats.familysense_focus||{});
+      cats=Object.assign({},hubProfile.categories);
     }
+    if(scServerCategories&&typeof scServerCategories==='object'){
+      cats=Object.assign({},cats,scServerCategories);
+    }
+    dsTotal=countTotalAnswersInCategory(cats.datesense_focus||{},5);
+    fsTotal=countTotalAnswersInCategory(cats.familysense_focus||{},5);
+    dsFilled=countFilledAnswersInCategory(cats.datesense_focus||{});
+    fsFilled=countFilledAnswersInCategory(cats.familysense_focus||{});
     return [
       {key:'own',label:'OWN',filled:ownFilled,total:ownTotal},
       {key:'ds',label:'DateSense',filled:dsFilled,total:dsTotal},
@@ -988,11 +992,15 @@ a{text-decoration:none;color:inherit}
     {id:'relatie',prompts:[0,0,0,0]},
     {id:'gevoels',prompts:[0,0,0,0]}
   ];
+  /* Zelfde blokken en slot-aantallen als ownsense.html APP_CATS (anders klopt % op hub niet na onboarding). */
   var SC_APP_CATS=[
-    {id:'datesense_focus',prompts:[0,0,0,0]},
-    {id:'familysense_focus',prompts:[0,0,0,0]}
+    {id:'datesense_focus',prompts:[0,0,0,0,0]},
+    {id:'familysense_focus',prompts:[0,0,0,0,0]},
+    {id:'friendsense_focus',prompts:[0,0,0,0,0]},
+    {id:'selfsense_focus',prompts:[0,0,0,0,0,0]}
   ];
   var SC_ALL_CATS=SC_OWN_CATS.concat(SC_APP_CATS);
+  var scServerCategories=null;
   function countOwnSlotsFromCategories(cats){
     cats=cats||{};
     var filled=0,total=0;
@@ -1043,6 +1051,7 @@ a{text-decoration:none;color:inherit}
       var row=await sb.from('sense_profiles').select('props').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
       if(row&&!row.error&&row.data&&row.data.props){
         var pcats=(row.data.props&&row.data.props.categories)||{};
+        scServerCategories=(pcats&&typeof pcats==='object')?pcats:null;
         var sc=countOwnSlotsFromCategories(pcats);
         if(sc.total>0){
           if(sc.filled>filledAnswers)filledAnswers=sc.filled;
