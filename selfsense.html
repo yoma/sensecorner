@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-05-2026 11:22">
+<meta name="fs-build" content="04-05-2026 12:52">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -710,8 +710,6 @@ a:focus-visible,
 .spiegel-plan-bottom-p{font-size:11px;color:#6b7280;line-height:1.45;margin:0 0 10px}
 .spiegel-plan-bottom .spiegel-rem-row{margin-top:0}
 .spiegel-shuffle-today{margin-top:10px;padding:10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--app-medium) 28%,#fff);background:color-mix(in srgb,var(--app-licht) 22%,#fff);font-size:12px;color:#2f3f35;line-height:1.45}
-.spiegel-shuffle-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.spiegel-shuffle-actions button{font-size:12px;font-weight:700;padding:8px 12px;border-radius:10px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit}
 .spiegel-rem-hours-wrap{display:flex;flex-wrap:wrap;gap:5px;max-width:100%;margin-top:6px}
 .spiegel-rem-hour-chip{font-size:11px;font-weight:700;padding:5px 7px;border-radius:8px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;color:#374151}
 .spiegel-rem-hour-chip.on{border-color:var(--app-medium);background:color-mix(in srgb,var(--app-licht) 35%,#fff);color:var(--app-donker)}
@@ -1121,7 +1119,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 04-05-2026 11:22</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 04-05-2026 12:52</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -4406,8 +4404,9 @@ async function loadAll(){
   try{initSpiegelReminderTick();}catch(_eRem){}
   try{
     setTimeout(function(){
-      try{maybeShowAdemReminderBootPopup();}catch(_eA){}
-      try{updateNavTabIndicators();}catch(_eB){}
+      try{ensureSpiegelDailyPlanInboxReminder();}catch(_eA){}
+      try{maybeShowAdemReminderBootPopup();}catch(_eB){}
+      try{updateNavTabIndicators();}catch(_eC){}
     },520);
   }catch(_eC){}
   if(S.screen==='dossier'&&S.viewDossier&&S.viewDossier!=='OWN Sense'&&!S.profiles.includes(S.viewDossier)){
@@ -6169,6 +6168,7 @@ function renderHomeNotePerson(dossier){
 }
 function humanTaskLabel(id){
   id=String(id||'');
+  if(id.indexOf('spiegel-adem-dag-')===0)return'Adem planning vandaag';
   if(id.indexOf('spiegel-adem-')===0)return'Ademherinnering';
   var t=id.indexOf('sense-')===0?'Fotoanalyse'
     :(id.indexOf('actie-')===0?'Actie'
@@ -6530,19 +6530,16 @@ function rSpiegel(el){
   }
   var programHtml=''
     +'<div class="spiegel-program-card">'
-    +'<div class="spiegel-program-title">Adem-planning</div>'
+    +'<div class="spiegel-program-title">Adem Planner</div>'
     +'<div class="spiegel-shuffle-hint">Elke dag kiest de app één oefening uit wat je hier <strong>aan</strong> laat staan. Zet wat je (nog) niet wilt <strong>uit</strong>.</div>'
     +inclRow('box',sh.include_box,ibox.label)
     +inclRow('four_seven_eight',sh.include_four_seven_eight,i478.label)
     +inclRow('long_exhale',sh.include_long_exhale,ilong.label)
-    +'<div class="spiegel-shuffle-today">Vandaag is het: <strong>'+escHTML(todayLab)+'</strong></div>'
-    +'<div class="spiegel-shuffle-actions">'
-    +'<button type="button" onclick="reshuffleSpiegelTodaysPick()">Andere oefening voor vandaag</button>'
-    +'<button type="button" onclick="applyTodaySpiegelProgram()">Zelfde ritme in de grote knoppen</button>'
-    +'</div>'
+    +'<div class="spiegel-shuffle-today">Vandaag kiest Sensei: <strong>'+escHTML(todayLab)+'</strong><span style="font-weight:600;color:#5f6b67"> · de drie startknoppen hierboven volgen dit automatisch.</span></div>'
     +'<div class="spiegel-plan-bottom">'
     +'<div class="spiegel-plan-bottom-h">Herinner mij (uren en hoe vaak)</div>'
-    +'<p class="spiegel-plan-bottom-p"><strong>Hoe vaak per dag?</strong> Dat is het aantal uren dat je hieronder aanzet. Elk zo uur hoogstens één seintje (in <strong>Mijn meldingen</strong>), zolang de app dan openstaat. Nu: <strong>'+remCount+'</strong>× per dag'+(remHrs.length?' (om '+escHTML(remListHuman)+')':'')+'.</p>'
+    +'<p class="spiegel-plan-bottom-p"><strong>Herinnering aan:</strong> je krijgt altijd één regel in <strong>Mijn meldingen</strong> met je oefening van vandaag, tot je geademd hebt of de melding weg doet. Zo blijft je planning in Mijn meldingen staan.</p>'
+    +'<p class="spiegel-plan-bottom-p"><strong>Extra uren:</strong> kies op welke uren je (optioneel) ook een <strong>tijdseintje</strong> wilt: dat is een browsermelding als die aan staat, zolang de app dan openstaat. Nu: <strong>'+remCount+'</strong> uur'+(remHrs.length?' ('+escHTML(remListHuman)+')':'')+'.</p>'
     +'<div class="spiegel-rem-row">'
     +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:4px">Kies je uren (tik om aan of uit)</div>'
     +'<div class="spiegel-rem-hours-wrap">'+hourChips.join('')+'</div>'
@@ -6632,7 +6629,7 @@ function closeSpiegelInfo(){
 }
 function getSpiegelAdemPatternInfo(key){
   var k=String(key||'long_exhale');
-  if(k==='box')return{key:'box',label:'Box 4-4-4-4',shortLabel:'Box',why:'Volg rustig dit ritme: 4 sec in, 4 sec vasthouden, 4 sec uit, 4 sec rust. Dit gelijkmatige patroon helpt je landen en brengt focus.'};
+  if(k==='box')return{key:'box',label:'Box 4-4-4-4',shortLabel:'4-4-4-4',why:'Vier gelijke fasen (box / vierkant): 4 sec in, 4 vast, 4 uit, 4 rust. Dus vier keer het cijfer 4, niet drie (4-4-4 zou één fase weglaten). Helpt je landen en brengt focus.'};
   if(k==='four_seven_eight')return{key:'four_seven_eight',label:'4-7-8',shortLabel:'4-7-8',why:'Adem zacht in 4 sec, houd 7 sec vast, en adem in 8 sec uit. De lange uitademing helpt je spanning loslaten en dieper ontspannen.'};
   return{key:'long_exhale',label:'Verlengd uitademen 4-6',shortLabel:'4-6',why:'Houd het eenvoudig: 4 sec in, 6 sec uit. Door net wat langer uit te ademen geef je je lichaam een kalm en veilig signaal.'};
 }
@@ -6813,6 +6810,33 @@ function addSpiegelAdemInboxReminder(slotKey,patternKey){
   });
   saveSpiegelAdemInbox(items);
 }
+/** Zolang herinnering aan staat: één vaste regel in Mijn meldingen per dag (ook zonder extra uren). */
+function ensureSpiegelDailyPlanInboxReminder(){
+  try{
+    var p=refreshSpiegelShufflePrefsIfNeeded();
+    if(!p||!p.reminder_on)return;
+    var dk=getLocalDateKey();
+    var st=getSpiegelAdemCompletionState();
+    if(st.completed&&st.completed[dk])return;
+    var slotKey='dag-'+dk;
+    var id='spiegel-adem-'+slotKey;
+    var pk=getSpiegelAdemPatternInfo(p.todays_key).key;
+    var items=getSpiegelAdemInboxRaw();
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      if(it&&String(it.id)===id&&!it.dismissed){
+        if(String(it.pattern_key||'')!==pk){
+          it.pattern_key=pk;
+          it.ts=Date.now();
+          saveSpiegelAdemInbox(items);
+        }
+        return;
+      }
+    }
+    addSpiegelAdemInboxReminder(slotKey,pk);
+    try{updateNavTabIndicators();}catch(_e){}
+  }catch(_e2){}
+}
 function dismissSpiegelAdemInboxItem(id){
   var sid=String(id||'');
   var items=getSpiegelAdemInboxRaw();
@@ -6826,7 +6850,9 @@ function dismissSpiegelAdemInboxForDate(dateKey){
   var items=getSpiegelAdemInboxRaw();
   items.forEach(function(it){
     if(!it||it.dismissed)return;
-    if(String(it.slot_key||'').indexOf(dk+'-')===0)it.dismissed=true;
+    var sk=String(it.slot_key||'');
+    if(sk.indexOf(dk+'-')===0)it.dismissed=true;
+    if(sk==='dag-'+dk)it.dismissed=true;
   });
   saveSpiegelAdemInbox(items);
 }
@@ -6837,12 +6863,16 @@ function getSpiegelAdemInboxOpenTasks(){
     var x=items[i];
     if(!x||x.dismissed)continue;
     var lab=getSpiegelAdemPatternInfo(x.pattern_key).label;
+    var isDaily=String(x.id||'').indexOf('spiegel-adem-dag-')===0;
+    var msg=isDaily
+      ?('Planning vandaag: <strong>'+escHTML(lab)+'</strong>. Die blijft hier tot je geademd hebt of weg doet.')
+      :('Adem: <strong>'+escHTML(lab)+'</strong> staat voor je klaar (shuffle van vandaag).');
     out.push({
       id:x.id,
       type:'a',
       prio:'medium',
-      msg:'Adem: <strong>'+escHTML(lab)+'</strong> staat voor je klaar (shuffle van vandaag).',
-      openMsg:'Nog openstaand: tijd om te ademen volgens je programma.',
+      msg:msg,
+      openMsg:isDaily?'Nog openstaand: je planning voor vandaag.':'Nog openstaand: tijd om te ademen volgens je programma.',
       link:'Naar Adem →',
       action:"goScreen('spiegel')",
       dossier:'',
@@ -6918,16 +6948,21 @@ function syncSpiegelProgramFromShufflePrefs(p){
 /** Elke kalenderdag een willekeurige techniek uit de shuffle; zet program + startkeuze gelijk. */
 function ensureSpiegelShuffleDailyPick(){
   syncSpiegelProgramFromShufflePrefs(refreshSpiegelShufflePrefsIfNeeded());
+  try{ensureSpiegelDailyPlanInboxReminder();}catch(_e){}
 }
 function toggleSpiegelReminder(){
   var p=getSpiegelShufflePrefs();
   p.reminder_on=!p.reminder_on;
-  if(p.reminder_on){
+  if(!p.reminder_on){
+    try{dismissSpiegelAdemInboxItem('spiegel-adem-dag-'+getLocalDateKey());}catch(_e){}
+    try{updateNavTabIndicators();}catch(_e2){}
+  }else{
     p.reminder_hours=normalizeSpiegelReminderHoursArr(p.reminder_hours);
     if(!p.reminder_hours.length)p.reminder_hours=[9];
     if(p.reminder_os&&typeof Notification!=='undefined'&&Notification.permission==='default'){
       try{Notification.requestPermission();}catch(_e){}
     }
+    try{ensureSpiegelDailyPlanInboxReminder();}catch(_e3){}
   }
   saveSpiegelShufflePrefs(p);
   initSpiegelReminderTick();
@@ -7002,39 +7037,22 @@ function toggleSpiegelShuffleInclude(key){
   var field=k==='box'?'include_box':(k==='four_seven_eight'?'include_four_seven_eight':'include_long_exhale');
   setSpiegelShuffleIncludeFromSwitch(key,!p[field]);
 }
-function reshuffleSpiegelTodaysPick(){
-  var p=getSpiegelShufflePrefs();
-  var en=enabledSpiegelShuffleKeys(p);
-  if(!en.length)return;
-  var cur=p.todays_key;
-  var pool=en.length>1?en.filter(function(x){return x!==cur;}):en;
-  if(!pool.length)pool=en;
-  p.todays_key=pool[Math.floor(Math.random()*pool.length)];
-  saveSpiegelShufflePrefs(p);
-  var prog=getSpiegelAdemProgram();
-  prog.mode='daily';
-  prog.daily=p.todays_key;
-  saveSpiegelAdemProgram(prog);
-  _spiegelAdemPatternKey=p.todays_key;
-  toast('Vandaag nu: '+getSpiegelAdemPatternInfo(p.todays_key).label);
-  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
-}
 function maybeSpiegelAdemReminder(){
   var p=refreshSpiegelShufflePrefsIfNeeded();
   if(!p.reminder_on)return;
+  var dk=getLocalDateKey();
+  var st=getSpiegelAdemCompletionState();
+  if(st.completed&&st.completed[dk])return;
+  ensureSpiegelDailyPlanInboxReminder();
   var hours=normalizeSpiegelReminderHoursArr(p.reminder_hours);
   if(!hours.length)return;
   var now=new Date();
   var nowH=now.getHours();
   if(hours.indexOf(nowH)<0)return;
-  var dk=getLocalDateKey();
-  var st=getSpiegelAdemCompletionState();
-  if(st.completed&&st.completed[dk])return;
   var slot=dk+'-'+nowH;
   var fs=p.fired_slots&&typeof p.fired_slots==='object'?p.fired_slots:{};
   if(fs[slot])return;
   var pat=p.todays_key;
-  addSpiegelAdemInboxReminder(slot,pat);
   if(p.reminder_os&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
     var lab=getSpiegelAdemPatternInfo(pat).label;
     try{new Notification('Adem',{body:'Tijd om te ademen: '+lab+'.'});}catch(_e){}
@@ -7071,15 +7089,6 @@ function cycleSpiegelProgramDay(dayIdx){
   p.week[idx]=order[(at+1)%order.length];
   saveSpiegelAdemProgram(p);
   if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
-}
-function applyTodaySpiegelProgram(){
-  var p=getSpiegelAdemProgram();
-  var d=new Date().getDay();
-  var idx=d===0?6:d-1;
-  var key=p.mode==='daily'?p.daily:((p.week&&p.week[idx])||'long_exhale');
-  _spiegelAdemPatternKey=getSpiegelAdemPatternInfo(key).key;
-  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
-  toast('Grote knoppen tonen nu: '+getSpiegelAdemPatternInfo(key).label);
 }
 function getSpiegelAdemPattern(){
   var k=String(_spiegelAdemPatternKey||'long_exhale');
