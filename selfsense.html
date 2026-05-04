@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-05-2026 10:21">
+<meta name="fs-build" content="04-05-2026 10:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -689,6 +689,15 @@ a:focus-visible,
 .spiegel-program-today.pulse{animation:spiegelDonePulse .9s ease}
 .spiegel-program-streak{margin-top:6px;font-size:12px;color:#4b5563}
 .spiegel-program-apply{margin-top:8px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--b);background:#fff;font-size:12px;font-weight:700;color:#4b5563;cursor:pointer}
+.spiegel-shuffle-hint{font-size:11px;line-height:1.45;color:#6b7280;margin:0 0 10px}
+.spiegel-rem-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+.spiegel-rem-row label{font-size:12px;font-weight:700;color:#374151}
+.spiegel-rem-hour{min-width:88px;padding:6px 8px;border-radius:8px;border:1px solid var(--b);font:inherit;font-size:12px;background:#fff}
+.spiegel-shuffle-tech{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0;padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+.spiegel-shuffle-tech span{font-size:12px;font-weight:700;color:#334155;flex:1}
+.spiegel-shuffle-today{margin-top:10px;padding:10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--app-medium) 28%,#fff);background:color-mix(in srgb,var(--app-licht) 22%,#fff);font-size:12px;color:#2f3f35;line-height:1.45}
+.spiegel-shuffle-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.spiegel-shuffle-actions button{font-size:12px;font-weight:700;padding:8px 12px;border-radius:10px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit}
 @keyframes spiegelDonePulse{
   0%{transform:scale(1);box-shadow:0 0 0 rgba(118,163,120,0)}
   45%{transform:scale(1.018);box-shadow:0 0 0 6px rgba(118,163,120,.16)}
@@ -1085,7 +1094,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <body>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 04-05-2026 10:21</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 04-05-2026 10:31</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1837,6 +1846,7 @@ var _spiegelAdemPatternKey='long_exhale';
 var _spiegelAdemDurationSec=60;
 var _spiegelWasHiddenDuringSession=false;
 var _spiegelTodayDonePulseUntil=0;
+var _spiegelRemTick=null;
 function bumpTourSchedGen(){_tourSchedGen++;}
 function navigateTourScreen(id){
   var k=String(id||'').trim();
@@ -4355,6 +4365,7 @@ async function loadAll(){
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+  try{initSpiegelReminderTick();}catch(_eRem){}
   if(S.screen==='dossier'&&S.viewDossier&&S.viewDossier!=='OWN Sense'&&!S.profiles.includes(S.viewDossier)){
     S.viewDossier=null;
     goScreen('senses');
@@ -6426,7 +6437,8 @@ function rHome(el){
 
 function rSpiegel(el){
   var stats=getSpiegelAdemStats();
-  var prog=getSpiegelAdemProgram();
+  ensureSpiegelShuffleDailyPick();
+  var sh=getSpiegelShufflePrefs();
   var totalSessions=Math.max(1,(stats.box&&stats.box.sessions||0)+(stats.four_seven_eight&&stats.four_seven_eight.sessions||0)+(stats.long_exhale&&stats.long_exhale.sessions||0));
   function statChip(key,cls){
     var it=stats[key]||{sessions:0,duration:0};
@@ -6446,13 +6458,32 @@ function rSpiegel(el){
   var ibox=getSpiegelAdemPatternInfo('box');
   var i478=getSpiegelAdemPatternInfo('four_seven_eight');
   var ilong=getSpiegelAdemPatternInfo('long_exhale');
+  var hourOpts=[];
+  for(var hh=6;hh<=22;hh++){
+    hourOpts.push('<option value="'+hh+'"'+(sh.reminder_hour===hh?' selected':'')+'>'+String(hh).padStart(2,'0')+':00</option>');
+  }
+  var todayLab=getSpiegelAdemPatternInfo(sh.todays_key).label;
+  function inclRow(k,incl,fullLab){
+    return '<div class="spiegel-shuffle-tech"><span>'+escHTML(fullLab)+'</span>'
+      +'<button type="button" class="coach-save-other" style="font-size:11px;padding:5px 9px" onclick="toggleSpiegelShuffleInclude(\''+k+'\')">'+(incl?'In shuffle':'Uit shuffle')+'</button></div>';
+  }
   var programHtml=''
     +'<div class="spiegel-program-card">'
     +'<div class="spiegel-program-title">Programma</div>'
-    +'<div class="spiegel-duration-row">'
-    +'<button class="spiegel-duration-btn'+(prog.mode==='daily'&&prog.daily==='box'?' active':'')+'" type="button" onclick="pickSpiegelProgram(\'box\')">'+escHTML(ibox.label)+'</button>'
-    +'<button class="spiegel-duration-btn'+(prog.mode==='daily'&&prog.daily==='four_seven_eight'?' active':'')+'" type="button" onclick="pickSpiegelProgram(\'four_seven_eight\')">'+escHTML(i478.label)+'</button>'
-    +'<button class="spiegel-duration-btn'+(prog.mode==='daily'&&prog.daily==='long_exhale'?' active':'')+'" type="button" onclick="pickSpiegelProgram(\'long_exhale\')">'+escHTML(ilong.label)+'</button>'
+    +'<div class="spiegel-shuffle-hint">Dagelijks een willekeurige keuze uit wat je in de shuffle laat. Haal moeilijke technieken uit de shuffle. Herinnering werkt als de app openstaat op dat uur; zet zo nodig meldingen aan in je browser.</div>'
+    +'<div class="spiegel-rem-row">'
+    +'<label for="spiegelRemHr">Herinner mij (uur)</label>'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    +'<select id="spiegelRemHr" class="spiegel-rem-hour" onchange="setSpiegelReminderHour(this.value)">'+hourOpts.join('')+'</select>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:6px 10px" onclick="toggleSpiegelReminder()">'+(sh.reminder_on?'Zet uit':'Zet aan')+'</button>'
+    +'</div></div>'
+    +inclRow('box',sh.include_box,ibox.label)
+    +inclRow('four_seven_eight',sh.include_four_seven_eight,i478.label)
+    +inclRow('long_exhale',sh.include_long_exhale,ilong.label)
+    +'<div class="spiegel-shuffle-today">Vandaag voor jou: <strong>'+escHTML(todayLab)+'</strong> (uit shuffle)</div>'
+    +'<div class="spiegel-shuffle-actions">'
+    +'<button type="button" onclick="reshuffleSpiegelTodaysPick()">Andere trekken</button>'
+    +'<button type="button" onclick="applyTodaySpiegelProgram()">Zet als start boven</button>'
     +'</div>'
     +'</div>';
   var recent=(S.spiegelRecent&&Array.isArray(S.spiegelRecent)?S.spiegelRecent:[]).slice(0,3);
@@ -6621,6 +6652,148 @@ function markTodaySpiegelProgramDone(){
   saveSpiegelAdemCompletionState(st);
   return true;
 }
+function defaultSpiegelShufflePrefs(){
+  return{
+    reminder_on:false,
+    reminder_hour:9,
+    include_box:true,
+    include_four_seven_eight:true,
+    include_long_exhale:true,
+    pick_date:'',
+    todays_key:'long_exhale',
+    last_nudge_slot:''
+  };
+}
+function getSpiegelShufflePrefs(){
+  var d=defaultSpiegelShufflePrefs();
+  try{
+    var raw=getScopedStorage('spiegel_adem_shuffle_prefs','');
+    if(!raw)return d;
+    var p=JSON.parse(raw);
+    if(!p||typeof p!=='object')return d;
+    d.reminder_on=!!p.reminder_on;
+    d.reminder_hour=Math.max(0,Math.min(23,parseInt(p.reminder_hour,10)));
+    if(isNaN(d.reminder_hour))d.reminder_hour=9;
+    d.include_box=p.include_box!==false;
+    d.include_four_seven_eight=p.include_four_seven_eight!==false;
+    d.include_long_exhale=p.include_long_exhale!==false;
+    d.pick_date=String(p.pick_date||'');
+    d.todays_key=getSpiegelAdemPatternInfo(p.todays_key).key;
+    d.last_nudge_slot=String(p.last_nudge_slot||'');
+    return d;
+  }catch(_e){
+    return defaultSpiegelShufflePrefs();
+  }
+}
+function saveSpiegelShufflePrefs(p){
+  try{setScopedStorage('spiegel_adem_shuffle_prefs',JSON.stringify(p||defaultSpiegelShufflePrefs()));}catch(_e){}
+}
+function enabledSpiegelShuffleKeys(p){
+  var out=[];
+  if(p.include_box)out.push('box');
+  if(p.include_four_seven_eight)out.push('four_seven_eight');
+  if(p.include_long_exhale)out.push('long_exhale');
+  return out;
+}
+/** Nieuwe dag of ongeldige keuze: trek opnieuw uit shuffle en bewaar in prefs. */
+function refreshSpiegelShufflePrefsIfNeeded(){
+  var p=getSpiegelShufflePrefs();
+  var today=getLocalDateKey();
+  var en=enabledSpiegelShuffleKeys(p);
+  if(!en.length)en=['long_exhale'];
+  if(p.pick_date!==today||en.indexOf(p.todays_key)<0){
+    p.todays_key=en[Math.floor(Math.random()*en.length)];
+    p.pick_date=today;
+    saveSpiegelShufflePrefs(p);
+  }
+  return p;
+}
+/** Zet opgeslagen program + live startpatroon gelijk aan shuffle-keuze (Spiegel-UI). */
+function syncSpiegelProgramFromShufflePrefs(p){
+  p=p||refreshSpiegelShufflePrefsIfNeeded();
+  var prog=getSpiegelAdemProgram();
+  prog.mode='daily';
+  prog.daily=p.todays_key;
+  saveSpiegelAdemProgram(prog);
+  _spiegelAdemPatternKey=p.todays_key;
+}
+/** Elke kalenderdag een willekeurige techniek uit de shuffle; zet program + startkeuze gelijk. */
+function ensureSpiegelShuffleDailyPick(){
+  syncSpiegelProgramFromShufflePrefs(refreshSpiegelShufflePrefsIfNeeded());
+}
+function toggleSpiegelReminder(){
+  var p=getSpiegelShufflePrefs();
+  p.reminder_on=!p.reminder_on;
+  if(p.reminder_on&&typeof Notification!=='undefined'&&Notification.permission==='default'){
+    try{Notification.requestPermission();}catch(_e){}
+  }
+  saveSpiegelShufflePrefs(p);
+  initSpiegelReminderTick();
+  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
+}
+function setSpiegelReminderHour(h){
+  var p=getSpiegelShufflePrefs();
+  var v=parseInt(h,10);
+  if(isNaN(v))v=9;
+  p.reminder_hour=Math.max(6,Math.min(22,v));
+  saveSpiegelShufflePrefs(p);
+  initSpiegelReminderTick();
+  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
+}
+function toggleSpiegelShuffleInclude(key){
+  var p=getSpiegelShufflePrefs();
+  var k=getSpiegelAdemPatternInfo(key).key;
+  var field=k==='box'?'include_box':(k==='four_seven_eight'?'include_four_seven_eight':'include_long_exhale');
+  var next=!p[field];
+  if(!next){
+    var c=(p.include_box?1:0)+(p.include_four_seven_eight?1:0)+(p.include_long_exhale?1:0);
+    if(c<=1){toast('Hou minstens één techniek in de shuffle.');return;}
+  }
+  p[field]=next;
+  saveSpiegelShufflePrefs(p);
+  ensureSpiegelShuffleDailyPick();
+  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
+}
+function reshuffleSpiegelTodaysPick(){
+  var p=getSpiegelShufflePrefs();
+  var en=enabledSpiegelShuffleKeys(p);
+  if(!en.length)return;
+  var cur=p.todays_key;
+  var pool=en.length>1?en.filter(function(x){return x!==cur;}):en;
+  if(!pool.length)pool=en;
+  p.todays_key=pool[Math.floor(Math.random()*pool.length)];
+  saveSpiegelShufflePrefs(p);
+  var prog=getSpiegelAdemProgram();
+  prog.mode='daily';
+  prog.daily=p.todays_key;
+  saveSpiegelAdemProgram(prog);
+  _spiegelAdemPatternKey=p.todays_key;
+  toast('Nieuwe keuze: '+getSpiegelAdemPatternInfo(p.todays_key).label);
+  if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
+}
+function maybeSpiegelAdemReminder(){
+  var p=refreshSpiegelShufflePrefsIfNeeded();
+  if(!p.reminder_on)return;
+  var now=new Date();
+  if(now.getHours()!==p.reminder_hour)return;
+  var slot=getLocalDateKey()+'-'+String(now.getHours());
+  if(p.last_nudge_slot===slot)return;
+  var st=getSpiegelAdemCompletionState();
+  var dk=getLocalDateKey();
+  if(st.completed&&st.completed[dk])return;
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+    var lab=getSpiegelAdemPatternInfo(p.todays_key).label;
+    try{new Notification('Adem',{body:'Tijd om te ademen: '+lab+'.'});}catch(_e){}
+  }
+  p.last_nudge_slot=slot;
+  saveSpiegelShufflePrefs(p);
+}
+function initSpiegelReminderTick(){
+  if(_spiegelRemTick)return;
+  _spiegelRemTick=setInterval(function(){
+    try{maybeSpiegelAdemReminder();}catch(_e){}
+  },60000);
+}
 function setSpiegelProgramMode(mode){
   var p=getSpiegelAdemProgram();
   p.mode=(String(mode||'daily')==='week')?'week':'daily';
@@ -6651,12 +6824,6 @@ function applyTodaySpiegelProgram(){
   _spiegelAdemPatternKey=getSpiegelAdemPatternInfo(key).key;
   if(S.screen==='spiegel'){var mc=document.getElementById('mainContent');if(mc)rSpiegel(mc);}
   toast('Vandaag gekozen: '+getSpiegelAdemPatternInfo(key).label);
-}
-/** Programma: één tik zet dagelijks ritme en meteen het gekozen patroon in de Adem-startzone. */
-function pickSpiegelProgram(key){
-  setSpiegelProgramMode('daily');
-  setSpiegelProgramDaily(key);
-  applyTodaySpiegelProgram();
 }
 function getSpiegelAdemPattern(){
   var k=String(_spiegelAdemPatternKey||'long_exhale');
