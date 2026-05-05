@@ -523,6 +523,35 @@ a{color:inherit}
     if(key==='afgewezen')return'Afgewezen';
     return key||'nieuw';
   }
+  function formatBrowserInfo(info){
+    var b=(info&&typeof info==='object')?info:{};
+    var ua=String(b.user_agent||'').trim();
+    var lang=String(b.language||'').trim()||'-';
+    var platform=String(b.platform||'').trim()||'-';
+    var viewport=String(b.viewport||'').trim()||'-';
+    var online=(b.online===false)?'nee':'ja';
+    var browser='Onbekend';
+    if(ua){
+      if(/edg\//i.test(ua))browser='Edge';
+      else if(/chrome\//i.test(ua)&&!/edg\//i.test(ua))browser='Chrome';
+      else if(/safari\//i.test(ua)&&!/chrome\//i.test(ua))browser='Safari';
+      else if(/firefox\//i.test(ua))browser='Firefox';
+      var m=ua.match(/(edg|chrome|firefox|version)\/(\d+)/i);
+      if(m&&m[2])browser+=' '+m[2];
+    }
+    var pretty=[
+      'Browser: '+browser,
+      'Platform: '+platform,
+      'Scherm: '+viewport,
+      'Taal: '+lang,
+      'Online: '+online
+    ].join(' · ');
+    var raw=ua||JSON.stringify(b||{});
+    if(!ua||browser==='Onbekend'){
+      return pretty+' | Technisch: '+String(raw||'-');
+    }
+    return pretty;
+  }
   function feedbackMatchesFilters(r){
     var app=String((adminFeedbackFilterApp&&adminFeedbackFilterApp.value)||'all');
     var type=String((adminFeedbackFilterType&&adminFeedbackFilterType.value)||'all');
@@ -597,7 +626,7 @@ a{color:inherit}
       +'<div><label>Bericht</label><div class="val">'+escHTML(String(row.message||''))+'</div></div>'
       +'<div><label>Nu</label><div class="val">'+escHTML(String(row.current_context||''))+'</div></div>'
       +'<div><label>Daarvoor</label><div class="val">'+escHTML(String(row.previous_context||''))+'</div></div>'
-      +'<div><label>Browser</label><div class="val">'+escHTML(JSON.stringify(row.browser_info||{}))+'</div></div>'
+      +'<div><label>Browser</label><div class="val">'+escHTML(formatBrowserInfo(row.browser_info||{}))+'</div></div>'
       +'</div>'
       +'<div class="admin-feedback-status-row">'
       +'<label style="margin:0">Status</label>'
