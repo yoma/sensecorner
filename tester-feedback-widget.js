@@ -95,6 +95,11 @@
         Array.prototype.slice.call(ui.pills.querySelectorAll('[data-feedback-type]')).forEach(function(b){
           b.classList.toggle('active',b===btn);
         });
+        ui.pills.classList.remove('needs-choice');
+        if(ui.state&&ui.state.classList.contains('err')&&String(ui.state.textContent||'').toLowerCase().indexOf('wat wil je melden')>=0){
+          ui.state.textContent='';
+          ui.state.classList.remove('err');
+        }
         updateSubmitState();
       });
     });
@@ -111,7 +116,13 @@
       await runSubmit();
     });
     async function runSubmit(){
-      if(state.busy||!state.type||!state.msg)return;
+      if(state.busy||!state.msg)return;
+      if(!state.type){
+        ui.pills.classList.add('needs-choice');
+        ui.state.textContent='Duid nog iets aan bij "Wat wil je melden?" (of kies "Iets anders").';
+        ui.state.classList.add('err');
+        return;
+      }
       state.busy=true;
       updateSubmitState();
       ui.submitBtn.classList.add('loading');
@@ -185,7 +196,7 @@
     }
 
     function updateSubmitState(){
-      ui.submitBtn.disabled=!!(state.busy||!state.type||!state.msg);
+      ui.submitBtn.disabled=!!(state.busy||!state.msg);
     }
     function resetForm(){
       state.type='';
@@ -275,6 +286,7 @@
       +'<button type="button" data-feedback-type="mis_ik">Mis ik</button>'
       +'<button type="button" data-feedback-type="idee">Idee</button>'
       +'<button type="button" data-feedback-type="top">Top</button>'
+      +'<button type="button" data-feedback-type="iets_anders">Iets anders</button>'
       +'</div>'
       +'<textarea id="scFbText" class="sc-fb-text" placeholder="In een of twee zinnen..."></textarea>'
       +'<button type="button" id="scFbSubmit" class="sc-fb-submit">Verstuur</button>'
@@ -403,6 +415,7 @@
       +'.sc-fb-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}'
       +'.sc-fb-pills button{border:1px solid var(--b);background:rgba(255,255,255,.8);color:var(--chocolade);border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}'
       +'.sc-fb-pills button.active{background:rgba(200,212,181,.35);border-color:rgba(107,142,111,.52);color:var(--sage-donker);box-shadow:0 2px 10px rgba(61,47,31,.12)}'
+      +'.sc-fb-pills.needs-choice{padding:6px;border:1px dashed rgba(159,29,29,.45);border-radius:12px;background:rgba(253,236,236,.35)}'
       +'.sc-fb-text{width:100%;min-height:104px;border:1px solid var(--b);border-radius:12px;padding:10px 11px;font:inherit;font-size:13px;line-height:1.45;background:#fff;color:var(--chocolade);resize:vertical}'
       +'.sc-fb-submit{margin-top:10px;width:100%;border:none;border-radius:12px;background:var(--chocolade);color:var(--cream);padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}'
       +'.sc-fb-submit:disabled{opacity:.55;cursor:not-allowed}'
