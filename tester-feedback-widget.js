@@ -9,6 +9,7 @@
   var APP_CHOICES=[
     {key:'algemeen',label:'Algemeen',cls:'sc-app-all'},
     {key:'index',label:'Homepage',cls:'sc-app-index'},
+    {key:'sensei_adviseert',label:'Sensei adviseert',cls:'sc-app-sensei-adviseert'},
     {key:'sensecorner',label:'SenseCorner',cls:'sc-app-sensecorner'},
     {key:'datesense',label:'DateSense',cls:'sc-app-datesense'},
     {key:'familysense',label:'FamilySense',cls:'sc-app-familysense'},
@@ -59,6 +60,13 @@
       if(clean)hashPart=' -> '+clean;
     }
     return app.label+' -> '+title+hashPart;
+  }
+  function deriveDefaultAppForView(app){
+    var hash=String(window.location.hash||'').toLowerCase();
+    if(app&&app.key==='index'&&hash==='#hoe'){
+      return {key:'sensei_adviseert',label:'Sensei adviseert'};
+    }
+    return {key:app.key,label:app.label};
   }
   function readPrevContext(){
     try{
@@ -212,11 +220,12 @@
       updateSubmitState();
     }
     function applyDefaultAppPill(){
-      state.appKey=app.key;
-      state.appLabel=app.label;
+      var def=deriveDefaultAppForView(app);
+      state.appKey=String(def.key||app.key);
+      state.appLabel=String(def.label||app.label);
       var matched=false;
       Array.prototype.slice.call(ui.appPills.querySelectorAll('[data-app-key]')).forEach(function(b){
-        var isHit=String(b.getAttribute('data-app-key')||'')===app.key;
+        var isHit=String(b.getAttribute('data-app-key')||'')===state.appKey;
         b.classList.toggle('active',isHit);
         if(isHit)matched=true;
       });
@@ -424,6 +433,7 @@
       +'.sc-fb-app-pills button.active::before{content:"✓";position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:900;line-height:1}'
       +'.sc-fb-app-pills .sc-app-all{border-color:rgba(61,47,31,.25)}'
       +'.sc-fb-app-pills .sc-app-index{border-color:rgba(107,142,111,.45);color:var(--sage-donker)}'
+      +'.sc-fb-app-pills .sc-app-sensei-adviseert{border-color:rgba(107,142,111,.52);color:var(--sage-donker)}'
       +'.sc-fb-app-pills .sc-app-sensecorner{border-color:rgba(107,142,111,.55);color:var(--sage-donker)}'
       +'.sc-fb-app-pills .sc-app-datesense{border-color:rgba(186,86,84,.45);color:var(--date-donker)}'
       +'.sc-fb-app-pills .sc-app-familysense{border-color:rgba(125,106,171,.45);color:var(--family-donker)}'
@@ -431,7 +441,7 @@
       +'.sc-fb-app-pills .sc-app-selfsense{border-color:rgba(74,107,80,.45);color:var(--self-donker)}'
       +'.sc-fb-app-pills .sc-app-onboarding{border-color:rgba(200,136,31,.45);color:var(--friend-donker)}'
       +'.sc-fb-app-pills .sc-app-all.active{background:rgba(61,47,31,.08)}'
-      +'.sc-fb-app-pills .sc-app-index.active,.sc-fb-app-pills .sc-app-sensecorner.active,.sc-fb-app-pills .sc-app-ownsense.active{background:rgba(107,142,111,.18)}'
+      +'.sc-fb-app-pills .sc-app-index.active,.sc-fb-app-pills .sc-app-sensei-adviseert.active,.sc-fb-app-pills .sc-app-sensecorner.active,.sc-fb-app-pills .sc-app-ownsense.active{background:rgba(107,142,111,.18)}'
       +'.sc-fb-app-pills .sc-app-datesense.active{background:rgba(186,86,84,.18)}'
       +'.sc-fb-app-pills .sc-app-familysense.active{background:rgba(125,106,171,.18)}'
       +'.sc-fb-app-pills .sc-app-selfsense.active{background:rgba(74,107,80,.18)}'
