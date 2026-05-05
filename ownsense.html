@@ -1173,6 +1173,33 @@ refreshBootFocusCatFromUrl();
 
 var HUB_KEY='ownsense_hub_profile_v2';
 var HANDOFF_KEY='ownsense_handoff_v1';
+function ownBridgeStorageKey(base,uid){
+  var u=String(uid||window.__ownSenseUid||'').trim();
+  return u?(base+'::'+u):base;
+}
+function ownBridgeStorageGet(base,uid){
+  var raw=null;
+  var scoped=ownBridgeStorageKey(base,uid);
+  try{raw=localStorage.getItem(scoped);}catch(_e){}
+  if(raw==null){
+    try{raw=localStorage.getItem(base);}catch(_e2){}
+  }
+  return raw==null?'':raw;
+}
+function ownBridgeStorageSet(base,value,uid){
+  var scoped=ownBridgeStorageKey(base,uid);
+  try{localStorage.setItem(scoped,value);}catch(_e){}
+  if(scoped!==base){
+    try{localStorage.removeItem(base);}catch(_e2){}
+  }
+}
+function ownBridgeStorageRemove(base,uid){
+  var scoped=ownBridgeStorageKey(base,uid);
+  try{localStorage.removeItem(scoped);}catch(_e){}
+  if(scoped!==base){
+    try{localStorage.removeItem(base);}catch(_e2){}
+  }
+}
 var returnToApp='';
 var SB_URL='';
 var SB_ANON='';
@@ -2778,7 +2805,7 @@ async function loadOwnFromSupabase(){
       __ownSensePropsMetaCache=Object.assign({},pm);
       if(!restrictExternalCategorySources){
         try{
-          var mSlot=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+          var mSlot=safeJsonParse(ownBridgeStorageGet('ownsense_datesense_v1',window.__ownSenseUid)||'');
           var mOk=String((mSlot&&mSlot.user_id)||(mSlot&&mSlot.__uid)||'').trim()===String(user.id);
           if(
             mOk &&
@@ -2940,6 +2967,10 @@ function purgeCrossUserOwnsenseLocalCaches(uid){
       }catch(__){}
     }
   }
+  purgeKey(ownBridgeStorageKey('ownsense_profile_v1',u));
+  purgeKey(ownBridgeStorageKey('ownsense_datesense_v1',u));
+  purgeKey(ownBridgeStorageKey(HUB_KEY,u));
+  // Legacy fallbacks: opruimen als er nog ongescopeerde keys bestaan.
   purgeKey('ownsense_profile_v1');
   purgeKey('ownsense_datesense_v1');
   purgeKey(HUB_KEY);
@@ -2948,12 +2979,12 @@ function purgeCrossUserOwnsenseLocalCaches(uid){
 function mergeHubStateFromLocalStorage(user){
   if(!user||!user.id)return;
   window.__ownSenseUid=String(user.id);
-  var local=safeJsonParse(localStorage.getItem(HUB_KEY)||'');
+  var local=safeJsonParse(ownBridgeStorageGet(HUB_KEY,user.id)||'');
   if(!local||typeof local!=='object')return;
   var tag=String(local.__ownsense_uid||'').trim();
   if(!tag||tag!==String(user.id)){
     try{
-      localStorage.removeItem(HUB_KEY);
+      ownBridgeStorageRemove(HUB_KEY,user.id);
     }catch(_e){}
     return;
   }
@@ -2970,10 +3001,10 @@ function mergeHubStateFromLocalStorage(user){
 function tryConsumeOwnsenseHandoff(user,opts){
   opts=opts||{};
   if(!user||!user.id)return;
-  var handoff=safeJsonParse(localStorage.getItem(HANDOFF_KEY)||'');
+  var handoff=safeJsonParse(ownBridgeStorageGet(HANDOFF_KEY,user.id)||'');
   if(!handoff||typeof handoff!=='object')return;
   if(String(handoff.user_id||'')!==String(user.id)){
-    try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
+    try{ownBridgeStorageRemove(HANDOFF_KEY,user.id);}catch(_e){}
     return;
   }
   var src=String(handoff.source||'').toLowerCase();
@@ -2995,7 +3026,7 @@ function tryConsumeOwnsenseHandoff(user,opts){
       if(!isNaN(v)&&v>0)hubState.props[k]=v;
     });
   }
-  try{localStorage.removeItem(HANDOFF_KEY);}catch(_e){}
+  try{ownBridgeStorageRemove(HANDOFF_KEY,user.id);}catch(_e){}
 }
 
 /** restrictExternalCategorySources: blokkeer alleen lokale mirror + flat16 (+ handoff zonder DS/FS); DB-categorieën komen altijd uit sense_profiles. */
@@ -3004,12 +3035,12 @@ function loadHubState(user,opts){
   var blockExternalCats=!!opts.restrictExternalCategorySources;
   if(!user||!user.id)return;
   var uid=String(user.id);
-  var old=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  var old=safeJsonParse(ownBridgeStorageGet('ownsense_profile_v1',uid)||'');
   if(old&&typeof old==='object'){
     var ptag=String(old.__uid||old.user_id||'').trim();
     if(!ptag||ptag!==uid){
       try{
-        localStorage.removeItem('ownsense_profile_v1');
+        ownBridgeStorageRemove('ownsense_profile_v1',uid);
       }catch(_e){}
       old=null;
     }
@@ -3018,12 +3049,12 @@ function loadHubState(user,opts){
     hubState.display_name=String(old.name||'').trim();
   }
   delete hubState.phone;
-  var mirror=safeJsonParse(localStorage.getItem('ownsense_datesense_v1')||'');
+  var mirror=safeJsonParse(ownBridgeStorageGet('ownsense_datesense_v1',uid)||'');
   if(mirror&&typeof mirror==='object'){
     var mtag=String(mirror.user_id||mirror.__uid||'').trim();
     if(!mtag||mtag!==uid){
       try{
-        localStorage.removeItem('ownsense_datesense_v1');
+        ownBridgeStorageRemove('ownsense_datesense_v1',uid);
       }catch(_e2){}
       mirror=null;
     }
@@ -3038,12 +3069,12 @@ function loadHubState(user,opts){
       hubState.photo_url=String(hubState.photo_urls[0]||'').trim();
     }
   }
-  var v1flat=safeJsonParse(localStorage.getItem('ownsense_profile_v1')||'');
+  var v1flat=safeJsonParse(ownBridgeStorageGet('ownsense_profile_v1',uid)||'');
   if(v1flat&&typeof v1flat==='object'){
     var vtag=String(v1flat.__uid||v1flat.user_id||'').trim();
     if(!vtag||vtag!==uid){
       try{
-        localStorage.removeItem('ownsense_profile_v1');
+        ownBridgeStorageRemove('ownsense_profile_v1',uid);
       }catch(_e3){}
       v1flat=null;
     }
@@ -3093,7 +3124,7 @@ function loadHubState(user,opts){
 function saveHubState(){
   hubState.updated_at=new Date().toISOString();
   if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
-  localStorage.setItem(HUB_KEY,JSON.stringify(hubState));
+  ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
   scheduleSyncAppDepthSubFacts();
   saveOwnToSupabase();
   var saved=document.getElementById('saveIndicator');

@@ -5558,6 +5558,21 @@ function setScopedStorage(base,value){
 function removeScopedStorage(base){
   localStorage.removeItem(getScopedStorageKey(base));
 }
+function getOwnBridgeStorageKey(base){
+  var uid=String((S&&S.user&&S.user.id)||'').trim();
+  return uid?(base+'::'+uid):base;
+}
+function getOwnBridgeStorage(base){
+  var scoped=getOwnBridgeStorageKey(base);
+  var raw=localStorage.getItem(scoped);
+  if(raw==null)raw=localStorage.getItem(base);
+  return raw==null?'':raw;
+}
+function setOwnBridgeStorage(base,val){
+  var scoped=getOwnBridgeStorageKey(base);
+  localStorage.setItem(scoped,val);
+  if(scoped!==base)localStorage.removeItem(base);
+}
 function migrateLegacyUserPrefs(){
   if(!S||!S.user)return;
   var map=[
@@ -13177,7 +13192,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
   if(!entries||!entries.length)return;
   if(!S.user||!S.user.id)return;
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     var profile={};
     if(raw){try{profile=JSON.parse(raw);}catch(_e){profile={};}}
     var expect=OWN_CATS.reduce(function(n,c){return n+c.prompts.length;},0);
@@ -13214,7 +13229,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
     profile.syncedFromAppAt=new Date().toISOString();
     profile.syncedFromApp='selfsense';
     profile.__uid=String(S.user.id);
-    localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));
+    setOwnBridgeStorage('ownsense_profile_v1',JSON.stringify(profile));
   }catch(_e){}
 }
 
@@ -13222,7 +13237,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
 async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
   if(!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     if(!raw)return;
     var prof=JSON.parse(raw);
     if(!prof||!Array.isArray(prof.answers))return;
@@ -13275,7 +13290,7 @@ function mirrorOwnSenseCatsToLocalStorage(){
       });
     });
     if(!entries.length)return;
-    localStorage.setItem('ownsense_datesense_v1',JSON.stringify({
+    setOwnBridgeStorage('ownsense_datesense_v1',JSON.stringify({
       updatedAt:new Date().toISOString(),
       user_id:String(S.user.id),
       entries:entries,
@@ -13295,7 +13310,7 @@ function getOwnSenseOnboardingBlock(){
 
   /* Bron 1: ownsense.html standalone onboarding */
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     if(raw&&S.user&&S.user.id){
       var p=JSON.parse(raw);
       if(String((p&&p.__uid)||(p&&p.user_id)||'')!==String(S.user.id))p=null;
@@ -13323,7 +13338,7 @@ function getOwnSenseOnboardingBlock(){
       return c&&Object.values(c).some(function(v){return String(v||'').trim().length>5;});
     });
     if(!appHasContent&&S.user&&S.user.id){
-      var raw2=localStorage.getItem('ownsense_datesense_v1')||'';
+      var raw2=getOwnBridgeStorage('ownsense_datesense_v1')||'';
       if(raw2){
         var d2=JSON.parse(raw2);
         if(String((d2&&d2.user_id)||(d2&&d2.__uid)||'')!==String(S.user.id))d2=null;

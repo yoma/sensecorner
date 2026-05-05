@@ -766,10 +766,27 @@ a{text-decoration:none;color:inherit}
 
   /* ── OWN Sense status ophalen ── */
   var CIRCUMFERENCE=2*Math.PI*30; // r=30 - expliciet dasharray voor betrouwbare ring op mobiel (Safari)
-  var raw=localStorage.getItem('ownsense_profile_v1');
+  function scOwnBridgeKey(base,uid){
+    var u=String(uid||'').trim();
+    return u?(base+'::'+u):base;
+  }
+  function scOwnBridgeGet(base,uid){
+    var rawLocal=localStorage.getItem(scOwnBridgeKey(base,uid));
+    if(rawLocal==null)rawLocal=localStorage.getItem(base);
+    return rawLocal;
+  }
+  function scOwnBridgeSet(base,val,uid){
+    localStorage.setItem(scOwnBridgeKey(base,uid),val);
+    if(uid)localStorage.removeItem(base);
+  }
+  function scOwnBridgeRemove(base,uid){
+    localStorage.removeItem(scOwnBridgeKey(base,uid));
+    if(uid)localStorage.removeItem(base);
+  }
+  var raw=scOwnBridgeGet('ownsense_profile_v1','');
   var profile=null;
   try{if(raw)profile=JSON.parse(raw);}catch(_e){}
-  var hubRaw=localStorage.getItem('ownsense_hub_profile_v2');
+  var hubRaw=scOwnBridgeGet('ownsense_hub_profile_v2','');
   var hubProfile=null;
   try{if(hubRaw)hubProfile=JSON.parse(hubRaw);}catch(_e){}
 
@@ -986,6 +1003,7 @@ a{text-decoration:none;color:inherit}
   }
   var totalQ=11;
   var filledAnswers=0;
+  var serverOwnPhotoUrl='';
   /* Zelfde categorieën als ownsense.html - voorkomt PC vs mobile mismatch (localStorage ≠ server). */
   var SC_OWN_CATS=[
     {id:'karakter',prompts:[0,0,0,0]},
@@ -1028,7 +1046,7 @@ a{text-decoration:none;color:inherit}
       if(!pOwn||pOwn!==sid){
         profile=null;
         try{
-          localStorage.removeItem('ownsense_profile_v1');
+          scOwnBridgeRemove('ownsense_profile_v1',sid);
         }catch(_pe){}
       }
     }
@@ -1037,10 +1055,19 @@ a{text-decoration:none;color:inherit}
       if(!hOwn||hOwn!==sid){
         hubProfile=null;
         try{
-          localStorage.removeItem('ownsense_hub_profile_v2');
+          scOwnBridgeRemove('ownsense_hub_profile_v2',sid);
         }catch(_he){}
       }
     }
+    // Lees scoped bridge-data opnieuw zodra user bekend is.
+    try{
+      var rawScoped=scOwnBridgeGet('ownsense_profile_v1',sid)||'';
+      profile=rawScoped?JSON.parse(rawScoped):profile;
+    }catch(_eScProf){}
+    try{
+      var hubScoped=scOwnBridgeGet('ownsense_hub_profile_v2',sid)||'';
+      hubProfile=hubScoped?JSON.parse(hubScoped):hubProfile;
+    }catch(_eScHub){}
   }
   totalQ=(profile&&parseInt(profile.totalQ,10))||11;
   filledAnswers=0;
@@ -1051,6 +1078,11 @@ a{text-decoration:none;color:inherit}
     try{
       var row=await sb.from('sense_profiles').select('props').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
       if(row&&!row.error&&row.data&&row.data.props){
+        var scMeta=row.data.props&&row.data.props.meta&&typeof row.data.props.meta==='object'?row.data.props.meta:{};
+        serverOwnPhotoUrl=String(scMeta.photo_url||'').trim();
+        if(!serverOwnPhotoUrl&&Array.isArray(scMeta.foto_urls)&&scMeta.foto_urls.length){
+          serverOwnPhotoUrl=String(scMeta.foto_urls[0]||'').trim();
+        }
         var pcats=(row.data.props&&row.data.props.categories)||{};
         scServerCategories=(pcats&&typeof pcats==='object')?pcats:null;
         var sc=countOwnSlotsFromCategories(pcats);
@@ -1081,10 +1113,12 @@ a{text-decoration:none;color:inherit}
     profile.status='empty';
     profile.completionPct=0;
     if(userSession&&userSession.id)profile.__uid=String(userSession.id);
-    try{localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));}catch(_e){}
+    try{scOwnBridgeSet('ownsense_profile_v1',JSON.stringify(profile),userSession&&userSession.id?String(userSession.id):'');}catch(_e){}
   }
   var ownPhotoUrl='';
-  if(hubProfile){
+  if(serverOwnPhotoUrl){
+    ownPhotoUrl=serverOwnPhotoUrl;
+  }else if(hubProfile){
     ownPhotoUrl=String(hubProfile.photo_url||'').trim();
     if(!ownPhotoUrl&&Array.isArray(hubProfile.photo_urls)&&hubProfile.photo_urls.length){
       ownPhotoUrl=String(hubProfile.photo_urls[0]||'').trim();
@@ -2060,9 +2094,10 @@ a{text-decoration:none;color:inherit}
         }catch(_e){}
       }
       try{
-        localStorage.removeItem('ownsense_hub_profile_v2');
-        localStorage.removeItem('ownsense_profile_v1');
-        localStorage.removeItem('ownsense_datesense_v1');
+        var sid=(u&&u.id)?String(u.id):'';
+        scOwnBridgeRemove('ownsense_hub_profile_v2',sid);
+        scOwnBridgeRemove('ownsense_profile_v1',sid);
+        scOwnBridgeRemove('ownsense_datesense_v1',sid);
       }catch(_ls){}
       if(sb)await sb.auth.signOut();
       closeHubDock();
@@ -2213,9 +2248,10 @@ a{text-decoration:none;color:inherit}
       });
       if(signRes&&signRes.error){setAuthMsg(signRes.error.message||'Account maken mislukt.',true);return;}
       try{
-        localStorage.removeItem('ownsense_hub_profile_v2');
-        localStorage.removeItem('ownsense_profile_v1');
-        localStorage.removeItem('ownsense_datesense_v1');
+        var sid=(user&&user.id)?String(user.id):'';
+        scOwnBridgeRemove('ownsense_hub_profile_v2',sid);
+        scOwnBridgeRemove('ownsense_profile_v1',sid);
+        scOwnBridgeRemove('ownsense_datesense_v1',sid);
       }catch(_lsNew){}
       setAuthMsg('Account aangemaakt. Bevestig je e-mail en log daarna in.');
     }catch(_e){setAuthMsg('Account maken mislukt. Probeer opnieuw.',true);}

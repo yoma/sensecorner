@@ -5160,6 +5160,21 @@ function setScopedStorage(base,value){
 function removeScopedStorage(base){
   localStorage.removeItem(getScopedStorageKey(base));
 }
+function getOwnBridgeStorageKey(base){
+  var uid=String((S&&S.user&&S.user.id)||'').trim();
+  return uid?(base+'::'+uid):base;
+}
+function getOwnBridgeStorage(base){
+  var scoped=getOwnBridgeStorageKey(base);
+  var raw=localStorage.getItem(scoped);
+  if(raw==null)raw=localStorage.getItem(base);
+  return raw==null?'':raw;
+}
+function setOwnBridgeStorage(base,val){
+  var scoped=getOwnBridgeStorageKey(base);
+  localStorage.setItem(scoped,val);
+  if(scoped!==base)localStorage.removeItem(base);
+}
 function migrateLegacyUserPrefs(){
   if(!S||!S.user)return;
   var map=[
@@ -5403,6 +5418,52 @@ function getProfilesForVertelNameMatch(){
     var s=getDossierLifecycle(p);
     return s==='active'||s==='on_hold';
   });
+}
+function getDossierScopeLabelsForMatch(name){
+  var m=((S.pdata&&S.pdata[name])||{}).meta||{};
+  var scopes=normalizeAppScopeList(m);
+  var out=[];
+  if(scopes.indexOf('ds')>=0)out.push('DateSense');
+  if(scopes.indexOf('fs')>=0)out.push('FamilySense');
+  if(scopes.indexOf('ss')>=0)out.push('SelfSense');
+  if(!out.length)out.push('DateSense');
+  return out;
+}
+function findMentionCandidates(token){
+  if(!token)return [];
+  var t=String(token).trim();
+  if(t.length<3)return [];
+  var out=[];
+  getProfilesForVertelNameMatch().forEach(function(p){
+    var matched=false;
+    getDossierNameVariants(p).forEach(function(v){
+      if(matched||v.length<3)return;
+      if(t.toLowerCase()===v.toLowerCase())matched=true;
+      else if(isLikelySamePersonName(t,v))matched=true;
+    });
+    if(matched&&out.indexOf(p)<0)out.push(p);
+  });
+  return out;
+}
+function detectCrossAppNameAmbiguity(txt){
+  var words=(String(txt||'').match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g)||[]).map(function(w){return w.trim();});
+  var seen={};
+  for(var i=0;i<words.length;i++){
+    var w=words[i];
+    var lw=w.toLowerCase();
+    if(seen[lw])continue;
+    seen[lw]=1;
+    var cands=findMentionCandidates(w);
+    if(cands.length<2)continue;
+    var uniqScopes={};
+    cands.forEach(function(name){
+      getDossierScopeLabelsForMatch(name).forEach(function(lbl){uniqScopes[lbl]=1;});
+    });
+    var scopeLabels=Object.keys(uniqScopes);
+    if(scopeLabels.length<2)continue;
+    return{token:w,candidates:cands.slice(0,4),scopes:scopeLabels.slice(0,4)};
+  }
+  return null;
 }
 function levenshteinPerson(a,b){
   a=String(a).toLowerCase();
@@ -11383,9 +11444,11 @@ async function sendMsg(){
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
+  var ambiguousNameCtx=null;
   if(!voorgesteldDossier){
     var matchTxt=buildVertelDossierMatchText(txt);
     voorgesteldDossier=pickBestDossierForVertelText(matchTxt);
+    ambiguousNameCtx=detectCrossAppNameAmbiguity(matchTxt);
   }
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte (breder venster i.v.m. wisselen tussen dossiers)
@@ -11413,6 +11476,9 @@ async function sendMsg(){
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
     +' CONTEXT: '+coachCtxFinal;
+  if(ambiguousNameCtx){
+    sys+='\nNAAMCONFLICT: De naam «'+ambiguousNameCtx.token+'» lijkt in meerdere app-contexten te zitten ('+ambiguousNameCtx.scopes.join(' / ')+'). Vraag éérst kort om verduidelijking over welke context het gaat, voor je inhoudelijk advies geeft. Voorbeeld: "Bedoel je '+ambiguousNameCtx.token+' in '+ambiguousNameCtx.scopes.join(' of ')+'?"';
+  }
 
 
 
@@ -12582,7 +12648,7 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
   if(!entries||!entries.length)return;
   if(!S.user||!S.user.id)return;
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     var profile={};
     if(raw){try{profile=JSON.parse(raw);}catch(_e){profile={};}}
     var expect=OWN_CATS.reduce(function(n,c){return n+c.prompts.length;},0);
@@ -12619,14 +12685,14 @@ function syncOwnsenseProfileV1FromCategoryEntries(entries){
     profile.syncedFromAppAt=new Date().toISOString();
     profile.syncedFromApp='datesense';
     profile.__uid=String(S.user.id);
-    localStorage.setItem('ownsense_profile_v1',JSON.stringify(profile));
+    setOwnBridgeStorage('ownsense_profile_v1',JSON.stringify(profile));
   }catch(_e){}
 }
 
 async function mergeOwnsenseProfileV1IntoOwnSensePdata(){
   if(!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     if(!raw)return;
     var prof=JSON.parse(raw);
     if(!prof||!Array.isArray(prof.answers))return;
@@ -12678,7 +12744,7 @@ function mirrorOwnSenseCatsToLocalStorage(){
       });
     });
     if(!entries.length)return;
-    localStorage.setItem('ownsense_datesense_v1',JSON.stringify({
+    setOwnBridgeStorage('ownsense_datesense_v1',JSON.stringify({
       updatedAt:new Date().toISOString(),
       user_id:String(S.user.id),
       entries:entries,
@@ -12698,7 +12764,7 @@ function getOwnSenseOnboardingBlock(){
 
   /* Bron 1: ownsense.html standalone onboarding */
   try{
-    var raw=localStorage.getItem('ownsense_profile_v1')||'';
+    var raw=getOwnBridgeStorage('ownsense_profile_v1')||'';
     if(raw&&S.user&&S.user.id){
       var p=JSON.parse(raw);
       if(String((p&&p.__uid)||(p&&p.user_id)||'')!==String(S.user.id))p=null;
@@ -12726,7 +12792,7 @@ function getOwnSenseOnboardingBlock(){
       return c&&Object.values(c).some(function(v){return String(v||'').trim().length>5;});
     });
     if(!appHasContent&&S.user&&S.user.id){
-      var raw2=localStorage.getItem('ownsense_datesense_v1')||'';
+      var raw2=getOwnBridgeStorage('ownsense_datesense_v1')||'';
       if(raw2){
         var d2=JSON.parse(raw2);
         if(String((d2&&d2.user_id)||(d2&&d2.__uid)||'')!==String(S.user.id))d2=null;
