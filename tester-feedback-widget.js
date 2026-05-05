@@ -157,7 +157,8 @@
         };
         var ins=await insertFeedbackWithTimeout(payload,8000);
         if(ins&&ins.error)throw new Error(ins.error.message||'Versturen mislukt');
-        ui.state.textContent='Bedankt. Binnen!';
+        ui.state.textContent='';
+        showSuccessToast(ui);
         setTimeout(function(){
           resetForm();
           closePanel(ui);
@@ -294,6 +295,13 @@
       +'<div id="scFbRetryWrap" class="sc-fb-retry-wrap" hidden></div>'
       +'</div>'
       +'</div>';
+    host.innerHTML+=''
+      +'<div id="scFbSuccessToast" class="sc-fb-success-toast" hidden>'
+      +'<div class="sc-fb-success-card">'
+      +'<div class="sc-fb-success-title">Bedankt voor je melding 🙏</div>'
+      +'<div class="sc-fb-success-text">We nemen dit mee en gaan ermee verder.</div>'
+      +'</div>'
+      +'</div>';
     document.body.appendChild(host);
     return{
       openBtn:host.querySelector('#scFbOpenBtn'),
@@ -308,7 +316,8 @@
       text:host.querySelector('#scFbText'),
       submitBtn:host.querySelector('#scFbSubmit'),
       state:host.querySelector('#scFbState'),
-      retryWrap:host.querySelector('#scFbRetryWrap')
+      retryWrap:host.querySelector('#scFbRetryWrap'),
+      successToast:host.querySelector('#scFbSuccessToast')
     };
   }
   function openPanel(ui){
@@ -321,6 +330,21 @@
     ui.overlay.hidden=true;
     ui.overlay.setAttribute('aria-hidden','true');
     document.body.classList.remove('sc-fb-noscroll');
+  }
+  function showSuccessToast(ui){
+    if(!ui.successToast)return;
+    ui.successToast.hidden=false;
+    ui.successToast.classList.remove('show');
+    setTimeout(function(){
+      if(ui.successToast)ui.successToast.classList.add('show');
+    },10);
+    setTimeout(function(){
+      if(!ui.successToast)return;
+      ui.successToast.classList.remove('show');
+      setTimeout(function(){
+        if(ui.successToast)ui.successToast.hidden=true;
+      },220);
+    },1850);
   }
   async function insertFeedbackWithTimeout(payload,timeoutMs){
     var ac=null;
@@ -427,6 +451,12 @@
       +'.sc-fb-retry-wrap{display:flex;justify-content:center;margin-top:6px}'
       +'.sc-fb-retry-wrap[hidden]{display:none!important}'
       +'.sc-fb-retry-btn{border:1px solid var(--b);background:rgba(255,255,255,.92);color:var(--chocolade);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}'
+      +'.sc-fb-success-toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:240220;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}'
+      +'.sc-fb-success-toast[hidden]{display:none!important}'
+      +'.sc-fb-success-toast.show{opacity:1;transform:translateX(-50%) translateY(-2px)}'
+      +'.sc-fb-success-card{min-width:min(420px,calc(100vw - 24px));max-width:min(460px,calc(100vw - 24px));background:linear-gradient(165deg,rgba(255,252,247,.98) 0%,var(--ivoor) 55%,rgba(200,212,181,.16) 100%);border:1px solid rgba(107,142,111,.34);border-radius:14px;padding:12px 14px;box-shadow:0 14px 30px rgba(61,47,31,.2);text-align:center}'
+      +'.sc-fb-success-title{font-family:var(--font-serif);font-size:17px;font-weight:600;color:var(--chocolade);line-height:1.25}'
+      +'.sc-fb-success-text{margin-top:4px;font-size:12px;color:var(--warm-bruin);line-height:1.45}'
       +'@media(max-width:520px){.sc-fb-open{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}.sc-fb-hint{right:12px;bottom:calc(56px + env(safe-area-inset-bottom,0px));max-width:84vw}.sc-fb-backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}.sc-fb-overlay{padding:10px}.sc-fb-dialog{width:100%}.sc-fb-title{font-size:18px}}';
     document.head.appendChild(style);
   }
