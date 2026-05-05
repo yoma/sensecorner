@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="03-05-2026 18:47">
+<meta name="admin-build" content="05-05-2026 10:18">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -43,6 +43,31 @@ a{color:inherit}
 .admin-action-btn.approve{background:#ECFDF3;border-color:#B7E4C7;color:#136D2F}
 .admin-action-btn.revoke{background:var(--amberl);border-color:rgba(146,100,10,.4);color:var(--amber)}
 .admin-action-btn.delete{background:#FDECEC;border-color:#E9B5B5;color:#9F1D1D}
+.admin-feedback-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;border-radius:999px;background:#FDECEC;border:1px solid #E9B5B5;color:#9F1D1D;font-size:11px;font-weight:800}
+.admin-feedback-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.admin-feedback-filters select{border:1px solid var(--b);border-radius:10px;background:var(--ivoor);color:var(--chocolade);padding:7px 10px;font-size:12px;font-family:inherit}
+.admin-feedback-layout{display:grid;grid-template-columns:1fr;gap:10px}
+.admin-feedback-list{display:flex;flex-direction:column;gap:8px;max-height:440px;overflow:auto;padding-right:2px}
+.admin-feedback-row{border:1px solid var(--b);border-radius:12px;background:var(--ivoor);padding:10px 11px;cursor:pointer}
+.admin-feedback-row.active{border-color:rgba(107,142,111,.48);box-shadow:0 0 0 2px rgba(200,212,181,.35) inset}
+.admin-feedback-row-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.admin-feedback-type{font-size:12px;font-weight:800;color:var(--chocolade)}
+.admin-feedback-app{font-size:11px;color:var(--m)}
+.admin-feedback-meta{font-size:11px;color:var(--m);margin-bottom:5px}
+.admin-feedback-msg{font-size:12px;color:var(--chocolade);line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.admin-feedback-detail{border:1px solid var(--b);border-radius:12px;background:var(--ivoor);padding:11px}
+.admin-feedback-detail h3{font-size:13px;font-weight:700;color:var(--chocolade);margin-bottom:8px}
+.admin-feedback-detail-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px}
+.admin-feedback-detail label{font-size:11px;color:var(--m);display:block;margin-bottom:4px}
+.admin-feedback-detail .val{font-size:12px;color:var(--chocolade);line-height:1.45;word-break:break-word}
+.admin-feedback-status-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.admin-feedback-status-row select,.admin-feedback-note{border:1px solid var(--b);border-radius:10px;background:#fff;color:var(--chocolade);padding:8px 10px;font-size:12px;font-family:inherit}
+.admin-feedback-note{width:100%;min-height:90px;resize:vertical;line-height:1.45}
+.admin-feedback-save{border:1px solid var(--chocolade);background:var(--chocolade);color:var(--cream);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.admin-feedback-save:disabled{opacity:.7;cursor:wait}
+@media(min-width:980px){
+  .admin-feedback-layout{grid-template-columns:minmax(280px,360px) 1fr}
+}
 .prompt-grid{display:grid;gap:10px}
 .prompt-card{border:1px solid var(--b);border-radius:12px;padding:10px;background:var(--ivoor)}
 .prompt-card h3{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:6px}
@@ -90,6 +115,42 @@ a{color:inherit}
     </div>
     <div id="adminAiState" class="admin-state">Laden…</div>
     <div id="adminAiList" class="admin-list"></div>
+  </section>
+
+  <section id="adminFeedbackPanel" class="panel" aria-label="Tester feedback" style="display:none">
+    <div class="admin-panel-head">
+      <h2 style="margin:0">Tester feedback <span id="adminFeedbackBadge" class="admin-feedback-badge" style="display:none">0</span></h2>
+      <button id="adminFeedbackRefreshBtn" class="admin-refresh-btn" type="button">Vernieuwen</button>
+    </div>
+    <p>Meldingen van testers uit alle apps. Standaard staat de filter op nieuwe meldingen.</p>
+    <div class="admin-feedback-filters">
+      <select id="adminFeedbackFilterApp" aria-label="Filter app">
+        <option value="all">Alle apps</option>
+      </select>
+      <select id="adminFeedbackFilterType" aria-label="Filter type">
+        <option value="all">Alle types</option>
+        <option value="werkt_niet">Werkt niet</option>
+        <option value="mis_ik">Mis ik</option>
+        <option value="idee">Idee</option>
+        <option value="top">Top</option>
+      </select>
+      <select id="adminFeedbackFilterStatus" aria-label="Filter status">
+        <option value="nieuw" selected>Nieuwe meldingen</option>
+        <option value="bekeken">Bekeken</option>
+        <option value="opgepakt">Opgepakt</option>
+        <option value="opgelost">Opgelost</option>
+        <option value="afgewezen">Afgewezen</option>
+        <option value="all">Alle statussen</option>
+      </select>
+    </div>
+    <div id="adminFeedbackState" class="admin-state">Laden…</div>
+    <div class="admin-feedback-layout">
+      <div id="adminFeedbackList" class="admin-feedback-list"></div>
+      <div id="adminFeedbackDetail" class="admin-feedback-detail">
+        <h3>Selecteer een melding</h3>
+        <div class="subtle">Klik links op een rij om detail te bekijken.</div>
+      </div>
+    </div>
   </section>
 
   <details class="panel collapsible" aria-label="DateSense instellingen">
@@ -165,6 +226,17 @@ a{color:inherit}
   var saveDatePromptsState=document.getElementById('saveDatePromptsState');
   var saveFamilyPromptsState=document.getElementById('saveFamilyPromptsState');
   var saveSelfPromptsState=document.getElementById('saveSelfPromptsState');
+  var adminFeedbackPanel=document.getElementById('adminFeedbackPanel');
+  var adminFeedbackRefreshBtn=document.getElementById('adminFeedbackRefreshBtn');
+  var adminFeedbackState=document.getElementById('adminFeedbackState');
+  var adminFeedbackBadge=document.getElementById('adminFeedbackBadge');
+  var adminFeedbackList=document.getElementById('adminFeedbackList');
+  var adminFeedbackDetail=document.getElementById('adminFeedbackDetail');
+  var adminFeedbackFilterApp=document.getElementById('adminFeedbackFilterApp');
+  var adminFeedbackFilterType=document.getElementById('adminFeedbackFilterType');
+  var adminFeedbackFilterStatus=document.getElementById('adminFeedbackFilterStatus');
+  var feedbackRowsRaw=[];
+  var feedbackSelectedId=null;
 
   var DATE_PROMPTS={
     advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Begin met 1-2 zinnen die tonen dat je hun concrete verhaal gehoord hebt (één detail uit de context), daarna meteen jouw standpunt en tips. Geen bullets en geen extra kopjes. Vraag nooit hoe zij het zelf zouden aanpakken; geef jouw concreet advies. Hoogstens één echte verduidelijkingsvraag als iets cruciaals ontbreekt. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
@@ -307,6 +379,11 @@ a{color:inherit}
     adminAiState.textContent=msg||'';
     adminAiState.style.color=isErr?'var(--date-donker)':'var(--m)';
   }
+  function setFeedbackState(msg,isErr){
+    if(!adminFeedbackState)return;
+    adminFeedbackState.textContent=msg||'';
+    adminFeedbackState.style.color=isErr?'var(--date-donker)':'var(--m)';
+  }
 
   var AUTO_APPROVE_KEY='auto_approve_ai_on_signup';
 
@@ -427,6 +504,178 @@ a{color:inherit}
     });
   }
 
+  function feedbackTypeLabel(v){
+    var key=String(v||'').toLowerCase();
+    if(key==='werkt_niet')return'⚠ Werkt niet';
+    if(key==='mis_ik')return'🧩 Mis ik';
+    if(key==='idee')return'💡 Idee';
+    if(key==='top')return'❤️ Top';
+    return key||'Onbekend';
+  }
+  function feedbackStatusLabel(v){
+    var key=String(v||'').toLowerCase();
+    if(key==='nieuw')return'Nieuw';
+    if(key==='bekeken')return'Bekeken';
+    if(key==='opgepakt')return'Opgepakt';
+    if(key==='opgelost')return'Opgelost';
+    if(key==='afgewezen')return'Afgewezen';
+    return key||'nieuw';
+  }
+  function feedbackMatchesFilters(r){
+    var app=String((adminFeedbackFilterApp&&adminFeedbackFilterApp.value)||'all');
+    var type=String((adminFeedbackFilterType&&adminFeedbackFilterType.value)||'all');
+    var status=String((adminFeedbackFilterStatus&&adminFeedbackFilterStatus.value)||'nieuw');
+    if(app!=='all'&&String(r.app_key||'')!==app)return false;
+    if(type!=='all'&&String(r.feedback_type||'')!==type)return false;
+    if(status!=='all'&&String(r.status||'nieuw')!==status)return false;
+    return true;
+  }
+  function renderFeedbackAppFilterOptions(rows){
+    if(!adminFeedbackFilterApp)return;
+    var current=String(adminFeedbackFilterApp.value||'all');
+    var seen={};
+    var opts=['<option value="all">Alle apps</option>'];
+    (rows||[]).forEach(function(r){
+      var k=String(r.app_key||'').trim();
+      if(!k||seen[k])return;
+      seen[k]=true;
+      var label=String(r.app_label||k).trim()||k;
+      opts.push('<option value="'+escHTML(k)+'">'+escHTML(label)+'</option>');
+    });
+    adminFeedbackFilterApp.innerHTML=opts.join('');
+    if(seen[current])adminFeedbackFilterApp.value=current;
+    else adminFeedbackFilterApp.value='all';
+  }
+  function renderFeedbackList(){
+    if(!adminFeedbackList)return;
+    var rows=(feedbackRowsRaw||[]).filter(feedbackMatchesFilters);
+    if(!rows.length){
+      adminFeedbackList.innerHTML='<div class="subtle">Geen meldingen voor deze filters.</div>';
+      if(adminFeedbackDetail){
+        adminFeedbackDetail.innerHTML='<h3>Geen selectie</h3><div class="subtle">Er is geen melding om te tonen.</div>';
+      }
+      feedbackSelectedId=null;
+      return;
+    }
+    adminFeedbackList.innerHTML=rows.map(function(r){
+      var rid=String(r.id||'');
+      var active=String(feedbackSelectedId||'')===rid;
+      var who=String(r.user_name||'').trim()||String(r.user_email||'').trim()||('user '+String(r.user_id||'').slice(0,8));
+      var msg=String(r.message||'').trim();
+      return '<button type="button" class="admin-feedback-row'+(active?' active':'')+'" data-feedback-id="'+escHTML(rid)+'">'
+        +'<div class="admin-feedback-row-head"><div class="admin-feedback-type">'+feedbackTypeLabel(r.feedback_type)+'</div><div class="admin-feedback-app">'+escHTML(String(r.app_label||r.app_key||''))+'</div></div>'
+        +'<div class="admin-feedback-meta">'+escHTML(who)+' · '+escHTML(fmtDateTime(r.created_at)||'')+' · '+escHTML(feedbackStatusLabel(r.status))+'</div>'
+        +'<div class="admin-feedback-msg">'+escHTML(msg)+'</div>'
+        +'</button>';
+    }).join('');
+    Array.prototype.slice.call(adminFeedbackList.querySelectorAll('[data-feedback-id]')).forEach(function(btn){
+      btn.addEventListener('click',function(){
+        feedbackSelectedId=String(btn.getAttribute('data-feedback-id')||'');
+        renderFeedbackList();
+        renderFeedbackDetail();
+      });
+    });
+    if(!feedbackSelectedId&&rows[0])feedbackSelectedId=String(rows[0].id||'');
+    renderFeedbackDetail();
+  }
+  function renderFeedbackDetail(){
+    if(!adminFeedbackDetail)return;
+    var rid=String(feedbackSelectedId||'');
+    var row=(feedbackRowsRaw||[]).find(function(r){return String(r.id||'')===rid;});
+    if(!row){
+      adminFeedbackDetail.innerHTML='<h3>Geen selectie</h3><div class="subtle">Klik links op een melding.</div>';
+      return;
+    }
+    var who=String(row.user_name||'').trim()||String(row.user_email||'').trim()||('user '+String(row.user_id||'').slice(0,8));
+    adminFeedbackDetail.innerHTML=''
+      +'<h3>'+feedbackTypeLabel(row.feedback_type)+' · '+escHTML(String(row.app_label||row.app_key||''))+'</h3>'
+      +'<div class="admin-feedback-detail-grid">'
+      +'<div><label>Tijdstip</label><div class="val">'+escHTML(fmtDateTime(row.created_at)||'')+'</div></div>'
+      +'<div><label>Tester</label><div class="val">'+escHTML(who)+'</div></div>'
+      +'<div><label>Bericht</label><div class="val">'+escHTML(String(row.message||''))+'</div></div>'
+      +'<div><label>Nu</label><div class="val">'+escHTML(String(row.current_context||''))+'</div></div>'
+      +'<div><label>Daarvoor</label><div class="val">'+escHTML(String(row.previous_context||''))+'</div></div>'
+      +'<div><label>Browser</label><div class="val">'+escHTML(JSON.stringify(row.browser_info||{}))+'</div></div>'
+      +'</div>'
+      +'<div class="admin-feedback-status-row">'
+      +'<label style="margin:0">Status</label>'
+      +'<select id="adminFeedbackDetailStatus">'
+      +'<option value="nieuw">Nieuw</option>'
+      +'<option value="bekeken">Bekeken</option>'
+      +'<option value="opgepakt">Opgepakt</option>'
+      +'<option value="opgelost">Opgelost</option>'
+      +'<option value="afgewezen">Afgewezen</option>'
+      +'</select>'
+      +'<button id="adminFeedbackStatusSave" type="button" class="admin-feedback-save">Status opslaan</button>'
+      +'</div>'
+      +'<div style="margin-top:10px">'
+      +'<label>Admin notitie</label>'
+      +'<textarea id="adminFeedbackDetailNote" class="admin-feedback-note" placeholder="Interne notitie...">'+escHTML(String(row.admin_note||''))+'</textarea>'
+      +'<div style="margin-top:8px"><button id="adminFeedbackNoteSave" type="button" class="admin-feedback-save">Notitie opslaan</button></div>'
+      +'</div>';
+    var st=document.getElementById('adminFeedbackDetailStatus');
+    var stBtn=document.getElementById('adminFeedbackStatusSave');
+    var note=document.getElementById('adminFeedbackDetailNote');
+    var noteBtn=document.getElementById('adminFeedbackNoteSave');
+    if(st)st.value=String(row.status||'nieuw');
+    if(stBtn&&st){
+      stBtn.onclick=async function(){
+        stBtn.disabled=true;
+        setFeedbackState('Status opslaan…',false);
+        try{
+          var up=await sb.from('tester_feedback').update({status:String(st.value||'nieuw')}).eq('id',row.id);
+          if(up&&up.error)throw new Error(up.error.message||'Status opslaan mislukt');
+          setFeedbackState('Status opgeslagen.',false);
+          await loadAdminFeedbackPanel();
+        }catch(e){
+          setFeedbackState((e&&e.message)||'Status opslaan mislukt.',true);
+        }finally{
+          stBtn.disabled=false;
+        }
+      };
+    }
+    if(noteBtn&&note){
+      noteBtn.onclick=async function(){
+        noteBtn.disabled=true;
+        setFeedbackState('Notitie opslaan…',false);
+        try{
+          var up=await sb.from('tester_feedback').update({admin_note:String(note.value||'').trim()}).eq('id',row.id);
+          if(up&&up.error)throw new Error(up.error.message||'Notitie opslaan mislukt');
+          setFeedbackState('Notitie opgeslagen.',false);
+          await loadAdminFeedbackPanel();
+        }catch(e){
+          setFeedbackState((e&&e.message)||'Notitie opslaan mislukt.',true);
+        }finally{
+          noteBtn.disabled=false;
+        }
+      };
+    }
+  }
+  function updateFeedbackBadge(rows){
+    if(!adminFeedbackBadge)return;
+    var n=(rows||[]).filter(function(r){return String(r.status||'nieuw')==='nieuw';}).length;
+    adminFeedbackBadge.textContent=String(n);
+    adminFeedbackBadge.style.display=n>0?'inline-flex':'none';
+  }
+  async function loadAdminFeedbackPanel(){
+    if(!sb||!adminFeedbackPanel)return;
+    setFeedbackState('Laden…',false);
+    try{
+      var rs=await sb.from('tester_feedback').select('*').order('created_at',{ascending:false}).limit(600);
+      if(rs&&rs.error)throw new Error(rs.error.message||'Feedback laden mislukt');
+      feedbackRowsRaw=Array.isArray(rs&&rs.data)?rs.data:[];
+      renderFeedbackAppFilterOptions(feedbackRowsRaw);
+      updateFeedbackBadge(feedbackRowsRaw);
+      renderFeedbackList();
+      setFeedbackState('Filter op app, type en status.',false);
+    }catch(e){
+      feedbackRowsRaw=[];
+      if(adminFeedbackList)adminFeedbackList.innerHTML='<div class="subtle">Geen data geladen.</div>';
+      if(adminFeedbackDetail)adminFeedbackDetail.innerHTML='<h3>Geen selectie</h3><div class="subtle">Feedback kon niet geladen worden.</div>';
+      setFeedbackState((e&&e.message)||'Feedback laden mislukt.',true);
+    }
+  }
+
   async function loadAdminAiPanel(){
     if(!sb||!adminAiPanel)return;
     setAdminAiState('Laden…',false);
@@ -465,6 +714,7 @@ a{color:inherit}
       return;
     }
     if(adminAiPanel)adminAiPanel.style.display='block';
+    if(adminFeedbackPanel)adminFeedbackPanel.style.display='block';
     var legacyOverrides=readLegacyPromptOverrides(user);
     var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
     var savedFamilyPrompts=await loadSavedPromptSet('prompts_familysense');
@@ -504,9 +754,17 @@ a{color:inherit}
       };
     }
     await loadAdminAiPanel();
+    await loadAdminFeedbackPanel();
     if(adminAiRefreshBtn){
       adminAiRefreshBtn.onclick=function(){loadAdminAiPanel();};
     }
+    if(adminFeedbackRefreshBtn){
+      adminFeedbackRefreshBtn.onclick=function(){loadAdminFeedbackPanel();};
+    }
+    [adminFeedbackFilterApp,adminFeedbackFilterType,adminFeedbackFilterStatus].forEach(function(el){
+      if(!el)return;
+      el.addEventListener('change',function(){renderFeedbackList();});
+    });
     var autoEl=document.getElementById('adminAutoApproveAi');
     if(autoEl&&!autoEl._obAutoBound){
       autoEl._obAutoBound=true;
@@ -536,5 +794,6 @@ a{color:inherit}
   init();
 })();
 </script>
+<script src="tester-feedback-widget.js"></script>
 </body>
 </html>
