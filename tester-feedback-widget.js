@@ -5,7 +5,7 @@
   var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
   var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
   var PREV_CTX_KEY='sc_feedback_prev_ctx_v1';
-  var HINT_SEEN_KEY='sc_feedback_hint_seen_v1';
+  var HINT_INTERVAL_MS=60000;
   var APP_CHOICES=[
     {key:'algemeen',label:'Algemeen',cls:'sc-app-all'},
     {key:'index',label:'Homepage',cls:'sc-app-index'},
@@ -43,6 +43,7 @@
 
   bindUi(ui,currentApp,prevCtx,currentCtx);
   bootVisibility(ui);
+  startHintLoop(ui);
 
   function detectApp(){
     var file=(window.location.pathname.split('/').pop()||'').toLowerCase();
@@ -219,7 +220,7 @@
       +'</button>'
       +'<div id="scFbHint" class="sc-fb-hint" hidden>'
       +'<button type="button" class="sc-fb-hint-close" aria-label="Sluiten">x</button>'
-      +'Altijd iets te melden? Tik op <strong>Tip</strong>.'
+      +'Iets te melden? Heel graag!'
       +'</div>'
       +'<div id="scFbOverlay" class="sc-fb-overlay" hidden aria-hidden="true">'
       +'<div class="sc-fb-backdrop"></div>'
@@ -273,25 +274,27 @@
   }
   function maybeShowHint(ui){
     if(!ui.hint)return;
-    try{
-      if(localStorage.getItem(HINT_SEEN_KEY)==='1')return;
-    }catch(_e){}
+    if(!ui.openBtn||ui.openBtn.style.display==='none')return;
+    if(ui.overlay&&!ui.overlay.hidden)return;
     ui.hint.hidden=false;
     if(!ui.hint._bound){
       ui.hint._bound=true;
-      if(ui.hintClose)ui.hintClose.addEventListener('click',function(){hideHint(ui,true);});
+      if(ui.hintClose)ui.hintClose.addEventListener('click',function(){hideHint(ui,false);});
       ui.hint.addEventListener('click',function(ev){
         if(ev.target===ui.hintClose)return;
-        hideHint(ui,true);
+        hideHint(ui,false);
       });
     }
   }
-  function hideHint(ui,remember){
+  function hideHint(ui){
     if(!ui.hint)return;
     ui.hint.hidden=true;
-    if(remember){
-      try{localStorage.setItem(HINT_SEEN_KEY,'1');}catch(_e){}
-    }
+  }
+  function startHintLoop(ui){
+    maybeShowHint(ui);
+    setInterval(function(){
+      maybeShowHint(ui);
+    },HINT_INTERVAL_MS);
   }
   function injectCss(){
     if(document.getElementById('scFeedbackWidgetCss'))return;
