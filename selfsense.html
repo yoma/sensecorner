@@ -1675,6 +1675,8 @@ const DP={gevoeligheid:0,openheid:0,humor:0,directheid:0,avontuur:0,stabiliteit:
 const SEG_COLORS=['seg-own','seg-c1','seg-c2','seg-c3','seg-c4'];
 const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
+// Productkeuze: in SelfSense tonen we voorlopig geen aparte Senses-laag.
+const SELFSENSE_DISABLE_SENSES=true;
 const PROMPT_DEFAULTS={
   advice_core:'Je bent SelfSensei. De gebruiker wil concreet advies rond zelfreflectie, herstel en regulatie, geen coaching waarin jij het werk teruggeeft met open vragen. Gebruik nooit Unicode U+2014 in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Werk zo: begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context. Geen lange herhaling. Daarna geef je meteen jouw advies: wat zeg of doe je, waarom dat helpt, wat vermijden. Klein en haalbaar, zonder harde oordelen of labels. Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden; vraag nooit hoe zij het zelf zouden aanpakken. Werk NOOIT met scores of percentages. Geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen zonder aparte kopregels. Sluit daarna af met exact één aparte regel in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin.',
   tone_soft:'Wees warm, validerend en kalm. Benoem gevoelens zonder te overdrijven, en geef kleine veilige stappen.',
@@ -4776,7 +4778,10 @@ async function seedSelfSenseTestDossiers(){
 
 // ══ Navigation ═══════════════════════════════════════════════════
 function goBack(){
-  if(S.screen==='dossier'){goScreen('senses');return;}
+  if(S.screen==='dossier'){
+    goScreen(SELFSENSE_DISABLE_SENSES?'home':'senses');
+    return;
+  }
   goScreen(S.prev===S.screen?'home':S.prev);
 }
 
@@ -4808,6 +4813,9 @@ function _goScreenBody(sc){
   closeHelpMenu();
   if(sc==='planner'){
     toast('Plan samen is niet beschikbaar in SelfSense.');
+    sc='home';
+  }
+  if(sc==='senses'&&SELFSENSE_DISABLE_SENSES){
     sc='home';
   }
   // Protect screens when not authenticated
@@ -4875,6 +4883,10 @@ function _goScreenBody(sc){
   ['tab-spiegel','tab-senses','tab-own','tab-advice','tab-vertel'].forEach(function(id){
     var e=document.getElementById(id);
     if(!e)return;
+    if(id==='tab-senses'&&SELFSENSE_DISABLE_SENSES){
+      e.style.display='none';
+      return;
+    }
     e.style.display=S.user?'':'none';
   });
   var homeTab=document.getElementById('tab-home');
@@ -4882,7 +4894,7 @@ function _goScreenBody(sc){
   // Geen automatische rondleiding bij navigatie: enkel via Korte rondleiding / vraagteken / instellingen, of na «Hulp opnieuw tonen».
   updateNavTabIndicators();
   maybeShowHelpIconHint(false);
-  if(S.user&&areAppTooltipsEnabled()&&(sc==='senses'||sc==='own')&&!isScreenHelpSeen(sc)){
+  if(S.user&&areAppTooltipsEnabled()&&((!SELFSENSE_DISABLE_SENSES&&sc==='senses')||sc==='own')&&!isScreenHelpSeen(sc)){
     setTimeout(function(){
       if(S.screen===sc)startQuickHelpTour(false);
     },180);
