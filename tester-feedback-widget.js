@@ -27,6 +27,7 @@
     'admin.html':{key:'admin',label:'Admin'}
   };
   var sb=null;
+  var currentUserCache=null;
   try{
     if(window.supabase&&window.supabase.createClient){
       sb=window.supabase.createClient(SURL,SKEY);
@@ -80,7 +81,7 @@
     }catch(_e){}
   }
   function bindUi(ui,app,prev,current){
-    var state={type:'',msg:'',busy:false,user:null,appKey:app.key,appLabel:app.label};
+    var state={type:'',msg:'',busy:false,appKey:app.key,appLabel:app.label};
     ui.openBtn.addEventListener('click',function(){hideHint(ui);openPanel(ui);});
     ui.backdrop.addEventListener('click',function(ev){if(ev.target===ui.backdrop)closePanel(ui);});
     ui.closeBtn.addEventListener('click',function(){closePanel(ui);});
@@ -107,13 +108,19 @@
       });
     });
     ui.submitBtn.addEventListener('click',async function(){
+      await runSubmit();
+    });
+    async function runSubmit(){
       if(state.busy||!state.type||!state.msg)return;
       state.busy=true;
       updateSubmitState();
-      ui.state.textContent='Versturen...';
+      ui.submitBtn.classList.add('loading');
+      ui.submitBtn.textContent='Versturen...';
+      ui.state.textContent='Bezig met verzenden...';
       ui.state.classList.remove('err');
+      clearRetry();
       try{
-        var user=state.user||await getCurrentUser();
+        var user=currentUserCache||await getCurrentUser();
         if(!user||!user.id)throw new Error('Niet ingelogd');
         var payload={
           user_id:user.id,
@@ -137,7 +144,7 @@
             online:navigator.onLine!==false
           }
         };
-        var ins=await sb.from('tester_feedback').insert(payload);
+        var ins=await insertFeedbackWithTimeout(payload,8000);
         if(ins&&ins.error)throw new Error(ins.error.message||'Versturen mislukt');
         ui.state.textContent='Bedankt. Binnen!';
         setTimeout(function(){
@@ -145,13 +152,37 @@
           closePanel(ui);
         },650);
       }catch(e){
-        ui.state.textContent=(e&&e.message)||'Versturen mislukt.';
+        var msg=(e&&e.message)||'Versturen mislukt.';
+        var isTimeout=String(msg).toLowerCase().indexOf('timeout')>=0;
+        if(String(msg).toLowerCase().indexOf('timeout')>=0){
+          msg='Duurde te lang om te versturen. Probeer opnieuw.';
+        }
+        ui.state.textContent=msg;
         ui.state.classList.add('err');
+        if(isTimeout)showRetry();
       }finally{
         state.busy=false;
+        ui.submitBtn.classList.remove('loading');
+        ui.submitBtn.textContent='Verstuur';
         updateSubmitState();
       }
-    });
+    }
+    function clearRetry(){
+      if(!ui.retryWrap)return;
+      ui.retryWrap.innerHTML='';
+      ui.retryWrap.hidden=true;
+    }
+    function showRetry(){
+      if(!ui.retryWrap)return;
+      ui.retryWrap.hidden=false;
+      ui.retryWrap.innerHTML='<button type="button" class="sc-fb-retry-btn">Probeer opnieuw</button>';
+      var b=ui.retryWrap.querySelector('.sc-fb-retry-btn');
+      if(!b)return;
+      b.addEventListener('click',function(){
+        if(state.busy)return;
+        runSubmit();
+      });
+    }
 
     function updateSubmitState(){
       ui.submitBtn.disabled=!!(state.busy||!state.type||!state.msg);
@@ -161,6 +192,7 @@
       state.msg='';
       ui.text.value='';
       ui.state.textContent='';
+      clearRetry();
       Array.prototype.slice.call(ui.pills.querySelectorAll('[data-feedback-type]')).forEach(function(b){
         b.classList.remove('active');
       });
@@ -190,10 +222,12 @@
   }
   async function bootVisibility(ui){
     var user=await getCurrentUser();
+    currentUserCache=user;
     setVisibility(ui,!!(user&&user.id));
     if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
       sb.auth.onAuthStateChange(async function(){
         var u=await getCurrentUser();
+        currentUserCache=u;
         setVisibility(ui,!!(u&&u.id));
       });
     }
@@ -245,6 +279,7 @@
       +'<textarea id="scFbText" class="sc-fb-text" placeholder="In een of twee zinnen..."></textarea>'
       +'<button type="button" id="scFbSubmit" class="sc-fb-submit">Verstuur</button>'
       +'<div id="scFbState" class="sc-fb-state"></div>'
+      +'<div id="scFbRetryWrap" class="sc-fb-retry-wrap" hidden></div>'
       +'</div>'
       +'</div>';
     document.body.appendChild(host);
@@ -260,7 +295,8 @@
       appPills:host.querySelector('#scFbAppPills'),
       text:host.querySelector('#scFbText'),
       submitBtn:host.querySelector('#scFbSubmit'),
-      state:host.querySelector('#scFbState')
+      state:host.querySelector('#scFbState'),
+      retryWrap:host.querySelector('#scFbRetryWrap')
     };
   }
   function openPanel(ui){
@@ -273,6 +309,32 @@
     ui.overlay.hidden=true;
     ui.overlay.setAttribute('aria-hidden','true');
     document.body.classList.remove('sc-fb-noscroll');
+  }
+  async function insertFeedbackWithTimeout(payload,timeoutMs){
+    var ac=null;
+    var timer=null;
+    try{
+      if(typeof AbortController!=='undefined'){
+        ac=new AbortController();
+        timer=setTimeout(function(){
+          try{ac.abort();}catch(_e){}
+        },Math.max(1000,timeoutMs||8000));
+      }
+      var q=sb.from('tester_feedback').insert(payload);
+      if(ac&&typeof q.abortSignal==='function'){
+        q=q.abortSignal(ac.signal);
+      }
+      var rs=await q;
+      return rs;
+    }catch(e){
+      var m=String((e&&e.message)||'');
+      if(m.toLowerCase().indexOf('abort')>=0){
+        throw new Error('timeout');
+      }
+      throw e;
+    }finally{
+      if(timer)clearTimeout(timer);
+    }
   }
   function maybeShowHint(ui){
     if(!ui.hint)return;
@@ -322,7 +384,8 @@
       +'.sc-fb-app-pills{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}'
       +'.sc-fb-app-pills button{border:1px solid var(--b);background:rgba(255,255,255,.92);color:var(--chocolade);border-radius:999px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s ease}'
       +'.sc-fb-app-pills button:hover{transform:translateY(-1px)}'
-      +'.sc-fb-app-pills button.active{box-shadow:0 0 0 2px rgba(255,255,255,.72) inset,0 2px 10px rgba(61,47,31,.14);transform:translateY(-1px);font-weight:800}'
+      +'.sc-fb-app-pills button.active{position:relative;padding-left:24px;box-shadow:0 0 0 2px rgba(255,255,255,.72) inset,0 2px 10px rgba(61,47,31,.14);transform:translateY(-1px);font-weight:800}'
+      +'.sc-fb-app-pills button.active::before{content:"✓";position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:900;line-height:1}'
       +'.sc-fb-app-pills .sc-app-all{border-color:rgba(61,47,31,.25)}'
       +'.sc-fb-app-pills .sc-app-index{border-color:rgba(107,142,111,.45);color:var(--sage-donker)}'
       +'.sc-fb-app-pills .sc-app-sensecorner{border-color:rgba(107,142,111,.55);color:var(--sage-donker)}'
@@ -343,8 +406,14 @@
       +'.sc-fb-text{width:100%;min-height:104px;border:1px solid var(--b);border-radius:12px;padding:10px 11px;font:inherit;font-size:13px;line-height:1.45;background:#fff;color:var(--chocolade);resize:vertical}'
       +'.sc-fb-submit{margin-top:10px;width:100%;border:none;border-radius:12px;background:var(--chocolade);color:var(--cream);padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}'
       +'.sc-fb-submit:disabled{opacity:.55;cursor:not-allowed}'
+      +'.sc-fb-submit.loading{position:relative;padding-left:34px}'
+      +'.sc-fb-submit.loading::before{content:"";position:absolute;left:12px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;animation:scFbSpin .8s linear infinite}'
+      +'@keyframes scFbSpin{to{transform:rotate(360deg)}}'
       +'.sc-fb-state{font-size:12px;color:var(--warm-bruin);min-height:18px;margin-top:8px;text-align:center}'
       +'.sc-fb-state.err{color:#9F1D1D}'
+      +'.sc-fb-retry-wrap{display:flex;justify-content:center;margin-top:6px}'
+      +'.sc-fb-retry-wrap[hidden]{display:none!important}'
+      +'.sc-fb-retry-btn{border:1px solid var(--b);background:rgba(255,255,255,.92);color:var(--chocolade);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}'
       +'@media(max-width:520px){.sc-fb-open{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}.sc-fb-hint{right:12px;bottom:calc(56px + env(safe-area-inset-bottom,0px));max-width:84vw}.sc-fb-backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}.sc-fb-overlay{padding:10px}.sc-fb-dialog{width:100%}.sc-fb-title{font-size:18px}}';
     document.head.appendChild(style);
   }
