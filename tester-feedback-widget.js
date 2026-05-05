@@ -6,6 +6,16 @@
   var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
   var PREV_CTX_KEY='sc_feedback_prev_ctx_v1';
   var HINT_SEEN_KEY='sc_feedback_hint_seen_v1';
+  var APP_CHOICES=[
+    {key:'algemeen',label:'Algemeen',cls:'sc-app-all'},
+    {key:'index',label:'Homepage',cls:'sc-app-index'},
+    {key:'sensecorner',label:'SenseCorner',cls:'sc-app-sensecorner'},
+    {key:'datesense',label:'DateSense',cls:'sc-app-datesense'},
+    {key:'familysense',label:'FamilySense',cls:'sc-app-familysense'},
+    {key:'ownsense',label:'OwnSense',cls:'sc-app-ownsense'},
+    {key:'selfsense',label:'SelfSense',cls:'sc-app-selfsense'},
+    {key:'onboarding',label:'Onboarding',cls:'sc-app-onboarding'}
+  ];
   var APP_MAP={
     'index.html':{key:'index',label:'Index'},
     'onboarding.html':{key:'onboarding',label:'Onboarding'},
@@ -69,8 +79,8 @@
     }catch(_e){}
   }
   function bindUi(ui,app,prev,current){
-    var state={type:'',msg:'',busy:false,user:null};
-    ui.openBtn.addEventListener('click',function(){hideHint(ui);openPanel(ui);refreshContextLine();});
+    var state={type:'',msg:'',busy:false,user:null,appKey:app.key,appLabel:app.label};
+    ui.openBtn.addEventListener('click',function(){hideHint(ui);openPanel(ui);});
     ui.backdrop.addEventListener('click',function(ev){if(ev.target===ui.backdrop)closePanel(ui);});
     ui.closeBtn.addEventListener('click',function(){closePanel(ui);});
     ui.text.addEventListener('input',function(){state.msg=String(ui.text.value||'').trim();updateSubmitState();});
@@ -84,6 +94,15 @@
           b.classList.toggle('active',b===btn);
         });
         updateSubmitState();
+      });
+    });
+    Array.prototype.slice.call(ui.appPills.querySelectorAll('[data-app-key]')).forEach(function(btn){
+      btn.addEventListener('click',function(){
+        state.appKey=String(btn.getAttribute('data-app-key')||'').trim()||app.key;
+        state.appLabel=String(btn.getAttribute('data-app-label')||'').trim()||app.label;
+        Array.prototype.slice.call(ui.appPills.querySelectorAll('[data-app-key]')).forEach(function(b){
+          b.classList.toggle('active',b===btn);
+        });
       });
     });
     ui.submitBtn.addEventListener('click',async function(){
@@ -101,8 +120,8 @@
           user_name:String((user.user_metadata&&(
             user.user_metadata.full_name||user.user_metadata.display_name||user.user_metadata.roepnaam
           ))||'').trim(),
-          app_key:app.key,
-          app_label:app.label,
+          app_key:state.appKey,
+          app_label:state.appLabel,
           feedback_type:state.type,
           message:state.msg,
           current_context:current,
@@ -133,16 +152,6 @@
       }
     });
 
-    function refreshContextLine(){
-      var now=buildCurrentContext(app);
-      current=now;
-      var prevLabel=(prev&&prev.context)?String(prev.context):'Je vorige scherm';
-      if(window.innerWidth<560){
-        now=shorten(now,42);
-        prevLabel=shorten(prevLabel,42);
-      }
-      ui.context.textContent='We sturen je schermcontext automatisch mee. Nu: '+now+' | Net ervoor: '+prevLabel+'.';
-    }
     function updateSubmitState(){
       ui.submitBtn.disabled=!!(state.busy||!state.type||!state.msg);
     }
@@ -154,9 +163,28 @@
       Array.prototype.slice.call(ui.pills.querySelectorAll('[data-feedback-type]')).forEach(function(b){
         b.classList.remove('active');
       });
+      applyDefaultAppPill();
       updateSubmitState();
     }
-    refreshContextLine();
+    function applyDefaultAppPill(){
+      state.appKey=app.key;
+      state.appLabel=app.label;
+      var matched=false;
+      Array.prototype.slice.call(ui.appPills.querySelectorAll('[data-app-key]')).forEach(function(b){
+        var isHit=String(b.getAttribute('data-app-key')||'')===app.key;
+        b.classList.toggle('active',isHit);
+        if(isHit)matched=true;
+      });
+      if(!matched){
+        var fallback=ui.appPills.querySelector('[data-app-key="algemeen"]');
+        if(fallback){
+          fallback.classList.add('active');
+          state.appKey='algemeen';
+          state.appLabel='Algemeen';
+        }
+      }
+    }
+    applyDefaultAppPill();
     updateSubmitState();
   }
   async function bootVisibility(ui){
@@ -199,7 +227,12 @@
       +'<button type="button" class="sc-fb-close" aria-label="Sluiten">x</button>'
       +'<div class="sc-fb-ornament"></div>'
       +'<h3 class="sc-fb-title">Psst... tip voor SenseCorner?</h3>'
-      +'<p id="scFbContext" class="sc-fb-context"></p>'
+      +'<p id="scFbContext" class="sc-fb-context">Kies over welke app je tip gaat. Schermcontext sturen we automatisch intern mee.</p>'
+      +'<div id="scFbAppPills" class="sc-fb-app-pills">'
+      +APP_CHOICES.map(function(a){
+        return '<button type="button" class="'+a.cls+'" data-app-key="'+a.key+'" data-app-label="'+a.label+'">'+a.label+'</button>';
+      }).join('')
+      +'</div>'
       +'<div id="scFbPills" class="sc-fb-pills">'
       +'<button type="button" data-feedback-type="werkt_niet">Werkt niet</button>'
       +'<button type="button" data-feedback-type="mis_ik">Mis ik</button>'
@@ -221,6 +254,7 @@
       closeBtn:host.querySelector('.sc-fb-close'),
       context:host.querySelector('#scFbContext'),
       pills:host.querySelector('#scFbPills'),
+      appPills:host.querySelector('#scFbAppPills'),
       text:host.querySelector('#scFbText'),
       submitBtn:host.querySelector('#scFbSubmit'),
       state:host.querySelector('#scFbState')
@@ -259,11 +293,6 @@
       try{localStorage.setItem(HINT_SEEN_KEY,'1');}catch(_e){}
     }
   }
-  function shorten(s,max){
-    var t=String(s||'').trim();
-    if(t.length<=max)return t;
-    return t.slice(0,Math.max(0,max-1))+'...';
-  }
   function injectCss(){
     if(document.getElementById('scFeedbackWidgetCss'))return;
     var style=document.createElement('style');
@@ -284,6 +313,17 @@
       +'.sc-fb-ornament{width:40px;height:40px;margin:0 auto 8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,252,247,.95) 0 22%,rgba(200,212,181,.55) 22% 48%,rgba(107,142,111,.38) 48% 100%);box-shadow:0 6px 20px rgba(107,142,111,.22)}'
       +'.sc-fb-title{font-family:var(--font-serif);font-size:20px;font-weight:500;color:var(--chocolade);margin:0 0 8px;text-align:center}'
       +'.sc-fb-context{font-size:12px;color:var(--warm-bruin);line-height:1.45;margin:0 0 10px;text-align:center}'
+      +'.sc-fb-app-pills{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}'
+      +'.sc-fb-app-pills button{border:1px solid var(--b);background:rgba(255,255,255,.88);color:var(--chocolade);border-radius:999px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}'
+      +'.sc-fb-app-pills button.active{box-shadow:0 0 0 2px rgba(255,255,255,.65) inset}'
+      +'.sc-fb-app-pills .sc-app-all{border-color:rgba(61,47,31,.25)}'
+      +'.sc-fb-app-pills .sc-app-index{border-color:rgba(107,142,111,.45);color:var(--sage-donker)}'
+      +'.sc-fb-app-pills .sc-app-sensecorner{border-color:rgba(107,142,111,.55);color:var(--sage-donker)}'
+      +'.sc-fb-app-pills .sc-app-datesense{border-color:rgba(186,86,84,.45);color:var(--date-donker)}'
+      +'.sc-fb-app-pills .sc-app-familysense{border-color:rgba(125,106,171,.45);color:var(--family-donker)}'
+      +'.sc-fb-app-pills .sc-app-ownsense{border-color:rgba(107,142,111,.45);color:var(--sage-donker)}'
+      +'.sc-fb-app-pills .sc-app-selfsense{border-color:rgba(74,107,80,.45);color:var(--self-donker)}'
+      +'.sc-fb-app-pills .sc-app-onboarding{border-color:rgba(200,136,31,.45);color:var(--friend-donker)}'
       +'.sc-fb-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}'
       +'.sc-fb-pills button{border:1px solid var(--b);background:rgba(255,255,255,.8);color:var(--chocolade);border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}'
       +'.sc-fb-pills button.active{background:rgba(200,212,181,.35);border-color:rgba(107,142,111,.52);color:var(--sage-donker)}'
