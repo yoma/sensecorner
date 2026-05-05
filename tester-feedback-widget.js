@@ -5,6 +5,7 @@
   var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
   var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
   var PREV_CTX_KEY='sc_feedback_prev_ctx_v1';
+  var HINT_SEEN_KEY='sc_feedback_hint_seen_v1';
   var APP_MAP={
     'index.html':{key:'index',label:'Index'},
     'onboarding.html':{key:'onboarding',label:'Onboarding'},
@@ -15,13 +16,6 @@
     'selfsense.html':{key:'selfsense',label:'SelfSense'},
     'admin.html':{key:'admin',label:'Admin'}
   };
-  var TYPE_LABELS={
-    werkt_niet:'Werkt niet',
-    mis_ik:'Mis ik',
-    idee:'Idee',
-    top:'Top'
-  };
-
   var sb=null;
   try{
     if(window.supabase&&window.supabase.createClient){
@@ -76,7 +70,7 @@
   }
   function bindUi(ui,app,prev,current){
     var state={type:'',msg:'',busy:false,user:null};
-    ui.openBtn.addEventListener('click',function(){openPanel(ui);refreshContextLine();});
+    ui.openBtn.addEventListener('click',function(){hideHint(ui);openPanel(ui);refreshContextLine();});
     ui.backdrop.addEventListener('click',function(ev){if(ev.target===ui.backdrop)closePanel(ui);});
     ui.closeBtn.addEventListener('click',function(){closePanel(ui);});
     ui.text.addEventListener('input',function(){state.msg=String(ui.text.value||'').trim();updateSubmitState();});
@@ -142,12 +136,12 @@
     function refreshContextLine(){
       var now=buildCurrentContext(app);
       current=now;
-      var prevLabel=(prev&&prev.context)?String(prev.context):'Geen vorige pagina gedetecteerd';
+      var prevLabel=(prev&&prev.context)?String(prev.context):'Je vorige scherm';
       if(window.innerWidth<560){
-        now=shorten(now,46);
-        prevLabel=shorten(prevLabel,46);
+        now=shorten(now,42);
+        prevLabel=shorten(prevLabel,42);
       }
-      ui.context.textContent='Nu: '+now+' | Daarvoor: '+prevLabel;
+      ui.context.textContent='We sturen je schermcontext automatisch mee. Nu: '+now+' | Net ervoor: '+prevLabel+'.';
     }
     function updateSubmitState(){
       ui.submitBtn.disabled=!!(state.busy||!state.type||!state.msg);
@@ -177,7 +171,11 @@
   }
   function setVisibility(ui,show){
     ui.openBtn.style.display=show?'inline-flex':'none';
-    if(!show)closePanel(ui);
+    if(show)maybeShowHint(ui);
+    else{
+      closePanel(ui);
+      hideHint(ui);
+    }
   }
   async function getCurrentUser(){
     try{
@@ -191,6 +189,10 @@
       +'<button type="button" id="scFbOpenBtn" class="sc-fb-open" aria-label="Open feedback paneel">'
       +'<span class="sc-fb-open-dot"></span><span class="sc-fb-open-txt">Tip</span>'
       +'</button>'
+      +'<div id="scFbHint" class="sc-fb-hint" hidden>'
+      +'<button type="button" class="sc-fb-hint-close" aria-label="Sluiten">x</button>'
+      +'Altijd iets te melden? Tik op <strong>Tip</strong>.'
+      +'</div>'
       +'<div id="scFbOverlay" class="sc-fb-overlay" hidden aria-hidden="true">'
       +'<div class="sc-fb-backdrop"></div>'
       +'<div class="sc-fb-dialog" role="dialog" aria-modal="true" aria-label="Testfeedback">'
@@ -212,6 +214,8 @@
     document.body.appendChild(host);
     return{
       openBtn:host.querySelector('#scFbOpenBtn'),
+      hint:host.querySelector('#scFbHint'),
+      hintClose:host.querySelector('.sc-fb-hint-close'),
       overlay:host.querySelector('#scFbOverlay'),
       backdrop:host.querySelector('.sc-fb-backdrop'),
       closeBtn:host.querySelector('.sc-fb-close'),
@@ -233,6 +237,28 @@
     ui.overlay.setAttribute('aria-hidden','true');
     document.body.classList.remove('sc-fb-noscroll');
   }
+  function maybeShowHint(ui){
+    if(!ui.hint)return;
+    try{
+      if(localStorage.getItem(HINT_SEEN_KEY)==='1')return;
+    }catch(_e){}
+    ui.hint.hidden=false;
+    if(!ui.hint._bound){
+      ui.hint._bound=true;
+      if(ui.hintClose)ui.hintClose.addEventListener('click',function(){hideHint(ui,true);});
+      ui.hint.addEventListener('click',function(ev){
+        if(ev.target===ui.hintClose)return;
+        hideHint(ui,true);
+      });
+    }
+  }
+  function hideHint(ui,remember){
+    if(!ui.hint)return;
+    ui.hint.hidden=true;
+    if(remember){
+      try{localStorage.setItem(HINT_SEEN_KEY,'1');}catch(_e){}
+    }
+  }
   function shorten(s,max){
     var t=String(s||'').trim();
     if(t.length<=max)return t;
@@ -244,8 +270,11 @@
     style.id='scFeedbackWidgetCss';
     style.textContent=''
       +'body.sc-fb-noscroll{overflow:hidden!important}'
-      +'.sc-fb-open{position:fixed;right:16px;bottom:16px;z-index:240000;border:1px solid rgba(107,142,111,.42);background:linear-gradient(155deg,rgba(255,252,247,.98) 0%,var(--ivoor) 52%,rgba(200,212,181,.25) 100%);color:var(--chocolade);border-radius:999px;padding:9px 12px;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(61,47,31,.18)}'
+      +'.sc-fb-open{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:240000;border:1px solid rgba(107,142,111,.42);background:linear-gradient(155deg,rgba(255,252,247,.98) 0%,var(--ivoor) 52%,rgba(200,212,181,.25) 100%);color:var(--chocolade);border-radius:999px;padding:9px 12px;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(61,47,31,.18)}'
       +'.sc-fb-open-dot{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle,var(--sage-medium) 0 44%,var(--sage-licht) 44% 70%,var(--sage-donker) 70% 100%)}'
+      +'.sc-fb-hint{position:fixed;right:16px;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:240000;max-width:min(260px,78vw);background:var(--ivoor);color:var(--chocolade);border:1px solid rgba(107,142,111,.35);border-radius:12px;padding:10px 28px 10px 10px;font-size:12px;line-height:1.45;box-shadow:0 8px 24px rgba(61,47,31,.16)}'
+      +'.sc-fb-hint[hidden]{display:none!important}'
+      +'.sc-fb-hint-close{position:absolute;top:6px;right:7px;border:none;background:transparent;color:var(--warm-bruin);font-size:14px;line-height:1;cursor:pointer;padding:2px 4px}'
       +'.sc-fb-overlay{position:fixed;inset:0;z-index:240100;display:flex;align-items:flex-end;justify-content:flex-end;padding:18px}'
       +'.sc-fb-overlay[hidden]{display:none!important}'
       +'.sc-fb-backdrop{position:fixed;inset:0;background:rgba(42,24,16,.32);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}'
@@ -263,7 +292,7 @@
       +'.sc-fb-submit:disabled{opacity:.55;cursor:not-allowed}'
       +'.sc-fb-state{font-size:12px;color:var(--warm-bruin);min-height:18px;margin-top:8px;text-align:center}'
       +'.sc-fb-state.err{color:#9F1D1D}'
-      +'@media(max-width:520px){.sc-fb-backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}.sc-fb-overlay{padding:10px}.sc-fb-dialog{width:100%}.sc-fb-title{font-size:18px}}';
+      +'@media(max-width:520px){.sc-fb-open{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}.sc-fb-hint{right:12px;bottom:calc(56px + env(safe-area-inset-bottom,0px));max-width:84vw}.sc-fb-backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}.sc-fb-overlay{padding:10px}.sc-fb-dialog{width:100%}.sc-fb-title{font-size:18px}}';
     document.head.appendChild(style);
   }
 })();
