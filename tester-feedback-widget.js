@@ -391,7 +391,12 @@
       if(timer)clearTimeout(timer);
     }
   }
+  function isFeedbackHintHostPage(){
+    var f=(window.location.pathname.split('/').pop()||'').toLowerCase();
+    return f==='sensecorner.html';
+  }
   function maybeShowHint(ui){
+    if(!isFeedbackHintHostPage())return;
     if(!ui.hint)return;
     if(!ui.openBtn||ui.openBtn.style.display==='none')return;
     if(ui.overlay&&!ui.overlay.hidden)return;
@@ -410,6 +415,7 @@
     ui.hint.hidden=true;
   }
   function startHintLoop(ui){
+    if(!isFeedbackHintHostPage())return;
     maybeShowHint(ui);
     setInterval(function(){
       maybeShowHint(ui);
