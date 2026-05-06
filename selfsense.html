@@ -1300,7 +1300,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
     <div class="input-bar">
       <div id="vertelHelpMount" class="vertel-help-mount"></div>
       <div class="input-stack-vertel">
-        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ je verhaal of vraag; Sensei helpt het dossier kiezen. Vast advies per persoon: open hun dossier → tab Advies." rows="3" aria-label="Vertel je verhaal" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+        <textarea class="input-area input-area-vertel" id="msgInput" placeholder="Typ je verhaal of vraag. Dit wordt automatisch bewaard in je SelfSense/OWN-profiel." rows="3" aria-label="Vertel je verhaal" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
         <div class="input-toolbar-vertel input-toolbar-vertel--compact">
           <button type="button" class="rnd gr rnd--vertel" onclick="toggleImportMenu()" id="importBtn" title="Importeer">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -3547,17 +3547,11 @@ function updateVertelSaveModeUI(){
   var el=document.getElementById('vertelSaveMode');
   var hint=document.getElementById('vertelSaveHint');
   if(!el)return;
-  var forced=getForcedDossier();
-  if(forced){
-    el.textContent='Opslagmodus: Altijd opslaan bij '+dn(forced);
-    if(hint)hint.textContent='Nieuwe berichten worden automatisch aan dit dossier gekoppeld.';
-  }else{
-    el.textContent='Opslagmodus: Altijd vragen';
-    if(hint)hint.textContent='Na elk AI-antwoord kies jij eerst in welk dossier het wordt opgeslagen.';
-  }
+  el.textContent='Opslagmodus: automatisch naar SelfSense (OWN Sense)';
+  if(hint)hint.textContent='Je hoeft geen dossier te kiezen. Chatgeschiedenis blijft beschikbaar via Geschiedenis.';
 }
 function kiesVertelSaveMode(){
-  openSaveModeModal();
+  toast('SelfSense bewaart automatisch in je OWN Sense-profiel.');
 }
 
 function openVertelGesprekKies(){
@@ -3572,20 +3566,8 @@ function openVertelGesprekKies(){
 function updateVertelGesprekBanner(){
   var el=document.getElementById('vertelGesprekBanner');
   if(!el)return;
-  if(getForcedDossier()){
-    el.style.display='none';
-    el.innerHTML='';
-    return;
-  }
-  var d=S.vertelGesprekDossier||S.vertelFrom;
-  if(!d){
-    el.style.display='none';
-    el.innerHTML='';
-    return;
-  }
-  el.style.display='block';
-  el.innerHTML='Gesprek gekoppeld aan <strong>'+escHTML(dn(d))+'</strong> · '
-    +'<button type="button" class="linkish" onclick="openVertelGesprekKies()">Ander dossier</button>';
+  el.style.display='none';
+  el.innerHTML='';
 }
 
 function openSaveModeModal(){
@@ -10537,7 +10519,7 @@ async function rVertel(el){
       <div id="vertelSaveHint" style="color:#9aa0a8">Na elk AI-antwoord kies jij eerst in welk dossier het wordt opgeslagen.</div>
       <div style="color:#6b7280;font-size:12px">Regulatie of ontladen? Je kan hier vrij praten zonder eerst te structureren.</div>
     </div>
-    <button type="button" class="coach-save-other" onclick="kiesVertelSaveMode()">Opslag</button>
+    
   </div>
   <div id="vertelMoodMount" class="vertel-mood-strip" aria-label="Stemming vandaag"></div>
   <div id="vertelAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
@@ -10864,11 +10846,21 @@ function getEffectiveAnthropicKey(){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
-  var sess=await withTimeout(
-    sb.auth.getSession(),
-    15000,
-    'Sessie laden duurt te lang (netwerk). Vernieuw de pagina of log opnieuw in via SenseCorner.'
-  );
+  var sess=null;
+  try{
+    sess=await withTimeout(
+      sb.auth.getSession(),
+      25000,
+      null
+    );
+  }catch(_s1){
+    await new Promise(function(resolve){setTimeout(resolve,1200);});
+    sess=await withTimeout(
+      sb.auth.getSession(),
+      25000,
+      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
+    );
+  }
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
@@ -12159,9 +12151,6 @@ async function sendMsg(){
       window._pendingSegmenten=null;
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
       addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
-    }else if(segData&&segData.length>=2){
-      window._pendingSegmenten=segData;
-      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildSegmentReviewCardHtml());
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
@@ -12177,24 +12166,9 @@ async function sendMsg(){
         didSticky=true;
       }
       if(!didSticky){
-        var saveId='sv'+Date.now();
-        window._saveData=window._saveData||{};
-        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(buildVertelDossierMatchText(txt)):'';
-        if(nieuwNaam&&findExistingDossierForMention(nieuwNaam))nieuwNaam='';
-        window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
-        var saveLbl=voorgesteldDossier
-          ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
-          :'Opslaan in een dossier?';
-        var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
-          +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
-          +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
-          +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="In dit gesprek niet meer vragen waar je opslaat">Altijd in dit gesprek</button>':'')
-          +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
-          +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
-          +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
-          +'</div>';
-
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+saveBar);
+        var autoDossier='OWN Sense';
+        await _doOpslaan(null,txt+'\n'+raw,autoDossier,userSessionMsgId);
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(autoDossier)+'</span></span>',userSessionMsgId));
       }
     }
     // Update sidebar sessie preview
@@ -12202,7 +12176,8 @@ async function sendMsg(){
 
   }catch(x){
     hideT();
-    addMsg('ai','Er ging iets mis: '+x.message);
+    var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
+    addMsg('ai','Er ging iets mis: '+x.message+retryTip);
   }finally{
     S.busy=false;
   }

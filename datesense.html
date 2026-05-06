@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="06-05-2026 14:39">
+<meta name="ds-build" content="06-05-2026 15:29">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -10392,11 +10392,21 @@ function getEffectiveAnthropicKey(){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
-  var sess=await withTimeout(
-    sb.auth.getSession(),
-    15000,
-    'Sessie laden duurt te lang (netwerk). Vernieuw de pagina of log opnieuw in via SenseCorner.'
-  );
+  var sess=null;
+  try{
+    sess=await withTimeout(
+      sb.auth.getSession(),
+      25000,
+      null
+    );
+  }catch(_s1){
+    await new Promise(function(resolve){setTimeout(resolve,1200);});
+    sess=await withTimeout(
+      sb.auth.getSession(),
+      25000,
+      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
+    );
+  }
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
@@ -11686,7 +11696,8 @@ async function sendMsg(){
 
   }catch(x){
     hideT();
-    addMsg('ai','Er ging iets mis: '+x.message);
+    var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
+    addMsg('ai','Er ging iets mis: '+x.message+retryTip);
   }finally{
     S.busy=false;
     try{
