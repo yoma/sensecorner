@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="06-05-2026 20:59">
+<meta name="sc-build" content="06-05-2026 21:35">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1502,8 +1502,17 @@ a{text-decoration:none;color:inherit}
   async function getCurrentUser(){
     if(!sb)return null;
     try{
-      var res=await sb.auth.getSession();
-      return res&&res.data&&res.data.session&&res.data.session.user?res.data.session.user:null;
+      var res=await withTimeout(sb.auth.getSession(),12000,null);
+      if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
+      var bounce='';
+      try{bounce=String(sessionStorage.getItem('sc_login_bounce')||'');}catch(_b){}
+      if(bounce==='1'){
+        try{sessionStorage.removeItem('sc_login_bounce');}catch(_r){}
+        await new Promise(function(r){setTimeout(r,400);});
+        res=await withTimeout(sb.auth.getSession(),8000,null);
+        if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
+      }
+      return null;
     }catch(_e){return null;}
   }
   var _scLastCoachPack=null;
@@ -1965,9 +1974,9 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
-    await refreshAdminRole(user);
+    await withTimeout(Promise.resolve(refreshAdminRole(user)),6000,null).catch(function(){});
     var approval={known:false,approved:false};
-    if(user)approval=await getOwnAiApproval(user);
+    if(user)approval=await withTimeout(getOwnAiApproval(user),8000,{known:false,approved:false});
     updateHubHealthUi(user,approval);
     if(adminPill){
       adminPill.style.display=(user&&currentAdminRole==='admin')?'inline-flex':'none';
@@ -1975,7 +1984,9 @@ a{text-decoration:none;color:inherit}
     if(user){
       var em=String(user.email||'').trim();
       if(hubAuthState){
-        if(approval.approved){
+        if(!approval.known){
+          hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
+        }else if(approval.approved){
           hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang goedgekeurd, je kan de apps gebruiken.';
         }else{
           hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang wacht op approval.';
@@ -1992,7 +2003,7 @@ a{text-decoration:none;color:inherit}
       }
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
-      await refreshHubOwnPreview(user);
+      void refreshHubOwnPreview(user).catch(function(_ph){});
       updateHeroWelcome(user);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
@@ -2262,6 +2273,7 @@ a{text-decoration:none;color:inherit}
       }
       if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
       setAuthMsg('Even geduld, de pagina wordt vernieuwd.');
+      try{sessionStorage.setItem('sc_login_bounce','1');}catch(_lb){}
       // Login mag niet blokkeren op extra profiel/approval queries.
       Promise.resolve(refreshAuthUi()).catch(function(e){
         console.warn('refreshAuthUi after login', (e&&e.message)||e);
@@ -2321,8 +2333,10 @@ a{text-decoration:none;color:inherit}
   };
   await refreshAuthUi();
   if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
-    sb.auth.onAuthStateChange(function(ev){
-      if(ev==='SIGNED_OUT'){
+    sb.auth.onAuthStateChange(function(event){
+      if(event==='SIGNED_OUT'){
+        Promise.resolve(refreshAuthUi()).catch(function(){});
+      }else if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){
         Promise.resolve(refreshAuthUi()).catch(function(){});
       }
     });
