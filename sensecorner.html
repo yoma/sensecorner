@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="06-05-2026 20:44">
+<meta name="sc-build" content="06-05-2026 20:59">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -759,10 +759,10 @@ a{text-decoration:none;color:inherit}
 
   if(sb){
     try{
-      var sessEarly=await sb.auth.getSession();
+      var sessEarly=await withTimeout(sb.auth.getSession(),8000,null);
       var uEarly=sessEarly&&sessEarly.data&&sessEarly.data.session&&sessEarly.data.session.user?sessEarly.data.session.user:null;
       if(uEarly){
-        var doneEarly=await scHasOnboardingCompleted(uEarly.id);
+        var doneEarly=await withTimeout(scHasOnboardingCompleted(uEarly.id),8000,true);
         if(!doneEarly){
           window.location.replace('onboarding.html');
           return;
@@ -2261,6 +2261,7 @@ a{text-decoration:none;color:inherit}
         return;
       }
       if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
+      setAuthMsg('Even geduld, de pagina wordt vernieuwd.');
       // Login mag niet blokkeren op extra profiel/approval queries.
       Promise.resolve(refreshAuthUi()).catch(function(e){
         console.warn('refreshAuthUi after login', (e&&e.message)||e);
@@ -2269,7 +2270,7 @@ a{text-decoration:none;color:inherit}
       if(pendingReturnTo){
         window.location.href=pendingReturnTo;
       }else{
-        window.location.reload();
+        setTimeout(function(){try{window.location.reload();}catch(_r){window.location.href=window.location.pathname||'sensecorner.html';}},0);
       }
     }catch(_e){setAuthMsg('Inloggen mislukt. Probeer opnieuw.',true);}
   };

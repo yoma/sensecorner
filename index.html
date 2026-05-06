@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging landingspagina: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="lp-build" content="06-05-2026 20:11">
+<meta name="lp-build" content="06-05-2026 20:58">
 <title>SenseCorner - Een coach die jou echt leert kennen</title>
 <meta name="description" content="Sensei is je persoonlijke coach voor dating, familie, vriendschap en zelfkennis. Eén profiel dat jou begrijpt, in elk levensgebied.">
 <meta property="og:title" content="SenseCorner — Maak kennis met Sensei">
@@ -1068,24 +1068,44 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var res=await sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
     return !!(res&&res.data);
   }
-  async function afterAuthSuccess(){
-    var gu=await withTimeout(sb.auth.getUser(),7000,null);
-    var u=gu&&gu.data&&gu.data.user;
-    if(!u||!u.id)return;
-    var done=await withTimeout(hasObDone(u.id),5000,true);
-    stripLoginQuery();
-    closeLogin();
-    if(!done){
-      window.location.href='onboarding.html';
-      return;
+  async function afterAuthSuccess(signInRes){
+    try{
+      signInRes=signInRes||{};
+      var u=(signInRes.data&&signInRes.data.user)?signInRes.data.user:null;
+      var uid=u&&u.id;
+      if(!uid){
+        var sw=await withTimeout(sb.auth.getSession(),8000,null);
+        var ses=sw&&sw.data&&sw.data.session;
+        if(ses&&ses.user&&ses.user.id){u=ses.user;uid=u.id;}
+      }
+      if(!uid){
+        var gu=await withTimeout(sb.auth.getUser(),8000,null);
+        var u2=gu&&gu.data&&gu.data.user;
+        if(u2&&u2.id){u=u2;uid=u2.id;}
+      }
+      if(!uid){
+        setMsg('Inloggen lijkt gelukt, maar je sessie kon niet worden bevestigd. Vernieuw de pagina of probeer opnieuw.',true);
+        return;
+      }
+      setMsg('Profiel controleren…',false);
+      var done=await withTimeout(hasObDone(uid),8000,true);
+      stripLoginQuery();
+      closeLogin();
+      if(!done){
+        window.location.href='onboarding.html';
+        return;
+      }
+      if(pendingReturnTo){
+        var t=decodeURIComponent(pendingReturnTo);
+        if(t.indexOf('.html')<0||t.indexOf('http')===0)t='ownsense.html';
+        window.location.href=t;
+        return;
+      }
+      window.location.href='sensecorner.html';
+    }catch(e){
+      var em=e&&e.message?String(e.message):'';
+      setMsg('Kon inloggen niet afronden'+(em?(': '+em):'')+'. Vernieuw de pagina of probeer opnieuw.',true);
     }
-    if(pendingReturnTo){
-      var t=decodeURIComponent(pendingReturnTo);
-      if(t.indexOf('.html')<0||t.indexOf('http')===0)t='ownsense.html';
-      window.location.href=t;
-      return;
-    }
-    window.location.href='sensecorner.html';
   }
   async function bootFromUrl(){
     var sp;
@@ -1146,7 +1166,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         return;
       }
       if(res&&res.error){setMsg(res.error.message||'Inloggen mislukt.',true);return;}
-      await afterAuthSuccess();
+      await afterAuthSuccess(res);
     }catch(_e7){setMsg('Inloggen mislukt. Probeer opnieuw.',true);}
   };
   if(btnReg)btnReg.onclick=async function(){
