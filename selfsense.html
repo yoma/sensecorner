@@ -1678,6 +1678,41 @@ const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 // Productkeuze: in SelfSense tonen we voorlopig geen aparte Senses-laag.
 const SELFSENSE_DISABLE_SENSES=true;
+const SENSEI_TIPS_WHITELIST={
+  books:[
+    'standaardboekhandel.be',
+    'bibliotheek.be',
+    'iedereenleest.be',
+    'hebban.nl',
+    'bol.com'
+  ],
+  media:[
+    'vrtmax.be',
+    'canvas.be',
+    'ted.com',
+    'klara.be',
+    'radio1.be'
+  ],
+  places:[
+    'uitinvlaanderen.be',
+    'visitflanders.com',
+    'museumpasmusees.be',
+    'toerismevlaanderen.be',
+    'visit.brussels',
+    'visitantwerpen.be',
+    'visitgent.com',
+    'visitleuven.be',
+    'visitbruges.be'
+  ],
+  fallback:['nl.wikipedia.org']
+};
+function getSenseiTipsWhitelistDomains(){
+  return Array.from(new Set(
+    Object.values(SENSEI_TIPS_WHITELIST).reduce(function(all,list){
+      return all.concat(Array.isArray(list)?list:[]);
+    },[])
+  ));
+}
 const PROMPT_DEFAULTS={
   advice_core:'Je bent SelfSensei. De gebruiker wil concreet advies rond zelfreflectie, herstel en regulatie, geen coaching waarin jij het werk teruggeeft met open vragen. Gebruik nooit Unicode U+2014 in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Werk zo: begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context. Geen lange herhaling. Daarna geef je meteen jouw advies: wat zeg of doe je, waarom dat helpt, wat vermijden. Klein en haalbaar, zonder harde oordelen of labels. Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden; vraag nooit hoe zij het zelf zouden aanpakken. Werk NOOIT met scores of percentages. Geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen zonder aparte kopregels. Sluit daarna af met exact één aparte regel in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin.',
   tone_soft:'Wees warm, validerend en kalm. Benoem gevoelens zonder te overdrijven, en geef kleine veilige stappen.',
@@ -10840,13 +10875,25 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
+    var toolCfg={
+      web_search:{
+        allowed_domains:getSenseiTipsWhitelistDomains(),
+        max_search_queries:3
+      }
+    };
     var res=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
         'Authorization':'Bearer '+token
       },
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:maxTok||800,
+        system:sys,
+        messages:msgs,
+        tools:toolCfg
+      }),
       signal:controller.signal
     });
     clearTimeout(timer);
@@ -12030,6 +12077,13 @@ async function sendMsg(){
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
+    +' AANBEVELINGEN OP VRAAG: Geef alleen aanbevelingen voor boeken, media of plaatsen als de gebruiker daar expliciet om vraagt. Push nooit proactief tips in gewone antwoorden.'
+    +' Als de gebruiker expliciet om aanbevelingen vraagt: gebruik web search, maar alleen via deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
+    +' Noem alleen bronnen die je echt hebt gevonden. Verzin geen titel, auteur of URL.'
+    +' Geef per aanbeveling een echte, direct bruikbare link.'
+    +' Geef maximaal 2 of 3 aanbevelingen per antwoord.'
+    +' Als je niets passends vindt: zeg dat eerlijk en stel daarna 1 gerichte vervolgvraag om beter te zoeken.'
+    +' Gaat het om hulpverlening, crisis of professionele zorg: gebruik de bestaande gecureerde lijst in de app en doe geen web search.'
     +' CONTEXT: '+coachCtxFinal;
 
 
@@ -12923,7 +12977,12 @@ function importTekst(){
     inp.placeholder='Plak hier je tekst (Ctrl+V of lang indrukken)...';
     setTimeout(function(){inp.placeholder='Vertel me alles wat er in je hoofd zit...';},4000);
   }
-  toast('Plak je tekst in het veld (Ctrl+V)');
+  var showTip=true;
+  try{
+    if(sessionStorage.getItem('ss_import_tekst_tip_shown')==='1')showTip=false;
+    else sessionStorage.setItem('ss_import_tekst_tip_shown','1');
+  }catch(_e){}
+  if(showTip)toast('Plak je tekst in het veld (Ctrl+V)');
 }
 
 function handleTxtFile(input){
