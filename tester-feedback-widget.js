@@ -30,8 +30,10 @@
   var sb=null;
   var currentUserCache=null;
   try{
-    if(window.supabase&&window.supabase.createClient){
-      sb=window.supabase.createClient(SURL,SKEY);
+    if(window.__senseLpSupabase){
+      sb=window.__senseLpSupabase;
+    }else if(window.supabase&&window.supabase.createClient){
+      sb=window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY);
     }
   }catch(_e){}
   if(!sb)return;

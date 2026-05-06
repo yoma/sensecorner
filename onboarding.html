@@ -1090,9 +1090,11 @@
     selfsense: "self"
   };
 
-  if (window.supabase && typeof window.supabase.createClient === "function") {
+  if (window.__senseLpSupabase) {
+    sb = window.__senseLpSupabase;
+  } else if (window.supabase && window.supabase.createClient) {
     try {
-      sb = window.supabase.createClient(SURL, SKEY);
+      sb = window.__senseLpSupabase = window.supabase.createClient(SURL, SKEY);
     } catch (_eInit) {}
   }
 
@@ -1487,7 +1489,13 @@
       goToStatic("acc0");
       return;
     }
-    if (!sb) sb = window.supabase.createClient(SURL, SKEY);
+    if (!sb) {
+      if (window.__senseLpSupabase) {
+        sb = window.__senseLpSupabase;
+      } else if (window.supabase && window.supabase.createClient) {
+        sb = window.__senseLpSupabase = window.supabase.createClient(SURL, SKEY);
+      }
+    }
     var sess = await sb.auth.getSession();
     var session = sess && sess.data && sess.data.session;
     if (!session || !session.user) {

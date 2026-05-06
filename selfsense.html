@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="06-05-2026 20:44">
+<meta name="fs-build" content="06-05-2026 22:20">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -390,6 +390,8 @@ a:focus-visible,
 
 /* ══ VERTEL scherm ══ */
 .chat{flex:1;overflow-y:auto;padding:16px 16px;display:flex;flex-direction:column;gap:14px;-webkit-overflow-scrolling:touch}
+/* Eén verticale scroll: #chatWrap; chatArea groeit mee (anders dubbel scroll + appScroll volgt niet). */
+.vertel-shell #chatArea.chat{flex:0 0 auto;overflow:visible}
 .msg-ai{display:flex;flex-direction:column;gap:4px;margin:8px 0}
 .bbl-ai{background:var(--rl);border:1px solid rgba(125,106,171,.28);border-radius:16px 16px 16px 4px;padding:12px 14px;font-size:var(--fs-sm);color:#222;line-height:1.6;max-width:96%}
 .bbl-ai .sndr{font-size:var(--fs-xs);font-weight:700;color:var(--r);margin-bottom:6px;letter-spacing:.8px}
@@ -1582,8 +1584,10 @@ function getAppBuildDisplay(){
 }
 var sb=null;
 try{
-  if(window.supabase&&typeof window.supabase.createClient==='function')
-    sb=window.supabase.createClient(SURL,SKEY);
+  if(window.__senseLpSupabase)
+    sb=window.__senseLpSupabase;
+  else if(window.supabase&&window.supabase.createClient)
+    sb=window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY);
 }catch(e){
   console.warn('Supabase client init:',e);
 }
@@ -3068,6 +3072,15 @@ function withTimeout(promise,ms,msg){
       setTimeout(function(){reject(new Error(msg||('Timeout na '+ms+'ms')));},ms);
     })
   ]);
+}
+var _senseiAuthLock=Promise.resolve();
+function runSenseiAuthSerialized(fn){
+  var run=_senseiAuthLock.then(function(){return fn();});
+  _senseiAuthLock=run.then(
+    function(){return null;},
+    function(){return null;}
+  );
+  return run;
 }
 function formatSavePDiag(diag){
   if(!diag)return'';
@@ -10676,6 +10689,16 @@ async function rVertel(el){
     // Herstel ook de pending segmenten klik-handlers (zit al in de HTML via onclick)
   }
 
+  var _arrMem=S.vertelMsgs||[];
+  var _memErr=false;
+  for(var _mi=_arrMem.length-1;_mi>=0;_mi--){
+    if(_arrMem[_mi].role==='ai'){
+      if(/Er ging iets mis/i.test(String(_arrMem[_mi].html||'')))_memErr=true;
+      break;
+    }
+  }
+  S.vertelOfferHerstuur=_memErr;
+
   scrollVertelConversationIntoView();
   updateVertelSaveModeUI();
   renderVertelInputCoachTip();
@@ -10972,21 +10995,24 @@ function extractSenseiChatAssistantText(data){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
-  var sess=null;
-  try{
-    sess=await withTimeout(
-      sb.auth.getSession(),
-      10000,
-      null
-    );
-  }catch(_s1){
-    await new Promise(function(resolve){setTimeout(resolve,500);});
-    sess=await withTimeout(
-      sb.auth.getSession(),
-      8000,
-      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
-    );
-  }
+  var sess=await runSenseiAuthSerialized(async function(){
+    var s=null;
+    try{
+      s=await withTimeout(
+        sb.auth.getSession(),
+        12000,
+        null
+      );
+    }catch(_s1){
+      await new Promise(function(resolve){setTimeout(resolve,600);});
+      s=await withTimeout(
+        sb.auth.getSession(),
+        12000,
+        'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
+      );
+    }
+    return s;
+  });
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
@@ -11572,13 +11598,23 @@ function renderAiImportHomeLanding(){
 }
 
 // ══ Chat helpers ══════════════════════════════════════════════════
-/** Vertel: scroll gebeurt op #chatWrap (overflow); #chatArea groeit mee met berichten. */
+/** Vertel: scroll #chatWrap, #appScroll en scrollIntoView op het laatste blok (stippen of antwoord). */
 function scrollVertelConversationIntoView(){
   function bump(){
-    var wrap=document.getElementById('chatWrap');
     var ca=document.getElementById('chatArea');
-    if(wrap)wrap.scrollTop=wrap.scrollHeight;
-    if(ca)ca.scrollTop=ca.scrollHeight;
+    var wrap=document.getElementById('chatWrap');
+    var app=document.getElementById('appScroll');
+    if(ca){
+      var tail=document.getElementById('typ')||ca.lastElementChild;
+      if(tail&&typeof tail.scrollIntoView==='function'){
+        try{
+          tail.scrollIntoView({block:'end',inline:'nearest',behavior:'auto'});
+        }catch(_si){}
+      }
+      ca.scrollTop=ca.scrollHeight;
+    }
+    if(wrap)wrap.scrollTop=Math.max(0,wrap.scrollHeight-wrap.clientHeight);
+    if(app)app.scrollTop=Math.max(0,app.scrollHeight-app.clientHeight);
   }
   bump();
   try{
@@ -11589,6 +11625,8 @@ function scrollVertelConversationIntoView(){
   }catch(_e){
     setTimeout(bump,0);
   }
+  setTimeout(bump,48);
+  setTimeout(bump,220);
 }
 function vertelUserMsgPlainText(html){
   var t=String(html||'').trim();
@@ -11611,16 +11649,32 @@ function vertelReUseUserMessage(vertelIdx){
   if(!t){toast('Geen tekst om te herstellen.');return;}
   var inp=document.getElementById('msgInput');
   if(!inp){toast('Invoer niet beschikbaar.');return;}
+  var ca=document.getElementById('chatArea');
+  if(ca){
+    var victim=ca.querySelector('.msg-user[data-vertel-msg-idx="'+String(vertelIdx)+'"]');
+    if(victim){
+      var node=victim;
+      while(node){
+        var next=node.nextSibling;
+        node.remove();
+        node=next;
+      }
+    }
+  }
+  S.vertelMsgs=arr.slice(0,vertelIdx);
+  S.vertelOfferHerstuur=false;
+  refreshVertelResendButton();
   inp.value=t;
   autoResize(inp);
   try{inp.focus();}catch(_e){}
   scrollVertelConversationIntoView();
-  toast('Tekst staat in het veld. Controleer en tik op verstuur.');
+  void sendMsg();
 }
 function refreshVertelResendButton(){
   var ca=document.getElementById('chatArea');
   if(!ca||!document.getElementById('chatWrap'))return;
   ca.querySelectorAll('.vertel-resend-row').forEach(function(el){el.remove();});
+  if(!S.vertelOfferHerstuur)return;
   var users=ca.querySelectorAll('.msg-user');
   if(!users.length)return;
   var lastUser=users[users.length-1];
@@ -11629,7 +11683,7 @@ function refreshVertelResendButton(){
   var btnRow=document.createElement('div');
   btnRow.className='vertel-resend-row';
   btnRow.style.cssText='align-self:flex-end;margin:6px 2px 0 0;display:flex;justify-content:flex-end;width:100%;max-width:96%';
-  btnRow.innerHTML='<button type="button" class="coach-save-other vertel-resend-btn" title="Zet deze vraag terug in het veld om opnieuw te versturen">Herstuur</button>';
+  btnRow.innerHTML='<button type="button" class="coach-save-other vertel-resend-btn" title="Zelfde bericht meteen opnieuw naar Sensei sturen">Herstuur</button>';
   var btn=btnRow.querySelector('button');
   var mi=parseInt(idxStr,10);
   if(!(mi>=0))return;
@@ -12228,6 +12282,7 @@ async function sendMsg(){
   }
   inp.value='';inp.style.height='auto';S.busy=true;
 
+  S.vertelOfferHerstuur=false;
   addMsg('user',txt,hadAdviceCtx?{ctxLabel:'Context: eerder advies meegenomen'}:null);
   showT();
   try{
@@ -12330,7 +12385,9 @@ async function sendMsg(){
         aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),8000,'sessie-msg-timeout');
       }
     }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
-    void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
+    setTimeout(function(){
+      void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
+    },400);
     try{
       var sidLive=S.currentSessionId;
       if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){
@@ -12370,6 +12427,7 @@ async function sendMsg(){
 
   }catch(x){
     var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
+    S.vertelOfferHerstuur=true;
     addMsg('ai','Er ging iets mis: '+x.message+retryTip);
   }finally{
     hideT();
@@ -12516,6 +12574,7 @@ function allesNaarDossier(dosName){
 
 // Wis de chat na opslaan (voor een verse start)
 function clearChat(){
+  S.vertelOfferHerstuur=false;
   S.vertelMsgs=[];
   S.sessionHistoryPager=null;
   S.vertelGesprekDossier=null;
@@ -13983,6 +14042,14 @@ function renderVertelSessionFromRows(rows){
       ca.appendChild(aiWrap);
     }
   });
+  var lastAiHadErr=false;
+  for(var _ri=rows.length-1;_ri>=0;_ri--){
+    if(rows[_ri].role==='ai'){
+      if(/Er ging iets mis/i.test(String(rows[_ri].content||'')))lastAiHadErr=true;
+      break;
+    }
+  }
+  S.vertelOfferHerstuur=lastAiHadErr;
   syncVertelGesprekFocusFromRows(rows);
   refreshVertelResendButton();
 }
