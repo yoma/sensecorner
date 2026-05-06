@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="06-05-2026 20:15">
+<meta name="fs-build" content="06-05-2026 19:38">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -2142,6 +2142,7 @@ function autoResize(el){
   el.style.height='auto';
   var cap=el.classList&&el.classList.contains('input-area-vertel')?168:130;
   el.style.height=Math.min(el.scrollHeight,cap)+'px';
+  if(el.id==='msgInput'&&document.getElementById('chatWrap'))scrollVertelConversationIntoView();
 }
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
@@ -2633,6 +2634,12 @@ function hasSeenVertelCoachTip(){
 }
 function markVertelCoachTipSeen(){
   setScopedStorage('ds_vertel_tip_seen','1');
+}
+function hasHiddenVertelIntro(){
+  return String(getScopedStorage('ss_vertel_intro_hide','0')||'0')==='1';
+}
+function setVertelIntroHidden(v){
+  setScopedStorage('ss_vertel_intro_hide',v?'1':'0');
 }
 function addVertelHintToInput(text){
   var inp=document.getElementById('msgInput');
@@ -10633,10 +10640,12 @@ async function rVertel(el){
   if(hadForce)S._forceFreshVertel=false;
 
   if(!S.vertelMsgs||!S.vertelMsgs.length){
-    // Eerste keer: toon welkomstbericht
-    var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">SELFSENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.<br><br><strong>Advies vs Vertel:</strong> het tabblad <strong>Advies</strong> bij een dossier is het vaste coachrapport voor <em>die</em> persoon (op basis van tijdlijn en profiel). Hier in Vertel praat je vrij en kun je ook opnieuw om advies vragen - na het antwoord kies je bij welk dossier je opslaat.</div>`;
-    ca.appendChild(welcome);
+    // Eerste keer: toon welkomstbericht (optioneel verbergen via vink bovenaan)
+    if(!hasHiddenVertelIntro()){
+      var welcome=document.createElement('div');welcome.className='msg-ai';
+      welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div style="margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid rgba(125,106,171,.22);font-size:12px"><label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;line-height:1.45"><input type="checkbox" style="margin-top:3px;flex-shrink:0;width:18px;height:18px" onchange="if(this.checked){setVertelIntroHidden(true);var introCard=this.closest('.msg-ai');if(introCard)introCard.remove();toast('Deze intro tonen we niet meer.');}"><span><strong>Deze uitleg niet meer tonen</strong> (vink aan om de hele intro te verbergen)</span></label></div><div class="sndr">SELFSENSE</div><div class="vertel-welcome-body" style="user-select:text;-webkit-user-select:text;font-size:13px;line-height:1.6;color:#333">Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.<br><br><strong>Advies vs Vertel:</strong> het tabblad <strong>Advies</strong> bij een dossier is het vaste coachrapport voor <em>die</em> persoon (op basis van tijdlijn en profiel). Hier in Vertel praat je vrij en kun je ook opnieuw om advies vragen - na het antwoord kies je bij welk dossier je opslaat.</div></div>`;
+      ca.appendChild(welcome);
+    }
 
     if(!S.apiKey){
       var w=document.createElement('div');w.className='msg-ai';
@@ -10653,9 +10662,10 @@ async function rVertel(el){
         .replace(/"/g,'&quot;')
         .replace(/'/g,'&#39;');
     }
-    S.vertelMsgs.forEach(function(m){
+    S.vertelMsgs.forEach(function(m,idx){
       var d=document.createElement('div');
       d.className=m.role==='user'?'msg-user':'msg-ai';
+      if(m.role==='user')d.setAttribute('data-vertel-msg-idx',String(idx));
       var ctxLbl=String((m&&m.ctxLabel)||'').trim();
       d.innerHTML=m.role==='user'
         ?`${ctxLbl?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+escRestore(ctxLbl)+'</div>':''}<div class="bbl-user">${escRestore(m.html)}</div>`
@@ -10666,10 +10676,11 @@ async function rVertel(el){
     // Herstel ook de pending segmenten klik-handlers (zit al in de HTML via onclick)
   }
 
-  ca.scrollTop=ca.scrollHeight;
+  scrollVertelConversationIntoView();
   updateVertelSaveModeUI();
   renderVertelInputCoachTip();
   updateVertelGesprekBanner();
+  refreshVertelResendButton();
 }
 
 function rImport(el){
@@ -10965,14 +10976,14 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   try{
     sess=await withTimeout(
       sb.auth.getSession(),
-      25000,
+      10000,
       null
     );
   }catch(_s1){
-    await new Promise(function(resolve){setTimeout(resolve,1200);});
+    await new Promise(function(resolve){setTimeout(resolve,500);});
     sess=await withTimeout(
       sb.auth.getSession(),
-      25000,
+      8000,
       'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
     );
   }
@@ -11561,9 +11572,83 @@ function renderAiImportHomeLanding(){
 }
 
 // ══ Chat helpers ══════════════════════════════════════════════════
+/** Vertel: scroll gebeurt op #chatWrap (overflow); #chatArea groeit mee met berichten. */
+function scrollVertelConversationIntoView(){
+  function bump(){
+    var wrap=document.getElementById('chatWrap');
+    var ca=document.getElementById('chatArea');
+    if(wrap)wrap.scrollTop=wrap.scrollHeight;
+    if(ca)ca.scrollTop=ca.scrollHeight;
+  }
+  bump();
+  try{
+    requestAnimationFrame(function(){
+      bump();
+      requestAnimationFrame(bump);
+    });
+  }catch(_e){
+    setTimeout(bump,0);
+  }
+}
+function vertelUserMsgPlainText(html){
+  var t=String(html||'').trim();
+  if(!t)return'';
+  var tmp=document.createElement('div');
+  tmp.innerHTML=t;
+  var out=(tmp.textContent||tmp.innerText||'').replace(/\u00a0/g,' ').trim();
+  return out||t;
+}
+function vertelReUseUserMessage(vertelIdx){
+  if(S.busy){
+    toast('Even wachten tot Sensei klaar is.');
+    return;
+  }
+  var arr=S.vertelMsgs;
+  if(!arr||vertelIdx<0||vertelIdx>=arr.length)return;
+  var m=arr[vertelIdx];
+  if(!m||m.role!=='user')return;
+  var t=vertelUserMsgPlainText(m.html);
+  if(!t){toast('Geen tekst om te herstellen.');return;}
+  var inp=document.getElementById('msgInput');
+  if(!inp){toast('Invoer niet beschikbaar.');return;}
+  inp.value=t;
+  autoResize(inp);
+  try{inp.focus();}catch(_e){}
+  scrollVertelConversationIntoView();
+  toast('Tekst staat in het veld. Controleer en tik op verstuur.');
+}
+function refreshVertelResendButton(){
+  var ca=document.getElementById('chatArea');
+  if(!ca||!document.getElementById('chatWrap'))return;
+  ca.querySelectorAll('.vertel-resend-row').forEach(function(el){el.remove();});
+  var users=ca.querySelectorAll('.msg-user');
+  if(!users.length)return;
+  var lastUser=users[users.length-1];
+  var idxStr=lastUser.getAttribute('data-vertel-msg-idx');
+  if(idxStr==null||idxStr==='')return;
+  var btnRow=document.createElement('div');
+  btnRow.className='vertel-resend-row';
+  btnRow.style.cssText='align-self:flex-end;margin:6px 2px 0 0;display:flex;justify-content:flex-end;width:100%;max-width:96%';
+  btnRow.innerHTML='<button type="button" class="coach-save-other vertel-resend-btn" title="Zet deze vraag terug in het veld om opnieuw te versturen">Herstuur</button>';
+  var btn=btnRow.querySelector('button');
+  var mi=parseInt(idxStr,10);
+  if(!(mi>=0))return;
+  btn.addEventListener('click',function(){vertelReUseUserMessage(mi);});
+  var bar=lastUser.querySelector('.coach-save-bar');
+  if(bar&&bar.parentNode){
+    bar.parentNode.insertBefore(btnRow, bar);
+  }else{
+    var bbl=lastUser.querySelector('.bbl-user');
+    if(bbl&&bbl.parentNode)bbl.parentNode.insertBefore(btnRow, bbl.nextSibling);
+    else lastUser.appendChild(btnRow);
+  }
+}
 function addMsg(role,html,opts){
   var ca=document.getElementById('chatArea');if(!ca)return;
+  if(!S.vertelMsgs)S.vertelMsgs=[];
+  var pushIdx=S.vertelMsgs.length;
   var d=document.createElement('div');d.className=role==='user'?'msg-user':'msg-ai';
+  if(role==='user')d.setAttribute('data-vertel-msg-idx',String(pushIdx));
   var ctxLabel=String((opts&&opts.ctxLabel)||'').trim();
   function esc(s){
     return String(s==null?'':s)
@@ -11577,10 +11662,9 @@ function addMsg(role,html,opts){
   d.innerHTML=role==='user'
     ?`${ctxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(ctxLabel)+'</div>':''}<div class="bbl-user">${esc(html)}</div>`
     :`<div class="bbl-ai"><div class="sndr">SELFSENSE</div>${html}</div>`;
-  ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
-  // Bewaar in sessie zodat de chat bewaard blijft bij navigeren weg/terug
-  if(!S.vertelMsgs)S.vertelMsgs=[];
+  ca.appendChild(d);scrollVertelConversationIntoView();
   S.vertelMsgs.push({role,html,ctxLabel:ctxLabel||''});
+  refreshVertelResendButton();
 }
 
 var _typSlowHintTimers=[];
@@ -11605,7 +11689,7 @@ function startTypingSlowHints(){
         wrap.appendChild(hint);
       }
       hint.textContent=text;
-      try{typ.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(_e){}
+      scrollVertelConversationIntoView();
     },ms);
     _typSlowHintTimers.push(id);
   }
@@ -11617,12 +11701,13 @@ function showT(){
   clearTypingSlowHintTimers();
   var d=document.createElement('div');d.className='msg-ai';d.id='typ';
   d.innerHTML='<div class="typing-wrap"><div class="typing" aria-busy="true" aria-live="polite"><span></span><span></span><span></span></div></div>';
-  ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
+  ca.appendChild(d);scrollVertelConversationIntoView();
   startTypingSlowHints();
 }
 function hideT(){
   clearTypingSlowHintTimers();
   var t=document.getElementById('typ');if(t)t.remove();
+  refreshVertelResendButton();
 }
 
 function quickFill(){
@@ -12145,7 +12230,7 @@ async function sendMsg(){
 
   addMsg('user',txt,hadAdviceCtx?{ctxLabel:'Context: eerder advies meegenomen'}:null);
   showT();
-
+  try{
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
@@ -12193,14 +12278,12 @@ async function sendMsg(){
     +' CONTEXT: '+coachCtxFinal;
 
 
-
-  try{
     var segPromise=null;
     // AI-segmentatie (kleuren / opsplitsen) uit: triggert te vaak bij lang getypte tekst op mobiel; later optioneel terug via vlag.
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
-    var dossierCtx=await buildDossierContextForAI(voorgesteldDossier);
+    var dossierCtx=await withTimeout(buildDossierContextForAI(voorgesteldDossier),12000,'Dossier-context laden duurde te lang.');
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history];
     if(pendingAdviceCtx){
@@ -12241,12 +12324,12 @@ async function sendMsg(){
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
     try{
-      var sid=await ensureActiveSessionForMessage(txt);
+      var sid=await withTimeout(ensureActiveSessionForMessage(txt),8000,'sessie-timeout');
       if(sid){
-        userSessionMsgId=await saveSessionMsg(sid,'user',txt);
-        aiSessionMsgId=await saveSessionMsg(sid,'ai',raw);
+        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),8000,'sessie-msg-timeout');
+        aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),8000,'sessie-msg-timeout');
       }
-    }catch(sessErr){console.warn('sessie opslaan mislukt:',sessErr);}
+    }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
     void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
     try{
       var sidLive=S.currentSessionId;
@@ -12286,10 +12369,10 @@ async function sendMsg(){
     updateSessiePreview(S.currentSessionId,txt);
 
   }catch(x){
-    hideT();
     var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
     addMsg('ai','Er ging iets mis: '+x.message+retryTip);
   }finally{
+    hideT();
     S.busy=false;
   }
 }
@@ -12407,7 +12490,7 @@ function toonHoeWerktDit(){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var d=document.createElement('div');d.className='msg-ai';
   d.innerHTML='<div class="bbl-ai"><div class="sndr">SELFSENSE</div>De gekleurde stukjes tonen over wie elk deel van je bericht gaat. Tik op een stukje om het naar een ander dossier te verplaatsen of te negeren. Daarna tik je op <strong>Bevestig &amp; opslaan</strong>.</div>';
-  ca.appendChild(d);ca.scrollTop=ca.scrollHeight;
+  ca.appendChild(d);scrollVertelConversationIntoView();
 }
 
 // Verplaats alle segmenten naar één dossier in één klik
@@ -12445,6 +12528,7 @@ function clearChat(){
   var d=document.createElement('div');d.className='msg-ai';
   d.innerHTML='<div class="bbl-ai"><div class="sndr">SELFSENSE</div>Je start een nieuw Vertel-gesprek. Wat wil je kwijt?</div>';
   ca.appendChild(d);
+  scrollVertelConversationIntoView();
   // Welkomstbericht ook in S.vertelMsgs zetten
   S.vertelMsgs.push({role:'ai',html:'Je start een nieuw Vertel-gesprek. Wat wil je kwijt?'});
   S.currentSessionId=null;
@@ -12538,12 +12622,13 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
   if(ca){
     var progDiv=document.createElement('div');progDiv.className='msg-ai';progDiv.id='wa-progress';
     progDiv.innerHTML='<div class="bbl-ai"><div class="sndr">SELFSENSE</div><span id="wa-prog-txt">Deel 1/'+chunks.length+' verwerken...</span></div>';
-    ca.appendChild(progDiv);ca.scrollTop=ca.scrollHeight;
+    ca.appendChild(progDiv);scrollVertelConversationIntoView();
   }
 
   for(var ci=0;ci<chunks.length;ci++){
     var progTxt=document.getElementById('wa-prog-txt');
     if(progTxt)progTxt.textContent='Deel '+(ci+1)+'/'+chunks.length+' verwerken...';
+    scrollVertelConversationIntoView();
 
     try{
       // Stuur de tekst rechtstreeks op als één bericht in het dossier
@@ -13884,6 +13969,7 @@ function renderVertelSessionFromRows(rows){
       window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
       var userWrap=document.createElement('div');
       userWrap.className='msg-user';
+      userWrap.setAttribute('data-vertel-msg-idx',String(S.vertelMsgs.length-1));
       userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
         +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
         +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
@@ -13898,17 +13984,20 @@ function renderVertelSessionFromRows(rows){
     }
   });
   syncVertelGesprekFocusFromRows(rows);
+  refreshVertelResendButton();
 }
 
 async function laadOudereSessieBerichten(){
   var sid=S.currentSessionId;
   var pager=S.sessionHistoryPager;
   if(!sid||!pager||pager.sessionId!==sid||!pager.rows||!pager.rows.length||!pager.hasOlder)return;
+  var wrap=document.getElementById('chatWrap');
   var ca=document.getElementById('chatArea');
+  var scrollEl=wrap||ca;
   var beforeTs=pager.rows[0].created_at;
   if(!beforeTs)return;
-  var oldH=ca?ca.scrollHeight:0;
-  var oldTop=ca?ca.scrollTop:0;
+  var oldH=scrollEl?scrollEl.scrollHeight:0;
+  var oldTop=scrollEl?scrollEl.scrollTop:0;
   try{
     var batch=await fetchSenseSessionMsgBatch(sid,beforeTs);
     if(!batch.chron.length){
@@ -13921,8 +14010,8 @@ async function laadOudereSessieBerichten(){
     pager.hasOlder=!!batch.hasMore;
     renderVertelSessionFromRows(pager.rows);
     updateSessBulkBar();
-    if(ca){
-      ca.scrollTop=oldTop+(ca.scrollHeight-oldH);
+    if(scrollEl){
+      scrollEl.scrollTop=oldTop+(scrollEl.scrollHeight-oldH);
     }
   }catch(e){
     console.warn('laadOudereSessieBerichten',e);
@@ -13946,7 +14035,7 @@ async function laadSessie(sessionId,opt){
     S.sessionHistoryPager={sessionId:sessionId,rows:data.slice(),hasOlder:!!batch.hasMore};
     await applyVertelSessionTitleFromDb(sessionId,S.sessionHistoryPager.rows);
     renderVertelSessionFromRows(S.sessionHistoryPager.rows);
-    if(ca)ca.scrollTop=ca.scrollHeight;
+    scrollVertelConversationIntoView();
     updateSessBulkBar();
   }catch(e){
     console.warn('laadSessie error:',e);
@@ -14238,6 +14327,7 @@ try{
   window.closeDrawer=closeDrawer;
   window.openDrawer=openDrawer;
   window.nieuwGesprek=nieuwGesprek;
+  window.vertelReUseUserMessage=vertelReUseUserMessage;
   window.setSensesSortFromUi=setSensesSortFromUi;
   window.laadOudereSessieBerichten=laadOudereSessieBerichten;
   window.openSidebar=openSidebar;
