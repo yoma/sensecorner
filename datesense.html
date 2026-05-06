@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="06-05-2026 13:54">
+<meta name="ds-build" content="06-05-2026 14:39">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -3250,7 +3250,12 @@ function openDossierPickModal(title,sub,type,payload){
   titleEl.textContent=title||'Kies dossier';
   subEl.textContent=sub||'Selecteer een dossier.';
   window._dossierPickCtx={type:type,payload:payload||null};
-  var all=getDateSenseContactNames();
+  var all;
+  if(type==='relationship_focus'&&payload&&Array.isArray(payload.contacts)&&payload.contacts.length){
+    all=payload.contacts.filter(function(p){return !!p&&p!=='OWN Sense';});
+  }else{
+    all=getDateSenseContactNames();
+  }
   window._modalPickDossiers=all.slice();
   var html='';
   if(type==='save'){
@@ -3299,6 +3304,13 @@ async function selectDossierFromPick(dossier){
     updateVertelGesprekBanner();
     if(S.screen==='vertel')renderVertelInputCoachTip();
     toast('Opslagvoorstel: '+dn(dossier));
+  }else if(ctx.type==='relationship_focus'){
+    if(!dossier){
+      toast('Kies eerst een dossier');
+      return;
+    }
+    setFocusRelationType(stageRelationTypeValue(getDossierStage(dossier)));
+    await activateRelationshipFocus(dossier);
   }else if(ctx.type==='save'){
     S.vertelSessionStickyDossier=null;
     await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
@@ -5392,12 +5404,9 @@ function quickToggleUsageModeHome(){
     toast('Maak eerst een dossier voor Relatie Focus.');
     return;
   }
-  var focus=getFocusDossier();
-  if(!focus||getDossierLifecycle(focus)!=='active')focus=contacts[0];
-  setFocusRelationType(stageRelationTypeValue(getDossierStage(focus)));
   S.homeModeDraft='single';
   S.homeModeEditorOpen=false;
-  activateRelationshipFocus(focus).catch(function(){toast('Kon Relatie Focus niet activeren.');});
+  openRelationshipFocusPicker(contacts);
 }
 function switchUsageModeHome(targetMode){
   var mode=(targetMode==='single')?'single':'multi';
@@ -5411,12 +5420,24 @@ function switchUsageModeHome(targetMode){
     toast('Maak eerst een dossier voor Relatie Focus.');
     return;
   }
-  var focus=getFocusDossier();
-  if(!focus||getDossierLifecycle(focus)!=='active')focus=contacts[0];
-  setFocusRelationType(stageRelationTypeValue(getDossierStage(focus)));
   S.homeModeDraft='single';
   S.homeModeEditorOpen=false;
-  activateRelationshipFocus(focus).catch(function(){toast('Kon Relatie Focus niet activeren.');});
+  openRelationshipFocusPicker(contacts);
+}
+function openRelationshipFocusPicker(activeContacts){
+  var contacts=Array.isArray(activeContacts)&&activeContacts.length
+    ?activeContacts.slice()
+    :getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';});
+  if(!contacts.length){
+    toast('Maak eerst een dossier voor Relatie Focus.');
+    return;
+  }
+  openDossierPickModal(
+    'Kies focusdossier',
+    'Kies eerst je actieve dossier voor Relatie Focus. Let op: andere dossiers worden on hold gezet.',
+    'relationship_focus',
+    {contacts:contacts}
+  );
 }
 function activateDateModeFromHome(){
   var wasSingle=getUsageMode()==='single';
@@ -5453,7 +5474,7 @@ async function activateRelationshipFocus(name){
   }
   if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
   else toast('🎯 Relatie-focus op '+dn(name));
-  goScreen('senses');
+  if(S.screen==='home')goScreen('home');
 }
 
 function getActiveContactNames(){
@@ -5848,10 +5869,28 @@ async function closeDossier(name){
 }
 async function reopenDossier(name){
   if(!name||name==='OWN Sense')return;
-  await setDossierLifecycle(name,'active');
-  try{await ensureSingleModeHolds(true);}catch(e){console.warn(e);}
-  toast('🔄 '+dn(name)+' opnieuw actief');
-  refreshSensesAfterStatusChange();
+  if(getDossierLifecycle(name)==='active'){
+    toast('ℹ️ '+dn(name)+' is al actief.');
+    refreshSensesAfterStatusChange();
+    return;
+  }
+  try{
+    await setDossierLifecycle(name,'active');
+    try{
+      if(getUsageMode()==='single')await ensureSingleModeHolds(true);
+    }catch(holdErr){
+      console.warn('ensureSingleModeHolds after reopen',holdErr);
+    }
+    toast('🔄 '+dn(name)+' opnieuw actief');
+    refreshSensesAfterStatusChange();
+  }catch(e){
+    var msg=String((e&&e.message)||'Heropenen mislukt.');
+    if(/timeout|duurt te lang/i.test(msg)){
+      toast('Heropenen duurde te lang. Probeer opnieuw.');
+      return;
+    }
+    toast('Heropenen mislukt: '+msg);
+  }
 }
 async function updateDossierStageFromUI(name){
   var el=document.getElementById('dosStageSel');
