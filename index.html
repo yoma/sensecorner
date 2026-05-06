@@ -981,6 +981,14 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   if(!loginShell||!window.supabase||typeof window.supabase.createClient!=='function')return;
   var sb=window.supabase.createClient(SURL,SKEY);
   var pendingReturnTo='';
+  function withTimeout(promise,ms,fallback){
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise(function(resolve){
+        setTimeout(function(){resolve(fallback);},Math.max(500,ms||5000));
+      })
+    ]);
+  }
 
   function setMsg(t,isErr){
     if(!elMsg)return;
@@ -1050,10 +1058,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     return !!(res&&res.data);
   }
   async function afterAuthSuccess(){
-    var gu=await sb.auth.getUser();
+    var gu=await withTimeout(sb.auth.getUser(),7000,null);
     var u=gu&&gu.data&&gu.data.user;
     if(!u||!u.id)return;
-    var done=await hasObDone(u.id);
+    var done=await withTimeout(hasObDone(u.id),5000,true);
     stripLoginQuery();
     closeLogin();
     if(!done){
@@ -1072,11 +1080,11 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var sp;
     try{sp=new URLSearchParams(window.location.search||'');}catch(_e){return;}
     if(!sp.get('login')&&!sp.get('register'))return;
-    var sess=await sb.auth.getSession();
+    var sess=await withTimeout(sb.auth.getSession(),7000,null);
     var session=sess&&sess.data&&sess.data.session;
     if(session&&session.user){
       var uid=session.user.id;
-      var done=await hasObDone(uid);
+      var done=await withTimeout(hasObDone(uid),5000,true);
       stripLoginQuery();
       if(!done)window.location.replace('onboarding.html');
       else window.location.replace('sensecorner.html');

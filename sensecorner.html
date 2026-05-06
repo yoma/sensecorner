@@ -2219,7 +2219,10 @@ a{text-decoration:none;color:inherit}
     try{
       var res=await sb.auth.signInWithPassword({email:email,password:pw});
       if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
-      await refreshAuthUi();
+      // Login mag niet blokkeren op extra profiel/approval queries.
+      Promise.resolve(refreshAuthUi()).catch(function(e){
+        console.warn('refreshAuthUi after login', (e&&e.message)||e);
+      });
       closeAuthModal();
       if(pendingReturnTo){
         window.location.href=pendingReturnTo;
