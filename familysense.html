@@ -976,7 +976,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </style>
 </head>
 <body>
-<button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.22);background:rgba(255,255,255,.92);color:#2A1810;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">← Terug</button>
+<button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 03-05-2026 18:59</div>
@@ -10903,6 +10903,7 @@ async function sendMsg(){
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
+    +' BESTAAND DOSSIER: Als een naam of dossier bestaat, zeg dan nooit "ik ken die persoon niet". Als context nog dun is, zeg expliciet dat het dossier bestaat maar nog weinig context bevat, en stel precies 1 gerichte vervolgvraag om dat dossier te verrijken.'
     +' CONTEXT: '+coachCtxFinal;
   if(ambiguousNameCtx){
     sys+='\nNAAMCONFLICT: De naam «'+ambiguousNameCtx.token+'» lijkt in meerdere app-contexten te zitten ('+ambiguousNameCtx.scopes.join(' / ')+'). Vraag éérst kort om verduidelijking over welke context het gaat, voor je inhoudelijk advies geeft. Voorbeeld: "Bedoel je '+ambiguousNameCtx.token+' in '+ambiguousNameCtx.scopes.join(' of ')+'?"';
@@ -10930,8 +10931,13 @@ async function sendMsg(){
     }else if(S.vertelSessionStickyDossier){
       opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» - notities gaan vast naar dossier «'+dn(S.vertelSessionStickyDossier)+'». Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
     }
+    var sparseDossierHint='';
+    if(voorgesteldDossier&&(!dossierCtx||!String(dossierCtx).trim())){
+      sparseDossierHint='\nDOSSIER BESTAAT MAAR CONTEXT DUN: Dossier «'+dn(voorgesteldDossier)+'» is gevonden, maar er is nog weinig concrete inhoud. Zeg expliciet dat het dossier bestaat en vraag 1 gerichte vervolgvraag. Zeg niet dat je deze persoon niet kent.\n';
+    }
     var fullSys=sys
       +opslagVastNote
+      +sparseDossierHint
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');

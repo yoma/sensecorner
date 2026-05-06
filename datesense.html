@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="03-05-2026 18:59">
+<meta name="ds-build" content="06-05-2026 08:53">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1044,8 +1044,8 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </style>
 </head>
 <body>
-<button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.22);background:rgba(255,255,255,.92);color:#2A1810;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">← Terug</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 03-05-2026 18:59</div>
+<button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 06-05-2026 08:53</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -1674,6 +1674,12 @@ function refreshOwnAppDepthHintMounts(){
   [['vertelAppDepthHint','app-depth-hint--vertel'],['sensesAppDepthHint','app-depth-hint--senses'],['homeAppDepthHint','app-depth-hint--home']].forEach(function(pair){
     var el=document.getElementById(pair[0]);
     if(!el)return;
+    if(pair[0]==='vertelAppDepthHint'){
+      el.className='app-depth-hint-wrap';
+      el.innerHTML='';
+      el.style.display='none';
+      return;
+    }
     var h=renderOwnAppDepthHintHtml();
     el.className='app-depth-hint-wrap'+(h?' '+pair[1]:'');
     if(!h){el.innerHTML='';el.style.display='none';return;}
@@ -2206,6 +2212,12 @@ function hasSeenVertelCoachTip(){
 }
 function markVertelCoachTipSeen(){
   setScopedStorage('ds_vertel_tip_seen','1');
+}
+function hasHiddenVertelIntro(){
+  return String(getScopedStorage('ds_vertel_intro_hide','0')||'0')==='1';
+}
+function setVertelIntroHidden(v){
+  setScopedStorage('ds_vertel_intro_hide',v?'1':'0');
 }
 function addVertelHintToInput(text){
   var inp=document.getElementById('msgInput');
@@ -6237,31 +6249,30 @@ function rHome(el){
   ${onboardingHtml}
   <div id="homeAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
   ${renderAiImportHomeLanding()}
-  ${showModeEditor?`<div class="ai-rich-card" style="text-align:left;width:100%;margin:-8px 0 14px">
+  ${showModeEditor?`<div class="ai-rich-card home-mini-card" style="text-align:left;width:100%;margin:-8px 0 10px">
     <div class="ai-sec">
-      <div class="ai-sec-title"><span>🧭</span><span>Gebruiksmode</span></div>
-      <p class="ai-sec-text">${hasContacts?'Kies hoe je DateSense vandaag gebruikt.':'Maak eerst een contactdossier aan voor relatie-focus en verdere relatie-status.'}</p>
+      <div class="ai-sec-title"><span>🧭</span><span>Datemodus</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('multi')">Date modus</button>
-        <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'max-width:170px;padding:8px 10px':'font-size:12px;padding:7px 9px'}" onclick="setHomeModeDraft('single')">Relatie-focus</button>
+        <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'padding:7px 10px;font-size:11px':'font-size:11px;padding:7px 10px'}" onclick="setHomeModeDraft('multi')">Datemodus</button>
+        <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'padding:7px 10px;font-size:11px':'font-size:11px;padding:7px 10px'}" onclick="setHomeModeDraft('single')">Relatiemodus</button>
       </div>
       ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:180px;max-width:240px;padding:8px 10px;margin:0">'+getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="max-width:220px;padding:8px 12px;font-size:12px;font-weight:800" onclick="applyFocusFromHome()">Activeer relatie-focus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Kies alleen het dossier waarop je wil focussen. Relatiestatus haal ik uit dat dossier zelf. Andere actieve dossiers worden bij activatie automatisch op on hold gezet.</div>'
+        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:170px;max-width:220px;padding:7px 9px;margin:0;font-size:12px">'+getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="padding:7px 10px;font-size:11px;font-weight:800" onclick="applyFocusFromHome()">Activeer</button></div>'
         :(modeDraft==='single'&&!hasContacts
-          ?'<div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:8px">Je mag nu al voor relatie-focus kiezen, maar activeren kan pas zodra je minstens 1 extern dossier hebt aangemaakt.</div><button class="coach-save-other" style="font-size:12px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier aanmaken</button>'
-          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="max-width:200px;padding:8px 12px;font-size:12px;font-weight:800" onclick="activateDateModeFromHome()">Activeer date modus</button></div><div style="font-size:11px;color:#8a8f97;line-height:1.5;margin-top:6px">Je kan vanaf dan meerdere dossiers tegelijk opvolgen; oudere dossiers kan je indien nodig heropenen.</div>')
+          ?'<button class="coach-save-other" style="font-size:11px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier</button>'
+          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="padding:7px 10px;font-size:11px;font-weight:800" onclick="activateDateModeFromHome()">Activeer</button></div>')
       }
     </div>
   </div>`:''}
   ${!showModeEditor&&usageMode==='single'
-    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>🎯</span><span>Relatie-focus actief</span></div><p class="ai-sec-text">Focus op <strong>'+(focusName?escHTML(dn(focusName)):'je gekozen dossier')+'</strong>'+(focusRelType?(' · '+escHTML(focusRelType)):'')+'.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig focus</a></div></div></div>'
-    :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 8px"><div class="ai-sec"><div class="ai-sec-title"><span>💬</span><span>Date modus actief</span></div><p class="ai-sec-text">Je kan met meerdere dossiers tegelijk werken.</p><div style="font-size:10px;margin-top:2px"><a href="#" onclick="event.preventDefault();toggleHomeModeEditor(true)" style="color:#8a8f97;text-decoration:underline">wijzig modus</a></div></div></div>':'')
+    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 6px"><div class="ai-sec"><div class="ai-sec-title"><span>🧭</span><span>Relatiemodus</span></div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="ai-sec-text" style="margin:0;font-size:12px">Focus op <strong>'+(focusName?escHTML(dn(focusName)):'je dossier')+'</strong></div><button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="toggleHomeModeEditor(true)">Wijzig</button></div></div></div>'
+    :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 6px"><div class="ai-sec"><div class="ai-sec-title"><span>🧭</span><span>Datemodus</span></div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="ai-sec-text" style="margin:0;font-size:12px">Meerdere dossiers tegelijk</div><button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="toggleHomeModeEditor(true)">Wijzig</button></div></div></div>':'')
   }
   ${(function(){
       var shortcut=plannerHomeShortcutCopy();
       var plannerName=shortcut.name||(cs&&cs[0])||'';
-      if(!plannerName)return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>👥</span><span>Eerste dossier</span></div><p class="ai-sec-text">Maak eerst een contactdossier aan voor je plannen, vergelijking en relatie-status.</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
-      return '<div class="ai-rich-card home-mini-card"><div class="ai-sec"><div class="ai-sec-title"><span>🗓️</span><span>'+shortcut.title+'</span></div><p class="ai-sec-text">'+shortcut.text+'</p><button class="coach-save-other" style="font-size:11px;padding:6px 9px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+escJsStr(plannerName)+'\')">Plan iets leuks</button></div></div>';
+      if(!plannerName)return '<div class="ai-rich-card home-mini-card" style="margin-top:2px"><div class="ai-sec"><button class="coach-save-other" style="font-size:11px;padding:6px 10px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
+      return '<div class="ai-rich-card home-mini-card" style="margin-top:2px"><div class="ai-sec"><div style="display:flex;justify-content:flex-end"><button class="coach-save-other" style="font-size:11px;padding:6px 10px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+escJsStr(plannerName)+'\')">Plan</button></div></div></div>';
     })()}
   <!-- Grote microfoon + rimpels -->
   <div class="mic-wrap">
@@ -9794,7 +9805,6 @@ async function rVertel(el){
     <button type="button" class="coach-save-other" onclick="kiesVertelSaveMode()">Opslag</button>
   </div>
   <div id="vertelMoodMount" class="vertel-mood-strip" aria-label="Stemming vandaag"></div>
-  <div id="vertelAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
   <div id="sessBulkBar" class="vertel-empty-tip" style="display:none;padding:8px 16px;border-bottom:1px solid var(--b);background:#fafbfc"></div>
   <div class="chat" id="chatArea"></div>
 </div></div>`;
@@ -9806,9 +9816,11 @@ async function rVertel(el){
 
   if(!S.vertelMsgs||!S.vertelMsgs.length){
     // Eerste keer: toon welkomstbericht
-    var welcome=document.createElement('div');welcome.className='msg-ai';
-    welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.<br><br><strong>Advies vs Vertel:</strong> het tabblad <strong>Advies</strong> bij een dossier is het vaste coachrapport voor <em>die</em> persoon (op basis van tijdlijn en profiel). Hier in Vertel praat je vrij en kun je ook opnieuw om advies vragen — na het antwoord kies je bij welk dossier je opslaat.</div>`;
-    ca.appendChild(welcome);
+    if(!hasHiddenVertelIntro()){
+      var welcome=document.createElement('div');welcome.className='msg-ai';
+      welcome.innerHTML=`<div class="bbl-ai mobile-soft-card vertel-welcome-card"><div class="sndr">DATESENSE</div>Hoi! <strong>Vertel</strong> is je vrije gesprek met je coach. Onder <strong>Geschiedenis</strong> staan je eerdere chats; telkens je Vertel opent via het menu, begin je hier opnieuw met een leeg scherm (je oude gesprekken blijven bewaard in de lijst). Je kan dit gesprek aan een dossier koppelen boven het invoerveld. Standaard bevestig jij waar tekst wordt opgeslagen; kies je &ldquo;deze sessie vast&rdquo;, dan gaat het automatisch naar dat dossier.<br><br><strong>Advies vs Vertel:</strong> het tabblad <strong>Advies</strong> bij een dossier is het vaste coachrapport voor <em>die</em> persoon (op basis van tijdlijn en profiel). Hier in Vertel praat je vrij en kun je ook opnieuw om advies vragen - na het antwoord kies je bij welk dossier je opslaat.<div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1d5d5;font-size:12px"><label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" onchange="if(this.checked){setVertelIntroHidden(true);toast('Intro wordt niet meer getoond.');}">Niet meer tonen</label></div></div>`;
+      ca.appendChild(welcome);
+    }
 
     if(!S.apiKey){
       var w=document.createElement('div');w.className='msg-ai';
@@ -11475,6 +11487,7 @@ async function sendMsg(){
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
+    +' BESTAAND DOSSIER: Als een naam of dossier bestaat, zeg dan nooit "ik ken die persoon niet". Als context nog dun is, zeg expliciet dat het dossier bestaat maar nog weinig context bevat, en stel precies 1 gerichte vervolgvraag om dat dossier te verrijken.'
     +' CONTEXT: '+coachCtxFinal;
   if(ambiguousNameCtx){
     sys+='\nNAAMCONFLICT: De naam «'+ambiguousNameCtx.token+'» lijkt in meerdere app-contexten te zitten ('+ambiguousNameCtx.scopes.join(' / ')+'). Vraag éérst kort om verduidelijking over welke context het gaat, voor je inhoudelijk advies geeft. Voorbeeld: "Bedoel je '+ambiguousNameCtx.token+' in '+ambiguousNameCtx.scopes.join(' of ')+'?"';
@@ -11502,8 +11515,13 @@ async function sendMsg(){
     }else if(S.vertelSessionStickyDossier){
       opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» - notities gaan vast naar dossier «'+dn(S.vertelSessionStickyDossier)+'». Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
     }
+    var sparseDossierHint='';
+    if(voorgesteldDossier&&(!dossierCtx||!String(dossierCtx).trim())){
+      sparseDossierHint='\nDOSSIER BESTAAT MAAR CONTEXT DUN: Dossier «'+dn(voorgesteldDossier)+'» is gevonden, maar er is nog weinig concrete inhoud. Zeg expliciet dat het dossier bestaat en vraag 1 gerichte vervolgvraag. Zeg niet dat je deze persoon niet kent.\n';
+    }
     var fullSys=sys
       +opslagVastNote
+      +sparseDossierHint
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
