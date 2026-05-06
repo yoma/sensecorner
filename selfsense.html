@@ -619,8 +619,25 @@ a:focus-visible,
 
 /* ══ COACH CHAT UI ══ */
 .coach-save-bar{position:relative;z-index:2;display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:8px 12px;background:var(--g);border-radius:10px;border:1px solid var(--b)}
-.coach-save-bar-done{flex-wrap:nowrap;justify-content:space-between}
-.coach-save-bar-done .coach-save-lbl{flex:1;min-width:0}
+.coach-save-bar-done{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin-top:8px;
+  padding:4px 8px;
+  border-radius:8px;
+  background:rgba(74,139,95,.12);
+  border:1px solid rgba(74,139,95,.35);
+  flex-wrap:nowrap;
+  justify-content:flex-start;
+}
+.coach-save-bar-done .coach-save-lbl{
+  flex:0 1 auto;
+  min-width:0;
+  font-size:12px;
+  color:#2f6f42;
+  font-weight:700;
+}
 .coach-save-switch-btn{flex-shrink:0;width:38px;height:38px;padding:0;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--t);font-size:18px;line-height:1;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .coach-save-switch-btn:active{opacity:.85;background:#f5f5f5}
 .coach-save-sticky{padding:6px 10px;font-size:0.92em;background:#8B1538}
@@ -6211,6 +6228,11 @@ function buildCoachTasks(){
     if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
       tasks.push({id:'actie-advies-'+p,type:'a',prio:'medium',dossier:p,msg:'Voor <strong>'+escHTML(person)+'</strong> is het slim je advies te vernieuwen op basis van recente signalen.',openMsg:'Nog openstaand: advies voor <strong>'+escHTML(person)+'</strong> is nog niet vernieuwd.',link:'Naar advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
     }
+    var tipPreview=String(lastAdviceBlock.tip_preview||'').trim();
+    var tipKey=String(lastAdviceBlock.tip_key||'').trim();
+    if(tipPreview&&tipKey){
+      tasks.push({id:'tip-advies-'+p+'-'+tipKey,type:'a',prio:'medium',dossier:p,msg:'Nieuw advies voor <strong>'+escHTML(person)+'</strong>: '+escHTML(tipPreview),openMsg:'Nog openstaand: nieuw advies voor <strong>'+escHTML(person)+'</strong>.',link:'Open advies →',action:"viewDossier('"+escJsStr(p)+"');setTimeout(function(){switchTab('advies');},120)"});
+    }
     var m=d.meta||{};
     var hasPhotoUrl=!!(m&&m.photo_url);
     var hasAnPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
@@ -6256,6 +6278,28 @@ function renderHomeNotePerson(dossier){
     ?'<img class="home-note-avatar" src="'+meta.photo_url+'" alt="'+escHTML(label)+'">'
     :'<div class="home-note-avatar-fallback" style="background:'+avatarColors[ci%avatarColors.length]+'">'+escHTML(label.charAt(0).toUpperCase())+'</div>';
   return '<div class="home-note-person">'+avatar+'<span class="home-note-badge">'+escHTML(label)+'</span></div>';
+}
+function getAdviceMessageHistory(name){
+  var d=S.pdata[name]||{};
+  var meta=d.meta||{};
+  var arr=Array.isArray(meta.advice_messages)?meta.advice_messages:[];
+  return arr.filter(function(it){ return it&&String(it.text||'').trim(); });
+}
+function renderAdviceMessageBlock(name){
+  var arr=getAdviceMessageHistory(name);
+  if(!arr.length)return'';
+  var rows=arr.slice(-4).reverse().map(function(it){
+    var when=String(it.ts||'').trim();
+    var text=escHTML(String(it.text||'').trim());
+    return '<div style="padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;margin-top:8px">'
+      +'<div style="font-size:11px;color:#6b7280;font-weight:700">'+escHTML(when||'Onbekend moment')+'</div>'
+      +'<div style="font-size:12px;color:#374151;line-height:1.5;margin-top:4px">'+text+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div id="advMsgBlock" style="margin-top:12px;padding:10px 12px;border:1px solid #DCE7DF;border-radius:12px;background:#F7FBF8">'
+    +'<div style="font-size:12px;font-weight:800;color:#2f6f42;letter-spacing:.02em">💬 Recente adviezen</div>'
+    +rows
+    +'</div>';
 }
 function humanTaskLabel(id){
   id=String(id||'');
@@ -9629,6 +9673,7 @@ async function loadTab(name,tab,d){
         +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advExtraWrap\')">✨ Naar extra expertise</button>'
         +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionActions\')">✅ Naar acties</button>'
         +'</div>';
+      advHtml+=renderAdviceMessageBlock(name);
     }
     // Herstel ook acties uit cache
     var cachedActies=cache&&cache.acties||'';
@@ -9846,6 +9891,7 @@ async function genAdvies(name,forced){
       .replace(/ACTIES:[\s\S]*/ig,'')
       .trim();
     adviesTxt=sanitizeAdviceForRelationshipStage(adviesTxt,name,stageNow,relType);
+    var previewTxt=String(adviesTxt||'').replace(/\s+/g,' ').trim().slice(0,160);
     var result=formatAiCard(adviesTxt);
     var toneHtml=isAdminUser()
       ?('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">'
@@ -9888,10 +9934,15 @@ async function genAdvies(name,forced){
       acties:S.adviesCache[name].acties,
       extra_html:S.adviesCache[name].extra_html||'',
       extra_ts:S.adviesCache[name].extra_ts||'',
+      tip_preview:previewTxt,
+      tip_key:String(Date.now()),
       action_done:prevDoneKeys,
       action_done_keys:prevDoneKeys,
       updated_at:new Date().toISOString()
     };
+    var adviceMsgs=Array.isArray(d.meta.advice_messages)?d.meta.advice_messages:[];
+    if(previewTxt)adviceMsgs.push({ts:ts,text:previewTxt});
+    d.meta.advice_messages=adviceMsgs.slice(-12);
     S.pdata[name]=d;
     try{await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);}catch(_e2){}
     // Update footer
@@ -11992,12 +12043,7 @@ function rerenderSegmenten(){
 }
 
 function buildCoachSaveDoneBar(labelInnerHtml,sessionUserMsgId){
-  var sw='';
-  if(sessionUserMsgId&&S.user){
-    var sid=String(sessionUserMsgId).replace(/"/g,'');
-    sw='<button type="button" class="coach-save-switch-btn" data-smid="'+sid+'" onclick="openVertelSaveNaarAnderDossier(this.getAttribute(\'data-smid\'))" title="Alleen dit bericht naar een ander dossier" aria-label="Ander dossier voor dit bericht">⇄</button>';
-  }
-  return '<div class="coach-save-bar coach-save-bar-done">'+labelInnerHtml+sw+'</div>';
+  return '<div class="coach-save-bar coach-save-bar-done">'+labelInnerHtml+'</div>';
 }
 
 // ══ Verstuur bericht ══════════════════════════════════════════════
