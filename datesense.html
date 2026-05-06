@@ -5381,6 +5381,24 @@ function toggleHomeModeEditor(open){
   else S.homeModeEditorOpen=!S.homeModeEditorOpen;
   goScreen('home');
 }
+function quickToggleUsageModeHome(){
+  var mode=getUsageMode();
+  if(mode==='single'){
+    activateDateModeFromHome();
+    return;
+  }
+  var contacts=getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';});
+  if(!contacts.length){
+    toast('Maak eerst een dossier voor Relatie Focus.');
+    return;
+  }
+  var focus=getFocusDossier();
+  if(!focus||getDossierLifecycle(focus)!=='active')focus=contacts[0];
+  setFocusRelationType(stageRelationTypeValue(getDossierStage(focus)));
+  S.homeModeDraft='single';
+  S.homeModeEditorOpen=false;
+  activateRelationshipFocus(focus).catch(function(){toast('Kon Relatie Focus niet activeren.');});
+}
 function activateDateModeFromHome(){
   var wasSingle=getUsageMode()==='single';
   setUsageMode('multi');
@@ -6249,30 +6267,20 @@ function rHome(el){
   ${onboardingHtml}
   <div id="homeAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
   ${renderAiImportHomeLanding()}
-  ${showModeEditor?`<div class="ai-rich-card home-mini-card" style="text-align:left;width:100%;margin:-8px 0 10px">
+  <div class="ai-rich-card home-mini-card" style="margin:-10px 0 6px">
     <div class="ai-sec">
       <div class="ai-sec-title"><span>🧭</span><span>Datemodus</span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        <button class="${modeDraft==='multi'?'btn-r':'coach-save-other'}" style="${modeDraft==='multi'?'padding:7px 10px;font-size:11px':'font-size:11px;padding:7px 10px'}" onclick="setHomeModeDraft('multi')">Datemodus</button>
-        <button class="${modeDraft==='single'?'btn-r':'coach-save-other'}" style="${modeDraft==='single'?'padding:7px 10px;font-size:11px':'font-size:11px;padding:7px 10px'}" onclick="setHomeModeDraft('single')">Relatiemodus</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div class="ai-sec-text" style="margin:0;font-size:12px">${usageMode==='single'?'Relatie Focus'+(focusName?(' · '+escHTML(dn(focusName))):''):'Dating Focus'}</div>
+        <button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="quickToggleUsageModeHome()">Dating Focus &lt;=&gt; Relatie Focus</button>
       </div>
-      ${modeDraft==='single'&&hasContacts
-        ?'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="homeFocusSelect" class="form-input" aria-label="Focus dossier" style="min-width:170px;max-width:220px;padding:7px 9px;margin:0;font-size:12px">'+getDateSenseContactNames().filter(function(p){return getDossierLifecycle(p)==='active';}).map(function(p){return'<option value="'+escHTML(p)+'" '+(focusName===p?'selected':'')+'>'+escHTML(dn(p))+'</option>';}).join('')+'</select><button class="btn-r" style="padding:7px 10px;font-size:11px;font-weight:800" onclick="applyFocusFromHome()">Activeer</button></div>'
-        :(modeDraft==='single'&&!hasContacts
-          ?'<button class="coach-save-other" style="font-size:11px;padding:7px 9px;margin-top:8px" onclick="newSenseFromDrawer()">Eerste dossier</button>'
-          :'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn-r" style="padding:7px 10px;font-size:11px;font-weight:800" onclick="activateDateModeFromHome()">Activeer</button></div>')
-      }
     </div>
-  </div>`:''}
-  ${!showModeEditor&&usageMode==='single'
-    ?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 6px"><div class="ai-sec"><div class="ai-sec-title"><span>🧭</span><span>Relatiemodus</span></div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="ai-sec-text" style="margin:0;font-size:12px">Focus op <strong>'+(focusName?escHTML(dn(focusName)):'je dossier')+'</strong></div><button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="toggleHomeModeEditor(true)">Wijzig</button></div></div></div>'
-    :(!showModeEditor?'<div class="ai-rich-card home-mini-card" style="margin:-10px 0 6px"><div class="ai-sec"><div class="ai-sec-title"><span>🧭</span><span>Datemodus</span></div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="ai-sec-text" style="margin:0;font-size:12px">Meerdere dossiers tegelijk</div><button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="toggleHomeModeEditor(true)">Wijzig</button></div></div></div>':'')
-  }
+  </div>
   ${(function(){
       var shortcut=plannerHomeShortcutCopy();
       var plannerName=shortcut.name||(cs&&cs[0])||'';
-      if(!plannerName)return '<div class="ai-rich-card home-mini-card" style="margin-top:2px"><div class="ai-sec"><button class="coach-save-other" style="font-size:11px;padding:6px 10px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="newSenseFromDrawer()">Nieuw dossier</button></div></div>';
-      return '<div class="ai-rich-card home-mini-card" style="margin-top:2px"><div class="ai-sec"><div style="display:flex;justify-content:flex-end"><button class="coach-save-other" style="font-size:11px;padding:6px 10px;border-color:#FFD9B3;color:#A55B00;background:#FFF8F0" onclick="openPlanner(\''+escJsStr(plannerName)+'\')">Plan</button></div></div></div>';
+      if(!plannerName)return '<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="coach-save-other" style="font-size:11px;padding:6px 9px" onclick="newSenseFromDrawer()">Nieuw dossier</button></div>';
+      return '<div style="display:flex;justify-content:flex-end;margin-top:4px"><button type="button" aria-label="Plan iets" onclick="openPlanner(\''+escJsStr(plannerName)+'\')" style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;border:none;background:transparent;color:#A55B00;cursor:pointer;font-family:inherit;padding:2px 4px"><span style="width:30px;height:30px;border-radius:15px;border:1px solid #FFD9B3;background:#FFF8F0;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1">📅</span><span style="font-size:10px;line-height:1.1;color:#8A6A3A">Plan iets</span></button></div>';
     })()}
   <!-- Grote microfoon + rimpels -->
   <div class="mic-wrap">
@@ -7885,7 +7893,6 @@ function rAdviceHub(el){
     routeBody='<div class="advice-route-grid">'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'person\')"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies dossier, stel je focusvraag en krijg meteen advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 dossiers en geef direct advies.</span></span></button>'
-      +'<button type="button" class="advice-route-card" onclick="openOwnSenseEntryPoint()"><span class="advice-route-icon">🪞</span><span class="advice-route-copy"><span class="advice-route-title">Met mijn OwnSense-lens</span><span class="advice-route-desc">Open OwnSense om je lens meteen te verrijken.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en lees het antwoord hier. Vertel open je alleen als je dat zelf kiest.</span></span></button>'
       +'</div>';
@@ -7897,15 +7904,15 @@ function rAdviceHub(el){
     +'<h2 class="advice-hub-title">Waar heb je vandaag zicht op nodig?</h2>'
     +'<p class="advice-hub-sub">Beslis hier je route. Ik genereer advies vanuit dit scherm.</p>'
     +routeBody
-    +'<div class="advice-depth-wrap" style="margin-top:14px">'
-    +'<div class="advice-depth-label">Diepgang</div>'
-    +'<p class="advice-depth-help">Bij <strong>Over een persoon</strong>: kies <strong>Hoofdadvies</strong> of <strong>Hoofd + extra</strong>. Hieronder stel je je standaard in voor snel opnieuw proberen.</p>'
-    +'<div class="advice-depth-row">'
-    +depthBtn('standard','Gewoon advies')
-    +depthBtn('extra','Met extra expertise')
-    +depthBtn('both','Beide tegelijk')
-    +'</div>'
-    +'</div>'
+    +(st.route?('<div class="advice-depth-wrap" style="margin-top:14px">'
+      +'<div class="advice-depth-label">Diepgang</div>'
+      +'<p class="advice-depth-help">Bij <strong>Over een persoon</strong>: kies <strong>Hoofdadvies</strong> of <strong>Hoofd + extra</strong>. Hieronder stel je je standaard in voor snel opnieuw proberen.</p>'
+      +'<div class="advice-depth-row">'
+      +depthBtn('standard','Gewoon advies')
+      +depthBtn('extra','Met extra expertise')
+      +depthBtn('both','Beide tegelijk')
+      +'</div>'
+      +'</div>'):'')
     +(contacts.length?'<div class="advice-hub-footnote">Beschikbare dossiers: '+escHTML(contacts.slice(0,4).map(dn).join(', '))+(contacts.length>4?'…':'')+'</div>':'<div class="advice-hub-footnote">Nog geen dossier gevonden. Maak er eerst één in Senses.</div>')
     +'</div>';
 }
