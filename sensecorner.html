@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="06-05-2026 19:27">
+<meta name="sc-build" content="06-05-2026 20:08">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -732,6 +732,14 @@ a{text-decoration:none;color:inherit}
     }
   }catch(_e){}
   var pendingReturnTo='';
+  function withTimeout(promise,ms,fallback){
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise(function(resolve){
+        setTimeout(function(){resolve(fallback);},Math.max(500,ms||5000));
+      })
+    ]);
+  }
 
   async function scHasOnboardingCompleted(userId){
     if(!sb||!userId)return false;
@@ -2217,7 +2225,15 @@ a{text-decoration:none;color:inherit}
     if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
     setAuthMsg('Bezig met inloggen…');
     try{
-      var res=await sb.auth.signInWithPassword({email:email,password:pw});
+      var res=await withTimeout(
+        sb.auth.signInWithPassword({email:email,password:pw}),
+        12000,
+        null
+      );
+      if(res===null){
+        setAuthMsg('Inloggen duurt te lang. Controleer je netwerk en probeer opnieuw.',true);
+        return;
+      }
       if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
       // Login mag niet blokkeren op extra profiel/approval queries.
       Promise.resolve(refreshAuthUi()).catch(function(e){
