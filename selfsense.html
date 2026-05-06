@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="06-05-2026 15:57">
+<meta name="fs-build" content="06-05-2026 20:15">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1158,7 +1158,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 04-05-2026 13:52</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 06-05-2026 20:15</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -1729,6 +1729,54 @@ function getSenseiTipsWhitelistDomains(){
       return all.concat(Array.isArray(list)?list:[]);
     },[])
   ));
+}
+
+/** Vaste lijst Vlaamse/Belgische hulplijnen (gecurateerd; geen vervanging voor professionele spoedzorg). */
+var SELFSENSE_HELPLINES=[
+  {key:'tele_onthaal',name:'Tele-Onthaal',number:'106',chat:'https://www.tele-onthaal.be/chat/',description:'Voor elke zorg, klein of groot. Gratis en anoniem.',hours:'24 uur per dag, 7 dagen op 7. Chat avonds beschikbaar.',primary:true},
+  {key:'zelfmoordlijn',name:'Zelfmoordlijn',number:'1813',chat:'https://www.zelfmoord1813.be/',description:'Voor wie aan zelfdoding denkt of zich zorgen maakt om iemand.',hours:'24 uur per dag, 7 dagen op 7.',crisis_only:true},
+  {key:'caw',name:'CAW',number:'0800 13 500',chat:'https://www.caw.be/contacteer-ons/',description:'Welzijnsvragen, relaties, financieel, juridisch, opvang.',hours:'Werkdagen 13u tot 17u via chat, telefoon ruimer.'},
+  {key:'huisarts_wacht',name:'Huisarts van wacht',number:'1733',description:'Medische ingang, ook bij psychische klachten.',hours:'24 uur per dag, 7 dagen op 7.'},
+  {key:'noodnummer',name:'Acute noodsituatie',number:'112',description:'Bel bij acuut gevaar voor leven of gezondheid.',hours:'24 uur per dag, 7 dagen op 7.',crisis_only:true},
+  {key:'awel',name:'Awel (jongeren)',number:'102',chat:'https://awel.be/',description:'Voor kinderen en jongeren.',hours:'Elke dag 16u tot 22u, niet op zon- en feestdagen.',youth_only:true}
+];
+function selfSenseHelplineMobileUa(){
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent||'');
+}
+async function selfSenseHelplineCallOrCopy(number){
+  var n=String(number||'').trim();
+  if(!n)return;
+  var tel='tel:'+n.replace(/\s+/g,'');
+  if(selfSenseHelplineMobileUa()){
+    window.location.href=tel;
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(n);
+    toast('Nummer gekopieerd');
+  }catch(_e){
+    window.location.href=tel;
+  }
+}
+function renderAdviceHubHelplinesHtml(){
+  return SELFSENSE_HELPLINES.map(function(h){
+    var chatBtn=h.chat
+      ?'<a class="coach-save-other" style="font-size:11px;padding:7px 11px;text-decoration:none;display:inline-flex;align-items:center;border-radius:10px" href="'+escHTML(h.chat)+'" target="_blank" rel="noopener">Website / chat</a>'
+      :'';
+    return '<div class="advice-route-card" style="cursor:default;flex-direction:column;align-items:stretch;gap:10px;text-align:left">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      +'<div style="min-width:0">'
+      +'<div style="font-size:14px;font-weight:800;color:#1f2937">'+escHTML(h.name)+(h.youth_only?' <span style="font-size:11px;font-weight:700;color:#6b7280">(jongeren)</span>':'')+'</div>'
+      +'<div style="font-size:14px;font-weight:800;color:var(--r);margin-top:3px">'+escHTML(h.number)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">'
+      +'<button type="button" class="btn-r" style="padding:8px 12px;font-size:12px" onclick="selfSenseHelplineCallOrCopy(\''+escJsStr(h.number)+'\')">Bel</button>'
+      +chatBtn
+      +'</div>'
+      +'</div>'
+      +'<div style="font-size:12px;color:#6b7280;line-height:1.55">'+escHTML(h.description||'')+(h.hours?'<br><span style="color:#8a8f97">'+escHTML(h.hours)+'</span>':'')+'</div>'
+      +'</div>';
+  }).join('');
 }
 const PROMPT_DEFAULTS={
   advice_core:'Je bent SelfSensei. De gebruiker wil concreet advies rond zelfreflectie, herstel en regulatie, geen coaching waarin jij het werk teruggeeft met open vragen. Gebruik nooit Unicode U+2014 in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Werk zo: begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context. Geen lange herhaling. Daarna geef je meteen jouw advies: wat zeg of doe je, waarom dat helpt, wat vermijden. Klein en haalbaar, zonder harde oordelen of labels. Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden; vraag nooit hoe zij het zelf zouden aanpakken. Werk NOOIT met scores of percentages. Geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen zonder aparte kopregels. Sluit daarna af met exact één aparte regel in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin.',
@@ -2461,13 +2509,8 @@ function positionHelpIconHint(){
   hint.style.top=top+'px';
 }
 function maybeShowHelpIconHint(force){
-  if(!areAppTooltipsEnabled())return;
-  var seen=String(getScopedStorage('ds_help_icon_hint_seen','0')||'0')==='1';
-  if(seen&&!force)return;
   var el=document.getElementById('helpIconHint');
-  if(!el)return;
-  positionHelpIconHint();
-  el.classList.add('show');
+  if(el)el.classList.remove('show');
 }
 function closeHelpMenu(){
   var m=document.getElementById('helpMenu');
@@ -4929,11 +4972,6 @@ function _goScreenBody(sc){
   // Geen automatische rondleiding bij navigatie: enkel via Korte rondleiding / vraagteken / instellingen, of na «Hulp opnieuw tonen».
   updateNavTabIndicators();
   maybeShowHelpIconHint(false);
-  if(S.user&&areAppTooltipsEnabled()&&((!SELFSENSE_DISABLE_SENSES&&sc==='senses')||sc==='own')&&!isScreenHelpSeen(sc)){
-    setTimeout(function(){
-      if(S.screen===sc)startQuickHelpTour(false);
-    },180);
-  }
   setTimeout(function(){ensureRenderHealthy('goScreen:'+sc);},40);
 }
 
@@ -7608,12 +7646,23 @@ function rAdviceHub(el){
       +'</div>'
       +renderResultCard()
       +'</div>';
+  }else if(st.route==='helplines'){
+    routeBody='<div style="margin-top:6px">'
+      +'<div style="font-size:13px;color:#4b5563;line-height:1.55;margin-bottom:12px;padding:12px 13px;border-radius:12px;background:#F8FAFC;border:1px solid #E2E8F0">'
+      +'Hier staan <strong>betrouwbare hulplijnen</strong> om te bellen of te chatten. SelfSense is geen vervanging voor professionele zorg. Bij <strong>acuut levensgevaar</strong> bel je best meteen <strong>112</strong>.'
+      +'</div>'
+      +'<div class="advice-route-grid" style="margin-bottom:4px">'+renderAdviceHubHelplinesHtml()+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button type="button" class="btn-g" style="max-width:340px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
+      +'</div>'
+      +'</div>';
   }else{
     routeBody='<div class="advice-route-grid">'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'person\')"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies dossier, stel je focusvraag en krijg meteen advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 dossiers en geef direct advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en lees het antwoord hier. Vertel open je alleen als je dat zelf kiest.</span></span></button>'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'helplines\')"><span class="advice-route-icon">🤝</span><span class="advice-route-copy"><span class="advice-route-title">Ik zoek online hulp</span><span class="advice-route-desc">Nummer- en chatlijst met erkende hulplijnen wanneer je liever met een mens praat.</span></span></button>'
       +'</div>';
   }
   el.innerHTML=''
@@ -7623,7 +7672,7 @@ function rAdviceHub(el){
     +'<h2 class="advice-hub-title">Waar heb je vandaag zicht op nodig?</h2>'
     +'<p class="advice-hub-sub">Beslis hier je route. Ik genereer advies vanuit dit scherm.</p>'
     +routeBody
-    +(st.route?('<div class="advice-depth-wrap" style="margin-top:14px">'
+    +(st.route&&st.route!=='helplines'?('<div class="advice-depth-wrap" style="margin-top:14px">'
       +'<div class="advice-depth-label">Diepgang</div>'
       +'<p class="advice-depth-help">Bij <strong>Over een persoon</strong>: kies <strong>Hoofdadvies</strong> of <strong>Hoofd + extra</strong>. Hieronder stel je je standaard in voor snel opnieuw proberen.</p>'
       +'<div class="advice-depth-row">'
@@ -10894,6 +10943,21 @@ function getEffectiveAnthropicKey(){
   return String(S.apiKey||'').trim();
 }
 
+/** Claude-antwoord kan meerdere `content`-blokken hebben (web search + tekst); niet alleen [0]. */
+function extractSenseiChatAssistantText(data){
+  var c=data&&data.content;
+  if(!Array.isArray(c))return '';
+  var parts=[];
+  for(var i=0;i<c.length;i++){
+    var b=c[i];
+    if(b&&b.type==='text'&&typeof b.text==='string'){
+      var t=b.text.trim();
+      if(t)parts.push(t);
+    }
+  }
+  return parts.join('\n\n');
+}
+
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
@@ -10961,7 +11025,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
       throw new Error(apiMsg);
     }
     if(data.error)throw new Error(data.error.message);
-    var txt=(data.content&&data.content[0]&&data.content[0].text)||'';
+    var txt=extractSenseiChatAssistantText(data)||'';
     if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');
     return txt;
   }catch(e){
@@ -12108,7 +12172,8 @@ async function sendMsg(){
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier - zeg nooit dat je die persoon niet in de dossiers hebt.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
-    +' Max 4 zinnen. Als de gebruiker om advies vraagt: geef meteen concrete stappen of formuleringen, geen slotvraag over hoe zij het zelf zouden aanpakken. Anders hoogstens één gerichte vraag als iets essentieels ontbreekt. Nederlands.'
+    +' Standaard max 4 zinnen. Bij aanbevelingen met web search en echte links mag het antwoord tot ongeveer 8 korte zinnen zijn.'
+    +' Als de gebruiker om advies vraagt: geef meteen concrete stappen of formuleringen, geen slotvraag over hoe zij het zelf zouden aanpakken. Anders hoogstens één gerichte vraag als iets essentieels ontbreekt. Nederlands.'
     +' Gebruik geen lange gedachtestreep ( - ); gebruik een komma of punt.'
     +' ROEPNAAM: Gebruik de roepnaam van de gebruiker spaarzaam (liefst 0×); hooguit 1× per antwoord en nooit geforceerd midden in een zin vlak na een komma. Spreek hem/haar bij voorkeur met «je»/«jij» aan.'
     +' Als de gebruiker iets vertelt over een contextpersoon: korte empathische reactie en bij voorkeur een praktische tip. Vraag niet terug hoe zij het zelf zouden oplossen als ze duidelijk advies zoeken. Geen oordeel, geen scores.'
@@ -12165,7 +12230,7 @@ async function sendMsg(){
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
-    var raw=await callAPI(fullSys,messages,420,22000);
+    var raw=await callAPI(fullSys,messages,1400,22000);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}
