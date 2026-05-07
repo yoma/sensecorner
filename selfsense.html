@@ -1709,40 +1709,27 @@ const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 // Productkeuze: in SelfSense tonen we voorlopig geen aparte Senses-laag.
 const SELFSENSE_DISABLE_SENSES=true;
-const SENSEI_TIPS_WHITELIST={
-  books:[
-    'standaardboekhandel.be',
-    'bibliotheek.be',
-    'iedereenleest.be',
-    'hebban.nl',
-    'bol.com'
-  ],
-  media:[
-    'vrtmax.be',
-    'canvas.be',
-    'ted.com',
-    'klara.be',
-    'radio1.be'
-  ],
-  places:[
-    'uitinvlaanderen.be',
-    'visitflanders.com',
-    'museumpasmusees.be',
-    'toerismevlaanderen.be',
-    'visit.brussels',
-    'visitantwerpen.be',
-    'visitgent.com',
-    'visitleuven.be',
-    'visitbruges.be'
-  ],
-  fallback:['nl.wikipedia.org']
+// Sensei aanbevelingen - whitelist voor web_search
+const SENSEI_WHITELIST={
+  boeken:['standaardboekhandel.be','bol.com','hebban.nl','iedereenleest.be'],
+  tedtalks:['ted.com'],
+  podcasts:['open.spotify.com','podcasts.apple.com','vrtmax.be'],
+  videos:['youtube.com','vrtmax.be','ted.com'],
+  plekken:['uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels','visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be'],
+  algemeen:['nl.wikipedia.org']
 };
+const SENSEI_ALLOWED_DOMAINS=[
+  ...new Set([
+    ...SENSEI_WHITELIST.boeken,
+    ...SENSEI_WHITELIST.tedtalks,
+    ...SENSEI_WHITELIST.podcasts,
+    ...SENSEI_WHITELIST.videos,
+    ...SENSEI_WHITELIST.plekken,
+    ...SENSEI_WHITELIST.algemeen
+  ])
+];
 function getSenseiTipsWhitelistDomains(){
-  return Array.from(new Set(
-    Object.values(SENSEI_TIPS_WHITELIST).reduce(function(all,list){
-      return all.concat(Array.isArray(list)?list:[]);
-    },[])
-  ));
+  return SENSEI_ALLOWED_DOMAINS.slice();
 }
 function isWhitelistTipRequest(text){
   var t=String(text||'').toLowerCase();
@@ -1760,10 +1747,12 @@ function isWhitelistTipRequest(text){
 }
 function getWhitelistTipDomainsForText(text){
   var t=String(text||'').toLowerCase();
-  var books=(SENSEI_TIPS_WHITELIST.books||[]).slice(0,3);
-  var media=(SENSEI_TIPS_WHITELIST.media||[]).slice(0,3);
-  var places=(SENSEI_TIPS_WHITELIST.places||[]).slice(0,3);
-  var fallback=(SENSEI_TIPS_WHITELIST.fallback||[]).slice(0,2);
+  var books=(SENSEI_WHITELIST.boeken||[]).slice(0,3);
+  var talks=(SENSEI_WHITELIST.tedtalks||[]).slice(0,2);
+  var podcasts=(SENSEI_WHITELIST.podcasts||[]).slice(0,2);
+  var videos=(SENSEI_WHITELIST.videos||[]).slice(0,2);
+  var places=(SENSEI_WHITELIST.plekken||[]).slice(0,3);
+  var fallback=(SENSEI_WHITELIST.algemeen||[]).slice(0,2);
   var out=[];
   function add(list){
     (list||[]).forEach(function(d){
@@ -1773,11 +1762,15 @@ function getWhitelistTipDomainsForText(text){
     });
   }
   if(/boek|lees|artikel|bibliotheek|roman|verhaal/.test(t))add(books);
-  if(/podcast|video|film|serie|docu|documentaire|kijk|luister/.test(t))add(media);
+  if(/ted|talk/.test(t))add(talks);
+  if(/podcast|luister/.test(t))add(podcasts);
+  if(/video|film|serie|docu|documentaire|kijk/.test(t))add(videos);
   if(/plek|museum|wandel|uitstap|naartoe|ergens heen|buiten/.test(t))add(places);
   if(!out.length){
     add(books.slice(0,2));
-    add(media.slice(0,2));
+    add(talks.slice(0,1));
+    add(podcasts.slice(0,1));
+    add(videos.slice(0,1));
     add(places.slice(0,2));
   }
   add(fallback);
@@ -11088,17 +11081,12 @@ function getEffectiveAnthropicKey(){
 
 /** Claude-antwoord kan meerdere `content`-blokken hebben (web search + tekst); niet alleen [0]. */
 function extractSenseiChatAssistantText(data){
-  var c=data&&data.content;
-  if(!Array.isArray(c))return '';
-  var parts=[];
-  for(var i=0;i<c.length;i++){
-    var b=c[i];
-    if(b&&b.type==='text'&&typeof b.text==='string'){
-      var t=b.text.trim();
-      if(t)parts.push(t);
-    }
-  }
-  return parts.join('\n\n');
+  var c=(data&&Array.isArray(data.content))?data.content:[];
+  return c
+    .filter(function(block){return block&&block.type==='text'&&typeof block.text==='string';})
+    .map(function(block){return block.text;})
+    .join('\n')
+    .trim();
 }
 
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
@@ -11128,12 +11116,14 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
-    var toolCfg={
-      web_search:{
-        allowed_domains:getSenseiTipsWhitelistDomains(),
-        max_search_queries:3
+    var toolCfg=[
+      {
+        type:'web_search_20250305',
+        name:'web_search',
+        allowed_domains:SENSEI_ALLOWED_DOMAINS,
+        max_uses:3
       }
-    };
+    ];
     var res=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
       headers:{
@@ -12431,18 +12421,17 @@ async function sendMsg(){
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
-    +' AANBEVELINGEN: Geef vooral aanbevelingen als de gebruiker daar expliciet om vraagt.'
-    +' Je mag daarnaast contextueel proactief 1 suggestie doen (boek, video, podcast, plek of museum) wanneer er duidelijke signalen zijn van bijvoorbeeld eenzaamheid, vastlopen, rouw, stress, overprikkeling of motivatieverlies.'
-    +' Houd proactieve suggesties subtiel en niet opdringerig: eerst empathie/coaching, daarna hoogstens 1 optionele suggestie.'
-    +' Vermijd spam: herhaal proactieve suggesties niet in elk antwoord en niet opnieuw zonder nieuwe aanleiding in de context.'
-    +' Als de gebruiker expliciet om aanbevelingen vraagt: gebruik web search, maar alleen via deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
+    +' AANBEVELINGEN: Je mag de gebruiker concrete aanbevelingen doen voor boeken die bij hen passen, TED talks, videos, documentaires, podcasts, en plekken, musea, events in Vlaanderen.'
+    +' KRITIEKE REGEL - geen verzinsels: voor elke aanbeveling gebruik je ALTIJD eerst de web_search tool. Verzin NOOIT een titel, auteur, naam, adres of URL.'
+    +' Gebruik voor aanbevelingen alleen deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
+    +' Geef altijd de echte link mee in markdown: [Titel](URL).'
+    +' Vind je niets passends? Zeg dan eerlijk: "Ik vind hier nu niet iets dat goed bij jou past - als je me meer vertelt over [X], zoek ik gerichter."'
+    +' Beperk aanbevelingen tot wat echt relevant is voor wat de gebruiker net vertelde. Liever een rake aanbeveling dan vijf vage.'
     +(wantsWhitelistTips&&whitelistTipDomains.length
       ?(' Voor DIT bericht ziet de intentie eruit als een tip-vraag. Start je aanbevelingen eerst vanuit deze whitelist-startpunten: '+whitelistTipDomains.join(', ')+'.')
       :'')
-    +' Noem alleen bronnen die je echt hebt gevonden. Verzin geen titel, auteur of URL.'
-    +' Geef per aanbeveling een echte, direct bruikbare link.'
-    +' Geef maximaal 2 of 3 aanbevelingen per antwoord bij expliciete vraag. Bij proactieve suggestie: maximaal 1.'
-    +' Als je niets passends vindt: zeg dat eerlijk en stel daarna 1 gerichte vervolgvraag om beter te zoeken.'
+    +' Noem alleen bronnen die je echt hebt gevonden.'
+    +' Geef maximaal 2 of 3 aanbevelingen per antwoord bij expliciete vraag.'
     +' Gaat het om hulpverlening, crisis of professionele zorg: gebruik de bestaande gecureerde lijst in de app en doe geen web search. Push dan geen willekeurige content als vervanging.'
     +' CONTEXT: '+coachCtxFinal;
 
