@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="06-05-2026 22:20">
+<meta name="fs-build" content="07-05-2026 16:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -674,6 +674,17 @@ a:focus-visible,
 .advice-route-card{display:flex;align-items:flex-start;gap:12px;text-align:left;padding:14px 15px;background:linear-gradient(180deg,#FFFFFF,#FCFCFC);border:1px solid #EAECEF;border-radius:14px;font-size:14px;font-weight:700;color:#26303A;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(25,29,36,.04);transition:transform .12s ease,box-shadow .14s ease,border-color .14s ease}
 .advice-route-card:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(25,29,36,.08);border-color:#DEE2E7}
 .advice-route-card:active{transform:translateY(0)}
+.reco-card{border:1px solid #E6EBF2;border-radius:16px;background:linear-gradient(180deg,#fff 0%,#FAFCFF 100%);padding:13px 14px;margin:2px 0 12px;box-shadow:0 4px 14px rgba(25,29,36,.05)}
+.reco-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.reco-title{font-size:12px;font-weight:800;color:#374151;letter-spacing:.03em;text-transform:uppercase}
+.reco-state{font-size:11px;color:#6b7280}
+.reco-body{font-size:13px;line-height:1.55;color:#334155}
+.reco-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.reco-chip{border:1px solid #D9DFE7;background:#fff;color:#475569;border-radius:999px;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .16s ease}
+.reco-chip:hover{border-color:#C4D0DE;background:#F8FAFD}
+.reco-chip.on{border-color:#B8C8DD;background:#EEF4FC;color:#1E3A5F}
+.reco-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.reco-actions .coach-save-other{border-radius:999px;padding:7px 11px}
 .advice-route-icon{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#F4EEFF;font-size:16px;line-height:1;flex-shrink:0}
 .advice-route-copy{display:block;min-width:0}
 .advice-route-title{display:block;font-size:14px;font-weight:800;color:#1f2937;line-height:1.35}
@@ -980,7 +991,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 06-05-2026 20:44</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 07-05-2026 16:05</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -6312,6 +6323,7 @@ function rHome(el){
       +'</div>';
   }
 
+  var recoHtml=renderHomeRecoCard();
   el.innerHTML=`
 <div class="home-shell">
 
@@ -6331,9 +6343,11 @@ function rHome(el){
     </button>
   </div>
   <div class="home-vertel-copy" style="font-size:13px;color:var(--m);margin:8px 0 16px">Tik om te vertellen</div>
+  ${recoHtml}
   ${notesHtml}
   </div>
 </div>`;
+  void ensureDailyRecoTipForHome();
   refreshOwnAppDepthHintMounts();
 }
 
@@ -6439,8 +6453,29 @@ function rAdviceHub(el){
       +'</div>'
       +renderResultCard()
       +'</div>';
+  }else if(st.route==='recommend'){
+    st.recoPrefs=st.recoPrefs||getRecoPrefs();
+    var recoChips=SENSEI_RECO_CATEGORY_META.map(function(c){
+      var on=st.recoPrefs.categories[c.key]!==false;
+      return '<button type="button" class="reco-chip'+(on?' on':'')+'" onclick="toggleRecoCategory(\''+escJsStr(c.key)+'\')">'+escHTML(c.label)+'</button>';
+    }).join('');
+    routeBody='<div style="margin-top:6px">'
+      +'<div style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:6px">Aanbevelingen op maat</div>'
+      +'<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-bottom:8px">Kies welke categorieen Sensei mag gebruiken. Deze keuze geldt voor zowel dagtips als handmatig zoeken.</div>'
+      +'<div class="reco-chips" style="margin:0 0 10px">'+recoChips+'</div>'
+      +'<div class="reco-actions" style="margin-top:0">'
+      +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="toggleRecoAutoEnabled('+(st.recoPrefs.auto_enabled?'false':'true')+')">'+(st.recoPrefs.auto_enabled?'Auto dagtip uit':'Auto dagtip aan')+'</button>'
+      +'</div>'
+      +'<textarea id="adviceHubRecoPrompt" class="form-input" placeholder="Waar wil je nu iets voor? Bv. rust in huis, gesprek, grenzen..." style="min-height:92px;resize:vertical;margin:10px 0 10px">'+escHTML(st.recoPrompt||'')+'</textarea>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button type="button" class="btn-r" style="max-width:280px;padding:10px 12px" onclick="runAdviceHubRecommendationsNow()">Zoek aanbevelingen</button>'
+      +'<button type="button" class="btn-g" style="max-width:300px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
+      +'</div>'
+      +renderResultCard()
+      +'</div>';
   }else{
     routeBody='<div class="advice-route-grid">'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'recommend\')"><span class="advice-route-icon">✨</span><span class="advice-route-copy"><span class="advice-route-title">Aanbevelingen op maat</span><span class="advice-route-desc">Kies categorieen en laat Sensei nu gericht zoeken wat bij jou past.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'person\')"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies dossier, stel je focusvraag en krijg meteen advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 dossiers en geef direct advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
@@ -6495,6 +6530,95 @@ function setAdviceHubDepthMode(mode){
     var mc=document.getElementById('mainContent');
     if(mc)rAdviceHub(mc);
   }
+}
+function toggleRecoCategory(catKey){
+  var st=getAdviceHubState();
+  st.recoPrefs=st.recoPrefs||getRecoPrefs();
+  if(!st.recoPrefs.categories)st.recoPrefs.categories=defaultRecoPrefs().categories;
+  if(st.recoPrefs.categories[catKey]===false)st.recoPrefs.categories[catKey]=true;
+  else st.recoPrefs.categories[catKey]=false;
+  saveRecoPrefs(st.recoPrefs);
+  if(S.screen==='advice'){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdviceHub(mc);
+  }
+}
+function toggleRecoAutoEnabled(on){
+  var st=getAdviceHubState();
+  st.recoPrefs=st.recoPrefs||getRecoPrefs();
+  st.recoPrefs.auto_enabled=!!on;
+  saveRecoPrefs(st.recoPrefs);
+  if(S.screen==='advice'){
+    var mc=document.getElementById('mainContent');
+    if(mc)rAdviceHub(mc);
+  }
+}
+async function runAdviceHubRecommendationsNow(){
+  var st=getAdviceHubState();
+  st.recoPrefs=st.recoPrefs||getRecoPrefs();
+  var cats=getRecoEnabledCategories(st.recoPrefs);
+  if(!cats.length){toast('Kies minstens 1 categorie.');return;}
+  var qEl=document.getElementById('adviceHubRecoPrompt');
+  st.recoPrompt=qEl?String(qEl.value||'').trim():'';
+  st.resultTitle='Aanbevelingen op maat';
+  st.resultHtml=renderAdviceLoadingCard();
+  st.resultTs='';
+  var mc=document.getElementById('mainContent');
+  if(mc)rAdviceHub(mc);
+  try{
+    var allowedDomains=buildRecoDomainsFromCategories(cats);
+    var catTxt=cats.join(', ');
+    var sys='Je bent FamilySensei aanbevelingsassistent. Geef 2 concrete aanbevelingen rond gezin, grenzen en verbinding. Gebruik alleen toegelaten categorieen: '+catTxt+'. Gebruik alleen echte bronnen met links.';
+    var usr='Vraag van gebruiker:\n'+(st.recoPrompt||'Zoek 2 relevante aanbevelingen die vandaag kunnen helpen in mijn familiecontext.')+'\nGeef kort en praktisch antwoord.';
+    var raw=await callAPI(sys,[{role:'user',content:usr}],700,26000,null,{allowed_domains:allowedDomains});
+    st.resultHtml=formatAiCard(raw);
+    st.resultTs=new Date().toLocaleString('nl-BE');
+  }catch(e){
+    st.resultHtml='<div style="color:#b91c1c">Kon aanbevelingen niet laden: '+escHTML((e&&e.message)?e.message:'onbekend')+'</div>';
+  }
+  if(mc)rAdviceHub(mc);
+}
+async function ensureDailyRecoTipForHome(){
+  var prefs=getRecoPrefs();
+  if(prefs.auto_enabled===false)return;
+  var cats=getRecoEnabledCategories(prefs);
+  if(!cats.length)return;
+  var cache=getDailyRecoCache();
+  if(cache&&!hasDailyRecoExpired(cache))return;
+  try{
+    var allowedDomains=buildRecoDomainsFromCategories(cats);
+    var catTxt=cats.join(', ');
+    var sys='Je bent FamilySensei. Geef precies 1 korte dagtip met 1 concrete aanbeveling en 1 echte link. Alleen categorieen: '+catTxt+'.';
+    var usr='Doel: warme, haalbare tip voor vandaag in gezin, verbinding en grenzen.';
+    var raw=await callAPI(sys,[{role:'user',content:usr}],420,22000,null,{allowed_domains:allowedDomains});
+    setDailyRecoCache({ts:new Date().toISOString(),text:String(raw||''),categories:cats});
+    if(S.screen==='home'){
+      var mc=document.getElementById('mainContent');
+      if(mc)rHome(mc);
+    }
+  }catch(_e){}
+}
+function renderHomeRecoCard(){
+  var prefs=getRecoPrefs();
+  var cats=getRecoEnabledCategories(prefs);
+  var cache=getDailyRecoCache();
+  var hasTip=cache&&cache.text&&!hasDailyRecoExpired(cache);
+  var body=hasTip?formatAiCard(String(cache.text||'')):'Nog geen dagtip klaar. Tik op vernieuwen.';
+  var chips=SENSEI_RECO_CATEGORY_META.map(function(c){
+    var on=prefs.categories[c.key]!==false;
+    return '<button type="button" class="reco-chip'+(on?' on':'')+'" onclick="toggleRecoCategory(\''+escJsStr(c.key)+'\')">'+escHTML(c.label)+'</button>';
+  }).join('');
+  return '<div class="reco-card">'
+    +'<div class="reco-head"><div class="reco-title">Aanbevelingen vandaag</div><div class="reco-state">'+(prefs.auto_enabled?'Auto aan':'Auto uit')+'</div></div>'
+    +'<div class="reco-body">'+body+'</div>'
+    +'<div class="reco-chips">'+chips+'</div>'
+    +'<div class="reco-actions">'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="toggleRecoAutoEnabled('+(prefs.auto_enabled?'false':'true')+')">'+(prefs.auto_enabled?'Auto uit':'Auto aan')+'</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="setDailyRecoCache(null);void ensureDailyRecoTipForHome();goScreen(\'home\')">Vernieuw tip</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="goScreen(\'advice\');setAdviceHubRoute(\'recommend\')">Open aanbevelingen</button>'
+    +'</div>'
+    +(cats.length?'':'<div style="font-size:11px;color:#8a8f97;margin-top:8px">Geen categorie actief. Zet er minstens 1 aan.</div>')
+    +'</div>';
 }
 function toggleAdviceHubCompare(name,on){
   var st=getAdviceHubState();
@@ -9760,6 +9884,73 @@ const SENSEI_ALLOWED_DOMAINS=[
   'uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels',
   'visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be','nl.wikipedia.org'
 ];
+const SENSEI_RECO_CATEGORY_META=[
+  {key:'boeken',label:'Boeken'},
+  {key:'tedtalks',label:'TED talks'},
+  {key:'podcasts',label:'Podcasts'},
+  {key:'videos',label:'Videos'},
+  {key:'plekken',label:'Plekken'}
+];
+const SENSEI_RECO_DOMAIN_MAP={
+  boeken:['standaardboekhandel.be','bol.com','hebban.nl','iedereenleest.be'],
+  tedtalks:['ted.com'],
+  podcasts:['open.spotify.com','podcasts.apple.com','vrtmax.be'],
+  videos:['youtube.com','vrtmax.be','ted.com'],
+  plekken:['uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels','visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be']
+};
+const SENSEI_RECO_PREFS_KEY='fs_reco_prefs_v1';
+const SENSEI_RECO_DAILY_KEY='fs_reco_daily_tip_v1';
+function defaultRecoPrefs(){
+  var categories={};
+  SENSEI_RECO_CATEGORY_META.forEach(function(c){categories[c.key]=true;});
+  return {auto_enabled:true,categories:categories};
+}
+function getRecoPrefs(){
+  var base=defaultRecoPrefs();
+  try{
+    var raw=getScopedStorage(SENSEI_RECO_PREFS_KEY,'')||'';
+    if(!raw)return base;
+    var p=JSON.parse(raw)||{};
+    base.auto_enabled=p.auto_enabled!==false;
+    var src=(p.categories&&typeof p.categories==='object')?p.categories:{};
+    SENSEI_RECO_CATEGORY_META.forEach(function(c){
+      if(src[c.key]===false)base.categories[c.key]=false;
+    });
+  }catch(_e){}
+  return base;
+}
+function saveRecoPrefs(prefs){
+  try{setScopedStorage(SENSEI_RECO_PREFS_KEY,JSON.stringify(prefs||defaultRecoPrefs()));}catch(_e){}
+}
+function getRecoEnabledCategories(prefs){
+  var p=prefs||getRecoPrefs();
+  return SENSEI_RECO_CATEGORY_META.filter(function(c){return p.categories[c.key]!==false;}).map(function(c){return c.key;});
+}
+function buildRecoDomainsFromCategories(cats){
+  var out=[];
+  (Array.isArray(cats)?cats:[]).forEach(function(k){
+    var list=Array.isArray(SENSEI_RECO_DOMAIN_MAP[k])?SENSEI_RECO_DOMAIN_MAP[k]:[];
+    list.forEach(function(d){if(d&&out.indexOf(d)<0)out.push(d);});
+  });
+  if(!out.length)out=SENSEI_ALLOWED_DOMAINS.slice();
+  return out;
+}
+function getDailyRecoCache(){
+  try{
+    var raw=getScopedStorage(SENSEI_RECO_DAILY_KEY,'')||'';
+    if(!raw)return null;
+    return JSON.parse(raw)||null;
+  }catch(_e){return null;}
+}
+function setDailyRecoCache(obj){
+  try{setScopedStorage(SENSEI_RECO_DAILY_KEY,JSON.stringify(obj||{}));}catch(_e){}
+}
+function hasDailyRecoExpired(cacheObj){
+  if(!cacheObj||!cacheObj.ts)return true;
+  var ts=Date.parse(cacheObj.ts);
+  if(!isFinite(ts))return true;
+  return (Date.now()-ts)>86400000;
+}
 function extractSenseiWebSearchLogMeta(data){
   var c=(data&&Array.isArray(data.content))?data.content:[];
   var sawWebSearch=false;
@@ -9852,7 +10043,7 @@ async function getTodaySenseiSearchCount(userId){
   return (res&&typeof res.count==='number')?res.count:0;
 }
 
-async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
+async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
   var sess=await runSenseiAuthSerialized(async function(){
@@ -9892,11 +10083,14 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
     if(!webSearchAllowed){
       effectiveSys+='\nBELANGRIJK: deze gebruiker heeft zijn 5 zoekopdrachten voor vandaag opgebruikt. Je mag NIET zoeken op het web vandaag. Als de gebruiker om een aanbeveling vraagt waarvoor je normaal zou zoeken, vertel hem vriendelijk dat je zoektegoed voor vandaag op is en dat je morgen weer voor hem kan zoeken. Bied aan om met wat je al weet iets nuttigs te zeggen, zonder titels of links te verzinnen.';
     }
+    var allowedDomains=(apiOpts&&Array.isArray(apiOpts.allowed_domains)&&apiOpts.allowed_domains.length)
+      ?apiOpts.allowed_domains
+      :SENSEI_ALLOWED_DOMAINS;
     var toolCfg=[
       {
         type:'web_search_20250305',
         name:'web_search',
-        allowed_domains:SENSEI_ALLOWED_DOMAINS,
+        allowed_domains:allowedDomains,
         max_uses:3
       }
     ];
