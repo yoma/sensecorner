@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="07-05-2026 20:34">
+<meta name="os-build" content="07-05-2026 22:24">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -3536,14 +3536,16 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     sess=await withTimeout(
       client.auth.getSession(),
       25000,
-      null
+      null,
+      {label:'ownsense-auth-getSession'}
     );
   }catch(_s1){
     await new Promise(function(resolve){setTimeout(resolve,1200);});
     sess=await withTimeout(
       client.auth.getSession(),
       25000,
-      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
+      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.',
+      {label:'ownsense-auth-getSession-retry'}
     );
   }
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
@@ -3566,7 +3568,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     clearTimeout(outerTimer);
     outerTimer=null;
     var readMs=Math.min(120000,Math.max(10000,timeoutMs-4000));
-    var raw=await withTimeout(r.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).');
+    var raw=await withTimeout(r.text(),readMs,'Het antwoord van de AI werd niet volledig ontvangen (netwerk of te grote response).',{label:'ownsense-sensei-chat-read-body'});
     var j;
     try{
       j=JSON.parse(raw);

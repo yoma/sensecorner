@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="07-05-2026 22:14">
+<meta name="fs-build" content="07-05-2026 22:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1202,7 +1202,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 22:14</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 22:40</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -8180,13 +8180,18 @@ async function runAdviceHubRecommendationsNow(){
   if(mc)rAdviceHub(mc);
   scrollAdviceHubResultIntoView();
 }
-async function ensureDailyRecoTipForHome(){
+var _dailyRecoHomeFetching=false;
+async function ensureDailyRecoTipForHome(opts){
+  opts=opts||{};
+  var forceManual=!!opts.forceManual;
   var prefs=getRecoPrefs();
-  if(prefs.auto_enabled===false)return;
+  if(!forceManual&&prefs.auto_enabled===false)return;
   var cats=getRecoEnabledCategories(prefs);
   if(!cats.length)return;
   var cache=getDailyRecoCache();
-  if(cache&&!hasDailyRecoExpired(cache))return;
+  if(cache&&!hasDailyRecoExpired(cache)&&!forceManual)return;
+  if(_dailyRecoHomeFetching)return;
+  _dailyRecoHomeFetching=true;
   try{
     var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{}});
     var ownMeta=own.meta||{};
@@ -8200,9 +8205,32 @@ async function ensureDailyRecoTipForHome(){
       var mc=document.getElementById('mainContent');
       if(mc)rHome(mc);
     }
-  }catch(_e){
-    // Stil falen op home-tip generatie.
+  }catch(e){
+    if(forceManual){
+      toast('Tip laden lukte niet. '+(e&&e.message?String(e.message):'Probeer later opnieuw.'));
+    }
+    console.warn('ensureDailyRecoTipForHome',e);
+  }finally{
+    _dailyRecoHomeFetching=false;
   }
+}
+async function refreshHomeDailyRecoTipManual(){
+  if(_dailyRecoHomeFetching){
+    toast('Er wordt al een tip geladen.');
+    return;
+  }
+  var cats=getRecoEnabledCategories(getRecoPrefs());
+  if(!cats.length){
+    toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
+    return;
+  }
+  if(!S.apiKey){
+    toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
+  setDailyRecoCache(null);
+  toast('Bezig met een nieuwe tip…');
+  await ensureDailyRecoTipForHome({forceManual:true});
 }
 function renderHomeRecoCard(){
   var prefs=getRecoPrefs();
@@ -8214,7 +8242,7 @@ function renderHomeRecoCard(){
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">Op maat</div></div>'
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="setDailyRecoCache(null);void ensureDailyRecoTipForHome();goScreen(\'home\')">Vernieuw tip</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="goScreen(\'advice\');setAdviceHubRoute(\'recommend\')">Open aanbevelingen</button>'
     +'</div>'
     +(cats.length?'':'<div style="font-size:11px;color:#8a8f97;margin-top:8px">Categorieen staan uit in Advies. Zet daar minstens 1 aan.</div>')
@@ -12414,9 +12442,30 @@ function clearTypingSlowHintTimers(){
     try{clearTimeout(_typSlowHintTimers.pop());}catch(_e){}
   }
 }
+/** Willekeurige combo voor Vertel-wachttijd (SelfSense / SelfSensei). */
+function pickTypingSlowHintPair(){
+  var early=[
+    'SelfSensei is met je bezig…',
+    'SelfSensei denkt even na…',
+    'SelfSensei komt eraan…',
+    'Even geduld, SelfSensei leest mee…',
+    'SelfSensei werkt het voor je uit…'
+  ];
+  var later=[
+    'Nog even volhouden: soms duurt het net iets langer door het netwerk of een grotere context.',
+    'Dit kan soms iets langer duren. SelfSensei formuleert het zorgvuldig voor jou.',
+    'Bij meer context onderweg kan het antwoord een moment extra vragen.',
+    'Duurt het lang? Vaak ligt dat aan de verbinding of aan hoeveel er wordt meegenomen.'
+  ];
+  return{
+    first:early[Math.floor(Math.random()*early.length)],
+    second:later[Math.floor(Math.random()*later.length)]
+  };
+}
 /** Vriendelijke tekst onder de stippen als een AI-call merkbaar lang duurt (netwerk / zware context). */
 function startTypingSlowHints(){
   clearTypingSlowHintTimers();
+  var pair=pickTypingSlowHintPair();
   function arm(ms,text){
     var id=setTimeout(function(){
       var typ=document.getElementById('typ');
@@ -12434,8 +12483,8 @@ function startTypingSlowHints(){
     },ms);
     _typSlowHintTimers.push(id);
   }
-  arm(9000,'Sensei heeft even wat meer tijd nodig…');
-  arm(20000,'Nog bezig - soms duurt het net iets langer door het netwerk of een grotere context.');
+  arm(9000,pair.first);
+  arm(20000,pair.second);
 }
 function showT(){
   var ca=document.getElementById('chatArea');if(!ca)return;

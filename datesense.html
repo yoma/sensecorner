@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="07-05-2026 22:14">
+<meta name="ds-build" content="07-05-2026 22:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 07-05-2026 22:14</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 07-05-2026 22:40</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -4459,6 +4459,14 @@ function stripTagsPlainExport(html){
   return String(html==null?'':html).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 }
 
+/** Platte tekst voor AI-geschiedenis: verborgen Vertel-follow-up stuurt apiPrompt mee i.p.v. zichtbare html. */
+function vertelUserTurnPlainForAi(m){
+  if(!m||m.role!=='user')return'';
+  var ap=String(m.apiPrompt||'').trim();
+  if(ap)return ap.replace(/\s+/g,' ').trim();
+  return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();
+}
+
 /** Platte tekst van recente gebruikersberichten in Vertel; laatste user-turn weglaten (die zit al in de API-messages). */
 function buildVertelRecentUserDigest(vertelMsgs,maxMsgs,maxChars){
   var arr=vertelMsgs||[];
@@ -4471,7 +4479,8 @@ function buildVertelRecentUserDigest(vertelMsgs,maxMsgs,maxChars){
   var total=0;
   var maxC=typeof maxChars==='number'?maxChars:1000;
   for(var i=0;i<users.length;i++){
-    var t=stripTagsPlainExport(users[i].html||'').replace(/\s+/g,' ').trim();
+    var raw=(users[i].apiPrompt&&String(users[i].apiPrompt).trim())||users[i].html||'';
+    var t=stripTagsPlainExport(raw).replace(/\s+/g,' ').trim();
     if(t.length<6)continue;
     if(t.length>220)t=t.substring(0,220)+'…';
     if(total+t.length+3>maxC)break;
@@ -8352,13 +8361,18 @@ async function runAdviceHubRecommendationsNow(){
   if(mc)rAdviceHub(mc);
   scrollAdviceHubResultIntoView();
 }
-async function ensureDailyRecoTipForHome(){
+var _dailyRecoHomeFetching=false;
+async function ensureDailyRecoTipForHome(opts){
+  opts=opts||{};
+  var forceManual=!!opts.forceManual;
   var prefs=getRecoPrefs();
-  if(prefs.auto_enabled===false)return;
+  if(!forceManual&&prefs.auto_enabled===false)return;
   var cats=getRecoEnabledCategories(prefs);
   if(!cats.length)return;
   var cache=getDailyRecoCache();
-  if(cache&&!hasDailyRecoExpired(cache))return;
+  if(cache&&!hasDailyRecoExpired(cache)&&!forceManual)return;
+  if(_dailyRecoHomeFetching)return;
+  _dailyRecoHomeFetching=true;
   try{
     var allowedDomains=buildRecoDomainsFromCategories(cats);
     var catTxt=cats.join(', ');
@@ -8370,7 +8384,32 @@ async function ensureDailyRecoTipForHome(){
       var mc=document.getElementById('mainContent');
       if(mc)rHome(mc);
     }
-  }catch(_e){}
+  }catch(e){
+    if(forceManual){
+      toast('Tip laden lukte niet. '+(e&&e.message?String(e.message):'Probeer later opnieuw.'));
+    }
+    console.warn('ensureDailyRecoTipForHome',e);
+  }finally{
+    _dailyRecoHomeFetching=false;
+  }
+}
+async function refreshHomeDailyRecoTipManual(){
+  if(_dailyRecoHomeFetching){
+    toast('Er wordt al een tip geladen.');
+    return;
+  }
+  var cats=getRecoEnabledCategories(getRecoPrefs());
+  if(!cats.length){
+    toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
+    return;
+  }
+  if(!S.apiKey){
+    toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
+  setDailyRecoCache(null);
+  toast('Bezig met een nieuwe tip…');
+  await ensureDailyRecoTipForHome({forceManual:true});
 }
 function renderHomeRecoCard(){
   var prefs=getRecoPrefs();
@@ -8382,7 +8421,7 @@ function renderHomeRecoCard(){
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">Op maat</div></div>'
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="setDailyRecoCache(null);void ensureDailyRecoTipForHome();goScreen(\'home\')">Vernieuw tip</button>'
+    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="goScreen(\'advice\');setAdviceHubRoute(\'recommend\')">Open aanbevelingen</button>'
     +'</div>'
     +(cats.length?'':'<div style="font-size:11px;color:#8a8f97;margin-top:8px">Categorieen staan uit in Advies. Zet daar minstens 1 aan.</div>')
@@ -11734,7 +11773,10 @@ function addMsg(role,html,opts){
     ?`${ctxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(ctxLabel)+'</div>':''}<div class="bbl-user">${esc(html)}</div>`
     :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}${aiReplyActionBar(pushIdx)}</div>`;
   ca.appendChild(d);scrollVertelConversationIntoView();
-  S.vertelMsgs.push({role,html,ctxLabel:ctxLabel||''});
+  var row={role:role,html:html,ctxLabel:ctxLabel||''};
+  var apiP=String((opts&&opts.apiPrompt)||'').trim();
+  if(apiP)row.apiPrompt=apiP;
+  S.vertelMsgs.push(row);
   refreshVertelResendButton();
 }
 
@@ -11761,10 +11803,10 @@ async function vraagExtraAdviesOpVertelAntwoord(msgIdx,mode){
     var ex=txt.length>520?txt.substring(0,517)+'...':txt;
     full='Sensei, ik wil verdieping op dit eerdere antwoord van jou. Kort fragment ter verduidelijking:\n'+ex+'\n'+prompt+'\n'+anti;
   }
-  var inp=document.getElementById('msgInput');
-  if(!inp)return;
-  inp.value=full;
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
+  var displayHtml=mode==='expertise'
+    ?'Expertise: meer diepgang op dit antwoord'
+    :'Extra advies: meer diepgang op dit antwoord';
+  S._vertelFollowUpSend={apiPrompt:full,displayHtml:displayHtml};
   await sendMsg();
 }
 
@@ -11774,8 +11816,30 @@ function clearTypingSlowHintTimers(){
     try{clearTimeout(_typSlowHintTimers.pop());}catch(_e){}
   }
 }
+/** Willekeurige combo voor Vertel-wachttijd (DateSense / DateSensei). */
+function pickTypingSlowHintPair(){
+  var early=[
+    'DateSensei is met je bezig…',
+    'DateSensei denkt even na…',
+    'DateSensei zet je antwoord klaar…',
+    'Even geduld, DateSensei leest mee…',
+    'DateSensei werkt het voor je uit…'
+  ];
+  var later=[
+    'Nog even volhouden: soms duurt het net iets langer door het netwerk of een grotere context.',
+    'Dit kan soms iets langer duren. DateSensei formuleert het zorgvuldig voor jou.',
+    'Bij meer dossiercontext onderweg kan het antwoord een moment extra vragen.',
+    'Duurt het lang? Vaak ligt dat aan de verbinding of aan hoeveel er wordt meegenomen.'
+  ];
+  return{
+    first:early[Math.floor(Math.random()*early.length)],
+    second:later[Math.floor(Math.random()*later.length)]
+  };
+}
+/** Vriendelijke tekst onder de stippen als een AI-call merkbaar lang duurt (netwerk / zware context). */
 function startTypingSlowHints(){
   clearTypingSlowHintTimers();
+  var pair=pickTypingSlowHintPair();
   function arm(ms,text){
     var id=setTimeout(function(){
       var typ=document.getElementById('typ');
@@ -11793,8 +11857,8 @@ function startTypingSlowHints(){
     },ms);
     _typSlowHintTimers.push(id);
   }
-  arm(9000,'Sensei heeft even wat meer tijd nodig…');
-  arm(20000,'Nog bezig - soms duurt het net iets langer door het netwerk of een grotere context.');
+  arm(9000,pair.first);
+  arm(20000,pair.second);
 }
 function showT(){
   var ca=document.getElementById('chatArea');if(!ca)return;
@@ -12269,7 +12333,16 @@ async function sendMsg(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
   if(_micActive)stopMic(true);
-  var txt=inp.value.trim();
+  var fu=S._vertelFollowUpSend;
+  var txt,userFacingTxt;
+  if(fu&&String(fu.apiPrompt||'').trim()){
+    try{S._vertelFollowUpSend=null;}catch(_e){}
+    txt=String(fu.apiPrompt).trim();
+    userFacingTxt=String(fu.displayHtml||'').trim()||'Meer diepgang op je antwoord';
+  }else{
+    txt=inp.value.trim();
+    userFacingTxt=txt;
+  }
   if(!txt){
     toast('Geen tekst om te versturen - wacht tot je zin verschijnt, of laat de micro los na inspreken.');
     return;
