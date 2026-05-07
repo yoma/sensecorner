@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="05-05-2026 10:18">
+<meta name="admin-build" content="07-05-2026 20:34">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -68,6 +68,28 @@ a{color:inherit}
 @media(min-width:980px){
   .admin-feedback-layout{grid-template-columns:minmax(280px,360px) 1fr}
 }
+/* Telemetry sectie */
+.tel-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+.tel-stat-card{border:1px solid var(--b);border-radius:12px;background:var(--ivoor);padding:9px 11px}
+.tel-stat-label{font-size:11px;color:var(--m);font-weight:600;margin-bottom:3px}
+.tel-stat-value{font-size:18px;font-weight:800;color:var(--chocolade);font-family:var(--font-serif)}
+.tel-stat-sub{font-size:11px;color:var(--m);margin-top:2px}
+.tel-filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.tel-filter-row select,.tel-filter-row input{border:1px solid var(--b);border-radius:10px;background:var(--ivoor);color:var(--chocolade);padding:7px 10px;font-size:12px;font-family:inherit}
+.tel-table{width:100%;border-collapse:collapse;font-size:12px}
+.tel-table th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--b);background:rgba(0,0,0,.02);font-weight:700;color:var(--chocolade);position:sticky;top:0}
+.tel-table td{padding:7px 8px;border-bottom:1px solid var(--b);color:var(--chocolade);vertical-align:top}
+.tel-table tbody tr:hover{background:rgba(0,0,0,.02)}
+.tel-status-pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800}
+.tel-status-pill.timeout{background:#FDECEC;color:#9F1D1D;border:1px solid #E9B5B5}
+.tel-status-pill.error{background:var(--amberl);color:var(--amber);border:1px solid rgba(146,100,10,.4)}
+.tel-status-pill.slow{background:#FFF7E0;color:#92640a;border:1px solid #F2D78A}
+.tel-table-wrap{max-height:520px;overflow:auto;border:1px solid var(--b);border-radius:12px;background:var(--ivoor)}
+.tel-empty{padding:22px;text-align:center;color:var(--m);font-size:12px}
+.tel-top-list{display:flex;flex-direction:column;gap:6px}
+.tel-top-row{display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border:1px solid var(--b);border-radius:10px;background:var(--ivoor);font-size:12px}
+.tel-top-fn{font-weight:700;color:var(--chocolade);min-width:0;flex:1;word-break:break-all}
+.tel-top-meta{color:var(--m);font-size:11px;flex-shrink:0;margin-left:8px}
 .prompt-grid{display:grid;gap:10px}
 .prompt-card{border:1px solid var(--b);border-radius:12px;padding:10px;background:var(--ivoor)}
 .prompt-card h3{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:6px}
@@ -153,6 +175,56 @@ a{color:inherit}
         <div class="subtle">Klik links op een rij om detail te bekijken.</div>
       </div>
     </div>
+  </section>
+
+  <section id="adminTelemetryPanel" class="panel" aria-label="AI telemetrie" style="display:none">
+    <div class="admin-panel-head">
+      <h2 style="margin:0">AI telemetrie</h2>
+      <button class="admin-refresh-btn" type="button" onclick="loadTelemetry()">Vernieuwen</button>
+    </div>
+    <p class="subtle" style="margin-bottom:10px">Trage en gefaalde calls in alle apps. Alleen problemen worden gelogd; succesvolle snelle calls niet.</p>
+
+    <div class="tel-stats-grid" id="telStatsGrid"></div>
+
+    <div class="tel-filter-row">
+      <select id="telFilterApp">
+        <option value="">Alle apps</option>
+        <option value="datesense">DateSense</option>
+        <option value="familysense">FamilySense</option>
+        <option value="selfsense">SelfSense</option>
+        <option value="ownsense">OwnSense</option>
+        <option value="sensecorner">SenseCorner</option>
+      </select>
+      <select id="telFilterStatus">
+        <option value="">Alle statussen</option>
+        <option value="timeout">Timeout</option>
+        <option value="error">Error</option>
+        <option value="slow">Slow</option>
+      </select>
+      <select id="telFilterRange">
+        <option value="1">Laatste 24u</option>
+        <option value="7" selected>Laatste 7 dagen</option>
+        <option value="30">Laatste 30 dagen</option>
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:10px">
+      <div>
+        <h3 style="font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:6px">Top 10 traagste functies (avg)</h3>
+        <div class="tel-top-list" id="telTopList"></div>
+      </div>
+    </div>
+
+    <h3 style="font-size:12px;font-weight:700;color:var(--chocolade);margin:6px 0 6px">Recente events (laatste 100)</h3>
+    <div class="tel-table-wrap">
+      <table class="tel-table">
+        <thead><tr>
+          <th>Tijd</th><th>App</th><th>Functie</th><th>Status</th><th>Duur</th><th>Timeout</th><th>Error</th>
+        </tr></thead>
+        <tbody id="telTableBody"></tbody>
+      </table>
+    </div>
+    <div class="admin-state" id="telState" style="margin-top:8px"></div>
   </section>
 
   <details class="panel collapsible" aria-label="DateSense instellingen">
@@ -377,6 +449,107 @@ a{color:inherit}
       return false;
     }
   }
+
+  function _telFmtTime(iso){
+    if(!iso)return'';
+    try{
+      var d=new Date(iso);
+      var dd=String(d.getDate()).padStart(2,'0');
+      var mm=String(d.getMonth()+1).padStart(2,'0');
+      var hh=String(d.getHours()).padStart(2,'0');
+      var mi=String(d.getMinutes()).padStart(2,'0');
+      return dd+'/'+mm+' '+hh+':'+mi;
+    }catch(_e){return iso;}
+  }
+  function _telEsc(s){
+    return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  async function loadTelemetry(){
+    var stateEl=document.getElementById('telState');
+    if(stateEl)stateEl.textContent='Laden…';
+    try{
+      var fa=document.getElementById('telFilterApp');
+      var fs=document.getElementById('telFilterStatus');
+      var fr=document.getElementById('telFilterRange');
+      var appFilter=fa?fa.value:'';
+      var statusFilter=fs?fs.value:'';
+      var rangeDays=parseInt(fr&&fr.value,10)||7;
+      var sinceIso=new Date(Date.now()-rangeDays*86400000).toISOString();
+
+      var q=sb.from('ai_telemetry')
+        .select('*')
+        .gte('created_at',sinceIso)
+        .order('created_at',{ascending:false})
+        .limit(500);
+      if(appFilter)q=q.eq('app',appFilter);
+      if(statusFilter)q=q.eq('status',statusFilter);
+
+      var res=await q;
+      var data=res&&res.data;
+      var error=res&&res.error;
+      if(error)throw new Error(error.message||String(error.code||'')||'Query mislukt');
+      var rows=data||[];
+
+      var counts={timeout:0,error:0,slow:0};
+      var perFn={};
+      rows.forEach(function(r){
+        if(counts[r.status]!==undefined)counts[r.status]++;
+        var key=r.app+' · '+r.fn_name;
+        if(!perFn[key])perFn[key]={count:0,totalMs:0,maxMs:0};
+        perFn[key].count++;
+        perFn[key].totalMs+=r.duration_ms||0;
+        if((r.duration_ms||0)>perFn[key].maxMs)perFn[key].maxMs=r.duration_ms||0;
+      });
+
+      var statsHtml=''
+        +'<div class="tel-stat-card"><div class="tel-stat-label">Totaal events</div><div class="tel-stat-value">'+rows.length+'</div><div class="tel-stat-sub">laatste '+rangeDays+' dagen</div></div>'
+        +'<div class="tel-stat-card"><div class="tel-stat-label">Timeouts</div><div class="tel-stat-value" style="color:#9F1D1D">'+counts.timeout+'</div></div>'
+        +'<div class="tel-stat-card"><div class="tel-stat-label">Errors</div><div class="tel-stat-value" style="color:var(--amber)">'+counts.error+'</div></div>'
+        +'<div class="tel-stat-card"><div class="tel-stat-label">Slow</div><div class="tel-stat-value" style="color:#92640a">'+counts.slow+'</div></div>';
+      var sg=document.getElementById('telStatsGrid');
+      if(sg)sg.innerHTML=statsHtml;
+
+      var topArr=Object.keys(perFn).map(function(k){
+        var v=perFn[k];
+        return {key:k,avg:Math.round(v.totalMs/v.count),count:v.count,max:v.maxMs};
+      }).sort(function(a,b){return b.avg-a.avg;}).slice(0,10);
+      var topHtml=topArr.length
+        ?topArr.map(function(t){
+          return '<div class="tel-top-row"><span class="tel-top-fn">'+_telEsc(t.key)+'</span><span class="tel-top-meta">avg '+t.avg+'ms · max '+t.max+'ms · '+t.count+'×</span></div>';
+        }).join('')
+        :'<div class="tel-empty">Geen events in deze filter.</div>';
+      var tl=document.getElementById('telTopList');
+      if(tl)tl.innerHTML=topHtml;
+
+      var tbody=document.getElementById('telTableBody');
+      var tableRows=rows.slice(0,100);
+      if(!tbody){/* noop */}
+      else if(!tableRows.length){
+        tbody.innerHTML='<tr><td colspan="7" class="tel-empty">Geen events in deze filter.</td></tr>';
+      }else{
+        tbody.innerHTML=tableRows.map(function(r){
+          var statusClass=(r.status==='timeout'||r.status==='error'||r.status==='slow')?r.status:'';
+          return '<tr>'
+            +'<td>'+_telEsc(_telFmtTime(r.created_at))+'</td>'
+            +'<td>'+_telEsc(r.app)+'</td>'
+            +'<td style="word-break:break-all">'+_telEsc(r.fn_name)+'</td>'
+            +'<td><span class="tel-status-pill '+statusClass+'">'+_telEsc(r.status)+'</span></td>'
+            +'<td>'+(r.duration_ms||0)+'ms</td>'
+            +'<td>'+(r.timeout_ms?r.timeout_ms+'ms':'-')+'</td>'
+            +'<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+_telEsc(r.error_msg||'')+'">'+_telEsc(r.error_msg||'')+'</td>'
+            +'</tr>';
+        }).join('');
+      }
+
+      if(stateEl)stateEl.textContent=rows.length===500?'Toon eerste 500 events (limit). Filter strakker voor specifieker beeld.':'';
+    }catch(e){
+      if(stateEl)stateEl.textContent='Fout bij laden: '+(e.message||e);
+      console.error('loadTelemetry failed',e);
+    }
+  }
+  window.loadTelemetry=loadTelemetry;
 
   function setAdminAiState(msg,isErr){
     if(!adminAiState)return;
@@ -749,6 +922,18 @@ a{color:inherit}
     }
     if(adminAiPanel)adminAiPanel.style.display='block';
     if(adminFeedbackPanel)adminFeedbackPanel.style.display='block';
+    var telPanel=document.getElementById('adminTelemetryPanel');
+    if(telPanel){
+      telPanel.style.display='block';
+      loadTelemetry();
+    }
+    ['telFilterApp','telFilterStatus','telFilterRange'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el&&!el._telBound){
+        el._telBound=true;
+        el.addEventListener('change',function(){loadTelemetry();});
+      }
+    });
     var legacyOverrides=readLegacyPromptOverrides(user);
     var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
     var savedFamilyPrompts=await loadSavedPromptSet('prompts_familysense');

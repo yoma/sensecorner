@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="07-05-2026 20:22">
+<meta name="ds-build" content="07-05-2026 22:14">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 07-05-2026 20:22</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 07-05-2026 22:14</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -2700,13 +2700,73 @@ async function optimizeImageForAnalysis(blob){
   return {blob:best,mediaType:'image/jpeg'};
 }
 
-function withTimeout(promise,ms,msg){
-  return Promise.race([
-    promise,
-    new Promise(function(_,reject){
-      setTimeout(function(){reject(new Error(msg||('Timeout na '+ms+'ms')));},ms);
-    })
-  ]);
+function withTimeout(promise,ms,msg,opts){
+  var t0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  var resolved=false;
+  var label=(opts&&opts.label)?String(opts.label):(msg||'unknown');
+  var meta=(opts&&opts.meta)||null;
+  return new Promise(function(resolve,reject){
+    var timer=setTimeout(function(){
+      if(resolved)return;
+      resolved=true;
+      var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+      try{console.warn('[telemetry timeout]',label,dt+'ms / '+ms+'ms');}catch(_e){}
+      try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'timeout',error_msg:msg||'Timeout',meta:meta});}catch(_e){}
+      reject(new Error(msg||('Timeout na '+ms+'ms')));
+    },ms);
+    Promise.resolve(promise).then(function(value){
+      if(resolved)return;
+      resolved=true;
+      clearTimeout(timer);
+      var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+      if(dt>ms*0.5){
+        try{console.warn('[telemetry slow]',label,dt+'ms / '+ms+'ms');}catch(_e){}
+        try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'slow',meta:meta});}catch(_e){}
+      }
+      resolve(value);
+    },function(err){
+      if(resolved)return;
+      resolved=true;
+      clearTimeout(timer);
+      var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+      var emsg=(err&&err.message)?String(err.message):String(err);
+      try{console.warn('[telemetry error]',label,dt+'ms',emsg);}catch(_e){}
+      try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'error',error_msg:emsg.substring(0,500),meta:meta});}catch(_e){}
+      reject(err);
+    });
+  });
+}
+window.SENSE_APP_NAME=window.SENSE_APP_NAME||'datesense';
+var _telLastInsert=0;
+async function logTelemetry(payload){
+  try{
+    if(typeof sb==='undefined'||!sb)return;
+    var uid=null;
+    if(typeof S!=='undefined'&&S&&S.user&&S.user.id)uid=S.user.id;
+    else{
+      try{
+        var sr=await sb.auth.getSession();
+        var su=sr&&sr.data&&sr.data.session&&sr.data.session.user;
+        uid=su&&su.id?su.id:null;
+      }catch(_e){return;}
+    }
+    if(!uid)return;
+    var now=Date.now();
+    if(now-_telLastInsert<250)return;
+    _telLastInsert=now;
+    var status=String(payload.status||'unknown').substring(0,20);
+    if(status==='ok')return;
+    await sb.from('ai_telemetry').insert({
+      user_id:uid,
+      app:String(window.SENSE_APP_NAME||'unknown').substring(0,30),
+      fn_name:String(payload.fn_name||'unknown').substring(0,100),
+      duration_ms:parseInt(payload.duration_ms,10)||0,
+      timeout_ms:payload.timeout_ms?parseInt(payload.timeout_ms,10):null,
+      status:status,
+      error_msg:payload.error_msg?String(payload.error_msg).substring(0,500):null,
+      meta:payload.meta||null
+    });
+  }catch(_e){}
 }
 var _senseiAuthLock=Promise.resolve();
 function runSenseiAuthSerialized(fn){
@@ -4342,16 +4402,17 @@ async function loadMsgs(pn,opt){
   var o=opt||{};
   var limit=Math.max(1,Math.min(1000,parseInt(o.limit||50,10)));
   var asc=o.asc===undefined?true:!!o.asc;
-  // Gefilterd op specifiek dossier
+  var selectCols=o.select||'*';
+  var innerTimeoutMs=parseInt(o.innerTimeoutMs,10)||6000;
   var q=sb.from('sense_messages')
-    .select('*')
+    .select(selectCols)
     .eq('user_id',S.user.id)
     .eq('profile_name',pn)
     .order('created_at',{ascending:asc})
     .limit(limit);
   var res;
   try{
-    res=await withTimeout(q,12000,'Berichten laden timeout');
+    res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
   }catch(te){
     console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
     if(o.throwOnError)throw te;
@@ -4368,9 +4429,15 @@ async function loadMsgs(pn,opt){
 }
 
 /** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen - advies moet de recentste zien. */
-async function loadMsgsRecentChronological(pn,limit){
+async function loadMsgsRecentChronological(pn,limit,opts){
   var cap=Math.max(1,Math.min(1000,parseInt(limit||120,10)));
-  var batch=await loadMsgs(pn,{limit:cap,asc:false});
+  var o=opts||{};
+  var batch=await loadMsgs(pn,{
+    limit:cap,
+    asc:false,
+    select:o.select||'*',
+    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000
+  });
   var arr=batch||[];
   return arr.slice().reverse();
 }
@@ -9402,7 +9469,7 @@ async function genAdvies(name,forced){
   var d=S.pdata[name]||{props:{...DP}};
   var msgs=[];
   try{
-    msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
+    msgs=await withTimeout(loadMsgsRecentChronological(name,60,{select:'html,role,created_at',innerTimeoutMs:6000}),8000,'Berichten laden duurde te lang.',{label:'genAdvies-loadMsgs',meta:{profile:name}});
   }catch(e){
     msgs=[];
   }
@@ -9596,7 +9663,7 @@ async function genAdviesOnderbouwd(name){
     }
     var msgs=[];
     try{
-      msgs=await withTimeout(loadMsgsRecentChronological(name,60),9000,'Berichten laden duurde te lang.');
+      msgs=await withTimeout(loadMsgsRecentChronological(name,60,{select:'html,role,created_at',innerTimeoutMs:6000}),8000,'Berichten laden duurde te lang.',{label:'genAdviesOnderbouwd-loadMsgs',meta:{profile:name}});
     }catch(_e){msgs=[];}
     var cache=(S.adviesCache&&S.adviesCache[name])||{};
     var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -12279,7 +12346,7 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
-    var dossierCtx=await withTimeout(buildDossierContextForAI(voorgesteldDossier),12000,'Dossier-context laden duurde te lang.');
+    var dossierCtx=await withTimeout(buildDossierContextForAI(voorgesteldDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:voorgesteldDossier||null}});
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history];
     if(pendingAdviceCtx){
@@ -12325,10 +12392,10 @@ async function sendMsg(){
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
     try{
-      var sid=await withTimeout(ensureActiveSessionForMessage(txt),5000,'sessie-timeout');
+      var sid=await withTimeout(ensureActiveSessionForMessage(txt),5000,'sessie-timeout',{label:'ensureActiveSessionForMessage'});
       if(sid){
-        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),5000,'sessie-msg-timeout');
-        aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),5000,'sessie-msg-timeout');
+        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),5000,'sessie-msg-timeout',{label:'saveSessionMsg-user'});
+        aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),5000,'sessie-msg-timeout',{label:'saveSessionMsg-ai'});
       }
     }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
     setTimeout(function(){
@@ -13760,7 +13827,7 @@ async function buildDossierContextForAI(dosName){
   if(catTxt.trim())lines.push('Ingevulde dossiervelden: '+catTxt.trim().substring(0,700));
   try{
     // Context policy: recente details + bestaande samenvatting/velden.
-    var recent=await loadMsgs(dosName,{limit:20,asc:false});
+    var recent=await loadMsgs(dosName,{limit:20,asc:false,select:'html,role',innerTimeoutMs:4000});
     var userRecent=(recent||[])
       .filter(function(m){return m.role==='user';})
       .map(function(m){return (m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
@@ -14299,8 +14366,8 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     bar.classList.remove('coach-save-bar-done');
   }
   try{
-    await withTimeout(ensureP(dossier),9000,'Opslag-timeout bij dossiercontrole.');
-    var inserted=await withTimeout(saveMsg(dossier,'user',tekst),10000,'Opslag-timeout bij bericht bewaren.');
+    await withTimeout(ensureP(dossier),9000,'Opslag-timeout bij dossiercontrole.',{label:'ensureP'});
+    var inserted=await withTimeout(saveMsg(dossier,'user',tekst),10000,'Opslag-timeout bij bericht bewaren.',{label:'saveMsg-user'});
     if(sessionUserMsgId&&inserted&&inserted.id){
       var map=getSessAssignMap();
       map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
@@ -14309,7 +14376,7 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     var pd=S.pdata[dossier]||{props:{...DP},count:0,categories:{}};
     pd.count=(pd.count||0)+1;
     S.pdata[dossier]=pd;
-    await withTimeout(saveP(dossier,pd.props,pd.count,pd.categories),10000,'Opslag-timeout bij profiel bijwerken.');
+    await withTimeout(saveP(dossier,pd.props,pd.count,pd.categories),10000,'Opslag-timeout bij profiel bijwerken.',{label:'saveP'});
     if(dossier==='OWN Sense'){
       await updateOwnSenseCategoriesFromVertel(tekst);
       var _ownT=(tekst||'').replace(/<[^>]*>/g,' ').trim();

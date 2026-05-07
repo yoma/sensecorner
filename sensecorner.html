@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="06-05-2026 21:35">
+<meta name="sc-build" content="07-05-2026 20:34">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -738,7 +738,7 @@ a{text-decoration:none;color:inherit}
     }
   }catch(_e){}
   var pendingReturnTo='';
-  function withTimeout(promise,ms,fallback){
+  function scTimeoutFallback(promise,ms,fallback){
     return Promise.race([
       Promise.resolve(promise),
       new Promise(function(resolve){
@@ -757,10 +757,10 @@ a{text-decoration:none;color:inherit}
 
   if(sb){
     try{
-      var sessEarly=await withTimeout(sb.auth.getSession(),8000,null);
+      var sessEarly=await scTimeoutFallback(sb.auth.getSession(),8000,null);
       var uEarly=sessEarly&&sessEarly.data&&sessEarly.data.session&&sessEarly.data.session.user?sessEarly.data.session.user:null;
       if(uEarly){
-        var doneEarly=await withTimeout(scHasOnboardingCompleted(uEarly.id),8000,true);
+        var doneEarly=await scTimeoutFallback(scHasOnboardingCompleted(uEarly.id),8000,true);
         if(!doneEarly){
           window.location.replace('onboarding.html');
           return;
@@ -1500,14 +1500,14 @@ a{text-decoration:none;color:inherit}
   async function getCurrentUser(){
     if(!sb)return null;
     try{
-      var res=await withTimeout(sb.auth.getSession(),12000,null);
+      var res=await scTimeoutFallback(sb.auth.getSession(),12000,null);
       if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
       var bounce='';
       try{bounce=String(sessionStorage.getItem('sc_login_bounce')||'');}catch(_b){}
       if(bounce==='1'){
         try{sessionStorage.removeItem('sc_login_bounce');}catch(_r){}
         await new Promise(function(r){setTimeout(r,400);});
-        res=await withTimeout(sb.auth.getSession(),8000,null);
+        res=await scTimeoutFallback(sb.auth.getSession(),8000,null);
         if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
       }
       return null;
@@ -1972,9 +1972,9 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
-    await withTimeout(Promise.resolve(refreshAdminRole(user)),6000,null).catch(function(){});
+    await scTimeoutFallback(Promise.resolve(refreshAdminRole(user)),6000,null).catch(function(){});
     var approval={known:false,approved:false};
-    if(user)approval=await withTimeout(getOwnAiApproval(user),8000,{known:false,approved:false});
+    if(user)approval=await scTimeoutFallback(getOwnAiApproval(user),8000,{known:false,approved:false});
     updateHubHealthUi(user,approval);
     if(adminPill){
       adminPill.style.display=(user&&currentAdminRole==='admin')?'inline-flex':'none';
@@ -2260,7 +2260,7 @@ a{text-decoration:none;color:inherit}
     if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
     setAuthMsg('Bezig met inloggen…');
     try{
-      var res=await withTimeout(
+      var res=await scTimeoutFallback(
         sb.auth.signInWithPassword({email:email,password:pw}),
         12000,
         null

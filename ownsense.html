@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="04-05-2026 13:52">
+<meta name="os-build" content="07-05-2026 20:34">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -3455,19 +3455,73 @@ function renderAiImportReview(p){
   });
   el.innerHTML=h;
 }
-function withTimeout(promise,ms,errMsg){
+function withTimeout(promise,ms,errMsg,opts){
+  var t0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  var settled=false;
+  var label=(opts&&opts.label)?String(opts.label):(errMsg||'unknown');
+  var meta=(opts&&opts.meta)||null;
   return new Promise(function(resolve,reject){
-    var settled=false;
     var t=setTimeout(function(){
       if(settled)return;
       settled=true;
+      var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+      try{console.warn('[telemetry timeout]',label,dt+'ms / '+ms+'ms');}catch(_e){}
+      try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'timeout',error_msg:errMsg||'Timeout',meta:meta});}catch(_e){}
       reject(new Error(errMsg||('Timeout na '+Math.round(ms/1000)+'s')));
     },ms);
-    promise.then(
-      function(v){if(settled)return;settled=true;clearTimeout(t);resolve(v);},
-      function(e){if(settled)return;settled=true;clearTimeout(t);reject(e);}
+    Promise.resolve(promise).then(
+      function(v){
+        if(settled)return;
+        settled=true;
+        clearTimeout(t);
+        var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+        if(dt>ms*0.5){
+          try{console.warn('[telemetry slow]',label,dt+'ms / '+ms+'ms');}catch(_e){}
+          try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'slow',meta:meta});}catch(_e){}
+        }
+        resolve(v);
+      },
+      function(e){
+        if(settled)return;
+        settled=true;
+        clearTimeout(t);
+        var dt=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-t0);
+        var emsg=(e&&e.message)?String(e.message):String(e);
+        try{console.warn('[telemetry error]',label,dt+'ms',emsg);}catch(_e){}
+        try{void logTelemetry({fn_name:label,duration_ms:dt,timeout_ms:ms,status:'error',error_msg:emsg.substring(0,500),meta:meta});}catch(_e){}
+        reject(e);
+      }
     );
   });
+}
+window.SENSE_APP_NAME=window.SENSE_APP_NAME||'ownsense';
+var _telLastInsertOs=0;
+async function logTelemetry(payload){
+  try{
+    if(typeof sb==='undefined'||!sb)return;
+    var uid=null;
+    try{
+      var sr=await sb.auth.getSession();
+      var su=sr&&sr.data&&sr.data.session&&sr.data.session.user;
+      uid=su&&su.id?su.id:null;
+    }catch(_e){return;}
+    if(!uid)return;
+    var now=Date.now();
+    if(now-_telLastInsertOs<250)return;
+    _telLastInsertOs=now;
+    var status=String(payload.status||'unknown').substring(0,20);
+    if(status==='ok')return;
+    await sb.from('ai_telemetry').insert({
+      user_id:uid,
+      app:String(window.SENSE_APP_NAME||'unknown').substring(0,30),
+      fn_name:String(payload.fn_name||'unknown').substring(0,100),
+      duration_ms:parseInt(payload.duration_ms,10)||0,
+      timeout_ms:payload.timeout_ms?parseInt(payload.timeout_ms,10):null,
+      status:status,
+      error_msg:payload.error_msg?String(payload.error_msg).substring(0,500):null,
+      meta:payload.meta||null
+    });
+  }catch(_e){}
 }
 function aiShortErr(msg,max){
   var s=String(msg==null?'':msg).replace(/\s+/g,' ').trim();
