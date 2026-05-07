@@ -795,10 +795,17 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 (function(){
   var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
   var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
-  if(!window.supabase||typeof window.supabase.createClient!=='function')return;
-  if(window.__senseLpSupabase)return;
-  try{window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY);}
-  catch(_e){}
+  window.getSenseLpSupabase=function(){
+    try{
+      if(window.__senseLpSupabase)return window.__senseLpSupabase;
+      if(!window.supabase||typeof window.supabase.createClient!=='function')return null;
+      window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY);
+      return window.__senseLpSupabase;
+    }catch(_e){
+      return null;
+    }
+  };
+  window.getSenseLpSupabase();
 })();
 </script>
 <script>
@@ -830,7 +837,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   var secondary=document.getElementById('lpAuthSecondary');
   var signOutBtn=document.getElementById('lpAuthSignOut');
   var backdrop=document.getElementById('lpAuthBackdrop');
-  if(!shell||!window.__senseLpSupabase)return;
+  if(!shell)return;
 
   function rememberHideForSession(){
     try{
@@ -895,16 +902,17 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 
   secondary.addEventListener('click',function(){rememberHideForSession();hide();});
   async function doLandingSignOut(){
+    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
     try{
-      var client=window.__senseLpSupabase;
-      if(!client)return;
       try{
         localStorage.removeItem('ownsense_hub_profile_v2');
         localStorage.removeItem('ownsense_profile_v1');
         localStorage.removeItem('ownsense_datesense_v1');
         localStorage.removeItem('ownsense_handoff_v1');
       }catch(_ls){}
-      await client.auth.signOut();
+      if(client&&client.auth&&typeof client.auth.signOut==='function'){
+        await client.auth.signOut();
+      }
     }catch(_so){}
     try{
       sessionStorage.removeItem(K_HUB_HIDE);
@@ -927,7 +935,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       var spGate=new URLSearchParams(window.location.search||'');
       if(spGate.get('login')==='1'||spGate.get('register')==='1')return;
     }catch(_sg){}
-    var sb=window.__senseLpSupabase;
+    var sb=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
     if(!sb)return;
     var sess=await sb.auth.getSession();
     var session=sess&&sess.data&&sess.data.session;
@@ -991,8 +999,9 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   var btnClose=document.getElementById('lpLoginClose');
   var btnForgot=document.getElementById('lpAuthForgot');
   var btnEye=document.getElementById('lpAuthPwToggle');
-  if(!loginShell||!window.__senseLpSupabase)return;
-  var sb=window.__senseLpSupabase;
+  if(!loginShell)return;
+  var sb=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
+  if(!sb)return;
   var pendingReturnTo='';
   function withTimeout(promise,ms,fallback){
     return Promise.race([
