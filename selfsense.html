@@ -859,6 +859,11 @@ a:focus-visible,
 .advice-route-card-soft .advice-route-icon{width:24px;height:24px;border-radius:999px;background:#EEF2F7;font-size:13px}
 .advice-route-card-soft .advice-route-title{font-size:12px;line-height:1.25}
 .advice-route-card-soft .advice-route-desc{font-size:11px;line-height:1.35;margin-top:1px}
+.advice-route-card-soft.advice-route-pill{display:inline-flex;justify-self:start;align-items:center;padding:7px 10px;gap:6px;width:auto;max-width:100%;background:#F8FAFB;border-color:#E7EDF2;box-shadow:0 1px 0 rgba(255,255,255,.78) inset}
+.advice-route-card-soft.advice-route-pill .advice-route-copy{display:inline-flex;align-items:center}
+.advice-route-card-soft.advice-route-pill .advice-route-title{font-size:10.5px;font-weight:780;letter-spacing:.01em;color:#4b5563}
+.advice-route-card-soft.advice-route-pill .advice-route-desc{display:none}
+.advice-route-card-soft.advice-route-pill .advice-route-icon{width:22px;height:22px;font-size:12px;background:#F1F5F9}
 .advice-route-icon{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#F4EEFF;font-size:16px;line-height:1;flex-shrink:0}
 .advice-route-copy{display:block;min-width:0}
 .advice-route-title{display:block;font-size:14px;font-weight:800;color:#1f2937;line-height:1.35}
@@ -2532,18 +2537,31 @@ function hasAnyContactDossier(){
 }
 function ownProfileSetupComplete(){
   var meta=((S.pdata['OWN Sense']||{}).meta)||{};
-  return !!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
+  var strict=!!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
+  if(strict)return true;
+  var fallbackKeys=['first_name','firstName','city','country','address','postal_code','birthdate','intent'];
+  for(var i=0;i<fallbackKeys.length;i++){
+    if(String(meta[fallbackKeys[i]]||'').trim())return true;
+  }
+  var prog=getProfielProgressCounts('OWN Sense')||{filled:0};
+  return (prog.filled||0)>=3;
 }
 function getOnboardingChecklist(){
   var own=S.pdata['OWN Sense']||{count:0,categories:{},meta:{}};
   var ownCount=own.count||0;
   var ownProgress=getProfielProgressCounts('OWN Sense');
   var ownHasProfileAnswers=!!(ownProgress&&ownProgress.filled>0);
+  var ownHasVertelHistory=(function(){
+    try{
+      var rows=(S.sessionHistoryPager&&Array.isArray(S.sessionHistoryPager.rows))?S.sessionHistoryPager.rows:[];
+      return rows.some(function(r){return r&&r.role==='user'&&String(r.content||'').trim();});
+    }catch(_e){return false;}
+  })();
   var ownHasAdvice=!!String((((own.meta||{}).last_advice||{}).html||'').trim();
   var ownMetaComplete=(getProfileMetaCompletion('OWN Sense')||{}).complete===true;
   return [
-    {id:'own-profile',done:ownMetaComplete,label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
-    {id:'vertel-start',done:ownCount>0||ownHasProfileAnswers,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"},
+    {id:'own-profile',done:ownMetaComplete||ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
+    {id:'vertel-start',done:ownCount>0||ownHasProfileAnswers||ownHasVertelHistory,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"},
     {id:'advies-start',done:ownHasAdvice,label:'Genereer je eerste advies',action:"goScreen('advice')"}
   ];
 }
@@ -7773,7 +7791,7 @@ function rAdviceHub(el){
     routeBody='<div class="advice-route-grid">'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en lees het antwoord hier. Vertel open je alleen als je dat zelf kiest.</span></span></button>'
-      +'<button type="button" class="advice-route-card advice-route-card-soft" onclick="setAdviceHubRoute(\'helplines\')"><span class="advice-route-icon">🤝</span><span class="advice-route-copy"><span class="advice-route-title">Ik zoek online hulp</span><span class="advice-route-desc">Nummer- en chatlijst met erkende hulplijnen wanneer je liever met een mens praat.</span></span></button>'
+      +'<button type="button" class="advice-route-card advice-route-card-soft advice-route-pill" onclick="setAdviceHubRoute(\'helplines\')"><span class="advice-route-icon">🤝</span><span class="advice-route-copy"><span class="advice-route-title">Online hulp</span><span class="advice-route-desc">Nummer- en chatlijst met erkende hulplijnen wanneer je liever met een mens praat.</span></span></button>'
       +'</div>';
   }
   el.innerHTML=''
@@ -13078,10 +13096,13 @@ async function askAdviceNow(){
   var sys='Je bent SelfSensei, empathische AI coach voor zelfreflectie en healing. Geef concreet, rustig advies op basis van de recente input. Max 3-4 zinnen, 2 actiestappen. Warm, direct en niet veroordelend. Nederlands.';
   try{
     var t=await callAPI(sys,[{role:'user',content:allCtx||'Geen recente data.'}],500);
-    hideT();
     addMsg('ai',`<span style="font-size:11px;font-weight:700;color:var(--r);letter-spacing:.8px">ADVIES</span><br><br>${t.replace(/\n/g,'<br>')}`);
-  }catch(x){hideT();addMsg('ai','Fout: '+x.message);}
-  S.busy=false;
+  }catch(x){
+    addMsg('ai','Fout: '+x.message);
+  }finally{
+    hideT();
+    S.busy=false;
+  }
 }
 
 // ══ Microfoon (speech-to-text) - push-to-talk: ingedrukt houden = luisteren, loslaten = stop ══

@@ -281,7 +281,7 @@
     var host=document.createElement('div');
     host.innerHTML=''
       +'<button type="button" id="scFbOpenBtn" class="sc-fb-open" aria-label="Open feedback paneel">'
-      +'<span class="sc-fb-open-dot"></span><span class="sc-fb-open-txt">Tip</span>'
+      +'<span class="sc-fb-open-dot"></span><span class="sc-fb-open-txt">Feedback</span>'
       +'</button>'
       +'<div id="scFbHint" class="sc-fb-hint" hidden>'
       +'<button type="button" class="sc-fb-hint-close" aria-label="Sluiten">x</button>'
