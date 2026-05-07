@@ -854,6 +854,11 @@ a:focus-visible,
 .advice-route-card{display:flex;align-items:flex-start;gap:12px;text-align:left;padding:14px 15px;background:linear-gradient(180deg,#FFFFFF,#FCFCFC);border:1px solid #EAECEF;border-radius:14px;font-size:14px;font-weight:700;color:#26303A;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(25,29,36,.04);transition:transform .12s ease,box-shadow .14s ease,border-color .14s ease}
 .advice-route-card:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(25,29,36,.08);border-color:#DEE2E7}
 .advice-route-card:active{transform:translateY(0)}
+.advice-route-card-soft{padding:10px 12px;border-radius:999px;background:#F7F8FA;border-color:#E4E8ED;box-shadow:none;gap:9px;font-size:12px}
+.advice-route-card-soft:hover{transform:none;box-shadow:none;border-color:#D6DEE8;background:#F4F6F8}
+.advice-route-card-soft .advice-route-icon{width:24px;height:24px;border-radius:999px;background:#EEF2F7;font-size:13px}
+.advice-route-card-soft .advice-route-title{font-size:12px;line-height:1.25}
+.advice-route-card-soft .advice-route-desc{font-size:11px;line-height:1.35;margin-top:1px}
 .advice-route-icon{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#F4EEFF;font-size:16px;line-height:1;flex-shrink:0}
 .advice-route-copy{display:block;min-width:0}
 .advice-route-title{display:block;font-size:14px;font-weight:800;color:#1f2937;line-height:1.35}
@@ -1734,6 +1739,60 @@ function getSenseiTipsWhitelistDomains(){
     },[])
   ));
 }
+function isWhitelistTipRequest(text){
+  var t=String(text||'').toLowerCase();
+  if(!t)return false;
+  var signals=[
+    'tip','tips','aanbevel','aanrader','suggestie','idee',
+    'boek','podcast','video','film','serie','docu','documentaire',
+    'website','site','artikel','lees','kijk','luister',
+    'waar kan ik','wat kan ik doen'
+  ];
+  for(var i=0;i<signals.length;i++){
+    if(t.indexOf(signals[i])>=0)return true;
+  }
+  return false;
+}
+function getWhitelistTipDomainsForText(text){
+  var t=String(text||'').toLowerCase();
+  var books=(SENSEI_TIPS_WHITELIST.books||[]).slice(0,3);
+  var media=(SENSEI_TIPS_WHITELIST.media||[]).slice(0,3);
+  var places=(SENSEI_TIPS_WHITELIST.places||[]).slice(0,3);
+  var fallback=(SENSEI_TIPS_WHITELIST.fallback||[]).slice(0,2);
+  var out=[];
+  function add(list){
+    (list||[]).forEach(function(d){
+      if(!d)return;
+      if(out.indexOf(d)>=0)return;
+      out.push(d);
+    });
+  }
+  if(/boek|lees|artikel|bibliotheek|roman|verhaal/.test(t))add(books);
+  if(/podcast|video|film|serie|docu|documentaire|kijk|luister/.test(t))add(media);
+  if(/plek|museum|wandel|uitstap|naartoe|ergens heen|buiten/.test(t))add(places);
+  if(!out.length){
+    add(books.slice(0,2));
+    add(media.slice(0,2));
+    add(places.slice(0,2));
+  }
+  add(fallback);
+  return out.slice(0,4);
+}
+function buildWhitelistTipBadgeHtml(domains){
+  var list=Array.isArray(domains)?domains:[];
+  if(!list.length)return '';
+  var chips=list.map(function(domain){
+    var clean=String(domain||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/+$/,'');
+    if(!clean)return '';
+    var url='https://'+clean;
+    return '<a class="planner-linkchip" href="'+escHTML(url)+'" target="_blank" rel="noopener">↗ '+escHTML(clean)+'</a>';
+  }).join('');
+  if(!chips)return '';
+  return '<div class="coach-save-bar" style="margin-top:8px">'
+    +'<span class="coach-save-lbl">🔎 Whitelist-startpunten</span>'
+    +'<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div>'
+    +'</div>';
+}
 
 /** Vaste lijst Vlaamse/Belgische hulplijnen (gecurateerd; geen vervanging voor professionele spoedzorg). */
 var SELFSENSE_HELPLINES=[
@@ -1779,6 +1838,31 @@ function renderAdviceHubHelplinesHtml(){
       +'</div>'
       +'</div>'
       +'<div style="font-size:12px;color:#6b7280;line-height:1.55">'+escHTML(h.description||'')+(h.hours?'<br><span style="color:#8a8f97">'+escHTML(h.hours)+'</span>':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+function renderAdviceHubWhitelistTipsHtml(){
+  var categories=[
+    {key:'mental_health',label:'Mentale gezondheid'},
+    {key:'self_help',label:'Zelfhulp en herstel'},
+    {key:'relationships',label:'Relaties en verbinding'},
+    {key:'media',label:'Media en inspiratie'},
+    {key:'places',label:'Plekken om naartoe te gaan'},
+    {key:'fallback',label:'Extra referentie'}
+  ];
+  return categories.map(function(cat){
+    var list=Array.isArray(SENSEI_TIPS_WHITELIST[cat.key])?SENSEI_TIPS_WHITELIST[cat.key]:[];
+    if(!list.length)return '';
+    var chips=list.map(function(domain){
+      var clean=String(domain||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/+$/,'');
+      if(!clean)return '';
+      var url='https://'+clean;
+      return '<a class="planner-linkchip" href="'+escHTML(url)+'" target="_blank" rel="noopener">↗ '+escHTML(clean)+'</a>';
+    }).join('');
+    if(!chips)return '';
+    return '<div style="padding:10px 12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff">'
+      +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:8px">'+escHTML(cat.label)+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px">'+chips+'</div>'
       +'</div>';
   }).join('');
 }
@@ -2451,12 +2535,16 @@ function ownProfileSetupComplete(){
   return !!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
 }
 function getOnboardingChecklist(){
-  var contacts=getContactProfileNames();
+  var own=S.pdata['OWN Sense']||{count:0,categories:{},meta:{}};
+  var ownCount=own.count||0;
+  var ownProgress=getProfielProgressCounts('OWN Sense');
+  var ownHasProfileAnswers=!!(ownProgress&&ownProgress.filled>0);
+  var ownHasAdvice=!!String((((own.meta||{}).last_advice||{}).html||'').trim();
+  var ownMetaComplete=(getProfileMetaCompletion('OWN Sense')||{}).complete===true;
   return [
-    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
-    {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste contextdossier aan',action:'newSenseFromDrawer()'},
-    {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Vul per dossier je context (rol of relatie tot jou)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
-    {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
+    {id:'own-profile',done:ownMetaComplete,label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
+    {id:'vertel-start',done:ownCount>0||ownHasProfileAnswers,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"},
+    {id:'advies-start',done:ownHasAdvice,label:'Genereer je eerste advies',action:"goScreen('advice')"}
   ];
 }
 function renderOnboardingCard(){
@@ -7672,17 +7760,20 @@ function rAdviceHub(el){
       +'Hier staan <strong>betrouwbare hulplijnen</strong> om te bellen of te chatten. SelfSense is geen vervanging voor professionele zorg. Bij <strong>acuut levensgevaar</strong> bel je best meteen <strong>112</strong>.'
       +'</div>'
       +'<div class="advice-route-grid" style="margin-bottom:4px">'+renderAdviceHubHelplinesHtml()+'</div>'
+      +'<div style="margin-top:14px;padding:12px 13px;border-radius:12px;background:#FAF7F2;border:1px solid #E7DCC9">'
+      +'<div style="font-size:12px;font-weight:800;color:#7a5d34;margin-bottom:8px">Tips uit whitelist</div>'
+      +'<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-bottom:10px">Dit zijn de domeinen die SelfSense gebruikt voor veilige online aanbevelingen.</div>'
+      +'<div style="display:grid;gap:8px">'+renderAdviceHubWhitelistTipsHtml()+'</div>'
+      +'</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
       +'<button type="button" class="btn-g" style="max-width:340px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
       +'</div>'
       +'</div>';
   }else{
     routeBody='<div class="advice-route-grid">'
-      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'person\')"><span class="advice-route-icon">👤</span><span class="advice-route-copy"><span class="advice-route-title">Over een persoon</span><span class="advice-route-desc">Kies dossier, stel je focusvraag en krijg meteen advies.</span></span></button>'
-      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'compare\')"><span class="advice-route-icon">👥</span><span class="advice-route-copy"><span class="advice-route-title">Twee of meer personen vergelijken</span><span class="advice-route-desc">Ik vergelijk 2 tot 3 dossiers en geef direct advies.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en lees het antwoord hier. Vertel open je alleen als je dat zelf kiest.</span></span></button>'
-      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'helplines\')"><span class="advice-route-icon">🤝</span><span class="advice-route-copy"><span class="advice-route-title">Ik zoek online hulp</span><span class="advice-route-desc">Nummer- en chatlijst met erkende hulplijnen wanneer je liever met een mens praat.</span></span></button>'
+      +'<button type="button" class="advice-route-card advice-route-card-soft" onclick="setAdviceHubRoute(\'helplines\')"><span class="advice-route-icon">🤝</span><span class="advice-route-copy"><span class="advice-route-title">Ik zoek online hulp</span><span class="advice-route-desc">Nummer- en chatlijst met erkende hulplijnen wanneer je liever met een mens praat.</span></span></button>'
       +'</div>';
   }
   el.innerHTML=''
@@ -7694,7 +7785,7 @@ function rAdviceHub(el){
     +routeBody
     +(st.route&&st.route!=='helplines'?('<div class="advice-depth-wrap" style="margin-top:14px">'
       +'<div class="advice-depth-label">Diepgang</div>'
-      +'<p class="advice-depth-help">Bij <strong>Over een persoon</strong>: kies <strong>Hoofdadvies</strong> of <strong>Hoofd + extra</strong>. Hieronder stel je je standaard in voor snel opnieuw proberen.</p>'
+      +'<p class="advice-depth-help">Kies hier je standaard tussen <strong>Gewoon advies</strong> en <strong>Met extra expertise</strong>. Zo kan je sneller opnieuw proberen.</p>'
       +'<div class="advice-depth-row">'
       +depthBtn('standard','Gewoon advies')
       +depthBtn('extra','Met extra expertise')
@@ -7970,7 +8061,7 @@ function renderAdviceEmptyState(name){
     +'<div style="font-size:34px;margin-bottom:10px">💬</div>'
     +'<div style="font-size:17px;font-weight:800;color:#333;margin-bottom:10px">Waarom je nog geen advies ziet</div>'
     +'<p style="font-size:14px;color:#555;line-height:1.55;margin:0 auto 14px;max-width:340px;text-align:left">SelfSensei bouwt advies op basis van <strong>jouw echte input</strong> over <strong>'+escHTML(label)+'</strong>: berichten in de tijdlijn (via Vertel), wat je op tab <strong>Profiel</strong> invult, en je profielgegevens. Zonder minimaal één bron is er niets om op te baseren - dan blijft dit bewust leeg.</p>'
-    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Tip:</strong> '+(isOwn?'Schrijf kort hoe jij je voelt, of vul je categorieën op tab Profiel in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op tab Profiel in.')+'</p>'
+    +'<p style="font-size:13px;color:#777;line-height:1.45;margin:0 auto 16px;max-width:340px;text-align:left"><strong>Invoerhulp:</strong> '+(isOwn?'Schrijf kort hoe jij je voelt, of vul je categorieën op tab Profiel in.':'Vertel wat er speelt met '+escHTML(label)+', of vul de invulvakjes op tab Profiel in.')+'</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px;max-width:340px;margin:0 auto">'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="S.vertelFrom=\''+escN+'\';S.vertelGesprekDossier=\''+escN+'\';goScreen(\'vertel\')">🎤 Naar Vertel, voeg een tijdlijnbericht toe</button>'
     +'<button type="button" class="coach-save-other" style="font-size:14px;padding:12px 14px;justify-content:center;width:100%" onclick="switchTab(\'profiel\')">📋 Tab Profiel - invulvakjes &amp; eigenschappen</button>'
@@ -9079,7 +9170,7 @@ function rSenses(el){
     });
   } else {
     h+=`<div class="sh">Contextpersonen</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">Nog geen contextpersonen.
-Tip: typ een naam in Vertel en SelfSensei maakt automatisch een dossier aan.</p></div>`;
+Invoerhulp: typ een naam in Vertel en SelfSensei maakt automatisch een dossier aan.</p></div>`;
   }
   if(archived.length){
     h+='<div class="sh">On hold / Afgesloten</div>';
@@ -12261,6 +12352,8 @@ async function sendMsg(){
     return;
   }
   var txtForAI=txt.length>2800?txt.substring(0,2800):txt;
+  var wantsWhitelistTips=isWhitelistTipRequest(txtForAI);
+  var whitelistTipDomains=wantsWhitelistTips?getWhitelistTipDomainsForText(txtForAI):[];
   var pendingAdviceCtx='';
   var hadAdviceCtx=false;
   try{
@@ -12325,6 +12418,9 @@ async function sendMsg(){
     +' Houd proactieve suggesties subtiel en niet opdringerig: eerst empathie/coaching, daarna hoogstens 1 optionele suggestie.'
     +' Vermijd spam: herhaal proactieve suggesties niet in elk antwoord en niet opnieuw zonder nieuwe aanleiding in de context.'
     +' Als de gebruiker expliciet om aanbevelingen vraagt: gebruik web search, maar alleen via deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
+    +(wantsWhitelistTips&&whitelistTipDomains.length
+      ?(' Voor DIT bericht ziet de intentie eruit als een tip-vraag. Start je aanbevelingen eerst vanuit deze whitelist-startpunten: '+whitelistTipDomains.join(', ')+'.')
+      :'')
     +' Noem alleen bronnen die je echt hebt gevonden. Verzin geen titel, auteur of URL.'
     +' Geef per aanbeveling een echte, direct bruikbare link.'
     +' Geef maximaal 2 of 3 aanbevelingen per antwoord bij expliciete vraag. Bij proactieve suggestie: maximaal 1.'
@@ -12368,13 +12464,12 @@ async function sendMsg(){
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
+    var whitelistTipBadge=buildWhitelistTipBadgeHtml(whitelistTipDomains);
     var raw=await callAPI(fullSys,messages,1400,22000);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}
     }
-    hideT();
-
     // Sla sessie-bericht op in Supabase (stil als geen sessie)
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
@@ -12401,7 +12496,7 @@ async function sendMsg(){
     if(forcedDossier){
       window._pendingSegmenten=null;
       await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
-      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
+      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
@@ -12413,13 +12508,13 @@ async function sendMsg(){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
         await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
         didSticky=true;
       }
       if(!didSticky){
         var autoDossier='OWN Sense';
         await _doOpslaan(null,txt+'\n'+raw,autoDossier,userSessionMsgId);
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(autoDossier)+'</span></span>',userSessionMsgId));
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(autoDossier)+'</span></span>',userSessionMsgId));
       }
     }
     // Update sidebar sessie preview
