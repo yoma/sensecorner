@@ -5327,9 +5327,8 @@ function getUsageMode(){
   return 'multi';
 }
 function setUsageMode(mode){
-  var m=mode==='single'?'single':'multi';
-  setScopedStorage('ds_usage_mode',m);
-  S.usageMode=m;
+  setScopedStorage('ds_usage_mode','multi');
+  S.usageMode='multi';
 }
 function getFocusDossier(){
   return getScopedStorage('ds_focus_dossier','')||'';
@@ -5510,22 +5509,15 @@ async function applyFocusFromHome(){
   var n=sel?sel.value:'';
   if(!n){toast('Kies eerst een dossier');return;}
   setFocusRelationType(stageRelationTypeValue(getDossierStage(n)));
-  S.homeModeDraft='single';
+  S.homeModeDraft='multi';
   S.homeModeEditorOpen=false;
   await activateRelationshipFocus(n);
 }
 async function activateRelationshipFocus(name){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
-  var targets=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
-  });
-  setUsageMode('single');
+  setUsageMode('multi');
   setFocusDossier(name);
-  for(var i=0;i<targets.length;i++){
-    await setDossierLifecycle(targets[i],'on_hold');
-  }
-  if(targets.length)toast('🎯 Gezins-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
-  else toast('🎯 Gezins-focus op '+dn(name));
+  toast('🎯 Focus op '+dn(name)+' ingesteld (gezins-modus blijft met alle dossiers actief)');
   goScreen('senses');
 }
 
@@ -5746,12 +5738,7 @@ async function setDossierStage(name,stage){
   await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
 }
 function shouldOfferStageFocusPrompt(name,stage){
-  if(!name||name==='OWN Sense')return false;
-  if(!isRelationshipFocusSuggestedStage(stage))return false;
-  if(getUsageMode()==='single'&&getFocusDossier()===name)return false;
-  var d=S.pdata[name]||{};
-  var m=d.meta||{};
-  return m.skip_focus_prompt!==true;
+  return false;
 }
 function openStageFocusModal(name,stage){
   var modal=document.getElementById('stageFocusModal');
