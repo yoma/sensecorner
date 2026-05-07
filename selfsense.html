@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="07-05-2026 22:40">
+<meta name="fs-build" content="07-05-2026 22:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1202,7 +1202,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 22:40</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 22:55</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -2161,6 +2161,8 @@ var S={
   /** Tijdelijke context uit Advies → Vertel (toon boven invoervak i.p.v. invoervak zelf te vullen). */
   vertelPendingAdvice:null
 };
+/** Vertel-chat wordt aan deze SenseCorner-app gekoppeld (DB-kolom sense_sessions.vertel_app). */
+var VERTEL_APP_SLUG='selfsense';
 
 var _profileModalFor='OWN Sense';
 var _goScreenReqId=0;
@@ -14578,13 +14580,13 @@ async function laadSessies(){
   el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#888;text-align:center">Laden…</div>';
   try{
     var res=await sb.from('sense_sessions')
-      .select('*').eq('user_id',S.user.id)
+      .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
       .order('updated_at',{ascending:false}).limit(30);
     var data=res.data;
     var err=res.error;
     if(err){
       res=await sb.from('sense_sessions')
-        .select('*').eq('user_id',S.user.id)
+        .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
         .order('created_at',{ascending:false}).limit(30);
       data=res.data;
       err=res.error;
@@ -14619,7 +14621,7 @@ async function verwijderSessie(sessionId){
   if(!confirm('Dit gesprek verwijderen uit je overzicht?'))return;
   try{
     await sb.from('sense_session_msgs').delete().eq('session_id',sessionId).eq('user_id',S.user.id);
-    await sb.from('sense_sessions').delete().eq('id',sessionId).eq('user_id',S.user.id);
+    await sb.from('sense_sessions').delete().eq('id',sessionId).eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG);
     if(S.currentSessionId===sessionId){
       S.currentSessionId=null;
       S.vertelMsgs=[];
@@ -14699,7 +14701,7 @@ async function applyVertelSessionTitleFromDb(sessionId,fallbackRows){
   var t=document.getElementById('sessieTitle');
   if(!t)return;
   try{
-    var r=await sb.from('sense_sessions').select('preview').eq('id',sessionId).eq('user_id',S.user.id).limit(1);
+    var r=await sb.from('sense_sessions').select('preview,vertel_app').eq('id',sessionId).eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG).limit(1);
     var row=(r&&r.data&&r.data[0])?r.data[0]:null;
     if(row&&String(row.preview||'').trim()){
       t.textContent=String(row.preview).trim();
@@ -14838,12 +14840,47 @@ async function laadSessie(sessionId,opt){
   opt=opt||{};
   if(!opt.skipCloseSidebar)closeSidebar();
   if(!S.user)return;
+  var ca=document.getElementById('chatArea');
+  function abortLaadSessieVertel(toastMsg){
+    S.currentSessionId=null;
+    S.vertelMsgs=[];
+    S.sessionHistoryPager=null;
+    window._sessieKoppelData=[];
+    var bulk=document.getElementById('sessBulkBar');
+    if(bulk){bulk.style.display='none';bulk.innerHTML='';}
+    if(ca)ca.innerHTML='';
+    var tit=document.getElementById('sessieTitle');
+    if(tit)tit.textContent='Nieuw gesprek';
+    updateVertelGesprekBanner();
+    renderVertelInputCoachTip();
+    refreshVertelResendButton();
+    if(toastMsg&&!opt.silent)toast(toastMsg);
+  }
   S.currentSessionId=sessionId;
   S.vertelMsgs=[];
   S.sessionHistoryPager=null;
-  var ca=document.getElementById('chatArea');
   if(ca)ca.innerHTML='<div style="text-align:center;color:var(--m);padding:20px;font-size:14px">Gesprek laden...</div>';
   try{
+    var sessRes=await sb.from('sense_sessions')
+      .select('id,vertel_app')
+      .eq('id',sessionId)
+      .eq('user_id',S.user.id)
+      .limit(1);
+    if(sessRes.error)throw sessRes.error;
+    var sessRow=(sessRes.data&&sessRes.data[0])?sessRes.data[0]:null;
+    if(!sessRow){
+      abortLaadSessieVertel('Gesprek laden mislukt');
+      return;
+    }
+    var va=sessRow.vertel_app;
+    if(va==null||String(va).trim()===''){
+      abortLaadSessieVertel('Dit oudere gesprek heeft geen app-label en wordt hier niet getoond. Start een nieuw gesprek in deze app.');
+      return;
+    }
+    if(String(va)!==VERTEL_APP_SLUG){
+      abortLaadSessieVertel('Dit gesprek hoort bij een andere SenseCorner-app. Open het in die app om verder te gaan.');
+      return;
+    }
     var batch=await fetchSenseSessionMsgBatch(sessionId,null);
     var data=batch.chron;
     if(!data||!data.length){if(ca)ca.innerHTML='';S.sessionHistoryPager=null;return;}
@@ -14854,8 +14891,7 @@ async function laadSessie(sessionId,opt){
     updateSessBulkBar();
   }catch(e){
     console.warn('laadSessie error:',e);
-    if(ca)ca.innerHTML='';
-    S.sessionHistoryPager=null;
+    abortLaadSessieVertel(null);
     if(!opt.silent)toast('Gesprek laden mislukt');
   }
 }
@@ -14963,7 +14999,7 @@ async function ensureActiveSessionForMessage(previewText){
   try{
     var preview=buildSessionPreview(previewText||'Nieuw gesprek');
     var {data,error}=await sb.from('sense_sessions')
-      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString()})
+      .insert({user_id:S.user.id,preview:preview,updated_at:new Date().toISOString(),vertel_app:VERTEL_APP_SLUG})
       .select().single();
     if(error)throw error;
     if(data&&data.id){
@@ -14985,7 +15021,7 @@ async function updateSessiePreview(sessionId,tekst){
   try{
     await sb.from('sense_sessions').update({
       preview:preview,updated_at:new Date().toISOString()
-    }).eq('id',sessionId).eq('user_id',S.user.id);
+    }).eq('id',sessionId).eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG);
   }catch(e){console.warn('updateSessiePreview:',e);}
 }
 
