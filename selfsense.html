@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="07-05-2026 17:48">
+<meta name="fs-build" content="07-05-2026 18:02">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1181,7 +1181,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 17:48</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 18:02</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -7991,16 +7991,13 @@ async function runAdviceHubRecommendationsNow(){
     }catch(_oc){}
     var recentUserLines=[];
     try{
-      var names=['OWN Sense'].concat((getActiveContactNames()||[]).filter(function(n){return n&&n!=='OWN Sense';}).slice(0,3));
-      for(var ni=0;ni<names.length;ni++){
-        var batch=await loadMsgs(names[ni],{limit:10,asc:false});
-        (batch||[]).forEach(function(m){
-          if(!m||m.role!=='user')return;
-          var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-          if(clean)recentUserLines.push(clean);
-        });
-      }
-      recentUserLines=recentUserLines.filter(Boolean).slice(0,10);
+      var batch=await loadMsgs('OWN Sense',{limit:16,asc:false});
+      (batch||[]).forEach(function(m){
+        if(!m||m.role!=='user')return;
+        var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        if(clean)recentUserLines.push(clean);
+      });
+      recentUserLines=recentUserLines.filter(Boolean).slice(0,8);
     }catch(_om){}
     var ownCtx=[
       'Naam: '+(getUserHoofdNaam()||''),
@@ -8013,7 +8010,8 @@ async function runAdviceHubRecommendationsNow(){
     var catTxt=cats.join(', ');
     var allowedDomains=buildRecoDomainsFromCategories(cats);
     var userAsk=st.recoPrompt||'Zoek 2 relevante aanbevelingen die nu kunnen helpen.';
-    var sys='Je bent SelfSensei aanbevelingsassistent. Geef 2 concrete aanbevelingen op basis van context. Gebruik alleen toegelaten categorieen: '+catTxt+'. Gebruik alleen echte bronnen met links. Geen verzinsels. Schrijf warm en persoonlijk: open met 1 zin die expliciet aansluit op wat deze gebruiker voelt of moeilijk vindt (bv eenzaamheid, bindingsangst, spanning), en gebruik daarvoor concrete contextsignalen. Voorbeeld openzinnen (stijl, geen vaste template): "Ik hoor dat je je de laatste tijd vaker eenzaam voelt, dus ik kies iets dat je vandaag al wat houvast kan geven." en "Ik merk dat nabijheid soms spanning geeft, daarom kies ik een rustige tip die veilig aanvoelt.". Als er contextregels zijn meegegeven, zeg dan NIET dat er weinig context is. Antwoord in max 8 zinnen en sluit af met een compacte lijst "Links:" met klikbare URL\'s.';
+    var relIntent=/\b(partner|relatie|koppel|daten|date|liefde|vriend|vriendin|man|vrouw)\b/i.test(userAsk);
+    var sys='Je bent SelfSensei aanbevelingsassistent. Geef 2 concrete aanbevelingen op basis van context. Gebruik alleen toegelaten categorieen: '+catTxt+'. Gebruik alleen echte bronnen met links. Geen verzinsels. Schrijf warm en persoonlijk: open met 1 zin die expliciet aansluit op wat deze gebruiker voelt of moeilijk vindt (bv eenzaamheid, spanning, overprikkeling), en gebruik daarvoor concrete contextsignalen. Voorbeeld openzinnen (stijl, geen vaste template): "Ik hoor dat je je de laatste tijd vaker eenzaam voelt, dus ik kies iets dat je vandaag al wat houvast kan geven." en "Ik merk dat nabijheid soms spanning geeft, daarom kies ik een rustige tip die veilig aanvoelt.". Als er contextregels zijn meegegeven, zeg dan NIET dat er weinig context is. Blijf bij de essentie van SelfSense: gebruiker zelf, zelfzorg, herstel, rust, energie en emotieregulatie. Vermijd partner- of relatieadvies, behalve als de vraag dat expliciet vraagt.'+(relIntent?' De vraag bevat expliciet relatiecontext, dus je mag die kort meenemen.':'')+' Antwoord in max 8 zinnen en sluit af met een compacte lijst "Links:" met klikbare URL\'s.';
     var usr='Context gebruiker:\n'+ownCtx+'\n\nVraag:\n'+userAsk+'\n\nToon empathie in de eerste zin en maak het direct toepasbaar.';
     var raw=await callAPI(sys,[{role:'user',content:usr}],700,26000,null,{allowed_domains:allowedDomains});
     st.resultHtml=formatAiCard(raw);
@@ -8035,7 +8033,7 @@ async function ensureDailyRecoTipForHome(){
     var ownMeta=own.meta||{};
     var catTxt=cats.join(', ');
     var allowedDomains=buildRecoDomainsFromCategories(cats);
-    var sys='Je bent SelfSensei. Geef precies 1 korte, warme dagtip met 1 concreet voorstel dat vandaag uitvoerbaar is en 1 echte link. Alleen categorieen: '+catTxt+'. Start met een persoonlijke zin die aansluit op de context van de gebruiker. Geen verzinsels.';
+    var sys='Je bent SelfSensei. Geef precies 1 korte, warme dagtip met 1 concreet voorstel dat vandaag uitvoerbaar is en 1 echte link. Alleen categorieen: '+catTxt+'. Start met een persoonlijke zin die aansluit op de context van de gebruiker. Focus op zelfzorg, herstel, rust en emotieregulatie. Vermijd partner- of relatieadvies. Geen verzinsels.';
     var usr='Gebruiker context: '+[ownMeta.city,ownMeta.country,ownMeta.intent,own.summary].filter(Boolean).join(' · ')+'\nDoel: een fijne, concrete suggestie in mensentaal.';
     var raw=await callAPI(sys,[{role:'user',content:usr}],420,22000,null,{allowed_domains:allowedDomains});
     setDailyRecoCache({ts:new Date().toISOString(),text:String(raw||''),categories:cats});
