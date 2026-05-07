@@ -745,7 +745,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     <div class="lp-auth-shell__actions">
       <a class="lp-btn lp-btn--primary" id="lpAuthPrimary" href="#">Verder</a>
       <button type="button" class="lp-btn lp-btn--ghost lp-btn--sageline" id="lpAuthSecondary">Sluiten</button>
-      <button type="button" class="lp-btn lp-btn--ghost" id="lpAuthSignOut" onclick="window.doLandingSignOut&&window.doLandingSignOut()">Afmelden</button>
+      <a class="lp-btn lp-btn--ghost" id="lpAuthSignOut" href="?logout=1" onclick="if(window.doLandingSignOut){window.doLandingSignOut();return false;}">Afmelden</a>
     </div>
   </div>
 </div>
@@ -911,6 +911,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         localStorage.removeItem('ownsense_handoff_v1');
       }catch(_ls){}
       if(client&&client.auth&&typeof client.auth.signOut==='function'){
+        try{await client.auth.signOut({scope:'global'});}catch(_sg){}
         await client.auth.signOut();
       }
     }catch(_so){}
@@ -919,7 +920,15 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       sessionStorage.removeItem(K_RESUME_HIDE);
     }catch(_ss){}
     hide();
-    try{window.location.reload();}catch(_r){window.location.href=window.location.pathname;}
+    try{
+      var p=new URLSearchParams(window.location.search||'');
+      p.delete('logout');
+      var qs=p.toString();
+      var next=window.location.pathname+(qs?('?'+qs):'')+(window.location.hash||'');
+      window.location.replace(next||window.location.pathname);
+    }catch(_r){
+      window.location.href=window.location.pathname;
+    }
   }
   window.doLandingSignOut=doLandingSignOut;
   if(signOutBtn)signOutBtn.addEventListener('click',doLandingSignOut);
@@ -933,6 +942,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   async function run(){
     try{
       var spGate=new URLSearchParams(window.location.search||'');
+      if(spGate.get('logout')==='1'){
+        await doLandingSignOut();
+        return;
+      }
       if(spGate.get('login')==='1'||spGate.get('register')==='1')return;
     }catch(_sg){}
     var sb=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
