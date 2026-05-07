@@ -10452,6 +10452,103 @@ function extractSenseiChatAssistantText(data){
   }
   return parts.join('\n\n');
 }
+const SENSEI_ALLOWED_DOMAINS=[
+  'standaardboekhandel.be','bol.com','hebban.nl','iedereenleest.be',
+  'ted.com','open.spotify.com','podcasts.apple.com','vrtmax.be','youtube.com',
+  'uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels',
+  'visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be','nl.wikipedia.org'
+];
+function extractSenseiWebSearchLogMeta(data){
+  var c=(data&&Array.isArray(data.content))?data.content:[];
+  var sawWebSearch=false;
+  var query='';
+  var resultRaw='';
+  for(var i=0;i<c.length;i++){
+    var b=c[i]||{};
+    if(String(b.type||'').toLowerCase()==='tool_use'){
+      var toolName=String(b.name||b.tool_name||'').toLowerCase();
+      var input=b.input&&typeof b.input==='object'?b.input:{};
+      if(toolName==='web_search'){
+        sawWebSearch=true;
+        if(!query){
+          query=String(input.query||input.search_query||input.q||input.query_string||'').trim();
+        }
+      }
+    }
+    if(String(b.type||'').toLowerCase()==='tool_result'){
+      try{resultRaw+=' '+JSON.stringify(b);}catch(_e){}
+    }
+  }
+  if(!sawWebSearch)return null;
+  if(!resultRaw){
+    try{resultRaw=JSON.stringify(c);}catch(_e2){resultRaw='';}
+  }
+  var m=String(resultRaw||'').match(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/i);
+  var hitDomain=m&&m[1]?String(m[1]).toLowerCase().replace(/^www\./,''):'';
+  return {
+    query:String(query||'').slice(0,500),
+    hit_domain:hitDomain||null
+  };
+}
+async function logSenseiWebSearchIfPresent(data,userId,appName){
+  try{
+    if(!sb||!userId)return;
+    var meta=extractSenseiWebSearchLogMeta(data);
+    if(!meta)return;
+    await sb.from('sensei_search_log').insert({
+      user_id:userId,
+      app_name:appName,
+      query_string:meta.query||'',
+      hit_domain:meta.hit_domain,
+      created_at:new Date().toISOString()
+    });
+  }catch(logErr){
+    console.log('sensei_search_log insert failed',logErr);
+  }
+}
+function getBrusselsDayUtcRange(now){
+  var ref=now instanceof Date?now:new Date();
+  var dayFmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'});
+  var parts=dayFmt.formatToParts(ref);
+  var map={};
+  for(var i=0;i<parts.length;i++){
+    if(parts[i]&&parts[i].type)map[parts[i].type]=parts[i].value;
+  }
+  var y=parseInt(map.year,10)||ref.getUTCFullYear();
+  var m=(parseInt(map.month,10)||1)-1;
+  var d=parseInt(map.day,10)||1;
+  function tzOffsetMinutes(at){
+    var dtf=new Intl.DateTimeFormat('en-US',{
+      timeZone:'Europe/Brussels',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'
+    });
+    var p=dtf.formatToParts(at);
+    var x={};
+    for(var j=0;j<p.length;j++){
+      if(p[j]&&p[j].type)x[p[j].type]=p[j].value;
+    }
+    var asUtc=Date.UTC(parseInt(x.year,10),parseInt(x.month,10)-1,parseInt(x.day,10),parseInt(x.hour,10),parseInt(x.minute,10),parseInt(x.second,10));
+    return Math.round((asUtc-at.getTime())/60000);
+  }
+  var startGuess=new Date(Date.UTC(y,m,d,0,0,0));
+  var startOffset=tzOffsetMinutes(startGuess);
+  var startUtc=new Date(startGuess.getTime()-startOffset*60000);
+  var nextGuess=new Date(Date.UTC(y,m,d+1,0,0,0));
+  var nextOffset=tzOffsetMinutes(nextGuess);
+  var endUtc=new Date(nextGuess.getTime()-nextOffset*60000);
+  return {startUtc:startUtc,endUtc:endUtc};
+}
+async function getTodaySenseiSearchCount(userId){
+  if(!sb||!userId)return 0;
+  var r=getBrusselsDayUtcRange(new Date());
+  var q=sb.from('sensei_search_log')
+    .select('id',{count:'exact',head:true})
+    .eq('user_id',userId)
+    .gte('created_at',r.startUtc.toISOString())
+    .lt('created_at',r.endUtc.toISOString());
+  var res=await q;
+  if(res&&res.error)throw res.error;
+  return (res&&typeof res.count==='number')?res.count:0;
+}
 
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
@@ -10472,18 +10569,41 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
     );
   }
   var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
+  var sessionUserId=sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.id?String(sess.data.session.user.id):'';
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
+    var webSearchAllowed=true;
+    try{
+      var todaySearchCount=await getTodaySenseiSearchCount(sessionUserId);
+      if(todaySearchCount>=5)webSearchAllowed=false;
+    }catch(countErr){
+      console.log('sensei_search_log count failed',countErr);
+      webSearchAllowed=true;
+    }
+    var effectiveSys=String(sys||'');
+    if(!webSearchAllowed){
+      effectiveSys+='\nBELANGRIJK: deze gebruiker heeft zijn 5 zoekopdrachten voor vandaag opgebruikt. Je mag NIET zoeken op het web vandaag. Als de gebruiker om een aanbeveling vraagt waarvoor je normaal zou zoeken, vertel hem vriendelijk dat je zoektegoed voor vandaag op is en dat je morgen weer voor hem kan zoeken. Bied aan om met wat je al weet iets nuttigs te zeggen, zonder titels of links te verzinnen.';
+    }
+    var toolCfg=[
+      {
+        type:'web_search_20250305',
+        name:'web_search',
+        allowed_domains:SENSEI_ALLOWED_DOMAINS,
+        max_uses:3
+      }
+    ];
+    var payload={model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:effectiveSys,messages:msgs};
+    if(webSearchAllowed)payload.tools=toolCfg;
     var res=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
         'Authorization':'Bearer '+token
       },
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:sys,messages:msgs}),
+      body:JSON.stringify(payload),
       signal:controller.signal
     });
     clearTimeout(timer);
@@ -10508,6 +10628,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride){
       throw new Error(apiMsg);
     }
     if(data.error)throw new Error(data.error.message);
+    await logSenseiWebSearchIfPresent(data,sessionUserId,'datesense');
     var txt=extractSenseiChatAssistantText(data)||'';
     if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');
     return txt;
