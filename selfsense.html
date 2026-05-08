@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 21:05">
+<meta name="fs-build" content="08-05-2026 21:14">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13688,7 +13688,7 @@ async function sendMsg(){
   var sys='Je bent SelfSensei, de persoonlijke herstelcoach van de gebruiker.'
     +' Je kent de gebruiker en contextpersonen via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
-    +' PRIORITEIT (twee situaties): (1) Als de gespreksbundel (zie RECENTE GESPREKSBUNDEL) nieuwe feiten of een doorlopend verhaal bevat, gaat die inhoud vóór oude of brede dossiertrekking; het is een groep berichten, niet één geïsoleerde zin. (2) Als de bundel dun is, bijvoorbeeld alleen een check-in zoals «hoe gaat het met [naam]?», gebruik dan actief JOUW CONTACTEN, SPECIFIEK DOSSIER CONTEXT en GEDEELDE KERNCONTEXT wanneer die inhoud over die persoon geven. Doe niet alsof je niets weet terwijl die secties wel gevuld zijn.'
+    +' PRIORITEIT (twee situaties): (1) Als de gespreksbundel (zie RECENTE GESPREKSBUNDEL) nieuwe feiten of een doorlopend verhaal bevat, gaat die inhoud vóór oude of brede dossiertrekking; het is een groep berichten, niet één geïsoleerde zin. (2) Als de bundel dun is, bijvoorbeeld alleen een check-in zoals «hoe gaat het met [naam]?», gebruik dan actief SPECIFIEK DOSSIER CONTEXT (met «Recent uit tijdlijn») en GEDEELDE KERNCONTEXT. De blokken CONTACTDOSSIERS onderaan deze prompt zijn samenvattingen en kunnen maanden oud zijn; als de tijdlijn spanning, school, ruzie of crisis noemt, mag je niet zeggen dat «het goed gaat» puur op basis van zo’n samenvatting of oude psycholoogtekst.'
     +' VERMIJD hier: vaste disclaimers als «ik weet het niet rechtstreekt» of «ik hoor alleen wat jij vertelt» als er wél dossier- of kerncontext over die persoon in deze prompt staat. Dan mag je dat kort en menselijk gebruiken (zonder te overdrijven).'
     +' Als een voornaam in CONTACTNAMEN, JOUW CONTACTEN of GEDEELDE KERNCONTEXT staat, bestaat dat dossier. Gebruik wat in die secties staat. Als de info daar écht dun is, zeg dat eerlijk en wijs naar de andere app voor diepte; verzin geen details.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
@@ -13712,8 +13712,7 @@ async function sendMsg(){
       :'')
     +' Noem alleen bronnen die je echt hebt gevonden.'
     +' Geef maximaal 2 of 3 aanbevelingen per antwoord bij expliciete vraag.'
-    +' Gaat het om hulpverlening, crisis of professionele zorg: gebruik de bestaande gecureerde lijst in de app en doe geen web search. Push dan geen willekeurige content als vervanging.'
-    +' CONTEXT: '+coachCtxFinal;
+    +' Gaat het om hulpverlening, crisis of professionele zorg: gebruik de bestaande gecureerde lijst in de app en doe geen web search. Push dan geen willekeurige content als vervanging.';
 
 
     var segPromise=null;
@@ -13761,7 +13760,7 @@ async function sendMsg(){
         length:String(dossierCtx||'').trim().length
       });
     }
-    if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
+    if(dossierCtx&&dossierCtx.length>2400)dossierCtx=dossierCtx.substring(0,2400);
     var messages=[...history];
     if(pendingAdviceCtx){
       messages.push({role:'user',content:pendingAdviceCtx});
@@ -13780,8 +13779,10 @@ async function sendMsg(){
       +(hasStrongMentionFocus?('\nGESPREKSFOCUS VOOR DEZE VRAAG: '+dn(mentionMatchDossier)+'. Interpreteer naamverwijzingen primair vanuit dit dossier, ook als opslag naar een ander dossier gaat. Als de recente gespreksbundel nieuwe feiten noemt (school, werk, ruzie, gezondheid), ga daar eerst op in en laat oude dossiersamenvatting naar de achtergrond schuiven tenzij het direct helpt.\n'):'')
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(vertelLeadingThread?('\n'+vertelLeadingThread):'')
-      +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT (vaak ouder; gebruik als ondersteuning, niet als vervanging van de gespreksbundel):\n'+dossierCtx):'')
-      +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
+      +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT (tijdlijn eerst in dit blok waar aanwezig; die gaat vóór statische samenvatting in hetzelfde blok):\n'+dossierCtx):'')
+      +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'')
+      +'\nCONTEXT - ALGEMENE ACHTERGROND (lage prioriteit: korte dossiersnippets kunnen achterlopen op de tijdlijn en het gesprek hierboven. Bij tegenstrijdigheid: tijdlijn en gespreksbundel winnen):\n'
+      +coachCtxFinal;
     if(hadAdviceCtx){
       fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder met concreet advies. Geen slotvraag hoe zij het zelf zouden aanpakken.';
     }
@@ -15236,14 +15237,15 @@ async function buildDossierContextForAI(dosName){
   if(!d)d={props:{},categories:{},summary:'',meta:{}};
   var lines=[];
   try{
-    var recent=await loadMsgs(dosKey,{limit:24,asc:false,select:'html,role',innerTimeoutMs:4000});
+    var recent=await loadMsgs(dosKey,{limit:36,asc:false,select:'html,role',innerTimeoutMs:5500});
     var userRecent=(recent||[])
       .filter(function(m){return m.role==='user';})
       .map(function(m){return (m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
       .filter(function(t){return t.length>3;})
-      .slice(0,12);
-    if(userRecent.length)lines.push('Recent uit tijdlijn (meest actueel voor dit dossier): '+userRecent.reverse().join(' | ').substring(0,1600));
+      .slice(0,15);
+    if(userRecent.length)lines.push('Recent uit tijdlijn (meest actueel; dit gaat vóór statische samenvatting): '+userRecent.reverse().join(' | ').substring(0,2200));
   }catch(_e){}
+  var hadTimelineUser=!!lines.length;
   var m=d.meta||{};
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
   var famRel=getContactRolBadgeText(m);
@@ -15254,7 +15256,13 @@ async function buildDossierContextForAI(dosName){
     if(m.photo_analysis.summary)ptxt+=' | '+String(m.photo_analysis.summary).substring(0,180);
     lines.push(ptxt);
   }
-  if(d.summary)lines.push('Samenvatting dossier (kan ouder zijn): '+d.summary.substring(0,420));
+  if(d.summary){
+    if(hadTimelineUser){
+      lines.push('Samenvatting dossier (historisch; alleen als het niet botst met de tijdlijn hierboven): '+String(d.summary).substring(0,160));
+    }else{
+      lines.push('Samenvatting dossier (kan ouder zijn): '+String(d.summary).substring(0,420));
+    }
+  }
   var catTxt='';
   if(d.categories){
     Object.values(d.categories).forEach(function(c){
