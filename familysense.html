@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 11:30">
+<meta name="fs-build" content="08-05-2026 13:36">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -4485,14 +4485,31 @@ async function saveP(name,props,count,categories,summary,meta){
   if(!S.user)return;
   sync('s');
   var startedAt=Date.now();
-  var propsToSave={...props,_v:1};
+  function parseSavePObjectLike(v){
+    if(v&&typeof v==='object'&&!Array.isArray(v))return v;
+    if(typeof v!=='string')return null;
+    var s=v.trim();
+    if(!s)return null;
+    try{
+      var parsed=JSON.parse(s);
+      return (parsed&&typeof parsed==='object'&&!Array.isArray(parsed))?parsed:null;
+    }catch(_e){
+      return null;
+    }
+  }
+  var safeProps=parseSavePObjectLike(props)||{};
+  var propsToSave={...safeProps,_v:1};
   // ALTIJD categories meegeven - nooit overschrijven met leeg object
   // Gebruik: meegegeven categories > huidige in memory > bestaande in propsToSave
-  var safeCats=categories||
-    (S.pdata[name]&&Object.keys(S.pdata[name].categories||{}).length>0?S.pdata[name].categories:null)||
-    null;
+  var argCats=parseSavePObjectLike(categories);
+  var memCats=parseSavePObjectLike(S.pdata[name]&&S.pdata[name].categories);
+  var safeCats=argCats||((memCats&&Object.keys(memCats).length>0)?memCats:null)||null;
+  if(categories!=null&&!argCats)console.warn('[FamilySense][saveP] skip invalid categories payload for',name);
   if(safeCats&&Object.keys(safeCats).length>0)propsToSave.categories=safeCats;
-  var safeMeta=meta||(S.pdata[name]&&S.pdata[name].meta)||null;
+  var argMeta=parseSavePObjectLike(meta);
+  var memMeta=parseSavePObjectLike(S.pdata[name]&&S.pdata[name].meta);
+  var safeMeta=argMeta||memMeta||null;
+  if(meta!=null&&!argMeta)console.warn('[FamilySense][saveP] skip invalid meta payload for',name);
   if(name!=='OWN Sense'){
     safeMeta=Object.assign({},safeMeta||{});
     var scopeList=Array.isArray(safeMeta.app_scope)?safeMeta.app_scope.slice():[];
