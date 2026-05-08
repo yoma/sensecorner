@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 15:08">
+<meta name="fs-build" content="08-05-2026 15:16">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1202,7 +1202,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 08-05-2026 15:08</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 08-05-2026 15:16</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -15458,7 +15458,37 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
   }
   try{
     await withTimeout(ensureP(dossier),9000,'Opslag-timeout bij dossiercontrole.',{label:'ensureP'});
-    var inserted=await withTimeout(saveMsg(dossier,'user',tekst),10000,'Opslag-timeout bij bericht bewaren.',{label:'saveMsg-user'});
+    // Guard tegen dubbele insert: hergebruik reeds gekoppelde senseMsgId voor dezelfde sessionUserMsgId+dossier
+    var inserted=null;
+    var _preMap=sessionUserMsgId?getSessAssignMap():null;
+    var _preEntry=(_preMap&&sessionUserMsgId)?_preMap[sessionUserMsgId]:null;
+    if(_preEntry&&_preEntry.dossier===dossier&&_preEntry.senseMsgId){
+      inserted={id:_preEntry.senseMsgId};
+    }
+    if(!inserted){
+      try{
+        inserted=await withTimeout(saveMsg(dossier,'user',tekst),14000,'Opslag-timeout bij bericht bewaren.',{label:'saveMsg-user'});
+      }catch(_eSm1){
+        var _emsg1=(_eSm1&&_eSm1.message)?String(_eSm1.message):String(_eSm1);
+        if(/timeout|netwerk|network|fetch|failed/i.test(_emsg1)&&S.user&&S.user.id){
+          try{
+            var _dup=await withTimeout(
+              sb.from('sense_messages').select('id').eq('user_id',S.user.id).eq('profile_name',dossier).eq('role','user').eq('html',tekst).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+              5000,
+              'Dubbel-check time-out.',
+              {label:'saveMsg-user-dedup'}
+            );
+            if(_dup&&_dup.data&&_dup.data.id)inserted={id:_dup.data.id};
+          }catch(_eDup){}
+          if(!inserted){
+            await new Promise(function(_r){setTimeout(_r,500);});
+            inserted=await withTimeout(saveMsg(dossier,'user',tekst),14000,'Opslag-timeout bij bericht bewaren.',{label:'saveMsg-user-retry'});
+          }
+        }else{
+          throw _eSm1;
+        }
+      }
+    }
     if(sessionUserMsgId&&inserted&&inserted.id){
       var map=getSessAssignMap();
       map[sessionUserMsgId]={dossier:dossier,senseMsgId:inserted.id};
