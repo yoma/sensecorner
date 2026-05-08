@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 21:44">
+<meta name="fs-build" content="08-05-2026 21:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -15270,11 +15270,18 @@ async function buildDossierContextForAI(dosName){
   try{
     var recent=await loadMsgs(dosKey,{limit:36,asc:false,select:'html,role,created_at',innerTimeoutMs:5500});
     try{
-      var debugCount=(recent||[]).filter(function(m){return m.role==='user';}).length;
-      var debugLast=(recent&&recent[0]&&recent[0].created_at)
-        ?new Date(recent[0].created_at).toLocaleString('nl-BE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
-        :'(geen)';
-      toast('DEBUG: '+dn(dosKey)+' → '+debugCount+' berichten, recent: '+debugLast);
+      var dbgRows=Array.isArray(recent)?recent:[];
+      var dbgUserCount=dbgRows.filter(function(m){return m.role==='user';}).length;
+      var dbgFirst=dbgRows[0];
+      var dbgLast='(geen)';
+      if(dbgFirst&&dbgFirst.created_at){
+        try{
+          dbgLast=new Date(dbgFirst.created_at).toLocaleString('nl-BE',{
+            day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'
+          });
+        }catch(_dE){dbgLast=String(dbgFirst.created_at);}
+      }
+      toast('DEBUG '+dn(dosKey)+': '+dbgUserCount+' user-msgs, recent: '+dbgLast);
     }catch(_e){}
     var userRecent=(recent||[])
       .filter(function(m){return m.role==='user';})
