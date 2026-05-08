@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 15:33">
+<meta name="fs-build" content="08-05-2026 15:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -6096,6 +6096,67 @@ function shouldDebugMentionMatch(){
   try{return localStorage.getItem('ds_debug_mentions')==='1';}catch(e){}
   return false;
 }
+function shouldDebugDossierContext(){
+  try{return localStorage.getItem('ds_debug_dossier_context')==='1';}catch(e){}
+  return false;
+}
+function resolveDossierContextKey(name){
+  var raw=String(name||'').trim();
+  if(!raw)return '';
+  if(raw==='OWN Sense')return 'OWN Sense';
+  if(S.pdata&&S.pdata[raw])return raw;
+  var rawLower=raw.toLowerCase();
+  var keys=Object.keys(S.pdata||{});
+  for(var i=0;i<keys.length;i++){
+    if(String(keys[i]||'').trim().toLowerCase()===rawLower)return keys[i];
+  }
+  var profiles=S.profiles||[];
+  for(var j=0;j<profiles.length;j++){
+    if(String(profiles[j]||'').trim().toLowerCase()===rawLower)return profiles[j];
+  }
+  return raw;
+}
+function findCompositeDossierForMentionName(name,exclude){
+  var target=normalizeCompositeMentionText(name);
+  if(!target||target.length<3)return '';
+  var contacts=getProfilesForVertelNameMatch();
+  for(var i=0;i<contacts.length;i++){
+    var p=contacts[i];
+    if(p===exclude)continue;
+    var parts=splitCompositeMentionParts(p);
+    if(parts.length>1&&parts.indexOf(target)>=0)return p;
+    var variants=getDossierNameVariants(p);
+    for(var vi=0;vi<variants.length;vi++){
+      var vParts=splitCompositeMentionParts(variants[vi]);
+      if(vParts.length>1&&vParts.indexOf(target)>=0)return p;
+    }
+  }
+  return '';
+}
+function buildFallbackDossierContextFromCache(name){
+  var dos=resolveDossierContextKey(name);
+  if(!dos||dos==='OWN Sense')return '';
+  var lines=[];
+  var d=(S.pdata&&S.pdata[dos])||{};
+  var summary=String(d.summary||'').trim();
+  if(summary)lines.push('Samenvatting '+dn(dos)+': '+summary.substring(0,500));
+  var catTxt='';
+  if(d.categories){
+    Object.values(d.categories).forEach(function(c){
+      Object.values(c||{}).forEach(function(v){if((v||'').trim())catTxt+=' '+v.trim();});
+    });
+  }
+  if(catTxt.trim())lines.push('Ingevulde dossiervelden: '+catTxt.trim().substring(0,700));
+  try{
+    var cache=(S._ctxMsgs&&Array.isArray(S._ctxMsgs[dos]))?S._ctxMsgs[dos]:[];
+    var recent=(cache||[])
+      .map(function(m){return String((m&&m.html)||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
+      .filter(function(t){return t.length>3;})
+      .slice(-6);
+    if(recent.length)lines.push('Recente kernpunten: '+recent.join(' | ').substring(0,1400));
+  }catch(_e){}
+  return lines.join('\n');
+}
 function findExistingDossierForMention(token){
   if(!token)return null;
   var tokens=buildMentionTokenVariants(token);
@@ -12156,6 +12217,45 @@ async function sendMsg(){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
     var dossierCtx=await withTimeout(buildDossierContextForAI(aiContextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:aiContextDossier||null}});
+    var dossierCtxSource='primary';
+    if(hasStrongMentionFocus&&!String(dossierCtx||'').trim()){
+      var fallbackCandidates=[];
+      var seenFallback={};
+      function addFallbackCandidate(name){
+        var key=resolveDossierContextKey(name);
+        if(!key||key==='OWN Sense'||seenFallback[key])return;
+        seenFallback[key]=1;
+        fallbackCandidates.push(key);
+      }
+      addFallbackCandidate(mentionMatchDossier);
+      addFallbackCandidate(aiContextDossier);
+      addFallbackCandidate(contextDossier);
+      var mentionName=String(dn(mentionMatchDossier)||'').trim();
+      addFallbackCandidate(findCompositeDossierForMentionName(mentionName,mentionMatchDossier));
+      for(var fci=0;fci<fallbackCandidates.length;fci++){
+        var candidate=fallbackCandidates[fci];
+        var candidateCtx=await withTimeout(buildDossierContextForAI(candidate),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI-fallback',meta:{profile:candidate||null}});
+        if(!String(candidateCtx||'').trim()){
+          candidateCtx=buildFallbackDossierContextFromCache(candidate);
+          if(String(candidateCtx||'').trim())dossierCtxSource='fallback-cache:'+candidate;
+        }else{
+          dossierCtxSource='fallback-dossier:'+candidate;
+        }
+        if(String(candidateCtx||'').trim()){
+          dossierCtx=candidateCtx;
+          aiContextDossier=candidate;
+          break;
+        }
+      }
+    }
+    if(shouldDebugDossierContext()){
+      console.debug('[dossier-context]',{
+        mention:mentionMatchDossier||null,
+        selected:aiContextDossier||null,
+        source:dossierCtxSource,
+        length:String(dossierCtx||'').trim().length
+      });
+    }
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history];
     if(pendingAdviceCtx){
@@ -13621,20 +13721,21 @@ function buildContactNamesLine(){
 }
 
 async function buildDossierContextForAI(dosName){
-  if(!dosName||!S.user||dosName==='OWN Sense')return'';
-  var d=S.pdata[dosName]||{props:{},categories:{},summary:'',meta:{}};
+  var dosKey=resolveDossierContextKey(dosName);
+  if(!dosKey||!S.user||dosKey==='OWN Sense')return'';
+  var d=S.pdata[dosKey]||{props:{},categories:{},summary:'',meta:{}};
   var lines=[];
   var m=d.meta||{};
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
   var famRel=getContactRolBadgeText(m);
   var mLine=[m.roepnaam,m.display_name,mAge?('leeftijd '+mAge):'',m.birthdate,m.city,famRel?('rol in jouw gezin: '+famRel):''].filter(Boolean).join(', ');
-  if(mLine)lines.push('Profielkaart '+dn(dosName)+': '+mLine.substring(0,180));
+  if(mLine)lines.push('Profielkaart '+dn(dosKey)+': '+mLine.substring(0,180));
   if(m.photo_analysis){
     var ptxt='Foto-analyse: mood '+(m.photo_analysis.mood||'')+', openheid '+(m.photo_analysis.openheid||0)+'%, glimlach '+(m.photo_analysis.glimlach||0)+'%, energie '+(m.photo_analysis.energie||0)+'%, verzorging '+(m.photo_analysis.verzorging||0)+'%, benaderbaarheid '+(m.photo_analysis.benaderbaarheid||0)+'%';
     if(m.photo_analysis.summary)ptxt+=' | '+String(m.photo_analysis.summary).substring(0,180);
     lines.push(ptxt);
   }
-  if(d.summary)lines.push('Samenvatting '+dn(dosName)+': '+d.summary.substring(0,500));
+  if(d.summary)lines.push('Samenvatting '+dn(dosKey)+': '+d.summary.substring(0,500));
   var catTxt='';
   if(d.categories){
     Object.values(d.categories).forEach(function(c){
@@ -13644,7 +13745,7 @@ async function buildDossierContextForAI(dosName){
   if(catTxt.trim())lines.push('Ingevulde dossiervelden: '+catTxt.trim().substring(0,700));
   try{
     // Context policy: recente details + bestaande samenvatting/velden.
-    var recent=await loadMsgs(dosName,{limit:20,asc:false,select:'html,role',innerTimeoutMs:4000});
+    var recent=await loadMsgs(dosKey,{limit:20,asc:false,select:'html,role',innerTimeoutMs:4000});
     var userRecent=(recent||[])
       .filter(function(m){return m.role==='user';})
       .map(function(m){return (m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
@@ -13652,6 +13753,10 @@ async function buildDossierContextForAI(dosName){
       .slice(0,10);
     if(userRecent.length)lines.push('Recente kernpunten: '+userRecent.reverse().join(' | ').substring(0,1400));
   }catch(e){}
+  if(!lines.length){
+    var cacheCtx=buildFallbackDossierContextFromCache(dosKey);
+    if(cacheCtx)lines.push(cacheCtx);
+  }
   return lines.join('\n');
 }
 
