@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="07-05-2026 22:24">
+<meta name="os-build" content="08-05-2026 11:30">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1292,6 +1292,33 @@ function activateTab(tabId){
 function safeJsonParse(raw){
   try{return JSON.parse(raw);}catch(e){return null;}
 }
+var _senseiAuthLock=Promise.resolve();
+function runSenseiAuthSerialized(fn){
+  var run=_senseiAuthLock.then(function(){return fn();});
+  _senseiAuthLock=run.then(
+    function(){return null;},
+    function(){return null;}
+  );
+  return run;
+}
+var _authTokenCache={token:null,expiresAt:0};
+function _setAuthTokenFromSession(session){
+  if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
+  var exp=(session.expires_at?session.expires_at*1000:0)||0;
+  _authTokenCache={token:String(session.access_token),expiresAt:exp?exp-60000:0};
+}
+async function getAccessTokenFresh(forceRefresh){
+  var client=initSupabase();
+  if(!client)throw new Error('Supabase niet beschikbaar.');
+  var now=Date.now();
+  if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
+    return _authTokenCache.token;
+  }
+  var sess=await withTimeout(client.auth.getSession(),25000,'Sessie laden lukt nu niet. Controleer je netwerk en probeer opnieuw.');
+  var s=sess&&sess.data&&sess.data.session;
+  _setAuthTokenFromSession(s);
+  return s&&s.access_token?String(s.access_token):'';
+}
 function normTxt(v){
   return String(v||'').toLowerCase().replace(/[^a-z0-9à-ÿ]+/g,' ').trim();
 }
@@ -2556,11 +2583,36 @@ function initSupabase(){
     if(window.__senseLpSupabase){
       sb=window.__senseLpSupabase;
     }else if(window.supabase&&window.supabase.createClient&&SB_URL&&SB_ANON){
-      sb=window.__senseLpSupabase=window.supabase.createClient(SB_URL,SB_ANON);
+      sb=window.__senseLpSupabase=window.supabase.createClient(SB_URL,SB_ANON,{
+        auth:{
+          persistSession:true,
+          autoRefreshToken:true,
+          detectSessionInUrl:true,
+          flowType:'pkce',
+          storageKey:'sensecorner-auth-v1'
+        }
+      });
     }
   }catch(e){}
   return sb;
 }
+var _authClientForEvents=initSupabase();
+if(_authClientForEvents&&_authClientForEvents.auth&&_authClientForEvents.auth.onAuthStateChange){
+  _authClientForEvents.auth.onAuthStateChange(function(ev,ses){
+    if(ev==='SIGNED_OUT'||!ses){
+      _setAuthTokenFromSession(null);
+      return;
+    }
+    if(ev==='TOKEN_REFRESHED'||ev==='SIGNED_IN'){
+      _setAuthTokenFromSession(ses);
+    }
+  });
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'){
+    try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
+  }
+});
 
 function stripHtml(s){
   return String(s||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -3531,24 +3583,7 @@ function aiShortErr(msg,max){
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs,opts){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
-  var sess=null;
-  try{
-    sess=await withTimeout(
-      client.auth.getSession(),
-      25000,
-      null,
-      {label:'ownsense-auth-getSession'}
-    );
-  }catch(_s1){
-    await new Promise(function(resolve){setTimeout(resolve,1200);});
-    sess=await withTimeout(
-      client.auth.getSession(),
-      25000,
-      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.',
-      {label:'ownsense-auth-getSession-retry'}
-    );
-  }
-  var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
+  var token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
   if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var timeoutMs=typeof customTimeoutMs==='number'&&customTimeoutMs>0?customTimeoutMs:90000;
   var controller=new AbortController();
@@ -3565,6 +3600,22 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}] }),
       signal:controller.signal
     });
+    if(r.status===401){
+      try{
+        var freshToken=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(true);});
+        if(freshToken){
+          r=await fetch(SURL+'/functions/v1/sensei-chat',{
+            method:'POST',
+            headers:{
+              'Content-Type':'application/json',
+              'Authorization':'Bearer '+freshToken
+            },
+            body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}] }),
+            signal:controller.signal
+          });
+        }
+      }catch(_re){}
+    }
     clearTimeout(outerTimer);
     outerTimer=null;
     var readMs=Math.min(120000,Math.max(10000,timeoutMs-4000));

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="08-05-2026 09:04">
+<meta name="ds-build" content="08-05-2026 11:30">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -438,7 +438,7 @@ a:focus-visible,
 /* Typing indicator */
 .typing-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:min(100%,340px)}
 .typing{display:flex;align-items:center;gap:6px;padding:14px 16px;background:var(--rl);border:1px solid #FFD5D5;border-radius:16px;width:fit-content}
-.typing-hint{font-size:12px;font-weight:650;color:#7a4d4b;line-height:1.4;padding:0 4px 2px}
+.typing-hint{font-size:12px;font-weight:650;color:var(--r);line-height:1.4;padding:0 4px 2px}
 .typing span{width:8px;height:8px;border-radius:4px;background:var(--r);animation:bnc .9s infinite}
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 09:04</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 11:30</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -1458,7 +1458,15 @@ try{
   if(window.__senseLpSupabase)
     sb=window.__senseLpSupabase;
   else if(window.supabase&&window.supabase.createClient)
-    sb=window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY);
+    sb=window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY,{
+      auth:{
+        persistSession:true,
+        autoRefreshToken:true,
+        detectSessionInUrl:true,
+        flowType:'pkce',
+        storageKey:'sensecorner-auth-v1'
+      }
+    });
 }catch(e){
   console.warn('Supabase client init:',e);
 }
@@ -2779,6 +2787,22 @@ function runSenseiAuthSerialized(fn){
   );
   return run;
 }
+var _authTokenCache={token:null,expiresAt:0};
+function _setAuthTokenFromSession(session){
+  if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
+  var exp=(session.expires_at?session.expires_at*1000:0)||0;
+  _authTokenCache={token:String(session.access_token),expiresAt:exp?exp-60000:0};
+}
+async function getAccessTokenFresh(forceRefresh){
+  var now=Date.now();
+  if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
+    return _authTokenCache.token;
+  }
+  var sess=await withTimeout(sb.auth.getSession(),25000,'Sessie laden lukt nu niet. Controleer je netwerk en probeer opnieuw.');
+  var s=sess&&sess.data&&sess.data.session;
+  _setAuthTokenFromSession(s);
+  return s&&s.access_token?String(s.access_token):'';
+}
 function formatSavePDiag(diag){
   if(!diag)return'';
   var ms=diag.totalMs!=null?String(diag.totalMs)+'ms':'?';
@@ -3355,7 +3379,7 @@ function openSaveModeModal(){
   var opts=document.getElementById('saveModeModalOpts');
   if(!modal||!opts)return;
   var forced=getForcedDossier();
-  var all=getDateSenseContactNames();
+  var all=sortDossiersByVertelPriority(getDateSenseContactNames());
   var html='';
   html+='<button class="save-modal-opt" onclick="setSaveModeAskAlways()"><span class="save-modal-dot" style="background:'+(!forced?'#BA5654':'#bbb')+'"></span><span><strong>Altijd vragen</strong><br><span style="font-size:12px;color:#666">Na elk AI-antwoord kies jij zelf het dossier.</span></span></button>';
   html+='<div style="font-size:12px;color:#8b9199;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 8px">Altijd opslaan bij</div>';
@@ -3389,6 +3413,40 @@ function setSaveModeForced(dossier){
   closeSaveModeModal();
   toast('✅ Altijd opslaan bij '+dn(dossier));
 }
+function sortDossiersByVertelPriority(list){
+  var all=Array.isArray(list)?list.slice():[];
+  var preferred=[];
+  function add(name){
+    var n=String(name||'').trim();
+    if(!n||n==='OWN Sense')return;
+    if(preferred.indexOf(n)>=0)return;
+    preferred.push(n);
+  }
+  add(S.vertelGesprekDossier);
+  add(S.vertelFrom);
+  try{add(getFocusDossier());}catch(_e){}
+  try{
+    var lastUser='';
+    var msgs=S.vertelMsgs||[];
+    for(var mi=msgs.length-1;mi>=0;mi--){
+      if(msgs[mi]&&msgs[mi].role==='user'){
+        lastUser=String(msgs[mi].html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        break;
+      }
+    }
+    if(lastUser){
+      var mt=buildVertelDossierMatchText(lastUser);
+      add(pickBestDossierForVertelText(mt));
+    }
+  }catch(_e2){}
+  return all.sort(function(a,b){
+    var ai=preferred.indexOf(a),bi=preferred.indexOf(b);
+    if(ai===-1&&bi===-1)return 0;
+    if(ai===-1)return 1;
+    if(bi===-1)return -1;
+    return ai-bi;
+  });
+}
 
 function openDossierPickModal(title,sub,type,payload){
   var modal=document.getElementById('dossierPickModal');
@@ -3405,6 +3463,7 @@ function openDossierPickModal(title,sub,type,payload){
   }else{
     all=['OWN Sense'].concat(getDateSenseContactNames());
   }
+  all=sortDossiersByVertelPriority(all);
   window._modalPickDossiers=all.slice();
   var html='';
   if(type==='save'){
@@ -3882,6 +3941,26 @@ function redirectToSenseCornerAuth(){
   var url='sensecorner.html?returnTo='+encodeURIComponent(target);
   window.location.href=url;
 }
+function isAuthSessionErrorMessage(msg){
+  var t=String(msg||'').toLowerCase();
+  if(!t)return false;
+  return t.indexOf('sessie laden')>=0
+    || t.indexOf('sessie is verlopen')>=0
+    || t.indexOf('geen actieve sessie')>=0
+    || t.indexOf('log opnieuw in via sensecorner')>=0;
+}
+function buildVertelAuthRecoveryHtml(errMsg){
+  var safeMsg=escHTML(String(errMsg||'Sessie laden lukt nu niet.'));
+  return ''
+    +'<div class="bbl-ai mobile-soft-card">'
+    +'<div class="sndr">DATESENSE</div>'
+    +'<div style="margin-top:6px;line-height:1.55">Je sessie kon niet worden geladen. Die is mogelijk verlopen. Log opnieuw in via SenseCorner en stuur je bericht daarna opnieuw.</div>'
+    +'<div style="margin-top:8px;font-size:12px;color:#666">'+safeMsg+'</div>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button type="button" class="coach-save-other" onclick="if(typeof redirectToSenseCornerAuth===\'function\'){redirectToSenseCornerAuth();}else{window.location.href=\'sensecorner.html\';}">Opnieuw inloggen via SenseCorner</button>'
+    +'</div>'
+    +'</div>';
+}
 function showFriendlyAuthGate(reason){
   var mc=document.getElementById('mainContent');
   if(!mc){redirectToSenseCornerAuth();return;}
@@ -3987,6 +4066,7 @@ async function init(){
   sb.auth.onAuthStateChange(async(ev,ses)=>{
     if(ev==='SIGNED_IN'&&ses){
       S.user=ses.user;
+      _setAuthTokenFromSession(ses||null);
       if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
@@ -3994,6 +4074,7 @@ async function init(){
       goScreen('home');
       applySenseDeepLinkFromUrl();
     } else if(ev==='SIGNED_OUT'){
+      _setAuthTokenFromSession(null);
       S.apiKey='';
       applySignedOutClientState();
       redirectToLandingAfterSignOut();
@@ -4001,6 +4082,9 @@ async function init(){
   });
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState==='hidden')flushPendingAutosaves();
+    if(document.visibilityState==='visible'){
+      try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
+    }
   });
   document.addEventListener('click',function(ev){
     var m=document.getElementById('helpMenu');
@@ -5664,6 +5748,79 @@ function dossierLabelWithScope(name){
   var lbls=getDossierScopeLabelsForMatch(name);
   if(!lbls||!lbls.length)return base;
   return base+' ('+lbls[0]+')';
+}
+function buildSharedCrossAppCoreContext(currentScope){
+  var scope=String(currentScope||'').toLowerCase();
+  var lines=[];
+  var arr=(S.profiles||[]).filter(function(p){
+    if(!p||p==='OWN Sense')return false;
+    var st=getDossierLifecycle(p);
+    return st==='active'||st==='on_hold';
+  });
+  var preferred=[];
+  function addPreferred(name){
+    var n=String(name||'').trim();
+    if(!n||n==='OWN Sense')return;
+    if(preferred.indexOf(n)>=0)return;
+    preferred.push(n);
+  }
+  addPreferred(S.vertelGesprekDossier);
+  addPreferred(S.vertelFrom);
+  try{addPreferred(getFocusDossier());}catch(_e){}
+  try{
+    var lastUser='';
+    var msgs=S.vertelMsgs||[];
+    for(var mi=msgs.length-1;mi>=0;mi--){
+      if(msgs[mi]&&msgs[mi].role==='user'){
+        lastUser=String(msgs[mi].html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        break;
+      }
+    }
+    if(lastUser){
+      var mt=buildVertelDossierMatchText(lastUser);
+      addPreferred(pickBestDossierForVertelText(mt));
+    }
+  }catch(_e2){}
+  arr=arr.slice().sort(function(a,b){
+    var ai=preferred.indexOf(a);
+    var bi=preferred.indexOf(b);
+    if(ai===-1&&bi===-1)return 0;
+    if(ai===-1)return 1;
+    if(bi===-1)return -1;
+    return ai-bi;
+  });
+  arr.forEach(function(p){
+    var d=(S.pdata&&S.pdata[p])||{};
+    var m=d.meta||{};
+    var scopes=normalizeAppScopeList(m);
+    var labels=getDossierScopeLabelsForMatch(p);
+    var isCross=scopes.indexOf(scope)===-1||scopes.length>1;
+    if(!isCross)return;
+    var bits=[];
+    if(String(m.dating_stage||'').trim())bits.push('datingfase: '+String(m.dating_stage).trim());
+    if(String(m.relationship_type||'').trim())bits.push('relatie: '+String(m.relationship_type).trim());
+    if(String(m.intent||'').trim())bits.push('intentie: '+String(m.intent).trim());
+    var fam='';
+    try{if(typeof getContactRolBadgeText==='function')fam=String(getContactRolBadgeText(m)||'').trim();}catch(_e){}
+    if(fam)bits.push('familierol: '+fam);
+    var summary=String(d.summary||'').trim();
+    if(summary)bits.push('kern: '+summary.substring(0,120));
+    var rec=[];
+    try{
+      var cache=(S._ctxMsgs&&Array.isArray(S._ctxMsgs[p]))?S._ctxMsgs[p]:[];
+      for(var i=cache.length-1;i>=0&&rec.length<2;i--){
+        var row=cache[i]||{};
+        if(String(row.role||'')!=='user')continue;
+        var t=String(row.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        if(t.length>6)rec.push(t.substring(0,110));
+      }
+    }catch(_e){}
+    if(rec.length)bits.push('recent: '+rec.join(' / '));
+    if(!bits.length)return;
+    lines.push('- '+dn(p)+' ('+labels.join('/')+'): '+bits.join(' | '));
+  });
+  if(!lines.length)return'';
+  return 'GEDEELDE KERNCONTEXT UIT ANDERE APPS:\n'+lines.slice(0,8).join('\n');
 }
 function findMentionCandidates(token){
   if(!token)return [];
@@ -7930,8 +8087,8 @@ function rSenses(el){
   var csRaw=allContacts.filter(function(p){return getDossierLifecycle(p)==='active';});
   var archivedRaw=allContacts.filter(function(p){var s=getDossierLifecycle(p);return s==='on_hold'||s==='closed';});
   var sortM=getSensesSortMode();
-  var cs=sortContactsForSenses(csRaw,sortM);
-  var archived=sortContactsForSenses(archivedRaw,sortM);
+  var cs=sortDossiersByVertelPriority(sortContactsForSenses(csRaw,sortM));
+  var archived=sortDossiersByVertelPriority(sortContactsForSenses(archivedRaw,sortM));
   var usageMode=getUsageMode();
   var focusName=getFocusDossier();
   if(typeof S.compareMode!=='boolean')S.compareMode=false;
@@ -8086,7 +8243,7 @@ function adviceHubSafeId(raw){
   return out||'item';
 }
 function rAdviceHub(el){
-  var contacts=getDateSenseContactNames().filter(function(n){return n&&n!=='OWN Sense';});
+  var contacts=sortDossiersByVertelPriority(getDateSenseContactNames().filter(function(n){return n&&n!=='OWN Sense';}));
   var st=getAdviceHubState();
   var depth=(S&&S.adviceHubDepthMode)||'standard';
   function depthBtn(id,label){
@@ -11039,24 +11196,17 @@ async function getTodaySenseiSearchCount(userId){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
-  var sess=null;
+  var token='';
   try{
-    sess=await withTimeout(
-      sb.auth.getSession(),
-      10000,
-      null
-    );
-  }catch(_s1){
-    await new Promise(function(resolve){setTimeout(resolve,500);});
-    sess=await withTimeout(
-      sb.auth.getSession(),
-      8000,
-      'Sessie laden lukt nu niet. We probeerden al opnieuw. Controleer je netwerk en probeer opnieuw.'
-    );
+    token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
+  }catch(e){
+    throw e;
   }
-  var token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
-  var sessionUserId=sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.id?String(sess.data.session.user.id):'';
-  if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
+  var sessionUserId=(S&&S.user&&S.user.id)?String(S.user.id):'';
+  if(!token){
+    console.warn('[AUTH][DATESENSE][CALL_API][NO_TOKEN]');
+    throw new Error('Je sessie is verlopen of ongeldig. Log opnieuw in via SenseCorner en probeer je bericht opnieuw.');
+  }
   var controller=new AbortController();
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
@@ -11095,6 +11245,22 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
       body:JSON.stringify(payload),
       signal:controller.signal
     });
+    if(res.status===401){
+      try{
+        var freshToken=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(true);});
+        if(freshToken){
+          res=await fetch(SURL+'/functions/v1/sensei-chat',{
+            method:'POST',
+            headers:{
+              'Content-Type':'application/json',
+              'Authorization':'Bearer '+freshToken
+            },
+            body:JSON.stringify(payload),
+            signal:controller.signal
+          });
+        }
+      }catch(_re){}
+    }
     clearTimeout(timer);
     timer=null;
     // Lees response-body met ruimere marge dan vroeger (max 25s), anders leek de spinner "vast" te hangen bij trage edge responses.
@@ -11132,6 +11298,10 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
 }
 
 const AUTO_ACCEPT_THRESHOLD=0.85;
+
+function safeJsonParse(raw){
+  try{return JSON.parse(raw);}catch(e){return null;}
+}
 
 function _wordOverlapScore(a,b){
   var wa=String(a||'').toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function(x){return x.length>2;});
@@ -12554,9 +12724,16 @@ async function sendMsg(){
     updateSessiePreview(S.currentSessionId,userFacingTxt);
 
   }catch(x){
+    var errMsg=String((x&&x.message)||x||'Onbekende fout.');
+    if(isAuthSessionErrorMessage(errMsg)){
+      console.warn('[AUTH][DATESENSE][VERTEL_RECOVERY]',x);
+      S.vertelOfferHerstuur=false;
+      addMsg('ai',buildVertelAuthRecoveryHtml(errMsg));
+      return;
+    }
     var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
     S.vertelOfferHerstuur=true;
-    addMsg('ai','Er ging iets mis: '+x.message+retryTip);
+    addMsg('ai','Er ging iets mis: '+errMsg+retryTip);
   }finally{
     hideT();
     S.busy=false;
@@ -13805,6 +13982,11 @@ function buildCoachContext(){
         lines.push(line);
       }
     });
+    lines.push('');
+  }
+  var sharedCore=buildSharedCrossAppCoreContext('ds');
+  if(sharedCore){
+    lines.push(sharedCore);
     lines.push('');
   }
   var own=S.pdata['OWN Sense']||{props:{},categories:{},meta:{}};
