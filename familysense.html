@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 14:38">
+<meta name="fs-build" content="08-05-2026 15:01">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1011,7 +1011,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 08-05-2026 14:38</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">FS BUILD 08-05-2026 15:01</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -12049,10 +12049,15 @@ async function sendMsg(){
   var ambiguousNameCtx=null;
   // FamilySense: OWN Sense is geen familiedossier voor Vertel-tijdlijn; lege placeholder niet laten winnen vóór naam-match.
   if(!forcedDossier&&voorgesteldDossier==='OWN Sense')voorgesteldDossier=null;
+  var matchTxt=buildVertelDossierMatchText(userFacingTxt);
+  var mentionMatchDossier=pickBestDossierForVertelText(matchTxt);
   if(!voorgesteldDossier){
-    var matchTxt=buildVertelDossierMatchText(userFacingTxt);
-    voorgesteldDossier=pickBestDossierForVertelText(matchTxt);
+    voorgesteldDossier=mentionMatchDossier;
     ambiguousNameCtx=detectCrossAppNameAmbiguity(matchTxt);
+  }
+  var contextDossier=voorgesteldDossier||null;
+  if(!forcedDossier&&mentionMatchDossier&&mentionMatchDossier!=='OWN Sense'){
+    contextDossier=mentionMatchDossier;
   }
   if(!voorgesteldDossier&&!forcedDossier){
     var fdFocus=String(getFocusDossier()||'').trim();
@@ -12100,14 +12105,14 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
-    var dossierCtx=await withTimeout(buildDossierContextForAI(voorgesteldDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:voorgesteldDossier||null}});
+    var dossierCtx=await withTimeout(buildDossierContextForAI(contextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:contextDossier||null}});
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history];
     if(pendingAdviceCtx){
       messages.push({role:'user',content:pendingAdviceCtx});
     }
     messages.push({role:'user',content:txtForAI});
-    var gesprekFocus=forcedDossier||S.vertelGesprekDossier||S.vertelFrom||'';
+    var gesprekFocus=forcedDossier||contextDossier||S.vertelGesprekDossier||S.vertelFrom||'';
     if(!forcedDossier&&gesprekFocus==='OWN Sense')gesprekFocus='';
     if(!gesprekFocus)gesprekFocus=voorgesteldDossier||'';
     var opslagVastNote='';
