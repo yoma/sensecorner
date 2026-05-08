@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="08-05-2026 13:36">
+<meta name="ds-build" content="08-05-2026 14:38">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 11:30</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 14:38</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -5843,13 +5843,16 @@ function findMentionCandidates(token){
   if(!token)return [];
   var t=String(token).trim();
   if(t.length<3)return [];
+  var tokens=buildMentionTokenVariants(t);
   var out=[];
   getProfilesForVertelNameMatch().forEach(function(p){
     var matched=false;
     getDossierNameVariants(p).forEach(function(v){
       if(matched||v.length<3)return;
-      if(t.toLowerCase()===v.toLowerCase())matched=true;
-      else if(isLikelySamePersonName(t,v))matched=true;
+      tokens.forEach(function(tv){
+        if(matched)return;
+        if(scoreMentionTokenVsVariant(tv,v)>=2)matched=true;
+      });
     });
     if(matched&&out.indexOf(p)<0)out.push(p);
   });
@@ -5934,16 +5937,90 @@ function getDossierNameVariants(p){
   add(pm.full_name);
   return out;
 }
+function normalizeCompositeMentionText(s){
+  return String(s||'')
+    .toLowerCase()
+    .replace(/\s*(?:\+|&)\s*/g,' en ')
+    .replace(/\s*(?:\/|\\|,|\|)\s*/g,' en ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function splitCompositeMentionParts(s){
+  var norm=normalizeCompositeMentionText(s);
+  if(!norm)return [];
+  return norm.split(/\s+en\s+/i).map(function(p){return p.trim();}).filter(function(p){return p.length>=3;});
+}
+function getMentionNameWordParts(s){
+  var norm=normalizeCompositeMentionText(s);
+  if(!norm)return [];
+  var skip={en:1,de:1,den:1,der:1,van:1,von:1,da:1,di:1,du:1,la:1,le:1,het:1};
+  return norm
+    .split(/[\s\-']+/)
+    .map(function(p){return p.trim();})
+    .filter(function(p){return p.length>=3&&!skip[p];});
+}
+function buildMentionTokenVariants(token){
+  var out=[];
+  var seen={};
+  function add(v){
+    v=String(v||'').trim();
+    if(v.length<3)return;
+    var k=v.toLowerCase();
+    if(seen[k])return;
+    seen[k]=1;
+    out.push(v);
+  }
+  add(token);
+  var norm=normalizeCompositeMentionText(token);
+  if(norm)add(norm);
+  splitCompositeMentionParts(token).forEach(add);
+  return out;
+}
+function scoreMentionTokenVsVariant(token,variant){
+  var t=String(token||'').trim();
+  var v=String(variant||'').trim();
+  if(!t||!v)return 0;
+  var tl=t.toLowerCase();
+  var vl=v.toLowerCase();
+  if(tl===vl)return 5;
+  var tn=normalizeCompositeMentionText(t);
+  var vn=normalizeCompositeMentionText(v);
+  if(tn&&vn&&tn===vn)return 4;
+  if(isLikelySamePersonName(t,v))return 3;
+  var tParts=splitCompositeMentionParts(t);
+  var vParts=splitCompositeMentionParts(v);
+  var tWords=getMentionNameWordParts(t);
+  var vWords=getMentionNameWordParts(v);
+  if(tWords.length===1&&vWords.length>1&&vWords.indexOf(tWords[0])>=0)return 2;
+  if(vWords.length===1&&tWords.length>1&&tWords.indexOf(vWords[0])>=0)return 2;
+  if(tParts.length===1&&vParts.length>1&&vParts.indexOf(tParts[0])>=0)return 2;
+  if(vParts.length===1&&tParts.length>1&&tParts.indexOf(vParts[0])>=0)return 2;
+  if(tParts.length&&vParts.length){
+    var overlap=0;
+    tParts.forEach(function(tp){if(vParts.indexOf(tp)>=0)overlap++;});
+    if(overlap>=Math.min(tParts.length,vParts.length))return 2;
+  }
+  return 0;
+}
+function shouldDebugMentionMatch(){
+  try{return localStorage.getItem('ds_debug_mentions')==='1';}catch(e){}
+  return false;
+}
 function findExistingDossierForMention(token){
   if(!token)return null;
-  var t=String(token).trim();
-  if(t.length<3)return null;
-  var found=null;
+  var tokens=buildMentionTokenVariants(token);
+  if(!tokens.length)return null;
+  var found=null,bestScore=0;
   getProfilesForVertelNameMatch().forEach(function(p){
     getDossierNameVariants(p).forEach(function(v){
       if(v.length<3)return;
-      if(t.toLowerCase()===v.toLowerCase())found=p;
-      else if(!found&&isLikelySamePersonName(t,v))found=p;
+      tokens.forEach(function(tv){
+        var score=scoreMentionTokenVsVariant(tv,v);
+        if(score>bestScore){
+          bestScore=score;
+          found=p;
+        }
+      });
     });
   });
   return found;
@@ -5965,31 +6042,70 @@ function buildVertelDossierMatchText(userTxt){
 function pickBestDossierForVertelText(matchText){
   var txt=String(matchText||'');
   if(!txt)return null;
+  var txtNorm=normalizeCompositeMentionText(txt);
   var contacts=getProfilesForVertelNameMatch();
-  var bestM=null,bestC=0;
+  var bestM=null,bestC=0,bestReason='';
   contacts.forEach(function(p){
     var variants=getDossierNameVariants(p);
     var cnt=0;
+    var reason='';
     variants.forEach(function(n){
       if(!n||n.length<2)return;
       try{
-        cnt+=(txt.match(new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi'))||[]).length;
+        var exactHits=(txt.match(new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi'))||[]).length;
+        if(exactHits&&!reason)reason='exact:'+n;
+        cnt+=exactHits;
       }catch(e){}
+      var nNorm=normalizeCompositeMentionText(n);
+      if(nNorm&&nNorm!==String(n).toLowerCase()){
+        try{
+          var normHits=(txtNorm.match(new RegExp('\\b'+nNorm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi'))||[]).length;
+          if(normHits&&!reason)reason='norm:'+nNorm;
+          cnt+=normHits;
+        }catch(e){}
+      }
+      var nParts=splitCompositeMentionParts(n);
+      if(nParts.length>1){
+        var hasAll=true;
+        for(var pi=0;pi<nParts.length;pi++){
+          var part=nParts[pi];
+          if(!new RegExp('\\b'+part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(txtNorm)){
+            hasAll=false;
+            break;
+          }
+        }
+        if(hasAll){
+          cnt+=1;
+          if(!reason)reason='parts:'+nParts.join('+');
+        }
+      }
     });
     if(cnt===0){
-      var words=txt.match(/\b[A-Za-zÀ-ÖØ-öø-ÿ]{4,}\b/g)||[];
+      var words=txtNorm.match(/\b[a-zà-öø-ÿ]{4,}\b/gi)||[];
       var seen={};
       words.forEach(function(w){
         var lw=w.toLowerCase();
         if(seen[lw])return;
         seen[lw]=1;
         variants.forEach(function(v){
-          if(v.length>=4&&isLikelySamePersonName(w,v))cnt+=1;
+          var score=scoreMentionTokenVsVariant(w,v);
+          if(score>=2){
+            cnt+=1;
+            if(!reason)reason='token:'+w+'~'+v;
+          }
         });
       });
     }
-    if(cnt>bestC){bestC=cnt;bestM=p;}
+    if(cnt>bestC){bestC=cnt;bestM=p;bestReason=reason;}
   });
+  if(shouldDebugMentionMatch()){
+    console.debug('[mention-match]',{
+      input:txt.substring(0,140),
+      best:bestM||null,
+      score:bestC,
+      reason:bestReason||''
+    });
+  }
   return bestM&&bestC>=1?bestM:null;
 }
 function isDossierNotificationsEnabled(name){
