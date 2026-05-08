@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 22:03">
+<meta name="fs-build" content="08-05-2026 22:09">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -6549,11 +6549,11 @@ function buildSharedCrossAppCoreContext(currentScope){
     }
     var rec=[];
     if(recSrc){
-      for(var i=recSrc.length-1;i>=0&&rec.length<2;i--){
+      for(var i=recSrc.length-1;i>=0&&rec.length<3;i--){
         var row=recSrc[i]||{};
         if(it.source==='pdata'&&row.role!=null&&String(row.role)!=='user')continue;
         var t=String(row.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-        if(t.length>6)rec.push(t.substring(0,110));
+        if(t.length>6)rec.push(t.substring(0,250));
       }
     }
     if(rec.length)bits.push('recent: '+rec.join(' / '));
@@ -15272,26 +15272,23 @@ async function buildDossierContextForAI(dosName){
   var lines=[];
   try{
     var recent=await loadMsgs(dosKey,{limit:36,asc:false,select:'html,role,created_at',innerTimeoutMs:5500});
-    try{
-      var dbgRows=Array.isArray(recent)?recent:[];
-      var dbgUserCount=dbgRows.filter(function(m){return m.role==='user';}).length;
-      var dbgFirst=dbgRows[0];
-      var dbgLast='(geen)';
-      if(dbgFirst&&dbgFirst.created_at){
-        try{
-          dbgLast=new Date(dbgFirst.created_at).toLocaleString('nl-BE',{
-            day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'
-          });
-        }catch(_dE){dbgLast=String(dbgFirst.created_at);}
-      }
-      alert('DEBUG '+dn(dosKey)+': '+dbgUserCount+' user-msgs, recent: '+dbgLast);
-    }catch(_e){}
     var userRecent=(recent||[])
       .filter(function(m){return m.role==='user';})
       .map(function(m){return (m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();})
       .filter(function(t){return t.length>3;})
       .slice(0,15);
-    if(userRecent.length)lines.push('Recent uit tijdlijn (meest actueel; dit gaat vóór statische samenvatting): '+userRecent.reverse().join(' | ').substring(0,2200));
+    if(userRecent.length){
+      var joined=userRecent.reverse().join(' | ');
+      var maxChars=2200;
+      var trimmed=joined.length>maxChars
+        ?joined.substring(joined.length-maxChars)
+        :joined;
+      var laatste=userRecent[userRecent.length-1]||'';
+      lines.push('MEEST RECENTE bericht uit tijdlijn (geef hieraan voorrang): '
+        +String(laatste).substring(0,400));
+      lines.push('Recent uit tijdlijn (chronologisch, meest actueel achteraan): '
+        +trimmed);
+    }
   }catch(_e){}
   var hadTimelineUser=!!lines.length;
   var m=d.meta||{};
