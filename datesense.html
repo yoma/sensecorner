@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="08-05-2026 15:27">
+<meta name="ds-build" content="08-05-2026 15:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 15:08</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 15:33</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -4491,13 +4491,52 @@ async function saveMsg(pn,role,html){
   if(!S.user)return;
   sync('s');
   sync('s');
-  var {data,error}=await sb.from('sense_messages').insert({user_id:S.user.id,profile_name:pn,role,html}).select('id').single();
-  if(error)throw new Error(error.message);
+  function normalizeMsgHtmlForStorage(v){
+    if(typeof v==='string')return v;
+    if(v==null)return '';
+    if(v&&typeof v==='object'){
+      if(typeof v.html==='string')return v.html;
+      try{return JSON.stringify(v);}catch(_e){return String(v);}
+    }
+    return String(v);
+  }
+  function shouldRetryAsJsonText(err){
+    var msg=String((err&&err.message)||err||'').toLowerCase();
+    return msg.indexOf('invalid input syntax for type json')>=0
+      || msg.indexOf('invalid input syntax for type jsonb')>=0;
+  }
+  var safeHtml=normalizeMsgHtmlForStorage(html);
+  var payload={user_id:S.user.id,profile_name:pn,role:role,html:safeHtml};
+  var res=await sb.from('sense_messages').insert(payload).select('id').single();
+  if(res&&res.error&&shouldRetryAsJsonText(res.error)){
+    payload.html=JSON.stringify(safeHtml);
+    res=await sb.from('sense_messages').insert(payload).select('id').single();
+  }
+  if(res&&res.error)throw new Error(res.error.message);
   sync('ok');
   if(String(pn)==='OWN Sense'){
     try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   }
-  return data||null;
+  return (res&&res.data)||null;
+}
+
+function normalizeLoadedMsgHtml(v){
+  if(typeof v==='string'){
+    var s=v.trim();
+    if(!s)return '';
+    var maybeJson=(s[0]==='"'&&s[s.length-1]==='"')||(s[0]==='{'&&s[s.length-1]==='}');
+    if(maybeJson){
+      try{
+        var parsed=JSON.parse(s);
+        if(typeof parsed==='string')return parsed;
+        if(parsed&&typeof parsed==='object'&&typeof parsed.html==='string')return parsed.html;
+      }catch(_e){}
+    }
+    return v;
+  }
+  if(v&&typeof v==='object'&&typeof v.html==='string')return v.html;
+  if(v==null)return '';
+  return String(v);
 }
 
 async function loadMsgs(pn,opt){
@@ -4528,7 +4567,12 @@ async function loadMsgs(pn,opt){
     if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
     return [];
   }
-  return data||[];
+  var rows=data||[];
+  return rows.map(function(row){
+    if(!row||typeof row!=='object')return row;
+    if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
+    return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
+  });
 }
 
 /** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen - advies moet de recentste zien. */
