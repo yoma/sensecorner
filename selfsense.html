@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="07-05-2026 22:55">
+<meta name="fs-build" content="08-05-2026 08:01">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1202,7 +1202,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
-<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 07-05-2026 22:55</div>
+<div id="fsBuildBadge" class="fs-build-badge" aria-label="Build versie">SS BUILD 08-05-2026 08:01</div>
 <script>
 // Vroege boot-probe: blijft zichtbaar als de app-scriptlaag niet start.
 (function(){
@@ -5047,6 +5047,14 @@ function stripTagsPlainExport(html){
   return String(html==null?'':html).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 }
 
+/** Platte tekst voor AI-geschiedenis: verborgen Vertel-follow-up stuurt apiPrompt mee i.p.v. zichtbare html. */
+function vertelUserTurnPlainForAi(m){
+  if(!m||m.role!=='user')return'';
+  var ap=String(m.apiPrompt||'').trim();
+  if(ap)return ap.replace(/\s+/g,' ').trim();
+  return stripTagsPlainExport(m.html||'').replace(/\s+/g,' ').trim();
+}
+
 /** Platte tekst van recente gebruikersberichten in Vertel; laatste user-turn weglaten (die zit al in de API-messages). */
 function buildVertelRecentUserDigest(vertelMsgs,maxMsgs,maxChars){
   var arr=vertelMsgs||[];
@@ -5059,7 +5067,8 @@ function buildVertelRecentUserDigest(vertelMsgs,maxMsgs,maxChars){
   var total=0;
   var maxC=typeof maxChars==='number'?maxChars:1000;
   for(var i=0;i<users.length;i++){
-    var t=stripTagsPlainExport(users[i].html||'').replace(/\s+/g,' ').trim();
+    var raw=(users[i].apiPrompt&&String(users[i].apiPrompt).trim())||users[i].html||'';
+    var t=stripTagsPlainExport(raw).replace(/\s+/g,' ').trim();
     if(t.length<6)continue;
     if(t.length>220)t=t.substring(0,220)+'…';
     if(total+t.length+3>maxC)break;
@@ -12404,7 +12413,10 @@ function addMsg(role,html,opts){
     ?`${ctxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(ctxLabel)+'</div>':''}<div class="bbl-user">${esc(html)}</div>`
     :`<div class="bbl-ai"><div class="sndr">SELFSENSE</div>${html}${aiReplyActionBar(pushIdx)}</div>`;
   ca.appendChild(d);scrollVertelConversationIntoView();
-  S.vertelMsgs.push({role,html,ctxLabel:ctxLabel||''});
+  var row={role:role,html:html,ctxLabel:ctxLabel||''};
+  var apiP=String((opts&&opts.apiPrompt)||'').trim();
+  if(apiP)row.apiPrompt=apiP;
+  S.vertelMsgs.push(row);
   refreshVertelResendButton();
 }
 
@@ -12431,10 +12443,10 @@ async function vraagExtraAdviesOpVertelAntwoord(msgIdx,mode){
     var ex=txt.length>520?txt.substring(0,517)+'...':txt;
     full='Sensei, ik wil verdieping op dit eerdere antwoord van jou. Kort fragment ter verduidelijking:\n'+ex+'\n'+prompt+'\n'+anti;
   }
-  var inp=document.getElementById('msgInput');
-  if(!inp)return;
-  inp.value=full;
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
+  var displayHtml=mode==='expertise'
+    ?'Expertise: meer diepgang op dit antwoord'
+    :'Extra advies: meer diepgang op dit antwoord';
+  S._vertelFollowUpSend={apiPrompt:full,displayHtml:displayHtml};
   await sendMsg();
 }
 
@@ -12993,7 +13005,16 @@ async function sendMsg(){
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
   var inp=document.getElementById('msgInput');
   if(_micActive)stopMic(true);
-  var txt=inp.value.trim();
+  var fu=S._vertelFollowUpSend;
+  var txt,userFacingTxt;
+  if(fu&&String(fu.apiPrompt||'').trim()){
+    try{S._vertelFollowUpSend=null;}catch(_e){}
+    txt=String(fu.apiPrompt).trim();
+    userFacingTxt=String(fu.displayHtml||'').trim()||'Meer diepgang op je antwoord';
+  }else{
+    txt=inp.value.trim();
+    userFacingTxt=txt;
+  }
   if(!txt){
     toast('Geen tekst om te versturen - wacht tot je zin verschijnt, of laat de micro los na inspreken.');
     return;
@@ -13023,21 +13044,31 @@ async function sendMsg(){
   inp.value='';inp.style.height='auto';S.busy=true;
 
   S.vertelOfferHerstuur=false;
-  addMsg('user',txt,hadAdviceCtx?{ctxLabel:'Context: eerder advies meegenomen'}:null);
+  var userOpts=null;
+  if(hadAdviceCtx){
+    userOpts={ctxLabel:'Context: eerder advies meegenomen'};
+  }
+  if(txt!==userFacingTxt){
+    userOpts=userOpts||{};
+    userOpts.apiPrompt=txt;
+  }
+  addMsg('user',userFacingTxt,userOpts);
   showT();
   try{
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   if(!voorgesteldDossier){
-    var matchTxt=buildVertelDossierMatchText(txt);
+    var matchTxt=buildVertelDossierMatchText(userFacingTxt);
     voorgesteldDossier=pickBestDossierForVertelText(matchTxt);
   }
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte
   var history=[];
   (S.vertelMsgs||[]).slice(-12).forEach(function(m){
-    var tekst=m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    var tekst=m.role==='user'
+      ?vertelUserTurnPlainForAi(m)
+      :String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     if(tekst.length>300)tekst=tekst.substring(0,300);
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
@@ -13120,20 +13151,20 @@ async function sendMsg(){
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
     try{
-      var sid=await withTimeout(ensureActiveSessionForMessage(txt),8000,'sessie-timeout',{label:'ensureActiveSessionForMessage'});
+      var sid=await withTimeout(ensureActiveSessionForMessage(userFacingTxt),8000,'sessie-timeout',{label:'ensureActiveSessionForMessage'});
       if(sid){
-        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),8000,'sessie-msg-timeout',{label:'saveSessionMsg-user'});
+        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',userFacingTxt),8000,'sessie-msg-timeout',{label:'saveSessionMsg-user'});
         aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),8000,'sessie-msg-timeout',{label:'saveSessionMsg-ai'});
       }
     }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
     setTimeout(function(){
-      void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
+      void _extractOwnFactsFireAndForget(userFacingTxt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
     },400);
     try{
       var sidLive=S.currentSessionId;
       if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){
         var ts=new Date().toISOString();
-        S.sessionHistoryPager.rows.push({id:userSessionMsgId,role:'user',content:txt,created_at:ts});
+        S.sessionHistoryPager.rows.push({id:userSessionMsgId,role:'user',content:userFacingTxt,created_at:ts});
         if(aiSessionMsgId)S.sessionHistoryPager.rows.push({id:aiSessionMsgId,role:'ai',content:raw,created_at:ts});
       }
     }catch(_pe){}
@@ -13141,7 +13172,7 @@ async function sendMsg(){
 
     if(forcedDossier){
       window._pendingSegmenten=null;
-      await _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId);
+      await _doOpslaan(null,userFacingTxt+'\n'+raw,forcedDossier,userSessionMsgId);
       addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
     }else{
       window._pendingSegmenten=null;
@@ -13153,18 +13184,18 @@ async function sendMsg(){
         if(voorgesteldSticky&&voorgesteldSticky!==sticky){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
-        await _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId);
+        await _doOpslaan(null,userFacingTxt+'\n'+raw,sticky,userSessionMsgId);
         addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
         didSticky=true;
       }
       if(!didSticky){
         var autoDossier='OWN Sense';
-        await _doOpslaan(null,txt+'\n'+raw,autoDossier,userSessionMsgId);
+        await _doOpslaan(null,userFacingTxt+'\n'+raw,autoDossier,userSessionMsgId);
         addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(autoDossier)+'</span></span>',userSessionMsgId));
       }
     }
     // Update sidebar sessie preview
-    updateSessiePreview(S.currentSessionId,txt);
+    updateSessiePreview(S.currentSessionId,userFacingTxt);
 
   }catch(x){
     var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';

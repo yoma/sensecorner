@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="07-05-2026 22:55">
+<meta name="ds-build" content="08-05-2026 08:01">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1079,7 +1079,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 </head>
 <body>
 <button type="button" aria-label="Ga terug" onclick="if(window.history.length>1){window.history.back();}else{window.location.href='sensecorner.html';}" style="position:fixed;left:12px;top:12px;z-index:1200;border:1px solid rgba(61,47,31,.16);background:rgba(255,255,255,.82);color:#2A1810;border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">←</button>
-<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 07-05-2026 22:55</div>
+<div id="dsBuildBadge" class="ds-build-badge" aria-label="Build versie">DS BUILD 08-05-2026 08:01</div>
 <!-- Schermlezer aankondigingen voor toasts/alerts -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></div>
 <script>
@@ -12372,7 +12372,15 @@ async function sendMsg(){
   inp.value='';inp.style.height='auto';S.busy=true;
 
   S.vertelOfferHerstuur=false;
-  addMsg('user',txt,hadAdviceCtx?{ctxLabel:'Context: eerder advies meegenomen'}:null);
+  var userOpts=null;
+  if(hadAdviceCtx){
+    userOpts={ctxLabel:'Context: eerder advies meegenomen'};
+  }
+  if(txt!==userFacingTxt){
+    userOpts=userOpts||{};
+    userOpts.apiPrompt=txt;
+  }
+  addMsg('user',userFacingTxt,userOpts);
   showT();
   try{
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
@@ -12380,7 +12388,7 @@ async function sendMsg(){
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   var ambiguousNameCtx=null;
   if(!voorgesteldDossier){
-    var matchTxt=buildVertelDossierMatchText(txt);
+    var matchTxt=buildVertelDossierMatchText(userFacingTxt);
     voorgesteldDossier=pickBestDossierForVertelText(matchTxt);
     ambiguousNameCtx=detectCrossAppNameAmbiguity(matchTxt);
   }
@@ -12388,7 +12396,9 @@ async function sendMsg(){
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte (breder venster i.v.m. wisselen tussen dossiers)
   var history=[];
   (S.vertelMsgs||[]).slice(-12).forEach(function(m){
-    var tekst=m.html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    var tekst=m.role==='user'
+      ?vertelUserTurnPlainForAi(m)
+      :String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     if(tekst.length>300)tekst=tekst.substring(0,300);
     if(tekst.length>5)history.push({role:m.role==='user'?'user':'assistant',content:tekst});
   });
@@ -12467,20 +12477,20 @@ async function sendMsg(){
     var userSessionMsgId=null;
     var aiSessionMsgId=null;
     try{
-      var sid=await withTimeout(ensureActiveSessionForMessage(txt),5000,'sessie-timeout',{label:'ensureActiveSessionForMessage'});
+      var sid=await withTimeout(ensureActiveSessionForMessage(userFacingTxt),5000,'sessie-timeout',{label:'ensureActiveSessionForMessage'});
       if(sid){
-        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',txt),5000,'sessie-msg-timeout',{label:'saveSessionMsg-user'});
+        userSessionMsgId=await withTimeout(saveSessionMsg(sid,'user',userFacingTxt),5000,'sessie-msg-timeout',{label:'saveSessionMsg-user'});
         aiSessionMsgId=await withTimeout(saveSessionMsg(sid,'ai',raw),5000,'sessie-msg-timeout',{label:'saveSessionMsg-ai'});
       }
     }catch(sessErr){console.warn('sessie opslaan vertraagd/mislukt:',sessErr);}
     setTimeout(function(){
-      void _extractOwnFactsFireAndForget(txt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
+      void _extractOwnFactsFireAndForget(userFacingTxt,voorgesteldDossier,userSessionMsgId).catch(function(_e){});
     },400);
     try{
       var sidLive=S.currentSessionId;
       if(sidLive&&S.sessionHistoryPager&&S.sessionHistoryPager.sessionId===sidLive&&userSessionMsgId){
         var ts=new Date().toISOString();
-        S.sessionHistoryPager.rows.push({id:userSessionMsgId,role:'user',content:txt,created_at:ts});
+        S.sessionHistoryPager.rows.push({id:userSessionMsgId,role:'user',content:userFacingTxt,created_at:ts});
         if(aiSessionMsgId)S.sessionHistoryPager.rows.push({id:aiSessionMsgId,role:'ai',content:raw,created_at:ts});
       }
     }catch(_pe){}
@@ -12489,7 +12499,7 @@ async function sendMsg(){
     if(forcedDossier){
       window._pendingSegmenten=null;
       addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dn(forcedDossier)+'</span></span>',userSessionMsgId));
-      _doOpslaan(null,txt+'\n'+raw,forcedDossier,userSessionMsgId).catch(function(e){
+      _doOpslaan(null,userFacingTxt+'\n'+raw,forcedDossier,userSessionMsgId).catch(function(e){
         console.warn('auto-opslaan gefaald',e);
         toast('Opslaan liep vast, probeer opnieuw via dossier.');
       });
@@ -12507,7 +12517,7 @@ async function sendMsg(){
           toast('Blijft opslaan bij '+dn(sticky)+'. Tik «Ander» om te wisselen.');
         }
         addMsg('ai',formatAiCard(raw)+adviceCtxBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dn(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
-        _doOpslaan(null,txt+'\n'+raw,sticky,userSessionMsgId).catch(function(e){
+        _doOpslaan(null,userFacingTxt+'\n'+raw,sticky,userSessionMsgId).catch(function(e){
           console.warn('sticky opslaan gefaald',e);
           toast('Opslaan liep vast, probeer opnieuw via dossier.');
         });
@@ -12516,9 +12526,9 @@ async function sendMsg(){
       if(!didSticky){
         var saveId='sv'+Date.now();
         window._saveData=window._saveData||{};
-        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(buildVertelDossierMatchText(txt)):'';
+        var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(buildVertelDossierMatchText(userFacingTxt)):'';
         if(nieuwNaam&&findExistingDossierForMention(nieuwNaam))nieuwNaam='';
-        window._saveData[saveId]={tekst:txt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
+        window._saveData[saveId]={tekst:userFacingTxt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
         var saveLbl=voorgesteldDossier
           ?'Opslaan bij <span class="coach-save-dos">'+dn(voorgesteldDossier)+'</span>?'
           :'Opslaan in een dossier?';
@@ -12535,7 +12545,7 @@ async function sendMsg(){
       }
     }
     // Update sidebar sessie preview
-    updateSessiePreview(S.currentSessionId,txt);
+    updateSessiePreview(S.currentSessionId,userFacingTxt);
 
   }catch(x){
     var retryTip=' Herstuur je vraag gerust, dan probeer ik opnieuw te antwoorden.';
