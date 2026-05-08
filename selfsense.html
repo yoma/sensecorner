@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 15:57">
+<meta name="fs-build" content="08-05-2026 20:44">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -2155,6 +2155,8 @@ var S={
   busy:false,
   profiles:[],
   pdata:{},
+  /** Read-only AI-cache: sense_profiles-rijen die niet in S.pdata zitten (pure fs/ds). UI blijft ongewijzigd. */
+  crossAppCache:{},
   viewDossier:null,viewTab:'overzicht',
   // Vertel chat tijdelijk (wis na opslaan)
   vertelMsgs:[],
@@ -4825,6 +4827,7 @@ function applySignedOutClientState(){
   S.adminRole='user';
   S.profiles=['OWN Sense'];
   S.pdata={};
+  S.crossAppCache={};
   updateNavTabIndicators();
 }
 async function doSignOut(){
@@ -4896,15 +4899,45 @@ function ingestSelfSenseProfileRow(p){
   };
   return true;
 }
+/** Bewaar sense_profiles-rij in S.crossAppCache alleen als die niet in S.pdata zit na SelfSense-ingest. Geen messages hier. */
+function ingestCrossAppCacheRow(p){
+  if(!p||!p.name||p.name==='OWN Sense')return;
+  if(S.pdata&&S.pdata[p.name])return;
+  var savedProps=p.props||{};
+  var loadedMeta=Object.assign({},savedProps.meta||{});
+  var lc=normalizeLifecycleForCrossAppRow(loadedMeta);
+  if(lc!=='active'&&lc!=='on_hold')return;
+  S.crossAppCache[p.name]={
+    name:p.name,
+    display_name:String(loadedMeta.display_name||p.name||'').trim(),
+    roepnaam:String(loadedMeta.roepnaam||savedProps.roepnaam||'').trim(),
+    meta:loadedMeta,
+    summary:String(p.summary||'').trim(),
+    categories:savedProps.categories||{},
+    last_active:p.last_active||p.updated_at||null,
+    lifecycle:lc,
+    app_scope:normalizeAppScopeList(loadedMeta),
+    _recentUserMsgs:null,
+    _recentLoadedAt:null
+  };
+}
+/** lifecycle_status (SelfSense) heeft voorrang op legacy lifecycle. */
+function normalizeLifecycleForCrossAppRow(loadedMeta){
+  var m=loadedMeta||{};
+  var raw=String(m.lifecycle_status!=null&&String(m.lifecycle_status).trim()?m.lifecycle_status:(m.lifecycle||'active')).toLowerCase();
+  if(raw!=='active'&&raw!=='on_hold'&&raw!=='closed')raw='active';
+  return raw;
+}
 async function loadAll(){
   if(!S.user)return;
   migrateLegacyUserPrefs();
   var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
-  S.profiles=['OWN Sense'];S.pdata={};
+  S.profiles=['OWN Sense'];S.pdata={};S.crossAppCache={};
   if(!data||!data.length){
     await ensureP('OWN Sense');
   } else {
     data.forEach(function(p){ingestSelfSenseProfileRow(p);});
+    data.forEach(function(p){ingestCrossAppCacheRow(p);});
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
   }
   reconcileSessAssignMapsAtLogin();
@@ -5374,6 +5407,9 @@ function _goScreenBody(sc){
     return;
   }
   S.prev=S.screen;S.screen=sc;
+  if(sc==='vertel'){
+    void hydrateCrossAppRecentMsgs();
+  }
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
   }
@@ -6132,11 +6168,16 @@ function migrateLegacyUserPrefs(){
 
 function getDossierLifecycle(name){
   if(!name||name==='OWN Sense')return'active';
-  var d=S.pdata[name]||{};
-  var m=d.meta||{};
-  var v=String(m.lifecycle_status||'active').toLowerCase();
-  if(v!=='active'&&v!=='on_hold'&&v!=='closed')return'active';
-  return v;
+  var d=S.pdata[name];
+  if(d){
+    var m=d.meta||{};
+    var v=String(m.lifecycle_status||'active').toLowerCase();
+    if(v!=='active'&&v!=='on_hold'&&v!=='closed')return'active';
+    return v;
+  }
+  var c=S.crossAppCache&&S.crossAppCache[name];
+  if(c)return c.lifecycle||'active';
+  return'active';
 }
 function getUsageMode(){
   return 'multi';
@@ -6351,7 +6392,7 @@ function getActiveContactNames(){
 }
 /** Actief + on hold (niet gesloten): Vertel moet grote/vaak gebruikte dossiers herkennen ook als focus ergens anders ligt. */
 function getProfilesForVertelNameMatch(){
-  return (S.profiles||[]).filter(function(p){
+  var fromProfiles=(S.profiles||[]).filter(function(p){
     if(!p||p==='OWN Sense')return false;
     var s=getDossierLifecycle(p);
     if(!(s==='active'||s==='on_hold'))return false;
@@ -6359,9 +6400,26 @@ function getProfilesForVertelNameMatch(){
     if(String(m.ds_cleanup_system_hidden||'').trim())return false;
     return true;
   });
+  var fromCache=Object.keys(S.crossAppCache||{}).filter(function(n){
+    var c=S.crossAppCache[n]||{};
+    if(!(c.lifecycle==='active'||c.lifecycle==='on_hold'))return false;
+    var m=c.meta||{};
+    if(String(m.ds_cleanup_system_hidden||'').trim())return false;
+    return true;
+  });
+  var seen={};
+  var out=[];
+  fromProfiles.concat(fromCache).forEach(function(n){
+    if(seen[n])return;
+    seen[n]=1;
+    out.push(n);
+  });
+  return out;
 }
 function getDossierScopeLabelsForMatch(name){
-  var m=((S.pdata&&S.pdata[name])||{}).meta||{};
+  var m={};
+  if(S.pdata&&S.pdata[name])m=(S.pdata[name].meta)||{};
+  else if(S.crossAppCache&&S.crossAppCache[name])m=(S.crossAppCache[name].meta)||{};
   var scopes=normalizeAppScopeList(m);
   var out=[];
   if(scopes.indexOf('ds')>=0)out.push('DateSense');
@@ -6376,78 +6434,101 @@ function dossierLabelWithScope(name){
   if(!lbls||!lbls.length)return base;
   return base+' ('+lbls[0]+')';
 }
+/** Lazy: eerste Vertel-open laadt recente user-berichten voor max. 10 cache-dossiers parallel. */
+var _crossAppHydrateInflight=null;
+async function hydrateCrossAppRecentMsgs(){
+  if(_crossAppHydrateInflight)return _crossAppHydrateInflight;
+  if(!sb||!S.user)return;
+  var cache=S.crossAppCache||{};
+  var keys=Object.keys(cache).filter(function(n){
+    return cache[n]&&cache[n]._recentUserMsgs===null;
+  });
+  if(!keys.length)return;
+  keys.sort(function(a,b){
+    var la=cache[a].last_active||'';
+    var lb=cache[b].last_active||'';
+    return String(lb).localeCompare(String(la));
+  });
+  keys=keys.slice(0,10);
+  _crossAppHydrateInflight=Promise.all(keys.map(function(name){
+    return sb.from('sense_messages')
+      .select('html').eq('user_id',S.user.id).eq('profile_name',name)
+      .eq('role','user').order('created_at',{ascending:false}).limit(5)
+      .then(function(r){
+        if(!cache[name])return;
+        if(r&&r.error){cache[name]._recentUserMsgs=[];return;}
+        cache[name]._recentUserMsgs=(r&&r.data)?r.data.reverse():[];
+        cache[name]._recentLoadedAt=new Date().toISOString();
+      })
+      .catch(function(){
+        if(cache[name])cache[name]._recentUserMsgs=[];
+      });
+  })).then(function(){_crossAppHydrateInflight=null;});
+  return _crossAppHydrateInflight;
+}
 function buildSharedCrossAppCoreContext(currentScope){
   var scope=String(currentScope||'').toLowerCase();
-  var lines=[];
-  var arr=(S.profiles||[]).filter(function(p){
-    if(!p||p==='OWN Sense')return false;
+  var combined=[];
+  (S.profiles||[]).forEach(function(p){
+    if(!p||p==='OWN Sense')return;
     var st=getDossierLifecycle(p);
-    return st==='active'||st==='on_hold';
-  });
-  var preferred=[];
-  function addPreferred(name){
-    var n=String(name||'').trim();
-    if(!n||n==='OWN Sense')return;
-    if(preferred.indexOf(n)>=0)return;
-    preferred.push(n);
-  }
-  addPreferred(S.vertelGesprekDossier);
-  addPreferred(S.vertelFrom);
-  try{addPreferred(getFocusDossier());}catch(_e){}
-  try{
-    var lastUser='';
-    var msgs=S.vertelMsgs||[];
-    for(var mi=msgs.length-1;mi>=0;mi--){
-      if(msgs[mi]&&msgs[mi].role==='user'){
-        lastUser=String(msgs[mi].html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-        break;
-      }
-    }
-    if(lastUser){
-      var mt=buildVertelDossierMatchText(lastUser);
-      addPreferred(pickBestDossierForVertelText(mt));
-    }
-  }catch(_e2){}
-  arr=arr.slice().sort(function(a,b){
-    var ai=preferred.indexOf(a);
-    var bi=preferred.indexOf(b);
-    if(ai===-1&&bi===-1)return 0;
-    if(ai===-1)return 1;
-    if(bi===-1)return -1;
-    return ai-bi;
-  });
-  arr.forEach(function(p){
+    if(!(st==='active'||st==='on_hold'))return;
     var d=(S.pdata&&S.pdata[p])||{};
     var m=d.meta||{};
     var scopes=normalizeAppScopeList(m);
-    var labels=getDossierScopeLabelsForMatch(p);
     var isCross=scopes.indexOf(scope)===-1||scopes.length>1;
     if(!isCross)return;
+    combined.push({
+      name:p,source:'pdata',d:d,m:m,scopes:scopes,
+      lastActive:d.lastActive||(m.last_active||'')
+    });
+  });
+  Object.keys(S.crossAppCache||{}).forEach(function(name){
+    var c=S.crossAppCache[name]||{};
+    if(!(c.lifecycle==='active'||c.lifecycle==='on_hold'))return;
+    combined.push({
+      name:name,source:'cache',d:c,m:c.meta||{},
+      scopes:c.app_scope||[],
+      lastActive:c.last_active||''
+    });
+  });
+  combined.sort(function(a,b){
+    return String(b.lastActive||'').localeCompare(String(a.lastActive||''));
+  });
+  combined=combined.slice(0,10);
+  var lines=[];
+  combined.forEach(function(it){
+    var labels=getDossierScopeLabelsForMatch(it.name);
     var bits=[];
-    if(String(m.dating_stage||'').trim())bits.push('datingfase: '+String(m.dating_stage).trim());
-    if(String(m.relationship_type||'').trim())bits.push('relatie: '+String(m.relationship_type).trim());
-    if(String(m.intent||'').trim())bits.push('intentie: '+String(m.intent).trim());
+    if(String(it.m.dating_stage||'').trim())bits.push('datingfase: '+String(it.m.dating_stage).trim());
+    if(String(it.m.relationship_type||'').trim())bits.push('relatie: '+String(it.m.relationship_type).trim());
+    if(String(it.m.intent||'').trim())bits.push('intentie: '+String(it.m.intent).trim());
     var fam='';
-    try{if(typeof getContactRolBadgeText==='function')fam=String(getContactRolBadgeText(m)||'').trim();}catch(_e){}
+    try{if(typeof getContactRolBadgeText==='function')fam=String(getContactRolBadgeText(it.m)||'').trim();}catch(_e){}
     if(fam)bits.push('familierol: '+fam);
-    var summary=String(d.summary||'').trim();
-    if(summary)bits.push('kern: '+summary.substring(0,120));
+    var summary=String(it.d.summary||'').trim();
+    if(summary)bits.push('kern: '+summary.substring(0,200));
+    var recSrc=null;
+    if(it.source==='pdata'){
+      recSrc=(S._ctxMsgs&&Array.isArray(S._ctxMsgs[it.name]))?S._ctxMsgs[it.name]:null;
+    }else{
+      recSrc=Array.isArray(it.d._recentUserMsgs)?it.d._recentUserMsgs:null;
+    }
     var rec=[];
-    try{
-      var cache=(S._ctxMsgs&&Array.isArray(S._ctxMsgs[p]))?S._ctxMsgs[p]:[];
-      for(var i=cache.length-1;i>=0&&rec.length<2;i--){
-        var row=cache[i]||{};
-        if(String(row.role||'')!=='user')continue;
+    if(recSrc){
+      for(var i=recSrc.length-1;i>=0&&rec.length<2;i--){
+        var row=recSrc[i]||{};
+        if(it.source==='pdata'&&row.role!=null&&String(row.role)!=='user')continue;
         var t=String(row.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
         if(t.length>6)rec.push(t.substring(0,110));
       }
-    }catch(_e){}
+    }
     if(rec.length)bits.push('recent: '+rec.join(' / '));
     if(!bits.length)return;
-    lines.push('- '+dn(p)+' ('+labels.join('/')+'): '+bits.join(' | '));
+    lines.push('- '+dn(it.name)+' ('+labels.join('/')+'): '+bits.join(' | '));
   });
   if(!lines.length)return'';
-  return 'GEDEELDE KERNCONTEXT UIT ANDERE APPS:\n'+lines.slice(0,8).join('\n');
+  return 'GEDEELDE KERNCONTEXT UIT ANDERE APPS:\n'+lines.join('\n');
 }
 function levenshteinPerson(a,b){
   a=String(a).toLowerCase();
@@ -6494,6 +6575,13 @@ function getDossierNameVariants(p){
   add(dn(p));
   if(!p||p==='OWN Sense')return out;
   var d=S.pdata[p]||{};
+  if(!Object.keys(d).length&&S.crossAppCache&&S.crossAppCache[p]){
+    var cx=S.crossAppCache[p];
+    d={
+      meta:cx.meta||{},
+      props:{roepnaam:cx.roepnaam,display_name:cx.display_name}
+    };
+  }
   var m=d.meta||{};
   var props=(d.props&&typeof d.props==='object')?d.props:{};
   var pm=(props.meta&&typeof props.meta==='object')?props.meta:{};
@@ -6591,6 +6679,10 @@ function resolveDossierContextKey(name){
   for(var i=0;i<keys.length;i++){
     if(String(keys[i]||'').trim().toLowerCase()===rawLower)return keys[i];
   }
+  var ck=Object.keys(S.crossAppCache||{});
+  for(var ci=0;ci<ck.length;ci++){
+    if(String(ck[ci]||'').trim().toLowerCase()===rawLower)return ck[ci];
+  }
   var profiles=S.profiles||[];
   for(var j=0;j<profiles.length;j++){
     if(String(profiles[j]||'').trim().toLowerCase()===rawLower)return profiles[j];
@@ -6619,6 +6711,10 @@ function buildFallbackDossierContextFromCache(name){
   if(!dos||dos==='OWN Sense')return '';
   var lines=[];
   var d=(S.pdata&&S.pdata[dos])||{};
+  if(!Object.keys(d).length&&S.crossAppCache&&S.crossAppCache[dos]){
+    var cxx=S.crossAppCache[dos];
+    d={summary:cxx.summary||'',categories:cxx.categories||{},meta:cxx.meta||{}};
+  }
   var summary=String(d.summary||'').trim();
   if(summary)lines.push('Samenvatting '+dn(dos)+': '+summary.substring(0,500));
   var catTxt='';
@@ -13409,6 +13505,52 @@ function buildCoachSaveDoneBar(labelInnerHtml,sessionUserMsgId){
   return '<div class="coach-save-bar coach-save-bar-done">'+labelInnerHtml+'</div>';
 }
 
+function buildCrossAppCoachBarHtml(barId,sug){
+  return '<div class="coach-save-bar coach-save-bar--crossapp" id="'+barId+'" style="margin-top:6px">'
+    +'<span class="coach-save-lbl">Ook noteren bij <b>'+escHTML(sug.displayName)+'</b> ('+escHTML(sug.targetLabel)+')?</span>'
+    +'<button type="button" class="coach-save-btn" data-act="accept">Ja</button>'
+    +'<button type="button" class="coach-save-skip" data-act="dismiss">Niet nu</button>'
+    +'</div>';
+}
+function wireCrossAppCoachBar(barId){
+  var bar=document.getElementById(barId);
+  if(!bar||bar.dataset.crossAppWired)return;
+  bar.dataset.crossAppWired='1';
+  var acc=bar.querySelector('[data-act="accept"]');
+  var dis=bar.querySelector('[data-act="dismiss"]');
+  if(acc)acc.addEventListener('click',function(){void acceptCrossAppNote(bar);});
+  if(dis)dis.addEventListener('click',function(){dismissCrossAppNote(bar);});
+}
+async function acceptCrossAppNote(bar){
+  if(!sb||!S.user||!bar)return;
+  var payload=(window._crossAppSaveData||{})[bar.id];
+  if(!payload)return;
+  var btn=bar.querySelector('[data-act="accept"]');
+  if(btn){btn.disabled=true;btn.textContent='...';}
+  try{
+    var insertPayload={
+      user_id:S.user.id,
+      profile_name:payload.profileName,
+      vertel_app:payload.targetApp,
+      role:'user',
+      html:payload.originalText
+    };
+    var res=await sb.from('sense_messages').insert(insertPayload);
+    if(res&&res.error)throw res.error;
+    toast('Genoteerd bij '+dn(payload.profileName));
+    bar.innerHTML='<span class="coach-save-lbl">Ook genoteerd bij <b>'+escHTML(dn(payload.profileName))+'</b></span>';
+    try{delete window._crossAppSaveData[bar.id];}catch(_e){}
+  }catch(e){
+    console.warn('[CROSS-APP][NOTE] failed',e);
+    toast('Opslaan mislukt, probeer opnieuw');
+    if(btn){btn.disabled=false;btn.textContent='Ja';}
+  }
+}
+function dismissCrossAppNote(bar){
+  if(bar&&bar.id){try{delete window._crossAppSaveData[bar.id];}catch(_e){}}
+  if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -13465,6 +13607,8 @@ async function sendMsg(){
   addMsg('user',userFacingTxt,userOpts);
   showT();
   try{
+  var crossBarHtml='';
+  var crossBarId=null;
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
@@ -13481,6 +13625,36 @@ async function sendMsg(){
   var aiContextDossier=contextDossier||null;
   if(hasStrongMentionFocus&&mentionMatchDossier!==forcedDossier){
     aiContextDossier=mentionMatchDossier;
+  }
+
+  var crossAppSuggestion=null;
+  if(mentionMatchDossier&&S.crossAppCache&&S.crossAppCache[mentionMatchDossier]){
+    var ca=S.crossAppCache[mentionMatchDossier];
+    var wordCount=String(userFacingTxt||'').trim().split(/\s+/).filter(Boolean).length;
+    if(wordCount>=25){
+      var scopesCa=ca.app_scope||[];
+      var targetApp=scopesCa.indexOf('fs')>=0?'familysense':(scopesCa.indexOf('ds')>=0?'datesense':null);
+      var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
+      if(targetApp){
+        crossAppSuggestion={
+          name:mentionMatchDossier,
+          displayName:dn(mentionMatchDossier),
+          targetApp:targetApp,
+          targetLabel:targetLbl,
+          originalText:userFacingTxt
+        };
+      }
+    }
+  }
+  if(crossAppSuggestion){
+    crossBarId='ca_'+Date.now()+'_'+String(Math.floor(Math.random()*1e9));
+    window._crossAppSaveData=window._crossAppSaveData||{};
+    window._crossAppSaveData[crossBarId]={
+      profileName:crossAppSuggestion.name,
+      targetApp:crossAppSuggestion.targetApp,
+      originalText:crossAppSuggestion.originalText
+    };
+    crossBarHtml=buildCrossAppCoachBarHtml(crossBarId,crossAppSuggestion);
   }
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte
@@ -13501,7 +13675,7 @@ async function sendMsg(){
   var sys='Je bent SelfSensei, de persoonlijke herstelcoach van de gebruiker.'
     +' Je kent de gebruiker en contextpersonen via hun dossiers.'
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
-    +' BELANGRIJK: Als een voornaam in CONTACTNAMEN of onder JOUW CONTACTEN staat, bestaat dat dossier - zeg nooit dat je die persoon niet in de dossiers hebt.'
+    +' Als een voornaam in CONTACTNAMEN, JOUW CONTACTEN of GEDEELDE KERNCONTEXT staat, bestaat dat dossier. Gebruik wat in die secties staat. Als de info dun is, zeg dat eerlijk en wijs naar de andere app voor diepte; verzin geen details.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Standaard max 4 zinnen. Bij aanbevelingen met web search en echte links mag het antwoord tot ongeveer 8 korte zinnen zijn.'
     +' Als de gebruiker om advies vraagt: geef meteen concrete stappen of formuleringen, geen slotvraag over hoe zij het zelf zouden aanpakken. Anders hoogstens één gerichte vraag als iets essentieels ontbreekt. Nederlands.'
@@ -13511,6 +13685,7 @@ async function sendMsg(){
     +' OPSLAG: Jij schrijft niet zelf naar dossiers. Onder het antwoord staan echte knoppen of een vaste melding (automatisch of «in dit gesprek»). Zet in je tekst géén aparte bewaarvraag, géén bullet-keuzes (Bevestigen / ander dossier / Negeren), géén 💾-regels en géén fictieve productnamen met «Sense» - dat botst met de echte UI en oogt als kapotte knoppen.'
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
+    +' CROSS-APP: Als de gebruiker substantieel praat over iemand wiens dossier in een andere app zit, mag je in je antwoord kort vermelden dat het ook in dat dossier kan worden bewaard (bijvoorbeeld dat het misschien ook bij het familiedossier van die persoon past). Schrijf zelf geen ja of nee-tekst die op knoppen lijkt; die staat als echte UI onder je antwoord.'
     +' AANBEVELINGEN: Je mag de gebruiker concrete aanbevelingen doen voor boeken die bij hen passen, TED talks, videos, documentaires, podcasts, en plekken, musea, events in Vlaanderen.'
     +' KRITIEKE REGEL - geen verzinsels: voor elke aanbeveling gebruik je ALTIJD eerst de web_search tool. Verzin NOOIT een titel, auteur, naam, adres of URL.'
     +' Gebruik voor aanbevelingen alleen deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
@@ -13633,7 +13808,8 @@ async function sendMsg(){
     if(forcedDossier){
       window._pendingSegmenten=null;
       await _doOpslaan(null,userFacingTxt+'\n'+raw,forcedDossier,userSessionMsgId);
-      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(forcedDossier)+'</span></span>',userSessionMsgId));
+      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(forcedDossier)+'</span></span>',userSessionMsgId)+crossBarHtml);
+      if(crossBarId)wireCrossAppCoachBar(crossBarId);
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
@@ -13645,7 +13821,8 @@ async function sendMsg(){
           toast('Blijft opslaan bij '+dossierLabelWithScope(sticky)+'. Tik «Ander» om te wisselen.');
         }
         await _doOpslaan(null,userFacingTxt+'\n'+raw,sticky,userSessionMsgId);
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId));
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId)+crossBarHtml);
+        if(crossBarId)wireCrossAppCoachBar(crossBarId);
         didSticky=true;
       }
       if(!didSticky){
@@ -13662,7 +13839,8 @@ async function sendMsg(){
             +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Nee</button>'
             +'</div>';
         }
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(autoDossier)+'</span></span>',userSessionMsgId)+extraDossierPrompt);
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(autoDossier)+'</span></span>',userSessionMsgId)+extraDossierPrompt+crossBarHtml);
+        if(crossBarId)wireCrossAppCoachBar(crossBarId);
       }
     }
     // Update sidebar sessie preview
@@ -14913,7 +15091,12 @@ function buildCoachContext(){
   if(contacts.length){
     lines.push('CONTACTDOSSIERS (SelfSense, FamilySense en DateSense waar beschikbaar):');
     contacts.forEach(function(p){
-      var d=S.pdata[p]||{props:{},count:0,categories:{},meta:{}};
+      var d=S.pdata[p];
+      if(!d&&S.crossAppCache&&S.crossAppCache[p]){
+        var cx=S.crossAppCache[p];
+        d={props:{},count:0,categories:cx.categories||{},summary:cx.summary||'',meta:cx.meta||{}};
+      }
+      if(!d)d={props:{},count:0,categories:{},meta:{}};
       var props=[];
       PK.forEach(function(k,i){if((d.props[k]||0)>0)props.push(PL[i]+':'+(d.props[k]||0)+'%');});
       var meta=d.meta||{};
@@ -15027,7 +15210,17 @@ function buildContactNamesLine(){
 async function buildDossierContextForAI(dosName){
   var dosKey=resolveDossierContextKey(dosName);
   if(!dosKey||!S.user||dosKey==='OWN Sense')return'';
-  var d=S.pdata[dosKey]||{props:{},categories:{},summary:'',meta:{}};
+  var d=S.pdata[dosKey];
+  if(!d&&S.crossAppCache&&S.crossAppCache[dosKey]){
+    var cax=S.crossAppCache[dosKey];
+    d={
+      props:{},
+      categories:cax.categories||{},
+      summary:cax.summary||'',
+      meta:cax.meta||{}
+    };
+  }
+  if(!d)d={props:{},categories:{},summary:'',meta:{}};
   var lines=[];
   var m=d.meta||{};
   var mAge=calcAgeFromBirthdate(m.birthdate)||m.age||'';
