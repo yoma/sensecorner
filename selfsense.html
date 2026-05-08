@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 22:09">
+<meta name="fs-build" content="08-05-2026 22:25">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13726,6 +13726,7 @@ async function sendMsg(){
     +' Vraagt de gebruiker waar iets blijft of of jij iets moet noteren? Verwijs kort naar de strook of melding onder je antwoord. Zeg nooit dat «de app het volledig zelf regelt» zonder die zichtbare opslagstap wanneer de gebruiker nog moet kiezen of bevestigen.'
     +' VERBOD: Schrijf nooit een aparte zin of regel die lijkt op knoppen («Ja · Altijd in dit gesprek · Ander dossier · Negeer» of varianten met komma’s); die bestaan al als echte knoppen onder je antwoord en anders ogen ze als kapotte UI.'
     +' CROSS-APP: Als de gebruiker substantieel praat over iemand wiens dossier in een andere app zit, mag je in je antwoord kort vermelden dat het ook in dat dossier kan worden bewaard (bijvoorbeeld dat het misschien ook bij het familiedossier van die persoon past). Schrijf zelf geen ja of nee-tekst die op knoppen lijkt; die staat als echte UI onder je antwoord.'
+    +' TOPIC-VERBANDEN: Als de gebruiker een onderwerp noemt zonder naam (bv. "school", "die ruzie", "het werk", "de mail"), en je ziet dat exact één dossier in CONTACTDOSSIERS of GEDEELDE KERNCONTEXT recent expliciet over dat onderwerp gaat, formuleer dan een hypothese ("Ik vermoed dat dit over Lena gaat - gisteren ging het over haar AI-huiswerk; klopt dat?"). Vraag dus niet alleen "over wie?", maar bied het waarschijnlijke verband direct aan als check. Als meerdere dossiers in aanmerking komen, vraag wel terug welk.'
     +' AANBEVELINGEN: Je mag de gebruiker concrete aanbevelingen doen voor boeken die bij hen passen, TED talks, videos, documentaires, podcasts, en plekken, musea, events in Vlaanderen.'
     +' KRITIEKE REGEL - geen verzinsels: voor elke aanbeveling gebruik je ALTIJD eerst de web_search tool. Verzin NOOIT een titel, auteur, naam, adres of URL.'
     +' Gebruik voor aanbevelingen alleen deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
@@ -14361,8 +14362,12 @@ async function updateOwnSenseCategoriesFromVertel(tekst){
     +' Alle niet-lege veldwaarden in het Nederlands. Maximaal één zin per veld.';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],600);
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],1200);
     var clean=raw.replace(/```json|```/g,'').trim();
+    var lastBrace=clean.lastIndexOf('}');
+    if(lastBrace>0&&lastBrace<clean.length-1){
+      clean=clean.substring(0,lastBrace+1);
+    }
     var updates=JSON.parse(clean);
 
     OWN_CATS.forEach(function(cat){
