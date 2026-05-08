@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging landingspagina: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="lp-build" content="06-05-2026 20:58">
+<meta name="lp-build" content="08-05-2026 15:46">
 <title>SenseCorner - Een coach die jou echt leert kennen</title>
 <meta name="description" content="Sensei is je persoonlijke coach voor dating, familie, vriendschap en zelfkennis. Eén profiel dat jou begrijpt, in elk levensgebied.">
 <meta property="og:title" content="SenseCorner — Maak kennis met Sensei">
@@ -370,8 +370,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   margin-bottom:8px;background:#fff;color:var(--chocolade);
 }
 .lp-login-pw-wrap{position:relative;margin-bottom:4px}
-.lp-login-pw-wrap .lp-login-input{padding-right:44px;margin-bottom:0}
-.lp-login-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:1px solid var(--b);background:var(--ivoor);color:var(--warm-bruin);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;font-family:inherit}
+.lp-login-pw-wrap .lp-login-input{padding-right:74px;margin-bottom:0}
+.lp-login-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid var(--b);background:var(--ivoor);color:var(--warm-bruin);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;letter-spacing:.02em;cursor:pointer;font-family:inherit;line-height:1.1}
+.lp-login-eye:hover{background:#fff}
+.lp-login-eye:focus-visible{outline:2px solid var(--sage);outline-offset:2px}
 .lp-login-name-hint{font-size:11px;color:var(--warm-bruin);margin:-4px 0 8px;display:none}
 .lp-login-help{display:flex;justify-content:flex-start;margin:4px 0 10px}
 .lp-login-link-btn{border:none;background:transparent;color:var(--sage-donker);font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;text-decoration:underline;font-family:inherit}
@@ -766,7 +768,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     <input id="lpAuthEmail" class="lp-login-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
     <div class="lp-login-pw-wrap">
       <input id="lpAuthPassword" class="lp-login-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
-      <button type="button" class="lp-login-eye" id="lpAuthPwToggle" aria-label="Toon of verberg wachtwoord">👁</button>
+      <button type="button" class="lp-login-eye" id="lpAuthPwToggle" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
     </div>
     <div class="lp-login-help">
       <button type="button" class="lp-login-link-btn" id="lpAuthForgot">Wachtwoord vergeten?</button>
@@ -1209,7 +1211,9 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   if(btnEye&&elPw)btnEye.onclick=function(){
     var isPw=elPw.type==='password';
     elPw.type=isPw?'text':'password';
-    btnEye.textContent=isPw?'🙈':'👁';
+    btnEye.textContent=isPw?'Verberg':'Toon';
+    btnEye.setAttribute('aria-pressed',isPw?'true':'false');
+    btnEye.setAttribute('aria-label',isPw?'Verberg wachtwoord':'Toon wachtwoord');
   };
   if(btnForgot)btnForgot.onclick=async function(){
     var email=String((elEmail&&elEmail.value)||'').trim();
@@ -1221,7 +1225,14 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       setMsg('Reset-link verzonden. Check je mailbox.',false);
     }catch(_e6){setMsg('Reset-link kon niet verstuurd worden.',true);}
   };
+  var lpAuthBusy=false;
+  function lpSetAuthBusy(b){
+    lpAuthBusy=!!b;
+    if(btnLogin)btnLogin.disabled=lpAuthBusy;
+    if(btnReg)btnReg.disabled=lpAuthBusy;
+  }
   if(btnLogin)btnLogin.onclick=async function(){
+    if(lpAuthBusy)return;
     if(elName&&elName.style.display==='block'){
       openLogin('login');
       return;
@@ -1230,6 +1241,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var pw=String((elPw&&elPw.value)||'');
     if(!email||!pw){setMsg('Vul e-mail en wachtwoord in.',true);return;}
     setMsg('Bezig met inloggen…',false);
+    lpSetAuthBusy(true);
     try{
       var res=await withTimeout(
         sb.auth.signInWithPassword({email:email,password:pw}),
@@ -1252,8 +1264,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       if(res&&res.error){setMsg(res.error.message||'Inloggen mislukt.',true);return;}
       await afterAuthSuccess(res);
     }catch(_e7){setMsg('Inloggen mislukt. Probeer opnieuw.',true);}
+    finally{lpSetAuthBusy(false);}
   };
   if(btnReg)btnReg.onclick=async function(){
+    if(lpAuthBusy)return;
     if(!elName||elName.style.display!=='block'){
       openLogin('register');
       return;
@@ -1264,6 +1278,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(!name){setMsg('Vul je naam in.',true);if(elName)elName.focus();return;}
     if(!email||!pw){setMsg('Vul e-mail en wachtwoord in.',true);return;}
     setMsg('Account aanmaken…',false);
+    lpSetAuthBusy(true);
     try{
       var signRes=await sb.auth.signUp({
         email:email,
@@ -1282,7 +1297,18 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       }catch(_lsReg){}
       setMsg('Account aangemaakt. Bevestig je e-mail en log daarna opnieuw in.',false);
     }catch(_e8){setMsg('Account maken mislukt. Probeer opnieuw.',true);}
+    finally{lpSetAuthBusy(false);}
   };
+  var lpLoginForm=document.getElementById('lpLoginForm');
+  if(lpLoginForm){
+    lpLoginForm.addEventListener('submit',function(ev){
+      ev.preventDefault();
+      if(lpAuthBusy)return;
+      var inRegister=elName&&elName.style.display==='block';
+      if(inRegister){if(btnReg)btnReg.click();}
+      else{if(btnLogin)btnLogin.click();}
+    });
+  }
   document.addEventListener('click',function(ev){
     var a=ev.target.closest&&ev.target.closest('a');
     if(!a)return;

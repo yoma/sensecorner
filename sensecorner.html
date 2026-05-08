@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="08-05-2026 15:08">
+<meta name="sc-build" content="08-05-2026 15:46">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -283,8 +283,10 @@ a{text-decoration:none;color:inherit}
 .auth-input{width:100%;border:1px solid var(--hub-line);border-radius:10px;padding:10px 11px;font:inherit;font-size:14px;margin-bottom:8px;background:var(--ivoor);color:var(--chocolade)}
 .auth-name-hint{font-size:11px;color:var(--m);margin-top:-2px;margin-bottom:8px}
 .auth-pw-wrap{position:relative}
-.auth-pw-wrap .auth-input{padding-right:44px}
-.auth-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:1px solid var(--hub-line);background:var(--ivoor);color:var(--warm-bruin);border-radius:8px;padding:4px 8px;font-size:12px;line-height:1;cursor:pointer}
+.auth-pw-wrap .auth-input{padding-right:74px}
+.auth-eye-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid var(--hub-line);background:var(--ivoor);color:var(--warm-bruin);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;letter-spacing:.02em;line-height:1.1;cursor:pointer;font-family:inherit}
+.auth-eye-btn:hover{background:#fff}
+.auth-eye-btn:focus-visible{outline:2px solid var(--sage,#6B8E6F);outline-offset:2px}
 .auth-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .auth-help-row{display:flex;justify-content:flex-start;margin-top:2px}
 .auth-link-btn{border:none;background:transparent;color:var(--app-donker);font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;text-decoration:underline}
@@ -711,7 +713,7 @@ a{text-decoration:none;color:inherit}
     <input id="authEmail" class="auth-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
     <div class="auth-pw-wrap">
       <input id="authPassword" class="auth-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
-      <button id="authPwToggleBtn" class="auth-eye-btn" type="button" aria-label="Toon of verberg wachtwoord">👁</button>
+      <button id="authPwToggleBtn" class="auth-eye-btn" type="button" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
     </div>
     <div class="auth-help-row">
       <button id="authForgotBtn" class="auth-link-btn" type="button">Wachtwoord vergeten?</button>
@@ -2350,12 +2352,20 @@ a{text-decoration:none;color:inherit}
       }
     }).catch(function(){});
   });
+  var authBusy=false;
+  function setAuthBusy(b){
+    authBusy=!!b;
+    if(authLoginBtn)authLoginBtn.disabled=authBusy;
+    if(authRegisterConfirmBtn)authRegisterConfirmBtn.disabled=authBusy;
+  }
   if(authLoginBtn)authLoginBtn.onclick=async function(){
+    if(authBusy)return;
     if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
     var email=String((authEmail&&authEmail.value)||'').trim();
     var pw=String((authPassword&&authPassword.value)||'');
     if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
     setAuthMsg('Bezig met inloggen…');
+    setAuthBusy(true);
     try{
       var res=await scTimeoutFallback(
         sb.auth.signInWithPassword({email:email,password:pw}),
@@ -2380,8 +2390,10 @@ a{text-decoration:none;color:inherit}
         setTimeout(function(){try{window.location.reload();}catch(_r){window.location.href=window.location.pathname||'sensecorner.html';}},0);
       }
     }catch(_e){setAuthMsg('Inloggen mislukt. Probeer opnieuw.',true);}
+    finally{setAuthBusy(false);}
   };
   if(authRegisterConfirmBtn)authRegisterConfirmBtn.onclick=async function(){
+    if(authBusy)return;
     if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
     var name=String((authName&&authName.value)||'').trim();
     var email=String((authEmail&&authEmail.value)||'').trim();
@@ -2389,6 +2401,7 @@ a{text-decoration:none;color:inherit}
     if(!name){setAuthMsg('Naam is verplicht bij account aanmaken.',true);if(authName)authName.focus();return;}
     if(!email||!pw){setAuthMsg('Vul naam, email en wachtwoord in.',true);return;}
     setAuthMsg('Account aanmaken…');
+    setAuthBusy(true);
     try{
       var signRes=await sb.auth.signUp({
         email:email,
@@ -2407,12 +2420,34 @@ a{text-decoration:none;color:inherit}
       }catch(_lsNew){}
       setAuthMsg('Account aangemaakt. Bevestig je e-mail en log daarna in.');
     }catch(_e){setAuthMsg('Account maken mislukt. Probeer opnieuw.',true);}
+    finally{setAuthBusy(false);}
   };
+  function authIsRegisterMode(){
+    return !!(authName&&authName.style.display!=='none'&&authName.style.display!=='');
+  }
+  function authTriggerPrimary(){
+    if(authBusy)return;
+    if(authIsRegisterMode()){
+      if(authRegisterConfirmBtn)authRegisterConfirmBtn.click();
+    }else{
+      if(authLoginBtn)authLoginBtn.click();
+    }
+  }
+  function authOnEnter(ev){
+    if(ev.key!=='Enter'||ev.isComposing||ev.shiftKey||ev.altKey||ev.ctrlKey||ev.metaKey)return;
+    ev.preventDefault();
+    authTriggerPrimary();
+  }
+  if(authName)authName.addEventListener('keydown',authOnEnter);
+  if(authEmail)authEmail.addEventListener('keydown',authOnEnter);
+  if(authPassword)authPassword.addEventListener('keydown',authOnEnter);
   if(authPwToggleBtn&&authPassword){
     authPwToggleBtn.onclick=function(){
       var isPw=authPassword.type==='password';
       authPassword.type=isPw?'text':'password';
-      authPwToggleBtn.textContent=isPw?'🙈':'👁';
+      authPwToggleBtn.textContent=isPw?'Verberg':'Toon';
+      authPwToggleBtn.setAttribute('aria-pressed',isPw?'true':'false');
+      authPwToggleBtn.setAttribute('aria-label',isPw?'Verberg wachtwoord':'Toon wachtwoord');
     };
   }
   if(authForgotBtn)authForgotBtn.onclick=async function(){
