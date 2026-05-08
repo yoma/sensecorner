@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 21:14">
+<meta name="fs-build" content="08-05-2026 21:24">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -5254,6 +5254,23 @@ function buildVertelLeadingThreadBlock(vertelMsgs,currentTxtForAi,maxPriorMsgs,p
   if(!body.length)return'';
   return 'RECENTE GESPREKSBUNDEL IN VERTEL (dit geheel weegt zwaarder dan oude dossierinfo; gebruik de hele bundel, niet één geïsoleerde zin):\n'
     +body.join('\n')+'\n';
+}
+
+/** Vorige user-turns in dit Vertel-gesprek: dossier uit naamherkenning (bv. Lena), voor vervolgvragen zonder naam («op school»). */
+function inferVertelContinuityFocusDossier(skipLastUserTurn){
+  var msgs=S.vertelMsgs||[];
+  var end=msgs.length;
+  if(skipLastUserTurn&&end>0&&msgs[end-1]&&msgs[end-1].role==='user')end--;
+  for(var i=end-1;i>=0;i--){
+    var row=msgs[i];
+    if(!row||row.role!=='user')continue;
+    var plain=vertelUserTurnPlainForAi(row);
+    if(!plain||plain.length<4)continue;
+    var mt=buildVertelDossierMatchText(plain);
+    var pick=pickBestDossierForVertelText(mt);
+    if(pick&&pick!=='OWN Sense')return pick;
+  }
+  return null;
 }
 
 async function exportDossierTimelineTxt(dossierName){
@@ -13627,22 +13644,26 @@ async function sendMsg(){
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   var matchTxt=buildVertelDossierMatchText(userFacingTxt);
   var mentionMatchDossier=pickBestDossierForVertelText(matchTxt);
+  var continuityFocusDossier=inferVertelContinuityFocusDossier(true);
+  var mentionFocusDossier=(mentionMatchDossier&&mentionMatchDossier!=='OWN Sense')
+    ?mentionMatchDossier
+    :((continuityFocusDossier&&continuityFocusDossier!=='OWN Sense')?continuityFocusDossier:null);
   if(!voorgesteldDossier){
-    voorgesteldDossier=mentionMatchDossier;
+    voorgesteldDossier=mentionMatchDossier||continuityFocusDossier;
   }
   var contextDossier=voorgesteldDossier||null;
-  if(!forcedDossier&&mentionMatchDossier&&mentionMatchDossier!=='OWN Sense'){
-    contextDossier=mentionMatchDossier;
+  if(!forcedDossier&&mentionFocusDossier){
+    contextDossier=mentionFocusDossier;
   }
-  var hasStrongMentionFocus=!!(mentionMatchDossier&&mentionMatchDossier!=='OWN Sense');
+  var hasStrongMentionFocus=!!mentionFocusDossier;
   var aiContextDossier=contextDossier||null;
-  if(hasStrongMentionFocus&&mentionMatchDossier!==forcedDossier){
-    aiContextDossier=mentionMatchDossier;
+  if(hasStrongMentionFocus&&mentionFocusDossier!==forcedDossier){
+    aiContextDossier=mentionFocusDossier;
   }
 
   var crossAppSuggestion=null;
-  if(mentionMatchDossier&&S.crossAppCache&&S.crossAppCache[mentionMatchDossier]){
-    var ca=S.crossAppCache[mentionMatchDossier];
+  if(mentionFocusDossier&&S.crossAppCache&&S.crossAppCache[mentionFocusDossier]){
+    var ca=S.crossAppCache[mentionFocusDossier];
     var wordCount=String(userFacingTxt||'').trim().split(/\s+/).filter(Boolean).length;
     if(wordCount>=25){
       var scopesCa=ca.app_scope||[];
@@ -13650,8 +13671,8 @@ async function sendMsg(){
       var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
       if(targetApp){
         crossAppSuggestion={
-          name:mentionMatchDossier,
-          displayName:dn(mentionMatchDossier),
+          name:mentionFocusDossier,
+          displayName:dn(mentionFocusDossier),
           targetApp:targetApp,
           targetLabel:targetLbl,
           originalText:userFacingTxt
@@ -13690,6 +13711,7 @@ async function sendMsg(){
     +' Gebruik die kennis actief: verwijs naar namen, situaties en eigenschappen.'
     +' PRIORITEIT (twee situaties): (1) Als de gespreksbundel (zie RECENTE GESPREKSBUNDEL) nieuwe feiten of een doorlopend verhaal bevat, gaat die inhoud vóór oude of brede dossiertrekking; het is een groep berichten, niet één geïsoleerde zin. (2) Als de bundel dun is, bijvoorbeeld alleen een check-in zoals «hoe gaat het met [naam]?», gebruik dan actief SPECIFIEK DOSSIER CONTEXT (met «Recent uit tijdlijn») en GEDEELDE KERNCONTEXT. De blokken CONTACTDOSSIERS onderaan deze prompt zijn samenvattingen en kunnen maanden oud zijn; als de tijdlijn spanning, school, ruzie of crisis noemt, mag je niet zeggen dat «het goed gaat» puur op basis van zo’n samenvatting of oude psycholoogtekst.'
     +' VERMIJD hier: vaste disclaimers als «ik weet het niet rechtstreekt» of «ik hoor alleen wat jij vertelt» als er wél dossier- of kerncontext over die persoon in deze prompt staat. Dan mag je dat kort en menselijk gebruiken (zonder te overdrijven).'
+    +' Als SPECIFIEK DOSSIER CONTEXT of de gespreksbundel concrete feiten noemt (school, mail, ruzie, huiswerk), ga daarop in; vraag niet «vertel het maar» alsof er geen context is, tenzij die secties echt leeg zijn.'
     +' Als een voornaam in CONTACTNAMEN, JOUW CONTACTEN of GEDEELDE KERNCONTEXT staat, bestaat dat dossier. Gebruik wat in die secties staat. Als de info daar écht dun is, zeg dat eerlijk en wijs naar de andere app voor diepte; verzin geen details.'
     +' Reageer warm, direct en eerlijk als een goede vriend.'
     +' Standaard max 4 zinnen. Bij aanbevelingen met web search en echte links mag het antwoord tot ongeveer 8 korte zinnen zijn.'
@@ -13731,11 +13753,12 @@ async function sendMsg(){
         seenFallback[key]=1;
         fallbackCandidates.push(key);
       }
+      addFallbackCandidate(mentionFocusDossier);
       addFallbackCandidate(mentionMatchDossier);
       addFallbackCandidate(aiContextDossier);
       addFallbackCandidate(contextDossier);
-      var mentionName=String(dn(mentionMatchDossier)||'').trim();
-      addFallbackCandidate(findCompositeDossierForMentionName(mentionName,mentionMatchDossier));
+      var mentionName=String(dn(mentionFocusDossier)||'').trim();
+      addFallbackCandidate(findCompositeDossierForMentionName(mentionName,mentionFocusDossier));
       for(var fci=0;fci<fallbackCandidates.length;fci++){
         var candidate=fallbackCandidates[fci];
         var candidateCtx=await withTimeout(buildDossierContextForAI(candidate),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI-fallback',meta:{profile:candidate||null}});
@@ -13754,7 +13777,7 @@ async function sendMsg(){
     }
     if(shouldDebugDossierContext()){
       console.debug('[dossier-context]',{
-        mention:mentionMatchDossier||null,
+        mention:mentionFocusDossier||mentionMatchDossier||null,
         selected:aiContextDossier||null,
         source:dossierCtxSource,
         length:String(dossierCtx||'').trim().length
@@ -13776,7 +13799,7 @@ async function sendMsg(){
     var vertelLeadingThread=buildVertelLeadingThreadBlock(S.vertelMsgs,txtForAI,12,1600,1200);
     var fullSys=sys
       +opslagVastNote
-      +(hasStrongMentionFocus?('\nGESPREKSFOCUS VOOR DEZE VRAAG: '+dn(mentionMatchDossier)+'. Interpreteer naamverwijzingen primair vanuit dit dossier, ook als opslag naar een ander dossier gaat. Als de recente gespreksbundel nieuwe feiten noemt (school, werk, ruzie, gezondheid), ga daar eerst op in en laat oude dossiersamenvatting naar de achtergrond schuiven tenzij het direct helpt.\n'):'')
+      +(hasStrongMentionFocus?('\nGESPREKSFOCUS VOOR DEZE VRAAG: '+dn(mentionFocusDossier)+(continuityFocusDossier&&!mentionMatchDossier?' (doorlopend uit eerdere berichten in dit Vertel-gesprek; het laatste bericht noemt die naam misschien niet)':'')+'. Interpreteer naamverwijzingen primair vanuit dit dossier, ook als opslag naar een ander dossier gaat. Als de recente gespreksbundel nieuwe feiten noemt (school, werk, ruzie, gezondheid), ga daar eerst op in en laat oude dossiersamenvatting naar de achtergrond schuiven tenzij het direct helpt.\n'):'')
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(vertelLeadingThread?('\n'+vertelLeadingThread):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT (tijdlijn eerst in dit blok waar aanwezig; die gaat vóór statische samenvatting in hetzelfde blok):\n'+dossierCtx):'')
@@ -13859,6 +13882,14 @@ async function sendMsg(){
     }
     // Update sidebar sessie preview
     updateSessiePreview(S.currentSessionId,userFacingTxt);
+    try{
+      if(mentionFocusDossier&&mentionFocusDossier!=='OWN Sense'&&!forcedDossier){
+        S.vertelGesprekDossier=mentionFocusDossier;
+        S.vertelFrom=mentionFocusDossier;
+        updateVertelGesprekBanner();
+        if(S.screen==='vertel')renderVertelInputCoachTip();
+      }
+    }catch(_vg){}
 
   }catch(x){
     var errMsg=String((x&&x.message)||x||'Onbekende fout.');
