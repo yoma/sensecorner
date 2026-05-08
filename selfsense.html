@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 15:16">
+<meta name="fs-build" content="08-05-2026 15:27">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13372,6 +13372,11 @@ async function sendMsg(){
   if(!forcedDossier&&mentionMatchDossier&&mentionMatchDossier!=='OWN Sense'){
     contextDossier=mentionMatchDossier;
   }
+  var hasStrongMentionFocus=!!(mentionMatchDossier&&mentionMatchDossier!=='OWN Sense');
+  var aiContextDossier=contextDossier||null;
+  if(hasStrongMentionFocus&&mentionMatchDossier!==forcedDossier){
+    aiContextDossier=mentionMatchDossier;
+  }
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte
   var history=[];
@@ -13421,7 +13426,7 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
-    var dossierCtx=await withTimeout(buildDossierContextForAI(contextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:contextDossier||null}});
+    var dossierCtx=await withTimeout(buildDossierContextForAI(aiContextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:aiContextDossier||null}});
     if(dossierCtx&&dossierCtx.length>1800)dossierCtx=dossierCtx.substring(0,1800);
     var messages=[...history];
     if(pendingAdviceCtx){
@@ -13437,6 +13442,7 @@ async function sendMsg(){
     }
     var fullSys=sys
       +opslagVastNote
+      +(hasStrongMentionFocus?('\nGESPREKSFOCUS VOOR DEZE VRAAG: '+dn(mentionMatchDossier)+'. Interpreteer naamverwijzingen in dit bericht primair vanuit dit dossier, ook als opslag naar een ander dossier gaat.\n'):'')
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(dossierCtx?('\nSPECIFIEK DOSSIER CONTEXT:\n'+dossierCtx):'')
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'');
