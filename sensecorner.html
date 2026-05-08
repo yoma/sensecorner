@@ -755,6 +755,34 @@ a{text-decoration:none;color:inherit}
     ]);
   }
 
+  async function scGetSessionRobust(){
+    if(!sb||!sb.auth||typeof sb.auth.getSession!=='function')return null;
+    var attempts=[
+      {timeout:9000,wait:300},
+      {timeout:12000,wait:600},
+      {timeout:12000,wait:0}
+    ];
+    for(var i=0;i<attempts.length;i++){
+      var cfg=attempts[i];
+      try{
+        var sess=await scTimeoutFallback(sb.auth.getSession(),cfg.timeout,null);
+        var session=sess&&sess.data&&sess.data.session;
+        if(session&&session.user)return session;
+      }catch(_e){}
+      if(cfg.wait>0){
+        try{await new Promise(function(r){setTimeout(r,cfg.wait);});}catch(_w){}
+      }
+    }
+    if(typeof sb.auth.getUser==='function'){
+      try{
+        var gu=await scTimeoutFallback(sb.auth.getUser(),9000,null);
+        var usr=gu&&gu.data&&gu.data.user;
+        if(usr&&usr.id)return {user:usr,access_token:''};
+      }catch(_gu){}
+    }
+    return null;
+  }
+
   async function scHasOnboardingCompleted(userId){
     if(!sb||!userId)return false;
     try{
@@ -765,8 +793,8 @@ a{text-decoration:none;color:inherit}
 
   if(sb){
     try{
-      var sessEarly=await scTimeoutFallback(sb.auth.getSession(),8000,null);
-      var uEarly=sessEarly&&sessEarly.data&&sessEarly.data.session&&sessEarly.data.session.user?sessEarly.data.session.user:null;
+      var sessEarly=await scGetSessionRobust();
+      var uEarly=sessEarly&&sessEarly.user?sessEarly.user:null;
       if(uEarly){
         var doneEarly=await scTimeoutFallback(scHasOnboardingCompleted(uEarly.id),8000,true);
         if(!doneEarly){
@@ -1508,15 +1536,15 @@ a{text-decoration:none;color:inherit}
   async function getCurrentUser(){
     if(!sb)return null;
     try{
-      var res=await scTimeoutFallback(sb.auth.getSession(),12000,null);
-      if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
+      var session=await scGetSessionRobust();
+      if(session&&session.user)return session.user;
       var bounce='';
       try{bounce=String(sessionStorage.getItem('sc_login_bounce')||'');}catch(_b){}
       if(bounce==='1'){
         try{sessionStorage.removeItem('sc_login_bounce');}catch(_r){}
         await new Promise(function(r){setTimeout(r,400);});
-        res=await scTimeoutFallback(sb.auth.getSession(),8000,null);
-        if(res&&res.data&&res.data.session&&res.data.session.user)return res.data.session.user;
+        session=await scGetSessionRobust();
+        if(session&&session.user)return session.user;
       }
       return null;
     }catch(_e){return null;}

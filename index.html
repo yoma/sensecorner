@@ -911,7 +911,34 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   secondary.addEventListener('click',function(){rememberHideForSession();hide();});
   async function doLandingSignOut(){
     var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
+    var originalBtnText=signOutBtn?signOutBtn.textContent:'';
+    var originalDesc=descEl?descEl.textContent:'';
+    var fallbackTimer=null;
+    function setBusyUi(text){
+      if(descEl&&text)descEl.textContent=text;
+      if(signOutBtn){
+        signOutBtn.textContent='Bezig met afmelden...';
+        signOutBtn.setAttribute('aria-disabled','true');
+        signOutBtn.style.pointerEvents='none';
+        signOutBtn.style.opacity='.72';
+      }
+    }
+    function resetBusyUi(){
+      if(signOutBtn){
+        signOutBtn.textContent=originalBtnText||'Afmelden';
+        signOutBtn.removeAttribute('aria-disabled');
+        signOutBtn.style.pointerEvents='';
+        signOutBtn.style.opacity='';
+      }
+      if(descEl&&originalDesc)descEl.textContent=originalDesc;
+    }
     try{
+      setBusyUi('Je wordt afgemeld. Dit kan bij traag netwerk iets langer duren.');
+      fallbackTimer=setTimeout(function(){
+        if(descEl){
+          descEl.textContent='Afmelden duurt iets langer dan normaal. We ronden het nu veilig af.';
+        }
+      },2600);
       try{
         localStorage.removeItem('ownsense_hub_profile_v2');
         localStorage.removeItem('ownsense_profile_v1');
@@ -919,10 +946,25 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         localStorage.removeItem('ownsense_handoff_v1');
       }catch(_ls){}
       if(client&&client.auth&&typeof client.auth.signOut==='function'){
-        try{await client.auth.signOut({scope:'global'});}catch(_sg){}
-        await client.auth.signOut();
+        var globalOut=null;
+        try{
+          globalOut=await Promise.race([
+            client.auth.signOut({scope:'global'}),
+            new Promise(function(resolve){setTimeout(function(){resolve({error:{message:'global-timeout'}});},9000);})
+          ]);
+        }catch(_sg){
+          globalOut={error:_sg||{message:'global-failed'}};
+        }
+        if(descEl&&globalOut&&globalOut.error){
+          descEl.textContent='Afmelden loopt nog. We zetten nu een lokale afmelding door.';
+        }
+        await Promise.race([
+          client.auth.signOut(),
+          new Promise(function(_resolve,reject){setTimeout(function(){reject(new Error('local-timeout'));},9000);})
+        ]);
       }
     }catch(_so){}
+    if(fallbackTimer){try{clearTimeout(fallbackTimer);}catch(_t){}}
     try{
       sessionStorage.removeItem(K_HUB_HIDE);
       sessionStorage.removeItem(K_RESUME_HIDE);
@@ -937,6 +979,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }catch(_r){
       window.location.href=window.location.pathname;
     }
+    resetBusyUi();
   }
   window.doLandingSignOut=doLandingSignOut;
   if(signOutBtn)signOutBtn.addEventListener('click',doLandingSignOut);
@@ -1190,11 +1233,20 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     try{
       var res=await withTimeout(
         sb.auth.signInWithPassword({email:email,password:pw}),
-        12000,
+        25000,
         null
       );
       if(res===null){
-        setMsg('Inloggen duurt te lang. Controleer je netwerk en probeer opnieuw.',true);
+        try{
+          res=await withTimeout(
+            sb.auth.signInWithPassword({email:email,password:pw}),
+            15000,
+            null
+          );
+        }catch(_eRetry){}
+      }
+      if(res===null){
+        setMsg('Inloggen duurt te lang. Probeer opnieuw of ga via SenseCorner inloggen.',true);
         return;
       }
       if(res&&res.error){setMsg(res.error.message||'Inloggen mislukt.',true);return;}

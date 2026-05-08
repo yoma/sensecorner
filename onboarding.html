@@ -1234,6 +1234,39 @@
     throw lastErr;
   }
 
+  async function obGetSessionRobust() {
+    if (!sb || !sb.auth || typeof sb.auth.getSession !== "function") return null;
+    var tries = [
+      { timeoutMs: 9000, waitMs: 350 },
+      { timeoutMs: 12000, waitMs: 600 },
+      { timeoutMs: 12000, waitMs: 0 }
+    ];
+    for (var i = 0; i < tries.length; i++) {
+      var cfg = tries[i];
+      try {
+        var raced = await Promise.race([
+          sb.auth.getSession(),
+          new Promise(function (resolve) {
+            setTimeout(function () {
+              resolve(null);
+            }, cfg.timeoutMs);
+          })
+        ]);
+        var session = raced && raced.data && raced.data.session;
+        if (session && session.user) return session;
+      } catch (_e) {}
+      if (cfg.waitMs > 0) await sleep(cfg.waitMs);
+    }
+    if (sb.auth && typeof sb.auth.getUser === "function") {
+      try {
+        var userRes = await sb.auth.getUser();
+        var user = userRes && userRes.data && userRes.data.user;
+        if (user && user.id) return { user: user, access_token: "" };
+      } catch (_e2) {}
+    }
+    return null;
+  }
+
   async function insertOnboardingFact(userId, subcategory, factText) {
     if (!sb || !userId || !subcategory) return { data: null, error: new Error("Geen verbinding") };
     var row = {
@@ -1512,8 +1545,7 @@
         });
       }
     }
-    var sess = await sb.auth.getSession();
-    var session = sess && sess.data && sess.data.session;
+    var session = await obGetSessionRobust();
     if (!session || !session.user) {
       goToStatic("acc0");
       return;
@@ -1702,8 +1734,8 @@
   async function obSenseiFetchOnce(systemPrompt, userMessage, maxTokens) {
     maxTokens = maxTokens || 400;
     if (!sb) throw new Error("Geen verbinding");
-    var sess = await sb.auth.getSession();
-    var token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+    var session = await obGetSessionRobust();
+    var token = session && session.access_token;
     if (!token) throw new Error("Geen geldige sessie");
     var controller = new AbortController();
     var timer = setTimeout(function () {
