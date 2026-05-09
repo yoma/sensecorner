@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 15:57">
+<meta name="fs-build" content="09-05-2026 16:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -4157,7 +4157,7 @@ async function init(){
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       initSessie(); // Na auth - sessie aanmaken
-      goScreen('home');
+      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
       applySenseDeepLinkFromUrl();
     }else{
       showFriendlyAuthGate('Geen actieve sessie gevonden.');
@@ -4176,7 +4176,7 @@ async function init(){
       await refreshAdminRoleFromSupabase();
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
-      goScreen('home');
+      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
       applySenseDeepLinkFromUrl();
     } else if(ev==='SIGNED_OUT'){
       _setAuthTokenFromSession(null);
@@ -4849,6 +4849,50 @@ function goScreen(sc){
   }
 }
 
+var CROSSAPP_VERTEL_THIS_APP='familysense';
+/**
+ * Leest een cross-app vertel-seed uit sessionStorage (gezet door een andere SenseCorner-app)
+ * en plaatst de tekst in de Vertel-input. TTL 5 min - oudere seeds worden weggegooid.
+ */
+function consumeCrossAppVertelSeed(){
+  if(!sessionStorage)return;
+  var raw='';
+  try{raw=sessionStorage.getItem('crossapp_vertel_seed')||'';}catch(_e){return;}
+  if(!raw)return;
+  var seed=null;
+  try{seed=JSON.parse(raw);}catch(_e){seed=null;}
+  if(!seed||!String(seed.text||'').trim()){
+    try{sessionStorage.removeItem('crossapp_vertel_seed');}catch(_e2){}
+    return;
+  }
+  if(Date.now()-(seed.ts||0)>5*60*1000){
+    try{sessionStorage.removeItem('crossapp_vertel_seed');}catch(_e3){}
+    return;
+  }
+  if(seed.targetApp&&seed.targetApp!==CROSSAPP_VERTEL_THIS_APP)return;
+  try{sessionStorage.removeItem('crossapp_vertel_seed');}catch(_e4){}
+  var inp=document.getElementById('msgInput');
+  if(inp){
+    inp.value=String(seed.text||'');
+    try{inp.dispatchEvent(new Event('input'));}catch(_e5){}
+  }
+  var srcLbl=seed.sourceApp==='selfsense'?'SelfSense':(seed.sourceApp==='familysense'?'FamilySense':(seed.sourceApp==='datesense'?'DateSense':'andere app'));
+  try{toast('Tekst overgenomen uit '+srcLbl+(seed.sourceProfile?' ('+String(seed.sourceProfile).trim()+')':''));}catch(_e6){}
+}
+function shouldBootScreenVertelForCrossAppSeed(){
+  if(!sessionStorage)return false;
+  var raw='';
+  try{raw=sessionStorage.getItem('crossapp_vertel_seed')||'';}catch(_e){return false;}
+  if(!raw)return false;
+  try{
+    var seed=JSON.parse(raw);
+    if(!seed||!String(seed.text||'').trim())return false;
+    if(Date.now()-(seed.ts||0)>5*60*1000)return false;
+    if(seed.targetApp&&seed.targetApp!==CROSSAPP_VERTEL_THIS_APP)return false;
+    return true;
+  }catch(_e2){return false;}
+}
+
 function _goScreenBody(sc){
   var prevScreen=S.screen;
   var shadeEl=document.getElementById('helpTourShade');
@@ -4872,6 +4916,9 @@ function _goScreenBody(sc){
   S.prev=S.screen;S.screen=sc;
   if(sc==='vertel'&&prevScreen!=='vertel'){
     S._forceFreshVertel=true;
+  }
+  if(sc==='vertel'){
+    setTimeout(function(){try{consumeCrossAppVertelSeed();}catch(_e){}},80);
   }
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
@@ -12803,6 +12850,44 @@ function ownSenseVertelRichEnoughForCategoryAI(t){
   return words.length>=6;
 }
 
+/**
+ * Probeer AI-JSON-output veilig te parsen, ook bij truncatie / kleine syntax-fouten.
+ * 1) Direct JSON.parse.
+ * 2) Knip tot laatste '}' en balanceer accolades.
+ * 3) Pluk per top-level key een compleet object via regex (voor flat schemas zoals OWN_CATS).
+ * Geeft null als alles faalt.
+ */
+function parseAiCategoriesJsonSafe(raw,debugLabel){
+  var s=String(raw||'').replace(/```json|```/g,'').trim();
+  if(!s)return null;
+  try{return JSON.parse(s);}catch(_e1){}
+  try{
+    var lastBrace=s.lastIndexOf('}');
+    if(lastBrace>0){
+      var trimmed=s.substring(0,lastBrace+1);
+      var open=(trimmed.match(/\{/g)||[]).length;
+      var close=(trimmed.match(/\}/g)||[]).length;
+      while(open>close){trimmed+='}';close++;}
+      return JSON.parse(trimmed);
+    }
+  }catch(_e2){}
+  try{
+    var partial={};
+    var rx=/"([a-zA-Z_]\w*)"\s*:\s*\{([^{}]*)\}/g;
+    var m;
+    while((m=rx.exec(s))){
+      try{partial[m[1]]=JSON.parse('{'+m[2]+'}');}catch(_e3){}
+    }
+    if(Object.keys(partial).length)return partial;
+  }catch(_e4){}
+  try{
+    if(typeof localStorage!=='undefined'&&localStorage.getItem('senseDebugAi')==='1'&&typeof console!=='undefined'&&console.warn){
+      console.warn('[AI-JSON parse failed] '+debugLabel,{len:s.length,head:s.substring(0,200),tail:s.substring(Math.max(0,s.length-200))});
+    }
+  }catch(_eL){}
+  return null;
+}
+
 /** Vertel → OWN Sense: vul OWN_CATS-velden uit vrije tekst (extra API-call). Alleen expliciete inhoud; lege strings als er niets over valt te halen. */
 async function updateOwnSenseCategoriesFromVertel(tekst){
   if(!S.apiKey)return;
@@ -12834,9 +12919,9 @@ async function updateOwnSenseCategoriesFromVertel(tekst){
     +' Alle niet-lege veldwaarden in het Nederlands. Maximaal één zin per veld.';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],600);
-    var clean=raw.replace(/```json|```/g,'').trim();
-    var updates=JSON.parse(clean);
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],2400);
+    var updates=parseAiCategoriesJsonSafe(raw,'updateOwnSenseCategoriesFromVertel(familysense)');
+    if(!updates)return;
 
     OWN_CATS.forEach(function(cat){
       var catId=cat.id;

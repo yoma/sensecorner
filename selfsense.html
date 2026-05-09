@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="08-05-2026 22:25">
+<meta name="fs-build" content="09-05-2026 16:23">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -2168,8 +2168,11 @@ var S={
   /** Vertel geschiedenis: {sessionId,rows,chronological DB rows,hasOlder} */
   sessionHistoryPager:null,
   /** Tijdelijke context uit Advies → Vertel (toon boven invoervak i.p.v. invoervak zelf te vullen). */
-  vertelPendingAdvice:null
+  vertelPendingAdvice:null,
+  /** Zet via localStorage key senseDebugAi=1 (reload) voor uitgebreide AI-consolelogs in callAPI. */
+  debugAi:false
 };
+try{S.debugAi=(typeof localStorage!=='undefined'&&localStorage.getItem('senseDebugAi')==='1');}catch(_e){S.debugAi=false;}
 /** Vertel-chat wordt aan deze SenseCorner-app gekoppeld (DB-kolom sense_sessions.vertel_app). */
 var VERTEL_APP_SLUG='selfsense';
 
@@ -12286,6 +12289,16 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
     if(data.error)throw new Error(data.error.message);
     await logSenseiWebSearchIfPresent(data,sessionUserId,'selfsense');
     var txt=extractSenseiChatAssistantText(data)||'';
+    try{
+      if(window.S&&S.debugAi){
+        console.groupCollapsed('[AI debug] sysHead='+String(sys||'').substring(0,80).replace(/\s+/g,' ')+'... maxTok='+(maxTok||800)+' len='+txt.length);
+        console.log('stop_reason:',data&&data.stop_reason);
+        console.log('usage:',data&&data.usage);
+        console.log('raw text:',txt);
+        console.log('messages in:',msgs);
+        console.groupEnd();
+      }
+    }catch(_eDbg){}
     if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');
     return txt;
   }catch(e){
@@ -13584,6 +13597,106 @@ function dismissCrossAppNote(bar){
   if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
 }
 
+/* Cross-app GO: verder praten in de app waar het dossier primair leeft (los van «Ook noteren»-strook). */
+function buildCrossAppGoBarHtml(barId,sug){
+  return '<div class="coach-save-bar coach-save-bar--crossapp-go" id="'+barId+'" style="margin-top:6px">'
+    +'<span class="coach-save-lbl">Wil je dieper op <b>'+escHTML(sug.displayName)+'</b> ingaan? Aangeraden: doe dit in <b>'+escHTML(sug.targetLabel)+'</b>.</span>'
+    +'<button type="button" class="coach-save-btn" data-act="goto">Open in '+escHTML(sug.targetLabel)+'</button>'
+    +'<button type="button" class="coach-save-skip" data-act="dismiss">Niet nu</button>'
+    +'</div>';
+}
+function wireCrossAppGoBar(barId){
+  var bar=document.getElementById(barId);
+  if(!bar||bar.dataset.crossAppGoWired)return;
+  bar.dataset.crossAppGoWired='1';
+  var go=bar.querySelector('[data-act="goto"]');
+  var dis=bar.querySelector('[data-act="dismiss"]');
+  if(go)go.addEventListener('click',function(){void acceptCrossAppGo(bar);});
+  if(dis)dis.addEventListener('click',function(){dismissCrossAppGo(bar);});
+}
+function _crossAppGoSuppressionKey(targetApp,profileName){
+  return String(targetApp||'')+':'+String(profileName||'');
+}
+function isCrossAppGoSuppressed(targetApp,profileName){
+  var sid=String((window.S&&S.currentSessionId)||'no-session');
+  var bag=window._crossAppGoSuppressed||{};
+  var bucket=bag[sid]||{};
+  return !!bucket[_crossAppGoSuppressionKey(targetApp,profileName)];
+}
+function suppressCrossAppGo(targetApp,profileName){
+  var sid=String((window.S&&S.currentSessionId)||'no-session');
+  window._crossAppGoSuppressed=window._crossAppGoSuppressed||{};
+  window._crossAppGoSuppressed[sid]=window._crossAppGoSuppressed[sid]||{};
+  window._crossAppGoSuppressed[sid][_crossAppGoSuppressionKey(targetApp,profileName)]=true;
+}
+function dismissCrossAppGo(bar){
+  if(!bar)return;
+  var payload=(window._crossAppGoData||{})[bar.id];
+  if(payload)suppressCrossAppGo(payload.targetApp,payload.profileName);
+  if(bar.id){try{delete window._crossAppGoData[bar.id];}catch(_e){}}
+  if(bar.parentNode)bar.parentNode.removeChild(bar);
+}
+async function acceptCrossAppGo(bar){
+  if(!bar)return;
+  var payload=(window._crossAppGoData||{})[bar.id];
+  if(!payload){if(bar.parentNode)bar.parentNode.removeChild(bar);return;}
+  try{
+    sessionStorage.setItem('crossapp_vertel_seed',JSON.stringify({
+      text:String(payload.originalText||''),
+      sourceApp:'selfsense',
+      sourceProfile:String(payload.profileName||''),
+      targetApp:String(payload.targetApp||''),
+      ts:Date.now()
+    }));
+  }catch(_e){}
+  var url=payload.targetApp==='datesense'?'datesense.html':(payload.targetApp==='familysense'?'familysense.html':null);
+  if(!url){toast('Doel-app niet bekend');return;}
+  location.href=url;
+}
+
+/**
+ * Zoekt bij vragen zonder naam naar recente user-berichten waarin een topic-woord voorkomt,
+ * over alle dossiers van deze user. Retourneert {profile, snippet, score, weighted, at} of null.
+ */
+async function findTopicHypothesisForVertel(userText){
+  if(!sb||!S.user||!S.user.id)return null;
+  var TRIG=['school','werk','ruzie','huiswerk','huistaak','mailtje','de mail','vergadering','het gesprek','collega','les ','de les','de test','rapport','training','sport','match','wedstrijd','date','afspraak','feestje','feest','reis','trip','vakantie'];
+  var t=String(userText||'').toLowerCase();
+  var hits=TRIG.filter(function(w){return t.indexOf(w)>=0;});
+  if(!hits.length)return null;
+  var since=new Date(Date.now()-14*24*3600*1000).toISOString();
+  try{
+    var r=await withTimeout(
+      sb.from('sense_messages')
+        .select('profile_name,html,created_at')
+        .eq('user_id',S.user.id)
+        .eq('role','user')
+        .gte('created_at',since)
+        .order('created_at',{ascending:false})
+        .limit(60),
+      6000,
+      'topic-hypothese zoekopdracht time-out',
+      {label:'findTopicHypothesisForVertel'}
+    );
+    if(!r||r.error||!Array.isArray(r.data))return null;
+    var best=null;
+    r.data.forEach(function(row){
+      var prof=String(row.profile_name||'').trim();
+      if(!prof||prof==='OWN Sense')return;
+      var body=String(row.html||'').replace(/<[^>]*>/g,' ').toLowerCase();
+      var score=hits.reduce(function(s,w){return s+(body.indexOf(w)>=0?1:0);},0);
+      if(score>0){
+        var ageH=(Date.now()-new Date(row.created_at).getTime())/(3600*1000);
+        var weighted=score+(ageH<24?0.5:(ageH<72?0.25:0));
+        if(!best||weighted>best.weighted){
+          best={profile:prof,snippet:body.substring(0,180),score:score,weighted:weighted,at:row.created_at};
+        }
+      }
+    });
+    return best;
+  }catch(_e){return null;}
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -13642,6 +13755,8 @@ async function sendMsg(){
   try{
   var crossBarHtml='';
   var crossBarId=null;
+  var crossGoBarHtml='';
+  var crossGoBarId='';
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
@@ -13692,6 +13807,16 @@ async function sendMsg(){
       originalText:crossAppSuggestion.originalText
     };
     crossBarHtml=buildCrossAppCoachBarHtml(crossBarId,crossAppSuggestion);
+  }
+  if(crossAppSuggestion&&!isCrossAppGoSuppressed(crossAppSuggestion.targetApp,crossAppSuggestion.name)){
+    crossGoBarId='cag_'+Date.now()+'_'+String(Math.floor(Math.random()*1e9));
+    window._crossAppGoData=window._crossAppGoData||{};
+    window._crossAppGoData[crossGoBarId]={
+      profileName:crossAppSuggestion.name,
+      targetApp:crossAppSuggestion.targetApp,
+      originalText:crossAppSuggestion.originalText
+    };
+    crossGoBarHtml=buildCrossAppGoBarHtml(crossGoBarId,crossAppSuggestion);
   }
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte
@@ -13746,6 +13871,12 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
+    var topicHypo=null;
+    try{
+      if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier){
+        topicHypo=await findTopicHypothesisForVertel(txtForAI);
+      }
+    }catch(_eTh){topicHypo=null;}
     var dossierCtx=await withTimeout(buildDossierContextForAI(aiContextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:aiContextDossier||null}});
     var dossierCtxSource='primary';
     if(hasStrongMentionFocus&&!String(dossierCtx||'').trim()){
@@ -13803,6 +13934,7 @@ async function sendMsg(){
     var vertelLeadingThread=buildVertelLeadingThreadBlock(S.vertelMsgs,txtForAI,12,1600,1200);
     var fullSys=sys
       +opslagVastNote
+      +(topicHypo?('\nTOPIC HYPOTHESE: De gebruiker noemt een onderwerp zonder naam. In dossier «'+dn(topicHypo.profile)+'» kwam dit recent terug: "'+String(topicHypo.snippet||'').replace(/"/g,"'").substring(0,140)+'". Stel kort en menselijk voor dat het hier waarschijnlijk over gaat, citeer een concreet detail uit dat fragment, en sluit af met een check ("klopt dat?"). Als de huidige gespreksfocus al ergens anders ligt, leg eerst kort de switch uit voor je het topic invult. Vermijd meta-zinnen als "het dossier is recent actief".\n'):'')
       +(hasStrongMentionFocus?('\nGESPREKSFOCUS VOOR DEZE VRAAG: '+dn(mentionFocusDossier)+(continuityFocusDossier&&!mentionMatchDossier?' (doorlopend uit eerdere berichten in dit Vertel-gesprek; het laatste bericht noemt die naam misschien niet)':'')+'. Interpreteer naamverwijzingen primair vanuit dit dossier, ook als opslag naar een ander dossier gaat. Als de recente gespreksbundel nieuwe feiten noemt (school, werk, ruzie, gezondheid), ga daar eerst op in en laat oude dossiersamenvatting naar de achtergrond schuiven tenzij het direct helpt.\n'):'')
       +(gesprekFocus&&!forcedDossier?('\nCONTEXT GESPREK: De gebruiker zit waarschijnlijk nog in hetzelfde draadje over '+dn(gesprekFocus)+', tenzij hij of zij duidelijk over iemand anders begint.\n'):'')
       +(vertelLeadingThread?('\n'+vertelLeadingThread):'')
@@ -13849,8 +13981,9 @@ async function sendMsg(){
     if(forcedDossier){
       window._pendingSegmenten=null;
       await _doOpslaan(null,userFacingTxt+'\n'+raw,forcedDossier,userSessionMsgId);
-      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(forcedDossier)+'</span></span>',userSessionMsgId)+crossBarHtml);
+      addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(forcedDossier)+'</span></span>',userSessionMsgId)+crossBarHtml+crossGoBarHtml);
       if(crossBarId)wireCrossAppCoachBar(crossBarId);
+      if(crossGoBarId)wireCrossAppGoBar(crossGoBarId);
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
@@ -13862,8 +13995,9 @@ async function sendMsg(){
           toast('Blijft opslaan bij '+dossierLabelWithScope(sticky)+'. Tik «Ander» om te wisselen.');
         }
         await _doOpslaan(null,userFacingTxt+'\n'+raw,sticky,userSessionMsgId);
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId)+crossBarHtml);
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(sticky)+'</span> <span style="font-size:11px;color:#666;font-weight:600">(dit gesprek)</span></span>',userSessionMsgId)+crossBarHtml+crossGoBarHtml);
         if(crossBarId)wireCrossAppCoachBar(crossBarId);
+        if(crossGoBarId)wireCrossAppGoBar(crossGoBarId);
         didSticky=true;
       }
       if(!didSticky){
@@ -13880,8 +14014,9 @@ async function sendMsg(){
             +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Nee</button>'
             +'</div>';
         }
-        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(autoDossier)+'</span></span>',userSessionMsgId)+extraDossierPrompt+crossBarHtml);
+        addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(autoDossier)+'</span></span>',userSessionMsgId)+extraDossierPrompt+crossBarHtml+crossGoBarHtml);
         if(crossBarId)wireCrossAppCoachBar(crossBarId);
+        if(crossGoBarId)wireCrossAppGoBar(crossGoBarId);
       }
     }
     // Update sidebar sessie preview
@@ -14331,6 +14466,48 @@ function ownSenseVertelRichEnoughForCategoryAI(t){
   return words.length>=6;
 }
 
+/**
+ * Probeer AI-JSON-output veilig te parsen, ook bij truncatie / kleine syntax-fouten.
+ * 1) Direct JSON.parse.
+ * 2) Knip tot laatste '}' en balanceer accolades.
+ * 3) Pluk per top-level key een compleet object via regex (voor flat schemas zoals OWN_CATS).
+ * Geeft null als alles faalt; logt op debug-mode.
+ */
+function parseAiCategoriesJsonSafe(raw,debugLabel){
+  var s=String(raw||'').replace(/```json|```/g,'').trim();
+  if(!s)return null;
+  try{return JSON.parse(s);}catch(_e1){}
+  try{
+    var lastBrace=s.lastIndexOf('}');
+    if(lastBrace>0){
+      var trimmed=s.substring(0,lastBrace+1);
+      var open=(trimmed.match(/\{/g)||[]).length;
+      var close=(trimmed.match(/\}/g)||[]).length;
+      while(open>close){trimmed+='}';close++;}
+      return JSON.parse(trimmed);
+    }
+  }catch(_e2){}
+  try{
+    var partial={};
+    var rx=/"([a-zA-Z_]\w*)"\s*:\s*\{([^{}]*)\}/g;
+    var m;
+    while((m=rx.exec(s))){
+      try{partial[m[1]]=JSON.parse('{'+m[2]+'}');}catch(_e3){}
+    }
+    if(Object.keys(partial).length)return partial;
+  }catch(_e4){}
+  try{
+    if(window.S&&S.debugAi){
+      console.warn('[AI-JSON parse failed] '+debugLabel,{
+        len:s.length,
+        head:s.substring(0,200),
+        tail:s.substring(Math.max(0,s.length-200))
+      });
+    }
+  }catch(_eL){}
+  return null;
+}
+
 /** Vertel → OWN Sense: vul OWN_CATS-velden uit vrije tekst (extra API-call). Alleen expliciete inhoud; lege strings als er niets over valt te halen. */
 async function updateOwnSenseCategoriesFromVertel(tekst){
   if(!S.apiKey)return;
@@ -14362,13 +14539,9 @@ async function updateOwnSenseCategoriesFromVertel(tekst){
     +' Alle niet-lege veldwaarden in het Nederlands. Maximaal één zin per veld.';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],1200);
-    var clean=raw.replace(/```json|```/g,'').trim();
-    var lastBrace=clean.lastIndexOf('}');
-    if(lastBrace>0&&lastBrace<clean.length-1){
-      clean=clean.substring(0,lastBrace+1);
-    }
-    var updates=JSON.parse(clean);
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],2400);
+    var updates=parseAiCategoriesJsonSafe(raw,'updateOwnSenseCategoriesFromVertel(selfsense)');
+    if(!updates)return;
 
     OWN_CATS.forEach(function(cat){
       var catId=cat.id;
