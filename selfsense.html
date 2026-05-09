@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="09-05-2026 16:48">
+<meta name="fs-build" content="09-05-2026 17:02">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13779,23 +13779,35 @@ async function sendMsg(){
     aiContextDossier=mentionFocusDossier;
   }
 
+  // Topic-hypothese vroeg berekenen + promoveren tot mentionFocus,
+  // zodat cross-app routing en sessie-continuiteit er direct gebruik van maken.
+  var topicHypo=null;
+  try{
+    if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier){
+      topicHypo=await findTopicHypothesisForVertel(txtForAI);
+    }
+  }catch(_eTh){topicHypo=null;}
+  if(topicHypo&&topicHypo.profile&&!mentionFocusDossier){
+    mentionFocusDossier=topicHypo.profile;
+    hasStrongMentionFocus=true;
+    if(!aiContextDossier||aiContextDossier==='OWN Sense')aiContextDossier=mentionFocusDossier;
+    if(!contextDossier||contextDossier==='OWN Sense')contextDossier=mentionFocusDossier;
+  }
+
   var crossAppSuggestion=null;
   if(mentionFocusDossier&&S.crossAppCache&&S.crossAppCache[mentionFocusDossier]){
     var ca=S.crossAppCache[mentionFocusDossier];
-    var wordCount=String(userFacingTxt||'').trim().split(/\s+/).filter(Boolean).length;
-    if(wordCount>=25){
-      var scopesCa=ca.app_scope||[];
-      var targetApp=scopesCa.indexOf('fs')>=0?'familysense':(scopesCa.indexOf('ds')>=0?'datesense':null);
-      var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
-      if(targetApp){
-        crossAppSuggestion={
-          name:mentionFocusDossier,
-          displayName:dn(mentionFocusDossier),
-          targetApp:targetApp,
-          targetLabel:targetLbl,
-          originalText:userFacingTxt
-        };
-      }
+    var scopesCa=ca.app_scope||[];
+    var targetApp=scopesCa.indexOf('fs')>=0?'familysense':(scopesCa.indexOf('ds')>=0?'datesense':null);
+    var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
+    if(targetApp){
+      crossAppSuggestion={
+        name:mentionFocusDossier,
+        displayName:dn(mentionFocusDossier),
+        targetApp:targetApp,
+        targetLabel:targetLbl,
+        originalText:userFacingTxt
+      };
     }
   }
   if(crossAppSuggestion){
@@ -13871,12 +13883,6 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
-    var topicHypo=null;
-    try{
-      if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier){
-        topicHypo=await findTopicHypothesisForVertel(txtForAI);
-      }
-    }catch(_eTh){topicHypo=null;}
     var dossierCtx=await withTimeout(buildDossierContextForAI(aiContextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:aiContextDossier||null}});
     var dossierCtxSource='primary';
     if(hasStrongMentionFocus&&!String(dossierCtx||'').trim()){
