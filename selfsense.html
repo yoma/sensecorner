@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="09-05-2026 16:23">
+<meta name="fs-build" content="09-05-2026 16:48">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -14004,7 +14004,14 @@ async function sendMsg(){
         var autoDossier='OWN Sense';
         await _doOpslaan(null,userFacingTxt+'\n'+raw,autoDossier,userSessionMsgId);
         var extraDossierPrompt='';
-        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier){
+        var _voorgesteldIsCrossApp=false;
+        try{
+          if(voorgesteldDossier&&S.crossAppCache&&S.crossAppCache[voorgesteldDossier]){
+            var _vsc=S.crossAppCache[voorgesteldDossier].app_scope||[];
+            _voorgesteldIsCrossApp=(_vsc.indexOf('ss')<0)&&(_vsc.indexOf('ds')>=0||_vsc.indexOf('fs')>=0);
+          }
+        }catch(_eVx){_voorgesteldIsCrossApp=false;}
+        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp){
           var saveId='sv'+Date.now();
           window._saveData=window._saveData||{};
           window._saveData[saveId]={tekst:userFacingTxt+'\n'+raw,dossier:voorgesteldDossier,sessionUserMsgId:userSessionMsgId};
@@ -14539,7 +14546,7 @@ async function updateOwnSenseCategoriesFromVertel(tekst){
     +' Alle niet-lege veldwaarden in het Nederlands. Maximaal één zin per veld.';
 
   try{
-    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],2400);
+    var raw=await callAPI(sys,[{role:'user',content:'Bestaande categorie-antwoorden (JSON): '+JSON.stringify(d.categories)+'\nNieuwe tekst (Vertel): '+t}],2400,60000);
     var updates=parseAiCategoriesJsonSafe(raw,'updateOwnSenseCategoriesFromVertel(selfsense)');
     if(!updates)return;
 
@@ -16090,9 +16097,11 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
     S.pdata[dossier]=pd;
     await withTimeout(saveP(dossier,pd.props,pd.count,pd.categories),10000,'Opslag-timeout bij profiel bijwerken.',{label:'saveP'});
     if(dossier==='OWN Sense'){
-      await updateOwnSenseCategoriesFromVertel(tekst);
       var _ownT=(tekst||'').replace(/<[^>]*>/g,' ').trim();
-      if(!ownSenseVertelRichEnoughForCategoryAI(_ownT))await updateEigenschappenAI(dossier,tekst);
+      void (async function(){
+        try{await updateOwnSenseCategoriesFromVertel(tekst);}catch(_eEx1){}
+        try{if(!ownSenseVertelRichEnoughForCategoryAI(_ownT))await updateEigenschappenAI(dossier,tekst);}catch(_eEx2){}
+      })();
     }else{
       updateContactCategories(dossier,tekst);
       herbereken(dossier);
