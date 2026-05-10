@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 16:11">
+<meta name="fs-build" content="10-05-2026 16:23">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -653,15 +653,26 @@ a:focus-visible,
 .vertel-ai-followup-pill{padding:4px 11px;font-size:11px;font-weight:600;font-family:inherit;line-height:1.25;border-radius:999px;border:1px solid color-mix(in srgb,var(--r) 30%,transparent);background:color-mix(in srgb,var(--r) 12%,#fff);color:color-mix(in srgb,var(--r) 70%,#1f2937);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .vertel-ai-followup-pill:active{opacity:.92}
 .coach-save-skip{padding:6px 10px;background:none;color:#aaa;border:none;font-size:12px;cursor:pointer;font-family:inherit}
+.msg-ai.topic-chooser{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  flex-shrink:0;
+}
 .topic-chooser{
-  align-self:flex-start;
-  max-width:96%;
+  align-self:stretch;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
   margin:8px 0;
   padding:14px 16px;
   background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.85));
   border:1px solid var(--b);
   border-radius:14px;
-  box-shadow:var(--shadow);
+  box-shadow:0 2px 12px rgba(61,47,31,.08);
+  position:relative;
+  z-index:3;
 }
 .topic-chooser-q{
   font-size:14px;
@@ -683,8 +694,17 @@ a:focus-visible,
   color:var(--chocolade);
   font-size:13px;
   font-weight:600;
+  font-family:inherit;
+  line-height:1.25;
   cursor:pointer;
   transition:var(--transition);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  max-width:100%;
+  appearance:none;
+  -webkit-appearance:none;
 }
 .topic-chooser-pill:hover{background:var(--app-medium)}
 .topic-chooser-pill--alt{
@@ -1879,15 +1899,11 @@ function hasDailyRecoExpired(cacheObj){
 function isWhitelistTipRequest(text){
   var t=String(text||'').toLowerCase();
   if(!t)return false;
-  var signals=[
-    'tip','tips','aanbevel','aanrader','suggestie','idee',
-    'boek','podcast','video','film','serie','docu','documentaire',
-    'website','site','artikel','lees','kijk','luister',
-    'waar kan ik','wat kan ik doen'
-  ];
-  for(var i=0;i<signals.length;i++){
-    if(t.indexOf(signals[i])>=0)return true;
-  }
+  if(t.indexOf('waar kan ik')>=0||t.indexOf('wat kan ik doen')>=0)return true;
+  // Woordgrenzen: voorkom valse positives (bv. "kijk" in "bekijken", "boek" in "facebook", "site" in "website").
+  if(/\b(tips?|aanbevel|aanrader|suggestie|(ideeën|ideeen|idee)|boek(en)?|podcasts?|videos?|video|films?|series|serie|documentaires?|docu|websites?|artikelen?|artikel|lees|luister)\b/.test(t))return true;
+  if(/\bkijk\b/.test(t))return true;
+  if(/\bsite\b/.test(t))return true;
   return false;
 }
 function getWhitelistTipDomainsForText(text){
@@ -1932,7 +1948,7 @@ function buildWhitelistTipBadgeHtml(domains){
   }).join('');
   if(!chips)return '';
   return '<div class="coach-save-bar" style="margin-top:8px">'
-    +'<span class="coach-save-lbl">🔎 Whitelist-startpunten</span>'
+    +'<span class="coach-save-lbl">🔎 Sites om op te bouwen (gecurateerd)</span>'
     +'<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div>'
     +'</div>';
 }
@@ -13649,7 +13665,7 @@ function removeTopicChooser(){
 function renderTopicChooser(candidates){
   var ca=document.getElementById('chatArea');if(!ca)return;
   var wrap=document.createElement('div');
-  wrap.className='topic-chooser';
+  wrap.className='msg-ai topic-chooser';
   wrap.id='topic-chooser-'+Date.now();
   var html='<div class="topic-chooser-q">Dit past bij meerdere dossiers. Waar gaat dit over?</div>';
   html+='<div class="topic-chooser-pills">';
@@ -13915,7 +13931,9 @@ async function sendMsg(){
   var topicHypo=null;
   var topicResult=null;
   try{
-    if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+    // Ook uitvoeren als mentionFocus al uit continuïteit komt: dan kan topic-still
+    // alsnog ambigu zijn (meerdere dossiers). Eerder werd de chooser daardoor nooit getoond.
+    if(!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
       topicResult=await findTopicCandidatesForVertel(txtForAI);
     }
   }catch(_eTh){topicResult=null;}
@@ -14013,12 +14031,12 @@ async function sendMsg(){
     +' TOPIC-VERBANDEN: Als de gebruiker een onderwerp noemt zonder naam (bv. "school", "die ruzie", "het werk", "de mail"), en je ziet dat exact één dossier in CONTACTDOSSIERS of GEDEELDE KERNCONTEXT recent expliciet over dat onderwerp gaat, formuleer dan een hypothese ("Ik vermoed dat dit over Lena gaat - gisteren ging het over haar AI-huiswerk; klopt dat?"). Vraag dus niet alleen "over wie?", maar bied het waarschijnlijke verband direct aan als check. Als meerdere dossiers in aanmerking komen, vraag wel terug welk.'
     +' AANBEVELINGEN: Je mag de gebruiker concrete aanbevelingen doen voor boeken die bij hen passen, TED talks, videos, documentaires, podcasts, en plekken, musea, events in Vlaanderen.'
     +' KRITIEKE REGEL - geen verzinsels: voor elke aanbeveling gebruik je ALTIJD eerst de web_search tool. Verzin NOOIT een titel, auteur, naam, adres of URL.'
-    +' Gebruik voor aanbevelingen alleen deze whitelist-domeinen: '+getSenseiTipsWhitelistDomains().join(', ')+'.'
+    +' Gebruik voor aanbevelingen alleen deze toegelaten domeinen (geen andere URLs verzinnen): '+getSenseiTipsWhitelistDomains().join(', ')+'.'
     +' Geef altijd de echte link mee in markdown: [Titel](URL).'
     +' Vind je niets passends? Zeg dan eerlijk: "Ik vind hier nu niet iets dat goed bij jou past - als je me meer vertelt over [X], zoek ik gerichter."'
     +' Beperk aanbevelingen tot wat echt relevant is voor wat de gebruiker net vertelde. Liever een rake aanbeveling dan vijf vage.'
     +(wantsWhitelistTips&&whitelistTipDomains.length
-      ?(' Voor DIT bericht ziet de intentie eruit als een tip-vraag. Start je aanbevelingen eerst vanuit deze whitelist-startpunten: '+whitelistTipDomains.join(', ')+'.')
+      ?(' Voor DIT bericht ziet de intentie eruit als een tip-vraag. Start je aanbevelingen eerst vanuit deze toegelaten startdomeinen: '+whitelistTipDomains.join(', ')+'.')
       :'')
     +' Noem alleen bronnen die je echt hebt gevonden.'
     +' Geef maximaal 2 of 3 aanbevelingen per antwoord bij expliciete vraag.'
