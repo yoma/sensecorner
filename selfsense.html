@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 16:31">
+<meta name="fs-build" content="10-05-2026 16:40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13962,22 +13962,20 @@ async function sendMsg(){
     aiContextDossier=mentionFocusDossier;
   }
 
-  // Topic-detectie + ambiguity-halt. Bij ≥2 sterke kandidaten (binnen 25%)
-  // tonen we een keuzekaart en stoppen we sendMsg; AI vuurt pas na user-keuze.
+  // Topic-detectie + keuzekaart-halt: bij triggerwoord zonder expliciete naam in jouw zin
+  // eerst bevestigen (ook bij 1 dossier uit DB + continuïteit, anders springt Sensei te hard).
   var topicHypo=null;
   var topicResult=null;
   try{
-    // Ook uitvoeren als mentionFocus al uit continuïteit komt: dan kan topic-still
-    // alsnog ambigu zijn (meerdere dossiers). Eerder werd de chooser daardoor nooit getoond.
     if(!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
       topicResult=await findTopicCandidatesForVertel(txtForAI);
     }
   }catch(_eTh){topicResult=null;}
   var chooserCand=null;
-  if(topicResult&&topicResult.hadTopicTriggers&&!explicitMentionDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
-    chooserCand=mergeTopicChooserCandidates(topicResult.candidates,continuityFocusDossier);
+  if(hasTopicTrig&&!explicitMentionDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+    chooserCand=mergeTopicChooserCandidates((topicResult&&topicResult.candidates)||[],continuityFocusDossier);
   }
-  if(chooserCand&&chooserCand.length>=2){
+  if(chooserCand&&chooserCand.length>=1){
     window._pendingTopicChoice={
       text:userFacingTxt,
       candidates:chooserCand,
