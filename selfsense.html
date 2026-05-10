@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 16:40">
+<meta name="fs-build" content="10-05-2026 16:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13705,6 +13705,7 @@ async function acceptTopicChoice(choice){
   S.vertelGesprekDossier=choice;
   S.vertelFrom=choice;
   if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+  S._suppressCrossAppBarsOnce=true;
   S._sendMsgPreloadText=pending.text;
   S._suppressAddUserMsgOnce=true;
   S._suppressTopicHypoOnce=true;
@@ -13923,6 +13924,8 @@ async function sendMsg(){
   S._suppressAddUserMsgOnce=false;
   var _skipTopicHypo=!!S._suppressTopicHypoOnce;
   S._suppressTopicHypoOnce=false;
+  var _skipCrossAppBars=!!S._suppressCrossAppBarsOnce;
+  S._suppressCrossAppBarsOnce=false;
   if(_preloadText){
     userFacingTxt=_preloadText;
     txtForAI=_preloadText.length>2800?_preloadText.substring(0,2800):_preloadText;
@@ -14013,6 +14016,7 @@ async function sendMsg(){
       };
     }
   }
+  if(_skipCrossAppBars)crossAppSuggestion=null;
   if(crossAppSuggestion){
     crossBarId='ca_'+Date.now()+'_'+String(Math.floor(Math.random()*1e9));
     window._crossAppSaveData=window._crossAppSaveData||{};
@@ -14151,6 +14155,12 @@ async function sendMsg(){
       +(pendingAdviceCtx?('\n'+pendingAdviceCtx):'')
       +'\nCONTEXT - ALGEMENE ACHTERGROND (lage prioriteit: korte dossiersnippets kunnen achterlopen op de tijdlijn en het gesprek hierboven. Bij tegenstrijdigheid: tijdlijn en gespreksbundel winnen):\n'
       +coachCtxFinal;
+    if(_skipCrossAppBars){
+      var _topicPickD=String(S.vertelGesprekDossier||S.vertelFrom||mentionFocusDossier||'').trim();
+      if(_topicPickD&&_topicPickD!=='OWN Sense'){
+        fullSys+='\nLET OP: De gebruiker heeft zojuist dossier «'+dn(_topicPickD)+'» gekozen via de topic-keuze. Geef in dit antwoord géén tweede beslismenu of opsomming (niet met eigen woorden vragen of ze hier willen verdergaan, in FamilySense willen werken, of apart willen opslaan; die opties regelt de app elders). Ga direct inhoudelijk verder.\n';
+      }
+    }
     if(hadAdviceCtx){
       fullSys+='\nEXTRA RICHTLIJN BIJ ADVIESCONTEXT: Begin je antwoord met 1 korte, expliciete brugzin dat je voortbouwt op het eerdere advies (bv. "Voortbouwend op je vorige advies..."), en ga dan direct praktisch verder met concreet advies. Geen slotvraag hoe zij het zelf zouden aanpakken.';
     }
@@ -14229,7 +14239,7 @@ async function sendMsg(){
             _voorgesteldIsCrossApp=(_vsc.indexOf('ss')<0)&&(_vsc.indexOf('ds')>=0||_vsc.indexOf('fs')>=0);
           }
         }catch(_eVx){_voorgesteldIsCrossApp=false;}
-        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp){
+        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp&&!_skipCrossAppBars){
           var saveId='sv'+Date.now();
           window._saveData=window._saveData||{};
           window._saveData[saveId]={tekst:userFacingTxt+'\n'+raw,dossier:voorgesteldDossier,sessionUserMsgId:userSessionMsgId};
