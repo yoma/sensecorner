@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 17:16">
+<meta name="fs-build" content="10-05-2026 18:54">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1734,7 +1734,11 @@ var S={
   /** Vertel geschiedenis: {sessionId,rows,chronological DB rows,hasOlder} */
   sessionHistoryPager:null,
   /** Tijdelijke context uit Advies → Vertel (toon boven invoervak i.p.v. invoervak zelf te vullen). */
-  vertelPendingAdvice:null
+  vertelPendingAdvice:null,
+  /** Na zelf-focus detectie: {prevSticky} voor expliciete OWN vs dossier-keuze onder het AI-antwoord. */
+  vertelSelfNarrativeFork:null,
+  /** Na opslaan in OWN via die fork: bij volgende opslagbalk vragen of vast OWN Sense in dit gesprek. */
+  vertelAfterOwnForkSave:false
 };
 /** Vertel-chat wordt aan deze SenseCorner-app gekoppeld (DB-kolom sense_sessions.vertel_app). */
 var VERTEL_APP_SLUG='familysense';
@@ -1911,7 +1915,6 @@ function autoResize(el){
   el.style.height='auto';
   var cap=el.classList&&el.classList.contains('input-area-vertel')?168:130;
   el.style.height=Math.min(el.scrollHeight,cap)+'px';
-  if(el.id==='msgInput'&&document.getElementById('chatWrap'))scrollVertelConversationIntoView();
 }
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 
@@ -3623,6 +3626,7 @@ async function selectDossierFromPick(dossier){
     toast('Opslagvoorstel: '+dn(dossier));
   }else if(ctx.type==='save'){
     S.vertelSessionStickyDossier=null;
+    clearVertelSelfNarrativeUiFlags();
     await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
   }
 }
@@ -3638,7 +3642,44 @@ async function createNewDossierFromPick(useSuggested){
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
   closeDossierPickModal();
   S.vertelSessionStickyDossier=null;
+  clearVertelSelfNarrativeUiFlags();
   await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
+}
+
+async function vertelForkChooseOwnSense(sid){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data)return;
+  try{
+    await _doOpslaan(sid,data.tekst,'OWN Sense',data.sessionUserMsgId);
+    S.vertelAfterOwnForkSave=true;
+  }catch(e){
+    console.error('vertelForkChooseOwnSense',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
+}
+async function vertelForkResumePrevSticky(sid){
+  var data=window._saveData&&window._saveData[sid];
+  if(!data||!data.selfNarrativePrevSticky)return;
+  data.dossier=data.selfNarrativePrevSticky;
+  try{
+    await opslaanInDossierSticky(sid);
+  }catch(e){
+    console.error('vertelForkResumePrevSticky',e);
+    toast(e&&e.message?String(e.message):'Opslaan mislukt.');
+  }
+}
+function vertelOwnSenseStickyJa(){
+  S.vertelSessionStickyDossier='OWN Sense';
+  S.vertelAfterOwnForkSave=false;
+  var el=document.getElementById('ownStickyOfferShell');
+  if(el){try{el.remove();}catch(_e){}}
+  try{toast('Oké: in dit gesprek slaan we voortaan automatisch op in OWN Sense. Tik «Ander» bij een bericht om te wisselen.');}catch(_t){}
+  if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+}
+function vertelOwnSenseStickyNee(){
+  S.vertelAfterOwnForkSave=false;
+  var el=document.getElementById('ownStickyOfferShell');
+  if(el){try{el.remove();}catch(_e){}}
 }
 
 // Verplaats tijdlijn bericht naar ander dossier
@@ -10288,6 +10329,7 @@ async function rVertel(el){
     S.sessionHistoryPager=null;
     window._sessieKoppelData=[];
     S.vertelSessionStickyDossier=null;
+    clearVertelSelfNarrativeUiFlags();
     S.currentSessionId=null;
   }
   el.innerHTML=`
@@ -12214,6 +12256,11 @@ function vertelLooksLikeOwnSenseNarrative(userTxt,stickyDossier){
   return true;
 }
 
+function clearVertelSelfNarrativeUiFlags(){
+  S.vertelSelfNarrativeFork=null;
+  S.vertelAfterOwnForkSave=false;
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -12272,16 +12319,16 @@ async function sendMsg(){
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   var ambiguousNameCtx=null;
-  // FamilySense: OWN Sense is geen familiedossier voor Vertel-tijdlijn; lege placeholder niet laten winnen vóór naam-match.
-  if(!forcedDossier&&voorgesteldDossier==='OWN Sense')voorgesteldDossier=null;
+  // FamilySense: OWN Sense is geen familiedossier voor Vertel-tijdlijn; lege placeholder niet laten winnen vóór naam-match (behalve bij expliciete OWN-sticky).
+  if(!forcedDossier&&voorgesteldDossier==='OWN Sense'&&S.vertelSessionStickyDossier!=='OWN Sense')voorgesteldDossier=null;
   if(!forcedDossier&&S.vertelSessionStickyDossier&&S.vertelSessionStickyDossier!=='OWN Sense'&&vertelLooksLikeOwnSenseNarrative(userFacingTxt,S.vertelSessionStickyDossier)){
     var _wasStickyFam=String(S.vertelSessionStickyDossier||'').trim();
     S.vertelSessionStickyDossier=null;
     if(String(S.vertelFrom||'')===_wasStickyFam)S.vertelFrom=null;
     if(String(S.vertelGesprekDossier||'')===_wasStickyFam)S.vertelGesprekDossier=null;
-    try{toast('Dit lijkt over jou te gaan; kies waar je dit wilt opslaan.');}catch(_ts){}
+    S.vertelSelfNarrativeFork={prevSticky:_wasStickyFam};
     voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
-    if(!forcedDossier&&voorgesteldDossier==='OWN Sense')voorgesteldDossier=null;
+    if(!forcedDossier&&voorgesteldDossier==='OWN Sense'&&S.vertelSessionStickyDossier!=='OWN Sense')voorgesteldDossier=null;
     if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
   }
   var matchTxt=buildVertelDossierMatchText(userFacingTxt);
@@ -12392,12 +12439,14 @@ async function sendMsg(){
     }
     messages.push({role:'user',content:txtForAI});
     var gesprekFocus=forcedDossier||contextDossier||S.vertelGesprekDossier||S.vertelFrom||'';
-    if(!forcedDossier&&gesprekFocus==='OWN Sense')gesprekFocus='';
+    if(!forcedDossier&&gesprekFocus==='OWN Sense'&&S.vertelSessionStickyDossier!=='OWN Sense')gesprekFocus='';
     if(!gesprekFocus)gesprekFocus=voorgesteldDossier||'';
     var opslagVastNote='';
     if(forcedDossier){
       opslagVastNote='\nLET OP OPSLAG: Deze sessie schrijft automatisch naar dossier «'+dn(forcedDossier)+'». Neem géén extra bewaarvraag of pseudo-menu in je antwoordtekst; dat hoort bij de vaste melding onder je tekst.\n';
-    }else if(S.vertelSessionStickyDossier&&S.vertelSessionStickyDossier!=='OWN Sense'){
+    }else if(S.vertelSessionStickyDossier==='OWN Sense'){
+      opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» naar OWN Sense; notities gaan daar automatisch heen. Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
+    }else if(S.vertelSessionStickyDossier){
       opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» - notities gaan vast naar dossier «'+dn(S.vertelSessionStickyDossier)+'». Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
     }
     var sparseDossierHint='';
@@ -12462,7 +12511,7 @@ async function sendMsg(){
     }else{
       window._pendingSegmenten=null;
       var didSticky=false;
-      if(!forcedDossier&&S.vertelSessionStickyDossier&&S.vertelSessionStickyDossier!=='OWN Sense'){
+      if(!forcedDossier&&S.vertelSessionStickyDossier){
         var sticky=S.vertelSessionStickyDossier;
         var voorgesteldSticky=voorgesteldDossier;
         // Sticky = expliciete keuze «Altijd in dit gesprek» - wint altijd tot «Ander» of nieuw gesprek.
@@ -12479,17 +12528,43 @@ async function sendMsg(){
         var nieuwNaam=(!voorgesteldDossier)?detectNieuweNaam(buildVertelDossierMatchText(userFacingTxt)):'';
         if(nieuwNaam&&findExistingDossierForMention(nieuwNaam))nieuwNaam='';
         window._saveData[saveId]={tekst:userFacingTxt+'\n'+raw,dossier:voorgesteldDossier,suggestedName:nieuwNaam,sessionUserMsgId:userSessionMsgId};
-        var saveLbl=voorgesteldDossier
-          ?'Opslaan bij <span class="coach-save-dos">'+dossierLabelWithScope(voorgesteldDossier)+'</span>?'
-          :'Opslaan in een dossier?';
-        var saveBar='<div class="coach-save-bar" id="'+saveId+'">'
-          +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
-          +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
-          +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="In dit gesprek niet meer vragen waar je opslaat">Altijd in dit gesprek</button>':'')
-          +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
-          +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
-          +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
-          +'</div>';
+        var fork=S.vertelSelfNarrativeFork;
+        var saveBar;
+        if(fork&&fork.prevSticky){
+          S.vertelSelfNarrativeFork=null;
+          window._saveData[saveId].selfNarrativePrevSticky=fork.prevSticky;
+          var prevNm=String(dn(fork.prevSticky)||fork.prevSticky).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          saveBar='<div class="coach-save-bar coach-save-self-fork" id="'+saveId+'" style="flex-direction:column;align-items:stretch;gap:10px;margin-top:10px">'
+            +'<span class="coach-save-lbl" style="width:100%">Dit lijkt over jou te gaan. Waar hoort dit bericht bij?</span>'
+            +'<div style="display:flex;flex-wrap:wrap;gap:8px;width:100%">'
+            +'<button type="button" class="coach-save-btn" data-fork-sid="'+saveId+'" onclick="vertelForkChooseOwnSense(this.dataset.forkSid)">OWN Sense</button>'
+            +'<button type="button" class="coach-save-other" data-fork-sid="'+saveId+'" onclick="vertelForkResumePrevSticky(this.dataset.forkSid)">Blijf bij '+prevNm+'</button>'
+            +'<button type="button" class="coach-save-other" data-fork-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.forkSid)">Ander dossier</button>'
+            +'<button type="button" class="coach-save-skip" data-fork-sid="'+saveId+'" onclick="var s=this.dataset.forkSid;var el=document.getElementById(s);if(el)el.remove();try{delete window._saveData[s]}catch(_e){}">Negeer</button>'
+            +'</div></div>';
+        }else{
+          var ownSenseOffer='';
+          if(S.vertelAfterOwnForkSave){
+            ownSenseOffer='<div class="own-sticky-offer-wrap" id="ownStickyOfferShell" style="width:100%;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,.08)">'
+              +'<span class="coach-save-lbl" style="display:block;margin-bottom:6px">Na je opslag in OWN Sense: wil je vanaf nu in dit gesprek alles standaard naar OWN Sense laten opslaan?</span>'
+              +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+              +'<button type="button" class="coach-save-btn coach-save-sticky" onclick="vertelOwnSenseStickyJa()">Ja, altijd OWN Sense</button>'
+              +'<button type="button" class="coach-save-other" onclick="vertelOwnSenseStickyNee()">Nee, per bericht kiezen</button>'
+              +'</div></div>';
+          }
+          var saveLbl=voorgesteldDossier
+            ?'Opslaan bij <span class="coach-save-dos">'+dossierLabelWithScope(voorgesteldDossier)+'</span>?'
+            :'Opslaan in een dossier?';
+          saveBar='<div class="coach-save-bar" id="'+saveId+'">'
+            +ownSenseOffer
+            +'<span class="coach-save-lbl">💾 '+saveLbl+'</span>'
+            +(voorgesteldDossier?'<button class="coach-save-btn" data-sid="'+saveId+'" onclick="opslaanInDossier(this.dataset.sid)">Ja</button>':'')
+            +(voorgesteldDossier?'<button class="coach-save-btn coach-save-sticky" data-sid="'+saveId+'" onclick="opslaanInDossierSticky(this.dataset.sid)" title="In dit gesprek niet meer vragen waar je opslaat">Altijd in dit gesprek</button>':'')
+            +'<button class="coach-save-other" data-sid="'+saveId+'" onclick="kiesAnderDossier(this.dataset.sid)">'+( voorgesteldDossier?'Ander':'Kies dossier')+'</button>'
+            +(nieuwNaam?'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,true)">Maak '+nieuwNaam+'</button>':'<button class="coach-save-other" data-sid="'+saveId+'" onclick="maakNieuwDossierEnOpslaan(this.dataset.sid,false)">Nieuw dossier</button>')
+            +'<button class="coach-save-skip" data-sid="'+saveId+'" onclick="document.getElementById(this.dataset.sid).remove()">Negeer</button>'
+            +'</div>';
+        }
 
         addMsg('ai',formatAiCard(raw)+adviceCtxBadge+saveBar);
       }
@@ -12658,6 +12733,7 @@ function clearChat(){
   S.vertelGesprekDossier=null;
   S.vertelFrom=null;
   S.vertelSessionStickyDossier=null;
+  clearVertelSelfNarrativeUiFlags();
   window._pendingSegmenten=null;
   var ca=document.getElementById('chatArea');
   if(!ca)return;
@@ -14473,6 +14549,7 @@ async function opslaanInDossierSticky(sid){
 
 function kiesAnderDossier(sid){
   S.vertelSessionStickyDossier=null;
+  clearVertelSelfNarrativeUiFlags();
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
   openDossierPickModal(
@@ -14497,6 +14574,7 @@ async function _opslaanKeuze(dossier){
 
 async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   S.vertelSessionStickyDossier=null;
+  clearVertelSelfNarrativeUiFlags();
   var data=window._saveData&&window._saveData[sid];
   if(!data)return;
   var suggested=data.suggestedName||'';
@@ -14552,6 +14630,7 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
       bar.className='coach-save-bar coach-save-bar-done';
       bar.innerHTML='<span style="font-size:13px;color:#2E7D32">✅ Opgeslagen bij <strong>'+escHTML(dn(dossier))+'</strong></span>';
     }
+    S.vertelAfterOwnForkSave=false;
     return inserted;
   }catch(e){
     if(bar){
@@ -14588,6 +14667,10 @@ try{
   window.viewDossier=viewDossier;
   window.openDossierProfiel=openDossierProfiel;
   window.opslaanInDossierSticky=opslaanInDossierSticky;
+  window.vertelForkChooseOwnSense=vertelForkChooseOwnSense;
+  window.vertelForkResumePrevSticky=vertelForkResumePrevSticky;
+  window.vertelOwnSenseStickyJa=vertelOwnSenseStickyJa;
+  window.vertelOwnSenseStickyNee=vertelOwnSenseStickyNee;
   window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
   window.safeSignOut=safeSignOut;
   window.closeDrawer=closeDrawer;
