@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 16:23">
+<meta name="fs-build" content="10-05-2026 16:31">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -6851,8 +6851,9 @@ function findExistingDossierForMention(token){
   });
   return found;
 }
-function buildVertelDossierMatchText(userTxt){
+function buildVertelDossierMatchText(userTxt,opts){
   var t=String(userTxt||'').trim();
+  if(opts&&opts.userOnly)return t;
   try{
     var msgs=S.vertelMsgs||[];
     for(var mi=msgs.length-1;mi>=0;mi--){
@@ -13773,11 +13774,11 @@ async function acceptCrossAppGo(bar){
  * per dossier geaggregeerd. Retourneert { candidates: [...], ambiguous } (max. 3 dossiers).
  */
 async function findTopicCandidatesForVertel(userText){
-  if(!sb||!S.user||!S.user.id)return {candidates:[],ambiguous:false};
+  if(!sb||!S.user||!S.user.id)return {candidates:[],ambiguous:false,hadTopicTriggers:false};
   var TRIG=['school','werk','ruzie','huiswerk','huistaak','mailtje','de mail','vergadering','het gesprek','collega','les ','de les','de test','rapport','training','sport','match','wedstrijd','date','afspraak','feestje','feest','reis','trip','vakantie'];
   var t=String(userText||'').toLowerCase();
   var hits=TRIG.filter(function(w){return t.indexOf(w)>=0;});
-  if(!hits.length)return {candidates:[],ambiguous:false};
+  if(!hits.length)return {candidates:[],ambiguous:false,hadTopicTriggers:false};
   var since=new Date(Date.now()-14*24*3600*1000).toISOString();
   try{
     var r=await withTimeout(
@@ -13792,7 +13793,7 @@ async function findTopicCandidatesForVertel(userText){
       'topic-kandidaten zoekopdracht time-out',
       {label:'findTopicCandidatesForVertel'}
     );
-    if(!r||r.error||!Array.isArray(r.data))return {candidates:[],ambiguous:false};
+    if(!r||r.error||!Array.isArray(r.data))return {candidates:[],ambiguous:false,hadTopicTriggers:true};
     var perDossier={};
     r.data.forEach(function(row){
       var prof=String(row.profile_name||'').trim();
@@ -13825,8 +13826,35 @@ async function findTopicCandidatesForVertel(userText){
       var ratio=arr[1].score/arr[0].score;
       if(ratio>=0.75)ambiguous=true;
     }
-    return {candidates:arr,ambiguous:ambiguous};
-  }catch(_e){return {candidates:[],ambiguous:false};}
+    return {candidates:arr,ambiguous:ambiguous,hadTopicTriggers:true};
+  }catch(_e){return {candidates:[],ambiguous:false,hadTopicTriggers:true};}
+}
+
+/** Zelfde triggerwoorden als topic-kandidaten; alleen user-tekst, geen AI-tail. */
+function vertelUserHasTopicTriggers(userTxt){
+  var TRIG=['school','werk','ruzie','huiswerk','huistaak','mailtje','de mail','vergadering','het gesprek','collega','les ','de les','de test','rapport','training','sport','match','wedstrijd','date','afspraak','feestje','feest','reis','trip','vakantie'];
+  var t=String(userTxt||'').toLowerCase();
+  return TRIG.some(function(w){return t.indexOf(w)>=0;});
+}
+
+function mergeTopicChooserCandidates(topicCandidates,continuityProf){
+  var map={};
+  (topicCandidates||[]).forEach(function(c){
+    var p=String((c&&c.profile)||'').trim();
+    if(!p||p==='OWN Sense')return;
+    map[p]=Object.assign({},c);
+  });
+  var cp=String(continuityProf||'').trim();
+  if(cp&&cp!=='OWN Sense'&&!map[cp]){
+    var ca=(S.crossAppCache&&S.crossAppCache[cp])||null;
+    var scope=ca&&Array.isArray(ca.app_scope)?ca.app_scope:[];
+    var appLbl=scope.indexOf('ds')>=0?'DateSense':(scope.indexOf('fs')>=0?'FamilySense':(scope.indexOf('ss')>=0?'SelfSense':''));
+    map[cp]={profile:cp,score:-1,snippet:'',latestAt:0,appLabel:appLbl};
+  }
+  var arr=[];
+  for(var k in map)arr.push(map[k]);
+  arr.sort(function(a,b){return (b.score||0)-(a.score||0);});
+  return arr;
 }
 
 // ══ Verstuur bericht ══════════════════════════════════════════════
@@ -13907,14 +13935,22 @@ async function sendMsg(){
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
-  var matchTxt=buildVertelDossierMatchText(userFacingTxt);
-  var mentionMatchDossier=pickBestDossierForVertelText(matchTxt);
   var continuityFocusDossier=inferVertelContinuityFocusDossier(true);
-  var mentionFocusDossier=(mentionMatchDossier&&mentionMatchDossier!=='OWN Sense')
-    ?mentionMatchDossier
-    :((continuityFocusDossier&&continuityFocusDossier!=='OWN Sense')?continuityFocusDossier:null);
+  var matchTxtFull=buildVertelDossierMatchText(userFacingTxt);
+  var pronounAwareMatch=pickBestDossierForVertelText(matchTxtFull);
+  var explicitMentionDossier=pickBestDossierForVertelText(String(userFacingTxt||'').trim());
+  var hasTopicTrig=vertelUserHasTopicTriggers(userFacingTxt);
+  // Bij topic-woorden geen AI-tail gebruiken voor dossier-focus: anders leest pickBest "Lena"
+  // uit het vorige AI-antwoord mee en slaan we de keuzekaart over.
+  var mentionFocusDossier=(explicitMentionDossier&&explicitMentionDossier!=='OWN Sense')
+    ?explicitMentionDossier
+    :(hasTopicTrig
+      ?((continuityFocusDossier&&continuityFocusDossier!=='OWN Sense')?continuityFocusDossier:null)
+      :((pronounAwareMatch&&pronounAwareMatch!=='OWN Sense')
+        ?pronounAwareMatch
+        :((continuityFocusDossier&&continuityFocusDossier!=='OWN Sense')?continuityFocusDossier:null)));
   if(!voorgesteldDossier){
-    voorgesteldDossier=mentionMatchDossier||continuityFocusDossier;
+    voorgesteldDossier=pronounAwareMatch||continuityFocusDossier;
   }
   var contextDossier=voorgesteldDossier||null;
   if(!forcedDossier&&mentionFocusDossier){
@@ -13937,13 +13973,17 @@ async function sendMsg(){
       topicResult=await findTopicCandidatesForVertel(txtForAI);
     }
   }catch(_eTh){topicResult=null;}
-  if(topicResult&&topicResult.ambiguous&&topicResult.candidates&&topicResult.candidates.length>=2){
+  var chooserCand=null;
+  if(topicResult&&topicResult.hadTopicTriggers&&!explicitMentionDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+    chooserCand=mergeTopicChooserCandidates(topicResult.candidates,continuityFocusDossier);
+  }
+  if(chooserCand&&chooserCand.length>=2){
     window._pendingTopicChoice={
       text:userFacingTxt,
-      candidates:topicResult.candidates,
+      candidates:chooserCand,
       ts:Date.now()
     };
-    renderTopicChooser(topicResult.candidates);
+    renderTopicChooser(chooserCand);
     S.busy=false;
     return;
   }
