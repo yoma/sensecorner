@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 15:59">
+<meta name="fs-build" content="10-05-2026 16:11">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -653,6 +653,52 @@ a:focus-visible,
 .vertel-ai-followup-pill{padding:4px 11px;font-size:11px;font-weight:600;font-family:inherit;line-height:1.25;border-radius:999px;border:1px solid color-mix(in srgb,var(--r) 30%,transparent);background:color-mix(in srgb,var(--r) 12%,#fff);color:color-mix(in srgb,var(--r) 70%,#1f2937);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .vertel-ai-followup-pill:active{opacity:.92}
 .coach-save-skip{padding:6px 10px;background:none;color:#aaa;border:none;font-size:12px;cursor:pointer;font-family:inherit}
+.topic-chooser{
+  align-self:flex-start;
+  max-width:96%;
+  margin:8px 0;
+  padding:14px 16px;
+  background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.85));
+  border:1px solid var(--b);
+  border-radius:14px;
+  box-shadow:var(--shadow);
+}
+.topic-chooser-q{
+  font-size:14px;
+  font-weight:600;
+  color:var(--chocolade);
+  margin:0 0 10px;
+  line-height:1.4;
+}
+.topic-chooser-pills{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.topic-chooser-pill{
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid var(--app-donker);
+  background:var(--app-licht);
+  color:var(--chocolade);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:var(--transition);
+}
+.topic-chooser-pill:hover{background:var(--app-medium)}
+.topic-chooser-pill--alt{
+  background:#fff;
+  border-color:var(--b);
+  color:var(--warm-bruin);
+  font-weight:500;
+}
+.topic-chooser-pill--alt:hover{background:#F6F7F9;color:var(--chocolade)}
+.topic-chooser-app{
+  font-size:11px;
+  font-weight:500;
+  opacity:0.75;
+}
 .home-mini-card{width:100%;max-width:340px;min-height:94px;text-align:left;margin:0 0 10px;padding:10px 12px;display:flex;align-items:center}
 .home-mini-card .ai-sec{width:100%;padding:0}
 .home-mini-card .ai-sec-title{font-size:11px;margin-bottom:4px}
@@ -13596,6 +13642,58 @@ function dismissCrossAppNote(bar){
   if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
 }
 
+function removeTopicChooser(){
+  var nodes=document.querySelectorAll('.topic-chooser');
+  nodes.forEach(function(n){if(n.parentNode)n.parentNode.removeChild(n);});
+}
+function renderTopicChooser(candidates){
+  var ca=document.getElementById('chatArea');if(!ca)return;
+  var wrap=document.createElement('div');
+  wrap.className='topic-chooser';
+  wrap.id='topic-chooser-'+Date.now();
+  var html='<div class="topic-chooser-q">Dit past bij meerdere dossiers. Waar gaat dit over?</div>';
+  html+='<div class="topic-chooser-pills">';
+  candidates.forEach(function(c){
+    var lbl=escHTML(dn(c.profile))+(c.appLabel?(' <span class="topic-chooser-app">('+escHTML(c.appLabel)+')</span>'):'');
+    html+='<button type="button" class="topic-chooser-pill" data-pick="'+escHTML(c.profile)+'">'+lbl+'</button>';
+  });
+  html+='<button type="button" class="topic-chooser-pill topic-chooser-pill--alt" data-pick="__none">Iets anders</button>';
+  html+='<button type="button" class="topic-chooser-pill topic-chooser-pill--alt" data-pick="__own">Hier verder zonder dossier</button>';
+  html+='</div>';
+  wrap.innerHTML=html;
+  ca.appendChild(wrap);
+  wrap.querySelectorAll('[data-pick]').forEach(function(b){
+    b.addEventListener('click',function(){void acceptTopicChoice(b.getAttribute('data-pick'));});
+  });
+  scrollVertelConversationIntoView();
+}
+async function acceptTopicChoice(choice){
+  var pending=window._pendingTopicChoice;
+  if(!pending)return;
+  window._pendingTopicChoice=null;
+  removeTopicChooser();
+  if(choice==='__none'){
+    addMsg('ai','<div>Over wie of wat gaat het dan?</div>');
+    var inp=document.getElementById('msgInput');
+    if(inp){inp.value='';inp.focus();}
+    return;
+  }
+  if(choice==='__own'){
+    S._sendMsgPreloadText=pending.text;
+    S._suppressAddUserMsgOnce=true;
+    S._suppressTopicHypoOnce=true;
+    await sendMsg();
+    return;
+  }
+  S.vertelGesprekDossier=choice;
+  S.vertelFrom=choice;
+  if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+  S._sendMsgPreloadText=pending.text;
+  S._suppressAddUserMsgOnce=true;
+  S._suppressTopicHypoOnce=true;
+  await sendMsg();
+}
+
 /* Cross-app GO: verder praten in de app waar het dossier primair leeft (los van «Ook noteren»-strook). */
 function buildCrossAppGoBarHtml(barId,sug){
   return '<div class="coach-save-bar coach-save-bar--crossapp-go" id="'+barId+'" style="margin-top:6px">'
@@ -13719,6 +13817,8 @@ async function findTopicCandidatesForVertel(userText){
 async function sendMsg(){
   if(S.busy)return;
   if(!S.apiKey){toast('⚠️ Eerst API key instellen via ⚙️');return;}
+  try{removeTopicChooser();}catch(_eRm){}
+  try{if(window._pendingTopicChoice)window._pendingTopicChoice=null;}catch(_eP){}
   var inp=document.getElementById('msgInput');
   if(_micActive)stopMic(true);
   var fu=S._vertelFollowUpSend;
@@ -13730,6 +13830,11 @@ async function sendMsg(){
   }else{
     txt=inp.value.trim();
     userFacingTxt=txt;
+  }
+  if(!txt&&S._sendMsgPreloadText){
+    txt=String(S._sendMsgPreloadText).trim();
+    userFacingTxt=txt;
+    S._sendMsgPreloadText=null;
   }
   if(!txt){
     toast('Geen tekst om te versturen - wacht tot je zin verschijnt, of laat de micro los na inspreken.');
@@ -13768,9 +13873,17 @@ async function sendMsg(){
     userOpts=userOpts||{};
     userOpts.apiPrompt=txt;
   }
-  addMsg('user',userFacingTxt,userOpts);
-  showT();
-  try{
+  var _preloadText=S._sendMsgPreloadText||null;
+  S._sendMsgPreloadText=null;
+  var _skipUserBubble=!!S._suppressAddUserMsgOnce;
+  S._suppressAddUserMsgOnce=false;
+  var _skipTopicHypo=!!S._suppressTopicHypoOnce;
+  S._suppressTopicHypoOnce=false;
+  if(_preloadText){
+    userFacingTxt=_preloadText;
+    txtForAI=_preloadText.length>2800?_preloadText.substring(0,2800):_preloadText;
+  }
+  if(!_skipUserBubble)addMsg('user',userFacingTxt,userOpts);
   var crossBarHtml='';
   var crossBarId=null;
   var crossGoBarHtml='';
@@ -13797,16 +13910,28 @@ async function sendMsg(){
     aiContextDossier=mentionFocusDossier;
   }
 
-  // Topic-detectie (kandidatenlijst); ambiguous-keuze volgt in latere stap.
+  // Topic-detectie + ambiguity-halt. Bij ≥2 sterke kandidaten (binnen 25%)
+  // tonen we een keuzekaart en stoppen we sendMsg; AI vuurt pas na user-keuze.
   var topicHypo=null;
+  var topicResult=null;
   try{
-    if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier){
-      var topicResultStap1=await findTopicCandidatesForVertel(txtForAI);
-      if(topicResultStap1&&topicResultStap1.candidates&&topicResultStap1.candidates.length){
-        topicHypo=topicResultStap1.candidates[0];
-      }
+    if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+      topicResult=await findTopicCandidatesForVertel(txtForAI);
     }
-  }catch(_eTh){topicHypo=null;}
+  }catch(_eTh){topicResult=null;}
+  if(topicResult&&topicResult.ambiguous&&topicResult.candidates&&topicResult.candidates.length>=2){
+    window._pendingTopicChoice={
+      text:userFacingTxt,
+      candidates:topicResult.candidates,
+      ts:Date.now()
+    };
+    renderTopicChooser(topicResult.candidates);
+    S.busy=false;
+    return;
+  }
+  if(topicResult&&topicResult.candidates&&topicResult.candidates.length>0){
+    topicHypo=topicResult.candidates[0];
+  }
   if(topicHypo&&topicHypo.profile&&!mentionFocusDossier){
     mentionFocusDossier=topicHypo.profile;
     hasStrongMentionFocus=true;
@@ -13814,6 +13939,8 @@ async function sendMsg(){
     if(!contextDossier||contextDossier==='OWN Sense')contextDossier=mentionFocusDossier;
   }
 
+  showT();
+  try{
   var crossAppSuggestion=null;
   if(mentionFocusDossier&&S.crossAppCache&&S.crossAppCache[mentionFocusDossier]){
     var ca=S.crossAppCache[mentionFocusDossier];
