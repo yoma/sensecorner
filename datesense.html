@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="09-05-2026 16:48">
+<meta name="ds-build" content="10-05-2026 15:05">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -4723,7 +4723,7 @@ function goScreen(sc){
 var CROSSAPP_VERTEL_THIS_APP='datesense';
 /**
  * Leest een cross-app vertel-seed uit sessionStorage (gezet door een andere SenseCorner-app)
- * en plaatst de tekst in de Vertel-input. TTL 5 min - oudere seeds worden weggegooid.
+ * en toont Q+A in de Vertel-chat plus persist in de actieve sessie. TTL 5 min - oudere seeds worden weggegooid.
  */
 function consumeCrossAppVertelSeed(){
   if(!sessionStorage)return;
@@ -4742,13 +4742,31 @@ function consumeCrossAppVertelSeed(){
   }
   if(seed.targetApp&&seed.targetApp!==CROSSAPP_VERTEL_THIS_APP)return;
   try{sessionStorage.removeItem('crossapp_vertel_seed');}catch(_e4){}
-  var inp=document.getElementById('msgInput');
-  if(inp){
-    inp.value=String(seed.text||'');
-    try{inp.dispatchEvent(new Event('input'));}catch(_e5){}
-  }
   var srcLbl=seed.sourceApp==='selfsense'?'SelfSense':(seed.sourceApp==='familysense'?'FamilySense':(seed.sourceApp==='datesense'?'DateSense':'andere app'));
-  try{toast('Tekst overgenomen uit '+srcLbl+(seed.sourceProfile?' ('+String(seed.sourceProfile).trim()+')':''));}catch(_e6){}
+  var profLbl=seed.sourceProfile?String(seed.sourceProfile).trim():'';
+  var userTxt=String(seed.text||'').trim();
+  var aiTxt=String(seed.lastAiReply||'').trim();
+  try{
+    addMsg('user',userTxt,{importedFrom:srcLbl,sourceProfile:profLbl});
+    if(aiTxt){
+      var aiHtml=(typeof formatAiCard==='function')?formatAiCard(aiTxt):('<div>'+aiTxt+'</div>');
+      addMsg('ai',aiHtml,{importedFrom:srcLbl});
+    }
+  }catch(_eRender){console.warn('cross-app render fail',_eRender);}
+  (async function(){
+    try{
+      var preview=userTxt.substring(0,120);
+      var sid=await ensureActiveSessionForMessage(preview);
+      if(!sid)return;
+      try{await saveSessionMsg(sid,'user','[Vanuit '+srcLbl+(profLbl?(' - '+profLbl):'')+'] '+userTxt);}catch(_eU){console.warn('persist user-import fail',_eU);}
+      if(aiTxt){
+        try{await saveSessionMsg(sid,'ai','[Vanuit '+srcLbl+'] '+aiTxt);}catch(_eA){console.warn('persist ai-import fail',_eA);}
+      }
+    }catch(_ePersist){console.warn('cross-app persist fail',_ePersist);}
+  })();
+  try{toast('Q+A overgenomen uit '+srcLbl+(profLbl?(' ('+profLbl+')'):''));}catch(_e5){}
+  var inp=document.getElementById('msgInput');
+  if(inp){inp.value='';try{inp.dispatchEvent(new Event('input'));}catch(_e6){}}
 }
 function shouldBootScreenVertelForCrossAppSeed(){
   if(!sessionStorage)return false;
@@ -10809,9 +10827,18 @@ async function rVertel(el){
       d.className=m.role==='user'?'msg-user':'msg-ai';
       if(m.role==='user')d.setAttribute('data-vertel-msg-idx',String(idx));
       var ctxLbl=String((m&&m.ctxLabel)||'').trim();
+      var imp=String((m&&m.importedFrom)||'').trim();
+      var bblOp=imp?' style="opacity:0.85"':'';
+      var aiSndr=imp?('VANUIT '+imp.toUpperCase()):'DATESENSE';
       d.innerHTML=m.role==='user'
-        ?`${ctxLbl?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+escRestore(ctxLbl)+'</div>':''}<div class="bbl-user">${escRestore(m.html)}</div>`
-        :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${m.html}</div>`;
+        ?`${ctxLbl?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+escRestore(ctxLbl)+'</div>':''}<div class="bbl-user"${bblOp}>${escRestore(m.html)}</div>`
+        :(imp?('<div class="bbl-ai"'+bblOp+'><div class="sndr">'+escRestore(aiSndr)+'</div>'+String(m.html||'')+'</div>')
+          :('<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+String(m.html||'')
+          +'<div class="vertel-ai-followup" role="group" aria-label="Verdieping op dit antwoord">'
+          +'<span class="vertel-ai-followup-hint">Meer diepgang</span>'
+          +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+idx+',\'advice\')">Extra advies</button>'
+          +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+idx+',\'expertise\')">Expertise</button>'
+          +'</div></div>'));
       ca.appendChild(d);
     });
 
@@ -12232,14 +12259,23 @@ function addMsg(role,html,opts){
       +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+msgIdx+',\'expertise\')">Expertise</button>'
       +'</div>';
   }
+  var _importedFrom=String((opts&&opts.importedFrom)||'').trim();
+  var _bblOpacity=_importedFrom?' style="opacity:0.85"':'';
+  var _aiSndr=_importedFrom?('VANUIT '+_importedFrom.toUpperCase()):'DATESENSE';
+  var _userCtxLabel=String((opts&&opts.ctxLabel)||'').trim();
+  if(!_userCtxLabel&&_importedFrom){
+    _userCtxLabel='Vanuit '+_importedFrom+(opts&&opts.sourceProfile?' - '+String(opts.sourceProfile).trim():'');
+  }
   // Escape alleen user's raw input; AI output mag (voor nu) wel HTML bevatten.
   d.innerHTML=role==='user'
-    ?`${ctxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(ctxLabel)+'</div>':''}<div class="bbl-user">${esc(html)}</div>`
-    :`<div class="bbl-ai"><div class="sndr">DATESENSE</div>${html}${aiReplyActionBar(pushIdx)}</div>`;
+    ?`${_userCtxLabel?'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+esc(_userCtxLabel)+'</div>':''}<div class="bbl-user"${_bblOpacity}>${esc(html)}</div>`
+    :`<div class="bbl-ai"${_bblOpacity}><div class="sndr">${esc(_aiSndr)}</div>${html}${_importedFrom?'':aiReplyActionBar(pushIdx)}</div>`;
   ca.appendChild(d);scrollVertelConversationIntoView();
-  var row={role:role,html:html,ctxLabel:ctxLabel||''};
+  var row={role:role,html:html,ctxLabel:_userCtxLabel||''};
   var apiP=String((opts&&opts.apiPrompt)||'').trim();
   if(apiP)row.apiPrompt=apiP;
+  if(_importedFrom)row.importedFrom=_importedFrom;
+  if(_importedFrom&&opts&&opts.sourceProfile)row.sourceProfile=String(opts.sourceProfile).trim();
   S.vertelMsgs.push(row);
   refreshVertelResendButton();
 }
@@ -14701,40 +14737,71 @@ function renderVertelSessionFromRows(rows){
   function escSess(s){
     return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  function parseVanuitPrefixedSessionMsg(content){
+    var s=String(content||'');
+    var mx=/^\[Vanuit ([^\]]+)\]\s*([\s\S]*)$/.exec(s);
+    if(!mx)return{ok:false,display:s,pill:'',body:s,importApp:''};
+    var inBr=String(mx[1]||'').trim();
+    var body=String(mx[2]||'');
+    return{ok:true,pill:'Vanuit '+inBr,body:body,importApp:String(inBr.split(' - ')[0]||'').trim()};
+  }
   var assignMap=getSessAssignMap();
   S.vertelMsgs=[];
   window._sessieKoppelData=[];
   rows.forEach(function(m,idx){
-    S.vertelMsgs.push({role:m.role,html:m.content||''});
     if(m.role==='user'){
-      var nextAi='';
+      var pvU=parseVanuitPrefixedSessionMsg(m.content||'');
+      var uBody=pvU.ok?pvU.body:String(m.content||'');
+      var uPill=pvU.ok?pvU.pill:'';
+      var uImp=pvU.ok?pvU.importApp:'';
+      var nextAiRaw='';
       for(var j=idx+1;j<rows.length;j++){
-        if(rows[j].role==='ai'){nextAi=rows[j].content||'';break;}
+        if(rows[j].role==='ai'){nextAiRaw=rows[j].content||'';break;}
         if(rows[j].role==='user')break;
       }
+      var pvN=parseVanuitPrefixedSessionMsg(nextAiRaw);
+      var nextAiBody=pvN.ok?pvN.body:nextAiRaw;
       var kIdx=window._sessieKoppelData.length;
       var a=assignMap[m.id]||{};
-      window._sessieKoppelData.push({sessionMsgId:m.id,text:m.content||'',aiText:nextAi,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
+      S.vertelMsgs.push({role:'user',html:uBody,ctxLabel:uPill,importedFrom:uImp});
+      window._sessieKoppelData.push({sessionMsgId:m.id,text:uBody,aiText:nextAiBody,senseMsgId:a.senseMsgId||null,dossier:a.dossier||''});
       var userWrap=document.createElement('div');
       userWrap.className='msg-user';
       userWrap.setAttribute('data-vertel-msg-idx',String(S.vertelMsgs.length-1));
-      userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
-        +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
-        +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
-        +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
-        +'</div></div>';
+      if(pvU.ok){
+        userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%">'
+          +'<div style="align-self:flex-end;margin:0 0 6px;max-width:96%;font-size:11px;font-weight:700;color:#7A7F87;background:#F6F7F9;border:1px solid #E7EAF0;border-radius:999px;padding:4px 10px">'+escSess(uPill)+'</div>'
+          +'<div class="bbl-user" style="opacity:0.85">'+escSess(uBody)+'</div></div>';
+      }else{
+        userWrap.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:96%"><div class="bbl-user">'+escSess(m.content||'')+'</div>'
+          +'<div class="coach-save-bar" style="margin-top:6px;padding:6px 10px"><span class="coach-save-lbl" id="sessAssignLbl-'+kIdx+'">'+(a.dossier?('📌 Gekoppeld aan '+dn(a.dossier)):'Nog niet gekoppeld aan dossier')+'</span>'
+          +'<button class="coach-save-other" onclick="koppelSessieMsg('+kIdx+')">'+(a.dossier?'Wijzig':'Koppel')+'</button>'
+          +(a.dossier?'<button class="coach-save-other" onclick="openGekoppeldDossierFromSess('+kIdx+')">Open dossier</button>':'')
+          +'</div></div>';
+      }
       ca.appendChild(userWrap);
     }else{
-      var aiWrap=document.createElement('div');
-      aiWrap.className='msg-ai';
-      var aiIdx=S.vertelMsgs.length-1;
-      aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+escSess(String(m.content||'')).replace(/\n/g,'<br>')
-        +'<div class="vertel-ai-followup" role="group" aria-label="Verdieping op dit antwoord">'
-        +'<span class="vertel-ai-followup-hint">Meer diepgang</span>'
-        +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+aiIdx+',\'advice\')">Extra advies</button>'
-        +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+aiIdx+',\'expertise\')">Expertise</button>'
-        +'</div></div>';
-      ca.appendChild(aiWrap);
+      var pvAi=parseVanuitPrefixedSessionMsg(m.content||'');
+      if(pvAi.ok){
+        var aiCard=(typeof formatAiCard==='function')?formatAiCard(pvAi.body):('<div>'+escSess(pvAi.body)+'</div>');
+        S.vertelMsgs.push({role:'ai',html:aiCard,importedFrom:pvAi.importApp});
+        var aiWrapI=document.createElement('div');
+        aiWrapI.className='msg-ai';
+        aiWrapI.innerHTML='<div class="bbl-ai" style="opacity:0.85"><div class="sndr">'+escSess('VANUIT '+String(pvAi.importApp||'').toUpperCase())+'</div>'+aiCard+'</div>';
+        ca.appendChild(aiWrapI);
+      }else{
+        S.vertelMsgs.push({role:'ai',html:m.content||''});
+        var aiWrap=document.createElement('div');
+        aiWrap.className='msg-ai';
+        var aiIdx=S.vertelMsgs.length-1;
+        aiWrap.innerHTML='<div class="bbl-ai"><div class="sndr">DATESENSE</div>'+escSess(String(m.content||'')).replace(/\n/g,'<br>')
+          +'<div class="vertel-ai-followup" role="group" aria-label="Verdieping op dit antwoord">'
+          +'<span class="vertel-ai-followup-hint">Meer diepgang</span>'
+          +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+aiIdx+',\'advice\')">Extra advies</button>'
+          +'<button type="button" class="vertel-ai-followup-pill" onclick="vraagExtraAdviesOpVertelAntwoord('+aiIdx+',\'expertise\')">Expertise</button>'
+          +'</div></div>';
+        ca.appendChild(aiWrap);
+      }
     }
   });
   var lastAiHadErr=false;

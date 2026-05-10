@@ -13574,15 +13574,14 @@ async function acceptCrossAppNote(bar){
   var btn=bar.querySelector('[data-act="accept"]');
   if(btn){btn.disabled=true;btn.textContent='...';}
   try{
-    var insertPayload={
-      user_id:S.user.id,
-      profile_name:payload.profileName,
-      vertel_app:payload.targetApp,
-      role:'user',
-      html:payload.originalText
-    };
-    var res=await sb.from('sense_messages').insert(insertPayload);
-    if(res&&res.error)throw res.error;
+    await saveMsg(payload.profileName,'user',payload.originalText);
+    if(payload.lastAiReply){
+      try{
+        await saveMsg(payload.profileName,'ai',String(payload.lastAiReply||''));
+      }catch(_eAi){
+        console.warn('[CROSS-APP][NOTE] ai-insert mislukt (user wel opgeslagen):',_eAi);
+      }
+    }
     toast('Genoteerd bij '+dn(payload.profileName));
     bar.innerHTML='<span class="coach-save-lbl">Ook genoteerd bij <b>'+escHTML(dn(payload.profileName))+'</b></span>';
     try{delete window._crossAppSaveData[bar.id];}catch(_e){}
@@ -13643,6 +13642,7 @@ async function acceptCrossAppGo(bar){
   try{
     sessionStorage.setItem('crossapp_vertel_seed',JSON.stringify({
       text:String(payload.originalText||''),
+      lastAiReply:String(payload.lastAiReply||''),
       sourceApp:'selfsense',
       sourceProfile:String(payload.profileName||''),
       targetApp:String(payload.targetApp||''),
@@ -13957,6 +13957,15 @@ async function sendMsg(){
       :'';
     var whitelistTipBadge=buildWhitelistTipBadgeHtml(whitelistTipDomains);
     var raw=await callAPI(fullSys,messages,1400,22000);
+    try{
+      var _rawForCrossApp=String(raw||'');
+      if(crossGoBarId&&window._crossAppGoData&&window._crossAppGoData[crossGoBarId]){
+        window._crossAppGoData[crossGoBarId].lastAiReply=_rawForCrossApp;
+      }
+      if(crossBarId&&window._crossAppSaveData&&window._crossAppSaveData[crossBarId]){
+        window._crossAppSaveData[crossBarId].lastAiReply=_rawForCrossApp;
+      }
+    }catch(_eEnrich){}
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}
