@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="09-05-2026 17:02">
+<meta name="fs-build" content="10-05-2026 15:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -13655,15 +13655,15 @@ async function acceptCrossAppGo(bar){
 }
 
 /**
- * Zoekt bij vragen zonder naam naar recente user-berichten waarin een topic-woord voorkomt,
- * over alle dossiers van deze user. Retourneert {profile, snippet, score, weighted, at} of null.
+ * Zoekt bij vragen zonder naam naar recente user-berichten waarin topic-woorden voorkomen,
+ * per dossier geaggregeerd. Retourneert { candidates: [...], ambiguous } (max. 3 dossiers).
  */
-async function findTopicHypothesisForVertel(userText){
-  if(!sb||!S.user||!S.user.id)return null;
+async function findTopicCandidatesForVertel(userText){
+  if(!sb||!S.user||!S.user.id)return {candidates:[],ambiguous:false};
   var TRIG=['school','werk','ruzie','huiswerk','huistaak','mailtje','de mail','vergadering','het gesprek','collega','les ','de les','de test','rapport','training','sport','match','wedstrijd','date','afspraak','feestje','feest','reis','trip','vakantie'];
   var t=String(userText||'').toLowerCase();
   var hits=TRIG.filter(function(w){return t.indexOf(w)>=0;});
-  if(!hits.length)return null;
+  if(!hits.length)return {candidates:[],ambiguous:false};
   var since=new Date(Date.now()-14*24*3600*1000).toISOString();
   try{
     var r=await withTimeout(
@@ -13675,26 +13675,44 @@ async function findTopicHypothesisForVertel(userText){
         .order('created_at',{ascending:false})
         .limit(60),
       6000,
-      'topic-hypothese zoekopdracht time-out',
-      {label:'findTopicHypothesisForVertel'}
+      'topic-kandidaten zoekopdracht time-out',
+      {label:'findTopicCandidatesForVertel'}
     );
-    if(!r||r.error||!Array.isArray(r.data))return null;
-    var best=null;
+    if(!r||r.error||!Array.isArray(r.data))return {candidates:[],ambiguous:false};
+    var perDossier={};
     r.data.forEach(function(row){
       var prof=String(row.profile_name||'').trim();
       if(!prof||prof==='OWN Sense')return;
       var body=String(row.html||'').replace(/<[^>]*>/g,' ').toLowerCase();
       var score=hits.reduce(function(s,w){return s+(body.indexOf(w)>=0?1:0);},0);
-      if(score>0){
-        var ageH=(Date.now()-new Date(row.created_at).getTime())/(3600*1000);
-        var weighted=score+(ageH<24?0.5:(ageH<72?0.25:0));
-        if(!best||weighted>best.weighted){
-          best={profile:prof,snippet:body.substring(0,180),score:score,weighted:weighted,at:row.created_at};
-        }
+      if(score===0)return;
+      var ageH=(Date.now()-new Date(row.created_at).getTime())/(3600*1000);
+      var bonus=(ageH<24?0.5:(ageH<72?0.25:0));
+      if(!perDossier[prof]){
+        var ca=(S.crossAppCache&&S.crossAppCache[prof])||null;
+        var scope=ca&&Array.isArray(ca.app_scope)?ca.app_scope:[];
+        var appLbl=scope.indexOf('ds')>=0?'DateSense':(scope.indexOf('fs')>=0?'FamilySense':(scope.indexOf('ss')>=0?'SelfSense':''));
+        perDossier[prof]={profile:prof,score:0,snippet:'',latestAt:0,appLabel:appLbl};
+      }
+      var d=perDossier[prof];
+      d.score+=score+bonus;
+      var rowTime=new Date(row.created_at).getTime();
+      if(rowTime>d.latestAt){
+        d.latestAt=rowTime;
+        d.snippet=body.substring(0,180);
       }
     });
-    return best;
-  }catch(_e){return null;}
+    var arr=[];
+    for(var k in perDossier)arr.push(perDossier[k]);
+    arr.sort(function(a,b){return b.score-a.score;});
+    arr=arr.slice(0,3);
+    var ambiguous=false;
+    if(arr.length>=2&&arr[0].score>0){
+      var ratio=arr[1].score/arr[0].score;
+      if(ratio>=0.75)ambiguous=true;
+    }
+    return {candidates:arr,ambiguous:ambiguous};
+  }catch(_e){return {candidates:[],ambiguous:false};}
 }
 
 // ══ Verstuur bericht ══════════════════════════════════════════════
@@ -13779,12 +13797,14 @@ async function sendMsg(){
     aiContextDossier=mentionFocusDossier;
   }
 
-  // Topic-hypothese vroeg berekenen + promoveren tot mentionFocus,
-  // zodat cross-app routing en sessie-continuiteit er direct gebruik van maken.
+  // Topic-detectie (kandidatenlijst); ambiguous-keuze volgt in latere stap.
   var topicHypo=null;
   try{
     if(!mentionFocusDossier&&!forcedDossier&&!S.vertelSessionStickyDossier){
-      topicHypo=await findTopicHypothesisForVertel(txtForAI);
+      var topicResultStap1=await findTopicCandidatesForVertel(txtForAI);
+      if(topicResultStap1&&topicResultStap1.candidates&&topicResultStap1.candidates.length){
+        topicHypo=topicResultStap1.candidates[0];
+      }
     }
   }catch(_eTh){topicHypo=null;}
   if(topicHypo&&topicHypo.profile&&!mentionFocusDossier){
