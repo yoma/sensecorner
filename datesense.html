@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="10-05-2026 15:05">
+<meta name="ds-build" content="10-05-2026 15:26">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -4746,6 +4746,7 @@ function consumeCrossAppVertelSeed(){
   var profLbl=seed.sourceProfile?String(seed.sourceProfile).trim():'';
   var userTxt=String(seed.text||'').trim();
   var aiTxt=String(seed.lastAiReply||'').trim();
+  // 1. Render in chatArea als geimporteerde Q+A (geen DB-write, dat doet stap 3)
   try{
     addMsg('user',userTxt,{importedFrom:srcLbl,sourceProfile:profLbl});
     if(aiTxt){
@@ -4753,6 +4754,18 @@ function consumeCrossAppVertelSeed(){
       addMsg('ai',aiHtml,{importedFrom:srcLbl});
     }
   }catch(_eRender){console.warn('cross-app render fail',_eRender);}
+  // 2. Zet gespreksfocus + sticky op het bron-dossier (de gebruiker koos
+  //    bewust voor "Open in DateSense" -> commitment om dit gesprek
+  //    aan dat dossier toe te wijzen, niet enkel een soft hint).
+  if(profLbl){
+    try{
+      S.vertelSessionStickyDossier=profLbl;
+      S.vertelGesprekDossier=profLbl;
+      S.vertelFrom=profLbl;
+      if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+    }catch(_eFocus){console.warn('cross-app focus-set fail',_eFocus);}
+  }
+  // 3. Persist naar actieve sessie zodat het blijft staan na refresh
   (async function(){
     try{
       var preview=userTxt.substring(0,120);
