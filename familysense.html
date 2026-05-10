@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 15:26">
+<meta name="fs-build" content="10-05-2026 17:16">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -12193,6 +12193,27 @@ function buildCoachSaveDoneBar(labelInnerHtml,sessionUserMsgId){
   return '<div class="coach-save-bar coach-save-bar-done">'+labelInnerHtml+sw+'</div>';
 }
 
+/** Sticky dossier (bv. kind) loslaten als de zin duidelijk over de ouder zelf gaat zonder die naam. */
+function vertelLooksLikeOwnSenseNarrative(userTxt,stickyDossier){
+  var st=String(stickyDossier||'').trim();
+  if(!st||st==='OWN Sense')return false;
+  var t=String(userTxt||'').toLowerCase().replace(/\s+/g,' ');
+  if(t.length<8)return false;
+  if(!/\b(ik ben|ik was|ik voel|ik heb|ik had|ik wil|ik ga|ik word|ik werd|ik kan|ik moet|ik zal|voor mij|over mezelf|bij mezelf|mijn eigen|terug aan het|aan het sporten|aan het trainen|aan het lopen|ik sport|ik train|ik loop)\b/.test(t))return false;
+  try{
+    var variants=getDossierNameVariants(st)||[];
+    for(var vi=0;vi<variants.length;vi++){
+      var v=String(variants[vi]||'').trim();
+      if(v.length<2)continue;
+      var low=v.toLowerCase();
+      try{
+        if(new RegExp('\\b'+low.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t))return false;
+      }catch(_eRg){}
+    }
+  }catch(_eVar){}
+  return true;
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -12253,6 +12274,16 @@ async function sendMsg(){
   var ambiguousNameCtx=null;
   // FamilySense: OWN Sense is geen familiedossier voor Vertel-tijdlijn; lege placeholder niet laten winnen vóór naam-match.
   if(!forcedDossier&&voorgesteldDossier==='OWN Sense')voorgesteldDossier=null;
+  if(!forcedDossier&&S.vertelSessionStickyDossier&&S.vertelSessionStickyDossier!=='OWN Sense'&&vertelLooksLikeOwnSenseNarrative(userFacingTxt,S.vertelSessionStickyDossier)){
+    var _wasStickyFam=String(S.vertelSessionStickyDossier||'').trim();
+    S.vertelSessionStickyDossier=null;
+    if(String(S.vertelFrom||'')===_wasStickyFam)S.vertelFrom=null;
+    if(String(S.vertelGesprekDossier||'')===_wasStickyFam)S.vertelGesprekDossier=null;
+    try{toast('Dit lijkt over jou te gaan; kies waar je dit wilt opslaan.');}catch(_ts){}
+    voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
+    if(!forcedDossier&&voorgesteldDossier==='OWN Sense')voorgesteldDossier=null;
+    if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+  }
   var matchTxt=buildVertelDossierMatchText(userFacingTxt);
   var mentionMatchDossier=pickBestDossierForVertelText(matchTxt);
   if(!voorgesteldDossier){
