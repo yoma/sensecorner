@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="11-05-2026 12:35">
+<meta name="ds-build" content="11-05-2026 12:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -5232,6 +5232,7 @@ function sortContactsForSenses(names,mode){
 function openPlanner(dosName){
   var name=String(dosName||'').trim();
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  if(!isDateSenseVisibleContact(name)){toast('Dit dossier staat als FamilySense-contact. De planner is voor DateSense-dossiers.');return;}
   var prefs=getBoostPrefs();
   S.planner=S.planner||{};
   S.planner.dossier=name;
@@ -5253,6 +5254,7 @@ function openPlanner(dosName){
 function openPlannerDraft(dosName,idea){
   var name=String(dosName||'').trim();
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  if(!isDateSenseVisibleContact(name)){toast('Dit dossier staat als FamilySense-contact. De planner is voor DateSense-dossiers.');return;}
   openPlanner(name);
   S.planner=S.planner||{};
   S.planner.dossier=name;
@@ -8271,9 +8273,14 @@ function rPlanner(el){
     var active=String((answers.idea||'')).toLowerCase()===v;
     return '<button class="planner-chip'+(active?' active':'')+'" onclick="setPlannerIdea(\''+v+'\')">'+v.charAt(0).toUpperCase()+v.slice(1)+'</button>';
   }).join('');
-  var contacts=(S.profiles||[]).filter(function(v){return v!=='OWN Sense'&&getDossierLifecycle(v)==='active';});
+  // Zelfde zichtbaarheid als Mijn Senses / Vertel: geen FamilySense-only dossiers (app_scope fs of familie-tags).
+  var contacts=getDateSenseContactNames().filter(function(v){return getDossierLifecycle(v)==='active';});
+  if(name&&contacts.indexOf(name)<0){
+    name=contacts[0]||'';
+    S.planner.dossier=name||null;
+  }
   var dossierSelect='<select id="plannerDossier" class="form-input" aria-label="Dossier voor dateplanner" style="margin:0" onchange="S.planner.dossier=this.value;S.planner.result=\'\';S.planner.historySelection=\'\';goScreen(\'planner\')">'
-    +contacts.map(function(v){return'<option value="'+escHTML(v)+'" '+((name||'')===v?'selected':'')+'>'+escHTML(dn(v))+'</option>';}).join('')
+    +(contacts.length?contacts.map(function(v){return'<option value="'+escHTML(v)+'" '+((name||'')===v?'selected':'')+'>'+escHTML(dn(v))+'</option>';}).join(''):'<option value="">Geen DateSense-dossiers</option>')
     +'</select>';
   var resultHtml='';
   if(p.loading){
