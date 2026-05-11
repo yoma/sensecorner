@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="10-05-2026 19:37">
+<meta name="ds-build" content="11-05-2026 11:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -12889,10 +12889,8 @@ function vertelLooksLikeOwnSenseNarrative(userTxt,stickyDossier){
   if(!st||st==='OWN Sense')return false;
   var t=String(userTxt||'').toLowerCase().replace(/\s+/g,' ');
   if(t.length<6)return false;
-  var prim=/\b(ik ben|ik was|ik voel|ik heb|ik had|ik wil|ik ga|ik word|ik werd|ik kan|ik moet|ik zal|ik doe|ik deed|ik werk|ik woon|ik leef|ik vind|ik denk|ik merk|ik merkte|ik probeer|ik zit|ik voelde|ik zoek|ik hoop|ik dacht|ik kom|ik bleef|ik sport|ik train|ik loop|voor mij|voor mezelf|over mezelf|bij mezelf|met mezelf|mijn eigen|mezelf|terug aan het|aan het sporten|aan het trainen|aan het lopen|voel me|voel mij|gaat om mij|uit mezelf)\b/;
-  var inv=/\b(wil|kan|moet|zal|ga|doe|heb|ben|hoop|dacht|vind|zoek|bleef|kom|zou|mag|blijf) ik\b/;
-  var dropBen=/\bben (best|erg|heel|zo|ook|nog|trots|blij|klaar|bezig|echt|goed|druk|moe|lekker|fan|warm)\b/;
-  if(!prim.test(t)&&!inv.test(t)&&!dropBen.test(t))return false;
+  // GUARD: bevat tekst expliciet de sticky-dossier-naam? Dan geen self-narrative.
+  var mentionsSticky=false;
   try{
     var variants=getDossierNameVariants(st)||[];
     for(var vi=0;vi<variants.length;vi++){
@@ -12900,11 +12898,27 @@ function vertelLooksLikeOwnSenseNarrative(userTxt,stickyDossier){
       if(v.length<2)continue;
       var low=v.toLowerCase();
       try{
-        if(new RegExp('\\b'+low.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t))return false;
+        if(new RegExp('\\b'+low.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t)){
+          mentionsSticky=true;break;
+        }
       }catch(_eRg){}
     }
   }catch(_eVar){}
-  return true;
+  if(mentionsSticky)return false;
+  // Bestaande sterke patronen (ongewijzigd).
+  var prim=/\b(ik ben|ik was|ik voel|ik heb|ik had|ik wil|ik ga|ik word|ik werd|ik kan|ik moet|ik zal|ik doe|ik deed|ik werk|ik woon|ik leef|ik vind|ik denk|ik merk|ik merkte|ik probeer|ik zit|ik voelde|ik zoek|ik hoop|ik dacht|ik kom|ik bleef|ik sport|ik train|ik loop|voor mij|voor mezelf|over mezelf|bij mezelf|met mezelf|mijn eigen|mezelf|terug aan het|aan het sporten|aan het trainen|aan het lopen|voel me|voel mij|gaat om mij|uit mezelf)\b/;
+  var inv=/\b(wil|kan|moet|zal|ga|doe|heb|ben|hoop|dacht|vind|zoek|bleef|kom|zou|mag|blijf) ik\b/;
+  var dropBen=/\bben (best|erg|heel|zo|ook|nog|trots|blij|klaar|bezig|echt|goed|druk|moe|lekker|fan|warm)\b/;
+  if(prim.test(t)||inv.test(t)||dropBen.test(t))return true;
+  // NIEUW: object-stand met "me/mij", causale zinnen, typo-tolerante "aan het".
+  var withMe=/\b(met me|met mij|bij me|bij mij|aan me|aan mij|over me|over mij|in me|in mij|tegen me|tegen mij|gaat beter met|gaat slechter met|gaat goed met|gaat slecht met|doordat ik|omdat ik|sinds ik|nadat ik|toen ik|als ik)\b/;
+  var tolerantSport=/\baan (h?et|eht|t)\s+(sport|train|loop|sporten|trainen|lopen)/;
+  if(withMe.test(t)||tolerantSport.test(t))return true;
+  // FALLBACK: 2+ eerste-persoon markers (ik/mij/me/mezelf/mijn) en de
+  // sticky-naam komt niet voor -> sterk signaal van self-talk.
+  var fpMatches=t.match(/\b(ik|mij|me|mezelf|mijn)\b/g);
+  if(fpMatches&&fpMatches.length>=2)return true;
+  return false;
 }
 
 function clearVertelSelfNarrativeUiFlags(){

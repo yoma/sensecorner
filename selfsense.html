@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="10-05-2026 18:54">
+<meta name="fs-build" content="11-05-2026 11:49">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -648,6 +648,11 @@ a:focus-visible,
 .coach-save-dos{font-size:13px;font-weight:700;color:var(--r)}
 .coach-save-btn{padding:6px 14px;background:var(--r);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .coach-save-other{padding:6px 10px;background:#fff;color:#555;border:1px solid var(--b);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit}
+.coach-save-bar--crossapp,.coach-save-bar--crossapp-go{align-items:flex-start}
+@media (max-width:768px){
+  .coach-save-bar--crossapp,.coach-save-bar--crossapp-go{flex-direction:column;align-items:stretch}
+  .coach-save-bar--crossapp .coach-save-lbl,.coach-save-bar--crossapp-go .coach-save-lbl{flex:1 1 auto;width:100%}
+}
 .vertel-ai-followup{margin-top:10px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--r) 22%,transparent);display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .vertel-ai-followup-hint{font-size:11px;font-weight:600;color:rgba(45,49,54,.52);letter-spacing:.015em}
 .vertel-ai-followup-pill{padding:4px 11px;font-size:11px;font-weight:600;font-family:inherit;line-height:1.25;border-radius:999px;border:1px solid color-mix(in srgb,var(--r) 30%,transparent);background:color-mix(in srgb,var(--r) 12%,#fff);color:color-mix(in srgb,var(--r) 70%,#1f2937);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -6530,6 +6535,34 @@ function dossierLabelWithScope(name){
   var lbls=getDossierScopeLabelsForMatch(name);
   if(!lbls||!lbls.length)return base;
   return base+' ('+lbls[0]+')';
+}
+/** Cross-app stroken: cache is alleen voor dossiers níet in pdata; dossiers wél in SelfSense zitten alleen in pdata. */
+function getCrossAppContextForVertelProfile(dossierName){
+  var n=String(dossierName||'').trim();
+  if(!n||n==='OWN Sense')return null;
+  if(S.crossAppCache&&S.crossAppCache[n]){
+    var c=S.crossAppCache[n];
+    return{meta:c.meta||{},app_scope:c.app_scope||normalizeAppScopeList(c.meta||{})};
+  }
+  if(S.pdata&&S.pdata[n]){
+    var m=(S.pdata[n].meta)||{};
+    return{meta:m,app_scope:normalizeAppScopeList(m)};
+  }
+  return null;
+}
+/** Na cross-app HTML: op mobiel onderaan balken in beeld (anders lijkt het alsof de triggers ontbreken). */
+function scrollVertelCrossAppBarsIntoView(){
+  try{
+    var ca=document.getElementById('chatArea');
+    if(!ca)return;
+    var lastAi=ca.querySelector('.msg-ai:last-of-type');
+    if(!lastAi)return;
+    var go=lastAi.querySelector('.coach-save-bar--crossapp-go');
+    var note=lastAi.querySelector('.coach-save-bar--crossapp');
+    var el=go||note;
+    if(!el||typeof el.scrollIntoView!=='function')return;
+    el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});
+  }catch(_e){}
 }
 /** Lazy: eerste Vertel-open laadt recente user-berichten voor max. 10 cache-dossiers parallel. */
 var _crossAppHydrateInflight=null;
@@ -13846,8 +13879,8 @@ function mergeTopicChooserCandidates(topicCandidates,continuityProf){
   });
   var cp=String(continuityProf||'').trim();
   if(cp&&cp!=='OWN Sense'&&!map[cp]){
-    var ca=(S.crossAppCache&&S.crossAppCache[cp])||null;
-    var scope=ca&&Array.isArray(ca.app_scope)?ca.app_scope:[];
+    var _mc=getCrossAppContextForVertelProfile(cp);
+    var scope=_mc&&Array.isArray(_mc.app_scope)?_mc.app_scope:[];
     var appLbl=scope.indexOf('ds')>=0?'DateSense':(scope.indexOf('fs')>=0?'FamilySense':(scope.indexOf('ss')>=0?'SelfSense':''));
     map[cp]={profile:cp,score:-1,snippet:'',latestAt:0,appLabel:appLbl};
   }
@@ -14000,19 +14033,21 @@ async function sendMsg(){
   showT();
   try{
   var crossAppSuggestion=null;
-  if(mentionFocusDossier&&S.crossAppCache&&S.crossAppCache[mentionFocusDossier]){
-    var ca=S.crossAppCache[mentionFocusDossier];
-    var scopesCa=ca.app_scope||[];
-    var targetApp=scopesCa.indexOf('fs')>=0?'familysense':(scopesCa.indexOf('ds')>=0?'datesense':null);
-    var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
-    if(targetApp){
-      crossAppSuggestion={
-        name:mentionFocusDossier,
-        displayName:dn(mentionFocusDossier),
-        targetApp:targetApp,
-        targetLabel:targetLbl,
-        originalText:userFacingTxt
-      };
+  if(mentionFocusDossier){
+    var _cxCtx=getCrossAppContextForVertelProfile(mentionFocusDossier);
+    if(_cxCtx){
+      var scopesCa=_cxCtx.app_scope||[];
+      var targetApp=scopesCa.indexOf('fs')>=0?'familysense':(scopesCa.indexOf('ds')>=0?'datesense':null);
+      var targetLbl=targetApp==='familysense'?'FamilySense':(targetApp==='datesense'?'DateSense':null);
+      if(targetApp){
+        crossAppSuggestion={
+          name:mentionFocusDossier,
+          displayName:dn(mentionFocusDossier),
+          targetApp:targetApp,
+          targetLabel:targetLbl,
+          originalText:userFacingTxt
+        };
+      }
     }
   }
   if(_skipCrossAppBars)crossAppSuggestion=null;
@@ -14233,9 +14268,12 @@ async function sendMsg(){
         var extraDossierPrompt='';
         var _voorgesteldIsCrossApp=false;
         try{
-          if(voorgesteldDossier&&S.crossAppCache&&S.crossAppCache[voorgesteldDossier]){
-            var _vsc=S.crossAppCache[voorgesteldDossier].app_scope||[];
-            _voorgesteldIsCrossApp=(_vsc.indexOf('ss')<0)&&(_vsc.indexOf('ds')>=0||_vsc.indexOf('fs')>=0);
+          if(voorgesteldDossier){
+            var _vctx=getCrossAppContextForVertelProfile(voorgesteldDossier);
+            if(_vctx){
+              var _vsc=_vctx.app_scope||[];
+              _voorgesteldIsCrossApp=(_vsc.indexOf('ss')<0)&&(_vsc.indexOf('ds')>=0||_vsc.indexOf('fs')>=0);
+            }
           }
         }catch(_eVx){_voorgesteldIsCrossApp=false;}
         if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp&&!_skipCrossAppBars){
@@ -14251,6 +14289,15 @@ async function sendMsg(){
         addMsg('ai',formatAiCard(raw)+adviceCtxBadge+whitelistTipBadge+buildCoachSaveDoneBar('<span class="coach-save-lbl">✅ Automatisch opgeslagen bij <span class="coach-save-dos">'+dossierLabelWithScope(autoDossier)+'</span></span>',userSessionMsgId)+extraDossierPrompt+crossBarHtml+crossGoBarHtml);
         if(crossBarId)wireCrossAppCoachBar(crossBarId);
         if(crossGoBarId)wireCrossAppGoBar(crossGoBarId);
+      }
+    }
+    if(crossBarId||crossGoBarId){
+      try{
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){scrollVertelCrossAppBarsIntoView();});
+        });
+      }catch(_eRf){
+        scrollVertelCrossAppBarsIntoView();
       }
     }
     // Update sidebar sessie preview
