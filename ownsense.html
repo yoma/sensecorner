@@ -1200,6 +1200,23 @@ function ownBridgeStorageRemove(base,uid){
     try{localStorage.removeItem(base);}catch(_e2){}
   }
 }
+function safeInternalAppTarget(raw,fallback){
+  var fb=String(fallback||'').trim();
+  var t=String(raw||'').trim();
+  if(!t)return fb;
+  try{t=decodeURIComponent(t);}catch(_e){}
+  t=String(t||'').trim().replace(/\\/g,'/');
+  if(!t||/[\u0000-\u001f\u007f]/.test(t)||/^\/\//.test(t)||/^[a-z][a-z0-9+.-]*:/i.test(t))return fb;
+  try{
+    var u=new URL(t,window.location.href);
+    if(u.origin!==window.location.origin)return fb;
+    var file=String((u.pathname.split('/').pop()||'')).toLowerCase();
+    var allowed={};
+    ['sensecorner.html','datesense.html','familysense.html','selfsense.html'].forEach(function(v){allowed[v]=1;});
+    if(!allowed[file])return fb;
+  }catch(_url){return fb;}
+  return t;
+}
 var returnToApp='';
 var SB_URL='';
 var SB_ANON='';
@@ -2498,7 +2515,7 @@ function renderBronTab(){
 function initQuickNav(){
   try{
     var qp=new URLSearchParams(window.location.search||'');
-    returnToApp=String(qp.get('returnTo')||'').trim();
+    returnToApp=safeInternalAppTarget(qp.get('returnTo'),'');
   }catch(_e){returnToApp='';}
   var backPill=document.getElementById('topBackPill');
   var menuPill=document.getElementById('topMenuPill');
