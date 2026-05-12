@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="11-05-2026 11:49">
+<meta name="fs-build" content="12-05-2026 16:10">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -399,6 +399,7 @@ a:focus-visible,
 .ai-rich-card p:last-child{margin-bottom:0!important}
 .ai-rich-card ul{padding-left:18px}
 .ai-sec{padding:2px 0 10px}
+.ai-sec.ai-sec-plain{padding-top:0}
 .ai-sec+.ai-sec{border-top:1px dashed rgba(125,106,171,.25);padding-top:10px}
 .ai-sec-title{font-size:12px;font-weight:800;letter-spacing:.4px;color:#4A3D66;text-transform:uppercase;margin:0 0 6px;display:flex;align-items:center;gap:6px}
 .ai-sec-text{font-size:14px;color:#2b2b2b;line-height:1.75;margin:0 0 8px}
@@ -3269,7 +3270,7 @@ function formatAiRichText(txt){
   }
   var lines=raw.split('\n').map(function(l){return l.trim();});
   var sections=[];
-  var cur={title:'Inzicht',items:[]};
+  var cur={title:'',items:[]};
   function pushCur(){if(cur.items.length)sections.push(cur);}
   lines.forEach(function(line){
     if(!line)return;
@@ -3299,7 +3300,12 @@ function formatAiRichText(txt){
       body.push('<p class="ai-sec-text">'+inlineFmt(it.text)+'</p>');
     });
     flushList();
-    return '<div class="ai-sec"><div class="ai-sec-title"><span>'+sectionIcon(sec.title)+'</span><span>'+inlineFmt(sec.title)+'</span></div>'+body.join('')+'</div>';
+    var titled=String(sec.title||'').trim();
+    var titleRow=titled
+      ?'<div class="ai-sec-title"><span>'+sectionIcon(sec.title)+'</span><span>'+inlineFmt(sec.title)+'</span></div>'
+      :'';
+    var plainCls=titled?'':' ai-sec-plain';
+    return '<div class="ai-sec'+plainCls+'">'+titleRow+body.join('')+'</div>';
   });
   return out.join('');
 }
