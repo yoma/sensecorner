@@ -4064,12 +4064,29 @@ function applySenseDeepLinkFromUrl(){
     }
   }catch(_e){}
 }
+function safeInternalAppTarget(raw,fallback){
+  var fb=String(fallback||'').trim();
+  var t=String(raw||'').trim();
+  if(!t)return fb;
+  try{t=decodeURIComponent(t);}catch(_e){}
+  t=String(t||'').trim().replace(/\\/g,'/');
+  if(!t||/[\u0000-\u001f\u007f]/.test(t)||/^\/\//.test(t)||/^[a-z][a-z0-9+.-]*:/i.test(t))return fb;
+  try{
+    var u=new URL(t,window.location.href);
+    if(u.origin!==window.location.origin)return fb;
+    var file=String((u.pathname.split('/').pop()||'')).toLowerCase();
+    var allowed={};
+    ['sensecorner.html','ownsense.html','datesense.html','familysense.html','selfsense.html'].forEach(function(v){allowed[v]=1;});
+    if(!allowed[file])return fb;
+  }catch(_url){return fb;}
+  return t;
+}
 function initQuickNavBackToApp(){
   var back=document.getElementById('backAppBtn');
   if(!back)return;
   try{
     var sp=new URLSearchParams(window.location.search||'');
-    var rt=String(sp.get('returnTo')||'').trim();
+    var rt=safeInternalAppTarget(sp.get('returnTo'),'');
     if(!rt)return;
     var low=rt.toLowerCase();
     if(low.indexOf('http://')===0||low.indexOf('https://')===0)return;

@@ -759,6 +759,23 @@ a{text-decoration:none;color:inherit}
       })
     ]);
   }
+  function safeInternalAppTarget(raw,fallback){
+    var fb=String(fallback||'ownsense.html').trim()||'ownsense.html';
+    var t=String(raw||'').trim();
+    if(!t)return fb;
+    try{t=decodeURIComponent(t);}catch(_e){}
+    t=String(t||'').trim().replace(/\\/g,'/');
+    if(!t||/[\u0000-\u001f\u007f]/.test(t)||/^\/\//.test(t)||/^[a-z][a-z0-9+.-]*:/i.test(t))return fb;
+    try{
+      var u=new URL(t,window.location.href);
+      if(u.origin!==window.location.origin)return fb;
+      var file=String((u.pathname.split('/').pop()||'')).toLowerCase();
+      var allowed={};
+      ['sensecorner.html','ownsense.html','datesense.html','familysense.html','selfsense.html'].forEach(function(v){allowed[v]=1;});
+      if(!allowed[file])return fb;
+    }catch(_url){return fb;}
+    return t;
+  }
 
   async function scGetSessionRobust(){
     if(!sb||!sb.auth||typeof sb.auth.getSession!=='function')return null;
@@ -1549,7 +1566,7 @@ a{text-decoration:none;color:inherit}
   }
   function goToIndexLogin(mode,targetApp){
     mode=String(mode||'login').toLowerCase()==='register'?'register':'login';
-    var rt=String(targetApp||'').trim();
+    var rt=targetApp?safeInternalAppTarget(targetApp,''):'';
     var q=[];
     if(mode==='register')q.push('register=1');
     else q.push('login=1');
@@ -1557,7 +1574,7 @@ a{text-decoration:none;color:inherit}
     window.location.href='index.html?'+q.join('&');
   }
   function authReturnUrl(target){
-    var t=String(target||'').trim()||'ownsense.html';
+    var t=safeInternalAppTarget(target,'ownsense.html');
     return window.location.origin+window.location.pathname.replace(/[^/]*$/,'')+t;
   }
   async function getCurrentUser(){
@@ -2089,7 +2106,7 @@ a{text-decoration:none;color:inherit}
     return user;
   }
   async function openAppWithAuth(target){
-    var t=String(target||'').trim();
+    var t=safeInternalAppTarget(target,'');
     if(!t)return;
     var user=await refreshAuthUi();
     if(user){
@@ -2390,7 +2407,7 @@ a{text-decoration:none;color:inherit}
       });
       closeAuthModal();
       if(pendingReturnTo){
-        window.location.href=pendingReturnTo;
+        window.location.href=safeInternalAppTarget(pendingReturnTo,'sensecorner.html');
       }else{
         setTimeout(function(){try{window.location.reload();}catch(_r){window.location.href=window.location.pathname||'sensecorner.html';}},0);
       }
@@ -2488,8 +2505,7 @@ a{text-decoration:none;color:inherit}
     var params=new URLSearchParams(window.location.search||'');
     var returnTo=String(params.get('returnTo')||'').trim();
     if(returnTo){
-      var target=decodeURIComponent(returnTo);
-      if(target.indexOf('.html')===-1||target.indexOf('http')===0)target='ownsense.html';
+      var target=safeInternalAppTarget(returnTo,'ownsense.html');
       var user=await getCurrentUser();
       if(user){
         window.location.href=target;
