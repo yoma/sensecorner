@@ -13064,6 +13064,18 @@ function clearVertelSelfNarrativeUiFlags(){
   S.vertelAfterOwnForkSave=false;
 }
 
+function restoreVertelSelfNarrativeForkOnError(snapshot){
+  if(!snapshot||!snapshot.sticky)return false;
+  var fork=S.vertelSelfNarrativeFork;
+  if(!fork||fork.prevSticky!==snapshot.sticky)return false;
+  S.vertelSessionStickyDossier=snapshot.sticky;
+  S.vertelFrom=snapshot.from;
+  S.vertelGesprekDossier=snapshot.gesprek;
+  S.vertelSelfNarrativeFork=null;
+  if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+  return true;
+}
+
 // ══ Verstuur bericht ══════════════════════════════════════════════
 async function sendMsg(){
   if(S.busy)return;
@@ -13117,6 +13129,7 @@ async function sendMsg(){
   }
   addMsg('user',userFacingTxt,userOpts);
   showT();
+  var selfNarrativeRestore=null;
   try{
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
@@ -13124,6 +13137,7 @@ async function sendMsg(){
   var ambiguousNameCtx=null;
   if(!forcedDossier&&S.vertelSessionStickyDossier&&S.vertelSessionStickyDossier!=='OWN Sense'&&vertelLooksLikeOwnSenseNarrative(userFacingTxt,S.vertelSessionStickyDossier)){
     var _wasStickyDs=String(S.vertelSessionStickyDossier||'').trim();
+    selfNarrativeRestore={sticky:_wasStickyDs,from:S.vertelFrom,gesprek:S.vertelGesprekDossier};
     S.vertelSessionStickyDossier=null;
     if(String(S.vertelFrom||'')===_wasStickyDs)S.vertelFrom=null;
     if(String(S.vertelGesprekDossier||'')===_wasStickyDs)S.vertelGesprekDossier=null;
@@ -13370,6 +13384,7 @@ async function sendMsg(){
     updateSessiePreview(S.currentSessionId,userFacingTxt);
 
   }catch(x){
+    restoreVertelSelfNarrativeForkOnError(selfNarrativeRestore);
     var errMsg=String((x&&x.message)||x||'Onbekende fout.');
     if(isAuthSessionErrorMessage(errMsg)){
       console.warn('[AUTH][DATESENSE][VERTEL_RECOVERY]',x);
