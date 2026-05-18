@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 10:59">
+<meta name="fs-build" content="18-05-2026 12:13">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -4717,12 +4717,15 @@ function showFriendlyAuthGate(reason){
     +'<div style="padding:22px;max-width:520px;margin:0 auto">'
     +'<div style="font-size:18px;font-weight:800;color:#333;margin-bottom:8px">Bijna klaar</div>'
     +'<div style="font-size:14px;line-height:1.6;color:#555;margin-bottom:12px">We konden je login nog niet meteen bevestigen. '
-    +'Klik hieronder om door te gaan via SenseCorner, of probeer nog eens.</div>'
+    +'Log in via SenseCorner, direct in deze app, of probeer opnieuw.</div>'
     +'<div style="font-size:12px;color:#7a7f88;line-height:1.45;margin-bottom:14px">'+escHTML(msg)+'</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button type="button" id="authGateLoginBtn" class="btn-r" style="padding:10px 14px">Inloggen via SenseCorner</button>'
+    +'<button type="button" id="authGateInAppBtn" class="btn-r" style="padding:10px 14px">Inloggen in deze app</button>'
+    +'<button type="button" id="authGateLoginBtn" class="btn-g" style="padding:10px 14px">Inloggen via SenseCorner</button>'
     +'<button type="button" id="authGateRetryBtn" class="btn-g" style="padding:10px 14px">Opnieuw proberen</button>'
     +'</div></div>';
+  var b0=document.getElementById('authGateInAppBtn');
+  if(b0)b0.onclick=function(){try{goScreen('login');}catch(_e){window.location.reload();}};
   var b1=document.getElementById('authGateLoginBtn');
   if(b1)b1.onclick=function(){redirectToSenseCornerAuth();};
   var b2=document.getElementById('authGateRetryBtn');
@@ -4772,8 +4775,6 @@ async function init(){
   if(mcBoot&&!String(mcBoot.textContent||'').replace(/\s+/g,'').trim()){
     mcBoot.innerHTML='<div style="padding:32px 20px;text-align:center;color:#666;font-size:14px;line-height:1.6">Bezig met laden…</div>';
   }
-  // Hard-simple runtime: toon altijd direct Home, auth/sync draait op achtergrond.
-  try{goScreen('home');}catch(_e){}
   if(!sb){
     goScreen('home');
     var mc=document.getElementById('mainContent');
@@ -4788,32 +4789,36 @@ async function init(){
   ensureSessionTables();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var sessionRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden time-out');
+    var sessionRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden time-out');
     var session=sessionRes&&sessionRes.data&&sessionRes.data.session;
     if(!session){
       await new Promise(function(r){setTimeout(r,900);});
-      var retryRes=await withTimeout(sb.auth.getSession(),7000,'Sessie laden retry time-out');
+      var retryRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden retry time-out');
       session=retryRes&&retryRes.data&&retryRes.data.session;
     }
     if(session){
       S.user=session.user;
+      _setAuthTokenFromSession(session);
       if(!S.apiKey)S.apiKey='hub_server_managed';
-      await refreshAdminRoleFromSupabase();
-      await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
-      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-      try{await refreshOwnFactsCoachContext();}catch(_e){}
-      initSessie(); // Na auth - sessie aanmaken
+      try{
+        await refreshAdminRoleFromSupabase();
+        await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
+        try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+        try{await refreshOwnFactsCoachContext();}catch(_e){}
+        initSessie(); // Na auth - sessie aanmaken
+      }catch(postErr){console.error('init post-auth:',postErr);}
       goScreen('home');
-      applySenseDeepLinkFromUrl();
-      scheduleDailyRecoTipRefresh();
-      scheduleDagAdviesRefresh();
+      try{applySenseDeepLinkFromUrl();}catch(_e){}
+      try{scheduleDailyRecoTipRefresh();}catch(_e){}
+      try{scheduleDagAdviesRefresh();}catch(_e){}
     }else{
-      showFriendlyAuthGate('Geen actieve sessie gevonden.');
+      goScreen('login');
       return;
     }
   }catch(e){
     console.error('init bg auth error:',e);
-    showFriendlyAuthGate(String((e&&e.message)||e||'Onbekende sessiefout.'));
+    goScreen('login');
+    try{toast(String((e&&e.message)||'Kon sessie niet laden. Log opnieuw in.'));}catch(_e){}
     return;
   }
   sb.auth.onAuthStateChange(async(ev,ses)=>{
@@ -4821,14 +4826,16 @@ async function init(){
       S.user=ses.user;
       _setAuthTokenFromSession(ses||null);
       if(!S.apiKey)S.apiKey='hub_server_managed';
-      await refreshAdminRoleFromSupabase();
-      await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
-      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-      try{await refreshOwnFactsCoachContext();}catch(_e){}
-      goScreen('home');
-      applySenseDeepLinkFromUrl();
-      scheduleDailyRecoTipRefresh();
-      scheduleDagAdviesRefresh();
+      try{
+        await refreshAdminRoleFromSupabase();
+        await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
+        try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+        try{await refreshOwnFactsCoachContext();}catch(_e){}
+      }catch(authErr){console.error('auth SIGNED_IN sync:',authErr);}
+      try{goScreen('home');}catch(_e){}
+      try{applySenseDeepLinkFromUrl();}catch(_e){}
+      try{scheduleDailyRecoTipRefresh();}catch(_e){}
+      try{scheduleDagAdviesRefresh();}catch(_e){}
     } else if(ev==='SIGNED_OUT'){
       _setAuthTokenFromSession(null);
       S.apiKey='';
