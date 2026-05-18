@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="18-05-2026 09:09">
+<meta name="admin-build" content="18-05-2026 09:25">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script type="module">
@@ -488,10 +488,25 @@ a{color:inherit}
     senseiCoreBasisLoadState.style.color=isErr?'var(--date-donker)':'var(--m)';
   }
   function setCoreBasisBlockState(key,msg,isErr){
-    var el=document.querySelector('[data-core-state="'+key+'"]');
+    if(!senseiCoreBasisGrid)return;
+    var el=senseiCoreBasisGrid.querySelector('[data-core-state="'+key+'"]');
     if(!el)return;
     el.textContent=msg||'';
     el.style.color=isErr?'var(--date-donker)':'var(--m)';
+  }
+  function setCoreBasisBlockBusy(key,busy){
+    if(!senseiCoreBasisGrid)return;
+    var block=senseiCoreBasisGrid.querySelector('[data-core-block="'+key+'"]');
+    if(!block)return;
+    Array.prototype.slice.call(block.querySelectorAll('[data-core-action]')).forEach(function(b){
+      b.disabled=!!busy;
+    });
+  }
+  function setCoreBasisOverrideBadge(key,active){
+    if(!senseiCoreBasisGrid)return;
+    var badge=senseiCoreBasisGrid.querySelector('[data-core-badge="'+key+'"]');
+    if(!badge)return;
+    badge.style.display=active?'':'none';
   }
   async function waitSenseiCoreDefaults(){
     var tries=0;
@@ -553,7 +568,7 @@ a{color:inherit}
           setCoreBasisBlockState(key,'Tekst mag niet leeg zijn.',true);
           return;
         }
-        btn.disabled=true;
+        setCoreBasisBlockBusy(key,true);
         setCoreBasisBlockState(key,'Opslaan…',false);
         try{
           var up=await sb.from('sensei_core_overrides').upsert({
@@ -563,26 +578,28 @@ a{color:inherit}
             updated_at:new Date().toISOString()
           },{onConflict:'key'});
           if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+          setCoreBasisOverrideBadge(key,true);
           setCoreBasisBlockState(key,'Opgeslagen.',false);
-          await refreshSenseiCoreBasisPanel();
         }catch(e){
           setCoreBasisBlockState(key,(e&&e.message)||'Opslaan mislukt.',true);
         }finally{
-          btn.disabled=false;
+          setCoreBasisBlockBusy(key,false);
         }
       }else if(action==='reset'){
         if(!confirm('Override verwijderen en terug naar factory default?'))return;
-        btn.disabled=true;
+        setCoreBasisBlockBusy(key,true);
         setCoreBasisBlockState(key,'Resetten…',false);
         try{
           var del=await sb.from('sensei_core_overrides').delete().eq('key',key);
           if(del&&del.error)throw new Error(del.error.message||'Reset mislukt');
+          var taReset=senseiCoreBasisGrid.querySelector('textarea[data-core-key="'+key+'"]');
+          if(taReset)taReset.value=getSenseiCoreFactory(key);
+          setCoreBasisOverrideBadge(key,false);
           setCoreBasisBlockState(key,'Terug naar factory default.',false);
-          await refreshSenseiCoreBasisPanel();
         }catch(e){
           setCoreBasisBlockState(key,(e&&e.message)||'Reset mislukt.',true);
         }finally{
-          btn.disabled=false;
+          setCoreBasisBlockBusy(key,false);
         }
       }
     });
