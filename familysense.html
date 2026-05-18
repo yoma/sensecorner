@@ -10,9 +10,10 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="12-05-2026 16:10">
+<meta name="fs-build" content="18-05-2026 09:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script type="module" src="./senseiCore-loader.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -1990,6 +1991,52 @@ async function refreshAdminRoleFromSupabase(){
   }catch(_e){
     S.adminRole='user';
   }
+}
+function senseiCoreReady(){
+  return !!(window.SenseiCore&&window.SenseiCore.buildAdviceCore);
+}
+async function loadSenseiCoreOverrides(){
+  var out={grondregels:null,dunne_context:null,crisis:null,redflags_rubriek:null};
+  if(!sb||!S.user||!S.user.id)return out;
+  try{
+    var rs=await sb.from('sensei_core_overrides').select('key,value');
+    if(rs&&rs.error)throw rs.error;
+    (rs.data||[]).forEach(function(row){
+      var k=String(row.key||'').trim();
+      var v=String(row.value||'').trim();
+      if(k&&v&&Object.prototype.hasOwnProperty.call(out,k))out[k]=v;
+    });
+  }catch(e){
+    console.warn('loadSenseiCoreOverrides',e);
+  }
+  return out;
+}
+var FAMILYSENSE_ADVICE_CORE_OPTS={
+  persona:'Je bent FamilySensei, de persoonlijke gezinscoach. De gebruiker wil concreet gezinsadvies op basis van hun situatie, geen coaching die het werk teruggeeft met enkel open vragen.',
+  formatRules:'{{mode_instruction}} {{tone_instruction}} {{relationship_guard}}\n\nWERKWIJZE: Begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context (naam, gevoel, scherp dilemma of feit uit het dossier). Geen lange herhaling. Daarna geef je jouw advies: wat zeg of doe jij in hun schoenen, waarom dat helpt, wat slim is om te vermijden. Schrijf in gesproken Nederlands, vloeiend, zonder kopjes, zonder bulletlijsten, zonder afstandelijke zinnen zoals "het is belangrijk om". Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden; vraag nooit hoe zij het zelf zouden aanpakken of een keten van vragen. Behandel de gebruiker als volwassen die zelf beslist. Geen extra juridische of medische disclaimers tenzij er acute veiligheid is, dan wel kort en concreet. Werk NOOIT met scores of percentages.\n\nOUTPUT: Schrijf eerst maximaal 8 zinnen zonder aparte kopregels. Sluit daarna af met exact één aparte regel in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin. Geen extra tekst vóór of na de ACTIES-regel.'
+};
+var _senseiCoreAdviceReady=false;
+async function applySenseiCoreToAdviceCore(buildOpts){
+  var tries=0;
+  while(!senseiCoreReady()&&tries<50){
+    await new Promise(function(r){setTimeout(r,20);});
+    tries++;
+  }
+  if(!senseiCoreReady()){
+    console.warn('SenseiCore niet geladen; advice_core blijft fallback');
+    _senseiCoreAdviceReady=false;
+    return;
+  }
+  var SC=window.SenseiCore;
+  var overrides=await loadSenseiCoreOverrides();
+  SC.setCoreOverrides(overrides);
+  PROMPT_DEFAULTS.advice_core=SC.buildAdviceCore(buildOpts||FAMILYSENSE_ADVICE_CORE_OPTS);
+  _senseiCoreAdviceReady=true;
+}
+async function ensureSenseiCoreAdviceCore(){
+  if(_senseiCoreAdviceReady&&senseiCoreReady())return;
+  if(!S.user||!S.user.id)return;
+  await applySenseiCoreToAdviceCore(FAMILYSENSE_ADVICE_CORE_OPTS);
 }
 function getPromptText(key){
   var k=String(key||'').trim();
@@ -4201,6 +4248,7 @@ async function init(){
       S.user=session.user;
       if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
+      await applySenseiCoreToAdviceCore(FAMILYSENSE_ADVICE_CORE_OPTS);
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       initSessie(); // Na auth - sessie aanmaken
@@ -4221,6 +4269,7 @@ async function init(){
       _setAuthTokenFromSession(ses||null);
       if(!S.apiKey)S.apiKey='hub_server_managed';
       await refreshAdminRoleFromSupabase();
+      await applySenseiCoreToAdviceCore(FAMILYSENSE_ADVICE_CORE_OPTS);
       try{await loadAll();}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
@@ -9601,6 +9650,7 @@ async function genAdvies(name,forced){
     if(box)box.innerHTML='<div style="text-align:center;padding:20px;color:var(--m)">⚠️ Voeg je API key toe via ⚙️ instellingen.</div>';
     return;
   }
+  await ensureSenseiCoreAdviceCore();
   if(_adviesInFlightByName[name]){
     if(forced)toast('Vernieuwen is al bezig. Even geduld.');
     return;
