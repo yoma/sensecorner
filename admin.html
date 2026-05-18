@@ -4,9 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#6B8E6F">
-<meta name="admin-build" content="11-05-2026 13:15">
+<meta name="admin-build" content="18-05-2026 09:09">
 <title>Sense Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="module">
+import {
+  SENSEI_GRONDREGELS_DEFAULT,
+  DUNNE_CONTEXT_CLAUSULE_DEFAULT,
+  CRISIS_REGEL_DEFAULT,
+  REDFLAGS_RUBRIEK_DEFAULT
+} from './senseiCore.js';
+window.__senseiCoreDefaults={
+  grondregels:SENSEI_GRONDREGELS_DEFAULT,
+  dunne_context:DUNNE_CONTEXT_CLAUSULE_DEFAULT,
+  crisis:CRISIS_REGEL_DEFAULT,
+  redflags_rubriek:REDFLAGS_RUBRIEK_DEFAULT
+};
+</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -99,6 +113,16 @@ a{color:inherit}
 .prompt-save-btn{border:1px solid var(--chocolade);background:var(--chocolade);color:var(--cream);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .prompt-save-btn:disabled{opacity:.7;cursor:wait}
 .prompt-save-state{font-size:12px;color:var(--m)}
+.core-basis-warn{border:1px solid rgba(146,100,10,.35);background:var(--amberl);color:var(--amber);border-radius:12px;padding:10px 12px;font-size:12px;font-weight:600;line-height:1.45;margin-bottom:12px}
+.core-basis-note{font-size:12px;color:var(--m);line-height:1.5;margin:-4px 0 12px}
+.core-basis-grid{display:flex;flex-direction:column;gap:14px}
+.core-basis-block{border:1px solid var(--b);border-radius:12px;padding:10px;background:var(--ivoor)}
+.core-basis-block h3{font-size:12px;font-weight:700;color:var(--chocolade);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--b)}
+.core-basis-block textarea{width:100%;border:1px solid var(--b);border-radius:10px;padding:10px;font:inherit;font-size:12px;line-height:1.45;background:rgba(255,255,255,.9);color:var(--chocolade);resize:vertical}
+.core-basis-actions{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.core-override-badge{font-size:11px;font-weight:800;color:#136D2F;background:#ECFDF3;border:1px solid #B7E4C7;border-radius:999px;padding:3px 9px}
+.core-reset-btn{border:1px solid var(--b);background:var(--ivoor);color:var(--chocolade);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.core-save-state{font-size:12px;color:var(--m)}
 .collapsible{padding:0;overflow:hidden}
 .collapsible-head{padding:12px 14px;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .collapsible-head::-webkit-details-marker{display:none}
@@ -227,6 +251,14 @@ a{color:inherit}
     <div class="admin-state" id="telState" style="margin-top:8px"></div>
   </section>
 
+  <section id="adminCoreBasisPanel" class="panel" aria-label="Sensei basisregels" style="display:none">
+    <h2>BASISREGELS (gelden voor ALLE Sensei-apps)</h2>
+    <div class="core-basis-warn">Aanpassen op eigen risico. Deze regels raken DateSense, FamilySense, SelfSense en toekomstige apps tegelijk.</div>
+    <p class="core-basis-note">De onderstaande DateSense / FamilySense / SelfSense prompt-grids (<code>advice_core</code> per app) worden in pass 1 niet automatisch in de live apps geladen. Alleen BASISREGELS hierboven geldt runtime voor alle apps (na stap 4-6 in de client-apps).</p>
+    <div id="senseiCoreBasisGrid" class="core-basis-grid"></div>
+    <div id="senseiCoreBasisLoadState" class="core-save-state" style="margin-top:8px"></div>
+  </section>
+
   <details class="panel collapsible" aria-label="DateSense instellingen">
     <summary class="collapsible-head">
       <h2>DateSense · AI instellingen</h2>
@@ -234,6 +266,7 @@ a{color:inherit}
     </summary>
     <div class="collapsible-body">
       <p>Specifieke DateSense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <p class="subtle" style="margin-top:0;margin-bottom:10px">Grid-prompts (o.a. advice_core) zijn nog niet gekoppeld aan de live app. Gedeelde regels stel je in via BASISREGELS hierboven.</p>
       <div id="dateSensePromptGrid" class="prompt-grid"></div>
       <div class="prompt-controls">
         <button id="saveDatePromptsBtn" type="button" class="prompt-save-btn">Opslaan DateSense</button>
@@ -249,6 +282,7 @@ a{color:inherit}
     </summary>
     <div class="collapsible-body">
       <p>Specifieke FamilySense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <p class="subtle" style="margin-top:0;margin-bottom:10px">Grid-prompts (o.a. advice_core) zijn nog niet gekoppeld aan de live app. Gedeelde regels stel je in via BASISREGELS hierboven.</p>
       <div id="familySensePromptGrid" class="prompt-grid"></div>
       <div class="prompt-controls">
         <button id="saveFamilyPromptsBtn" type="button" class="prompt-save-btn">Opslaan FamilySense</button>
@@ -321,6 +355,16 @@ a{color:inherit}
   var adminFeedbackFilterStatus=document.getElementById('adminFeedbackFilterStatus');
   var feedbackRowsRaw=[];
   var feedbackSelectedId=null;
+  var adminCoreBasisPanel=document.getElementById('adminCoreBasisPanel');
+  var senseiCoreBasisGrid=document.getElementById('senseiCoreBasisGrid');
+  var senseiCoreBasisLoadState=document.getElementById('senseiCoreBasisLoadState');
+
+  var CORE_BASIS_BLOCKS=[
+    {key:'grondregels',title:'Grondregels',rows:10},
+    {key:'dunne_context',title:'Dunne context-clausule',rows:6},
+    {key:'crisis',title:'Crisis-regel',rows:5},
+    {key:'redflags_rubriek',title:'REDFLAGS-rubriek (alleen DateSense)',rows:8}
+  ];
 
   var DATE_PROMPTS={
     advice_core:'Je bent DateSensei, een empathische AI dating coach. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} BELANGRIJKE OUTPUTREGELS: Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. Antwoord in het Nederlands. Gebruik geen markdown, geen codeblokken, geen tabellen. Gebruik geen nummering met woorden (zoals ten eerste, ten tweede). Geef exact 3 delen in deze volgorde. DEEL 1 ADVIES: schrijf 1 korte alinea met empathisch advies in maximaal 5 zinnen. Begin met 1-2 zinnen die tonen dat je hun concrete verhaal gehoord hebt (één detail uit de context), daarna meteen jouw standpunt en tips. Geen bullets en geen extra kopjes. Vraag nooit hoe zij het zelf zouden aanpakken; geef jouw concreet advies. Hoogstens één echte verduidelijkingsvraag als iets cruciaals ontbreekt. Als de signalen duidelijk slecht zijn (bv. hoge red flags, manipulatief gedrag, respectloos patroon), mag en moet je expliciet zeggen dat dit waarschijnlijk geen gezonde match is en dat stoppen beter is. Formuleer dat streng maar empathisch, met waardigheid en zonder schuldtaal. Voeg in dat geval ook een korte, respectvolle afrondtip toe (hoe vriendelijk afwijzen, grens stellen en contact afronden). DEEL 2 REDFLAGS (exact 1 regel): REDFLAGS:score;reden1|reden2|reden3 met score als geheel getal 0-100 en exact 3 korte redenen, zonder extra tekst voor of na deze regel. DEEL 3 ACTIES (exact 1 regel): ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg met exact 3 acties, emoji enkel uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡, titel max 5 woorden en korte uitleg exact 1 zin, zonder extra tekst voor of na deze regel. Als informatie ontbreekt: geef voorzichtig advies op basis van wat er wel is en houd redflags en acties concreet en bruikbaar.',
@@ -431,6 +475,139 @@ a{color:inherit}
       setSaveState(stateEl,(e&&e.message)||'Opslaan mislukt.',true);
     }finally{
       btn.disabled=false;
+    }
+  }
+
+  function getSenseiCoreFactory(key){
+    var d=window.__senseiCoreDefaults||{};
+    return String(d[key]||'');
+  }
+  function setCoreBasisLoadState(msg,isErr){
+    if(!senseiCoreBasisLoadState)return;
+    senseiCoreBasisLoadState.textContent=msg||'';
+    senseiCoreBasisLoadState.style.color=isErr?'var(--date-donker)':'var(--m)';
+  }
+  function setCoreBasisBlockState(key,msg,isErr){
+    var el=document.querySelector('[data-core-state="'+key+'"]');
+    if(!el)return;
+    el.textContent=msg||'';
+    el.style.color=isErr?'var(--date-donker)':'var(--m)';
+  }
+  async function waitSenseiCoreDefaults(){
+    var tries=0;
+    while(!window.__senseiCoreDefaults&&tries<50){
+      await new Promise(function(r){setTimeout(r,20);});
+      tries++;
+    }
+    return !!window.__senseiCoreDefaults;
+  }
+  async function loadSenseiCoreOverridesMap(){
+    if(!sb)return {};
+    try{
+      var rs=await sb.from('sensei_core_overrides').select('key,value');
+      if(rs&&rs.error)throw rs.error;
+      var map={};
+      (rs.data||[]).forEach(function(row){
+        var k=String(row.key||'').trim();
+        if(k)map[k]=String(row.value||'');
+      });
+      return map;
+    }catch(e){
+      console.warn('loadSenseiCoreOverridesMap',e);
+      throw e;
+    }
+  }
+  function renderSenseiCoreBasisPanel(overrideMap){
+    if(!senseiCoreBasisGrid)return;
+    var omap=overrideMap||{};
+    senseiCoreBasisGrid.innerHTML=CORE_BASIS_BLOCKS.map(function(block){
+      var k=block.key;
+      var hasOverride=Object.prototype.hasOwnProperty.call(omap,k);
+      var displayVal=hasOverride?omap[k]:getSenseiCoreFactory(k);
+      var badgeStyle=hasOverride?'':' style="display:none"';
+      return '<div class="core-basis-block" data-core-block="'+escHTML(k)+'">'
+        +'<h3>'+escHTML(block.title)+'</h3>'
+        +'<textarea data-core-key="'+escHTML(k)+'" rows="'+String(block.rows||6)+'">'+escHTML(displayVal)+'</textarea>'
+        +'<div class="core-basis-actions">'
+        +'<button type="button" class="prompt-save-btn" data-core-action="save" data-core-key="'+escHTML(k)+'">Opslaan</button>'
+        +'<button type="button" class="core-reset-btn" data-core-action="reset" data-core-key="'+escHTML(k)+'">Reset naar factory default</button>'
+        +'<span class="core-override-badge" data-core-badge="'+escHTML(k)+'"'+badgeStyle+'>OVERRIDE ACTIEF</span>'
+        +'<span class="core-save-state" data-core-state="'+escHTML(k)+'"></span>'
+        +'</div></div>';
+    }).join('');
+  }
+  function bindSenseiCoreBasisHandlers(user){
+    if(!senseiCoreBasisGrid||senseiCoreBasisGrid._coreBound)return;
+    senseiCoreBasisGrid._coreBound=true;
+    senseiCoreBasisGrid.addEventListener('click',async function(ev){
+      var btn=ev.target&&ev.target.closest?ev.target.closest('[data-core-action]'):null;
+      if(!btn||!sb||!user||!user.id)return;
+      var action=String(btn.getAttribute('data-core-action')||'');
+      var key=String(btn.getAttribute('data-core-key')||'').trim();
+      if(!key)return;
+      if(action==='save'){
+        if(!confirm('Deze wijziging geldt voor alle Sensei-apps. Doorgaan?'))return;
+        var ta=senseiCoreBasisGrid.querySelector('textarea[data-core-key="'+key+'"]');
+        var val=String(ta&&ta.value||'').trim();
+        if(!val){
+          setCoreBasisBlockState(key,'Tekst mag niet leeg zijn.',true);
+          return;
+        }
+        btn.disabled=true;
+        setCoreBasisBlockState(key,'Opslaan…',false);
+        try{
+          var up=await sb.from('sensei_core_overrides').upsert({
+            key:key,
+            value:val,
+            updated_by:user.id,
+            updated_at:new Date().toISOString()
+          },{onConflict:'key'});
+          if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+          setCoreBasisBlockState(key,'Opgeslagen.',false);
+          await refreshSenseiCoreBasisPanel();
+        }catch(e){
+          setCoreBasisBlockState(key,(e&&e.message)||'Opslaan mislukt.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      }else if(action==='reset'){
+        if(!confirm('Override verwijderen en terug naar factory default?'))return;
+        btn.disabled=true;
+        setCoreBasisBlockState(key,'Resetten…',false);
+        try{
+          var del=await sb.from('sensei_core_overrides').delete().eq('key',key);
+          if(del&&del.error)throw new Error(del.error.message||'Reset mislukt');
+          setCoreBasisBlockState(key,'Terug naar factory default.',false);
+          await refreshSenseiCoreBasisPanel();
+        }catch(e){
+          setCoreBasisBlockState(key,(e&&e.message)||'Reset mislukt.',true);
+        }finally{
+          btn.disabled=false;
+        }
+      }
+    });
+  }
+  async function refreshSenseiCoreBasisPanel(){
+    var map=await loadSenseiCoreOverridesMap();
+    renderSenseiCoreBasisPanel(map);
+  }
+  async function initSenseiCoreBasisPanel(user){
+    if(!adminCoreBasisPanel||!senseiCoreBasisGrid)return;
+    setCoreBasisLoadState('Laden…',false);
+    var ready=await waitSenseiCoreDefaults();
+    if(!ready){
+      setCoreBasisLoadState('Factory defaults uit senseiCore.js niet geladen. Herlaad de pagina.',true);
+      adminCoreBasisPanel.style.display='block';
+      return;
+    }
+    try{
+      bindSenseiCoreBasisHandlers(user);
+      await refreshSenseiCoreBasisPanel();
+      setCoreBasisLoadState('',false);
+      adminCoreBasisPanel.style.display='block';
+    }catch(e){
+      setCoreBasisLoadState((e&&e.message)||'BASISREGELS laden mislukt. Is de migration uitgevoerd?',true);
+      adminCoreBasisPanel.style.display='block';
     }
   }
 
@@ -930,6 +1107,7 @@ a{color:inherit}
     }
     if(adminAiPanel)adminAiPanel.style.display='block';
     if(adminFeedbackPanel)adminFeedbackPanel.style.display='block';
+    await initSenseiCoreBasisPanel(user);
     var telPanel=document.getElementById('adminTelemetryPanel');
     if(telPanel){
       telPanel.style.display='block';
