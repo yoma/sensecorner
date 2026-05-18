@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="18-05-2026 13:33">
+<meta name="sc-build" content="18-05-2026 14:28">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -779,7 +779,11 @@ a{text-decoration:none;color:inherit}
     if(!sess||!sess.user)return null;
     var rt=String(sess.refresh_token||'').trim();
     var exp=(sess.expires_at?sess.expires_at*1000:0)||0;
-    if(!rt&&exp&&exp<Date.now()-120000)return null;
+    var now=Date.now();
+    if(rt)return sess;
+    if(exp&&exp>now-30000)return sess;
+    if(String(sess.access_token||'').trim()&&!exp)return sess;
+    if(!rt&&exp&&exp<now-120000)return null;
     return sess;
   }
   async function scRefreshSessionSafe(){
@@ -794,13 +798,15 @@ a{text-decoration:none;color:inherit}
   }
   function scStartSessionKeepAlive(){
     if(_scSessionKeepAliveTimer){try{clearInterval(_scSessionKeepAliveTimer);}catch(_c){}}
-    _scSessionKeepAliveTimer=setInterval(function(){
+    var tick=function(){
       if(document.visibilityState!=='visible')return;
       scRefreshSessionSafe().then(function(sess){
         if(sess&&sess.user)return;
         return refreshAuthUi();
       }).catch(function(){});
-    },7*60*1000);
+    };
+    tick();
+    _scSessionKeepAliveTimer=setInterval(tick,3*60*1000);
   }
   async function scGetSessionRobust(){
     var persisted=scSessionFromPersisted();
@@ -857,14 +863,15 @@ a{text-decoration:none;color:inherit}
       if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
       _scSignOutDebounceTimer=setTimeout(async function(){
         _scSignOutDebounceTimer=null;
-        var recovered=await scGetSessionRobust();
+        var recovered=await scRefreshSessionSafe();
+        if(!recovered||!recovered.user)recovered=await scGetSessionRobust();
         if(recovered&&recovered.user){
           scStartSessionKeepAlive();
           Promise.resolve(refreshAuthUi()).catch(function(){});
           return;
         }
         Promise.resolve(refreshAuthUi()).catch(function(){});
-      },900);
+      },1500);
       return;
     }
     if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){

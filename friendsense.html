@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 13:58">
+<meta name="fs-build" content="18-05-2026 14:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -1576,12 +1576,12 @@ const OWN_CATS=[
   },
   {
     id:'relatie',
-    title:'Verbinding & Behoeften',
+    title:'Vriendschap & grenzen',
     icon:'🔗',
     prompts:[
-      {q:'Wat moet iemand doen voor jij je echt op je gemak voelt?',ph:'Bv: tijd nemen, geduld hebben, niet te veel vragen stellen in het begin, gewoon aanwezig zijn...'},
-      {q:'Wat heb je nodig van iemand die dicht bij je staat - en krijg je dat ook?',ph:'Bv: erkenning, rust, aanwezigheid zonder oordeel, iemand die écht luistert...'},
-      {q:'Doe je in relaties steeds hetzelfde, ook als je weet dat het niet werkt?',ph:'Bv: ik kies vaak emotioneel onbeschikbare mensen, of ik geef te snel op bij onzekerheid...'},
+      {q:'Wat moet een vriend(in) doen zodat jij je echt op je gemak voelt?',ph:'Bv: tijd nemen, niet oordelen, af en toe checken hoe het gaat, gewoon aanwezig zijn...'},
+      {q:'Wat heb je nodig in vriendschap - en krijg je dat nu ook?',ph:'Bv: eerlijkheid, humor, dat ik me niet hoef voor te doen, iemand die luistert...'},
+      {q:'Herken je patronen in hoe jij vriendschappen aangaat of beëindigt?',ph:'Bv: ik initieer te weinig, ik vermijd conflict, ik blijf te lang in iets dat niet meer klopt...'},
       {q:'Wat kan absoluut niet voor jou in een vriendschap?',ph:'Bv: liegen, gebrek aan respect, geen initiatief, zich nooit kwetsbaar tonen, oneerlijkheid...'}
     ]
   },
@@ -1611,7 +1611,7 @@ function getOwnAppDepthProgress(){
   return{filled:filled,total:n,pct:Math.round(filled*100/Math.max(1,n))};
 }
 /** Zelfde brug als OWN Sense-hub: onboarding-feiten → eerste slots van friendsense_focus. */
-var OWN_APP_DEPTH_FACT_SUB_MAP={friend_values:0,friend_conflict:1,family_meaning:0,family_friction:1};
+var OWN_APP_DEPTH_FACT_SUB_MAP={friend_values:0,friend_conflict:1};
 async function hydrateOwnAppDepthFromOnboardingFacts(){
   if(!S.user||!sb)return;
   var own=S.pdata&&S.pdata['OWN Sense'];
@@ -2257,12 +2257,15 @@ function hasAnyContactDossier(){
 }
 function ownProfileSetupComplete(){
   var meta=((S.pdata['OWN Sense']||{}).meta)||{};
-  return !!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
+  var basics=!!(String(meta.birthdate||'').trim()&&String(meta.country||'').trim());
+  var depth=getOwnAppDepthProgress();
+  var depthStarted=depth&&depth.filled>0;
+  return basics||depthStarted;
 }
 function getOnboardingChecklist(){
   var contacts=getContactProfileNames();
   return [
-    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
+    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul OWN Sense aan (basis of FriendSense-verdieping)',action:"openOwnSenseEntryPoint({cat:'friendsense_focus'})"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste vriendschapsdossier aan',action:'newSenseFromDrawer()'},
     {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Kies per dossier een rol (hechte vriend, jeugdvriend, collega-vriend…)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
@@ -2645,8 +2648,8 @@ function updateProfileModalCompletionLive(){
   var isOwn=_profileModalFor==='OWN Sense';
   var missing=[];
   if(isOwn){
-    var keys=['birthdate','city','country','intent'];
-    var labels={birthdate:'geboortedatum',city:'regio / woonplaats',country:'land',intent:'intentie'};
+    var keys=['birthdate','city','country'];
+    var labels={birthdate:'geboortedatum',city:'regio / woonplaats',country:'land'};
     missing=keys.filter(function(k){return!String(d[k]||'').trim();}).map(function(k){return labels[k];});
   }else{
     if(!String(d.birthdate||'').trim())missing.push('geboortedatum');
@@ -2987,7 +2990,11 @@ function senseSessionFromPersisted(){
   if(!sess||!sess.user)return null;
   var rt=String(sess.refresh_token||'').trim();
   var exp=(sess.expires_at?sess.expires_at*1000:0)||0;
-  if(!rt&&exp&&exp<Date.now()-120000)return null;
+  var now=Date.now();
+  if(rt)return sess;
+  if(exp&&exp>now-30000)return sess;
+  if(String(sess.access_token||'').trim()&&!exp)return sess;
+  if(!rt&&exp&&exp<now-120000)return null;
   return sess;
 }
 async function senseRefreshSessionSafe(){
@@ -3292,9 +3299,11 @@ function getProfileMetaCompletion(name){
   var d=S.pdata[name]||{};
   var m=d.meta||{};
   if(name==='OWN Sense'){
-    var keysOwn=['birthdate','city','country','intent'];
+    var keysOwn=['birthdate','city','country'];
     var filledOwn=keysOwn.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
-    return{filled:filledOwn,total:keysOwn.length,complete:filledOwn===keysOwn.length};
+    var depth=getOwnAppDepthProgress();
+    var depthOk=depth&&depth.filled>0;
+    return{filled:filledOwn+(depthOk?1:0),total:keysOwn.length+1,complete:ownProfileSetupComplete()};
   }
   var keysC=['birthdate','city','country'];
   var filledC=keysC.filter(function(k){return String(m[k]||'').trim().length>0;}).length;
@@ -5525,7 +5534,7 @@ function openProfileModal(name){
     +(isOwnProf?(renderProfileField('pf_address','Adres (straat + nr)',escA(meta.address),true)
       +'<input class="profile-field" id="pf_postal" placeholder="Postcode" value="'+escA(meta.postal_code)+'">'):'')
     +(isOwnProf
-      ?renderProfileField('pf_intent','Intentie (bv. serieuze relatie)',escA(meta.intent),true)
+      ?renderProfileField('pf_intent','Wat vind je belangrijk in vriendschap? (optioneel)',escA(meta.intent),true)
       :('<label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Hoofdrol in jullie vriendschap</label>'
         +'<select id="friendRolSelect" class="profile-field" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-bottom:6px">'
         +rolOpts
@@ -9148,12 +9157,18 @@ function buildOwnOverzichtSummaryAndMood(d){
     return sum+cat.prompts.filter(function(_,i){return(catData['a'+i]||'').trim().length>0;}).length;
   },0);
   var ownTotal=OWN_CATS.reduce(function(sum,cat){return sum+cat.prompts.length;},0);
+  var depthCat=(cats[OWN_APP_DEPTH_CAT.id]||{});
+  var depthFilled=0;
+  for(var di=0;di<OWN_APP_DEPTH_CAT.slots;di++){
+    if(String(depthCat['a'+di]||'').trim())depthFilled++;
+  }
   var moods=['😊 Goed','😐 Oké','😟 Moeilijk','💪 Sterk','🤔 Verward'];
   var moodKeys=['goed','oke','moeilijk','sterk','verward'];
   var dm=getOwnDailyMoodMeta(d.meta||{});
   var selKey=dm&&dm.key?dm.key:'';
   var html='<div style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.45">'
-    +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+ownFilled+'/'+ownTotal+'</strong> invulvragen'
+    +'<strong>'+(d.count||0)+'</strong> berichten · <strong>'+ownFilled+'/'+ownTotal+'</strong> OWN-vragen'
+    +' · <strong>'+depthFilled+'/'+OWN_APP_DEPTH_CAT.slots+'</strong> FriendSense-verdieping'
     +'</div>';
   html+='<div style="font-size:12px;font-weight:700;color:#333;margin-bottom:6px">Hoe voel je je vandaag?</div>';
   html+='<p style="font-size:11px;color:#8a8f97;margin:-2px 0 8px;line-height:1.45">Wordt opgeslagen en meegegeven aan je coach (Vertel, advies) voor vandaag.</p>';
@@ -12081,7 +12096,7 @@ function buildProfileMetaAccordionHtml(name,d){
   html+='<div class="own-cat-icon">👤</div>';
   html+='<div class="own-cat-info">';
   html+='<div class="own-cat-title">Profielgegevens</div>';
-  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">'+(isOwn?'Geboorte, regio, land en intentie (foto apart via Foto-tab)':'Geboorte, regio, land, hoofdrol + evt. toelichting (foto apart via Foto-tab)')+'</div>';
+  html+='<div style="font-size:11px;color:#8a8f97;margin-top:3px;line-height:1.35">'+(isOwn?'Geboorte, regio, land (foto apart via Foto-tab). FriendSense-verdieping via OWN Sense-hub.':'Geboorte, regio, land, hoofdrol + evt. toelichting (foto apart via Foto-tab)')+'</div>';
   html+='<div class="own-cat-prog '+(metaC.complete?'done':'')+'">'+metaC.filled+'/'+metaC.total+' basisvelden'+(metaC.complete?' ✓':'')+'</div>';
   html+='</div>';
   if(metaC.complete)html+='<span class="own-meta-check" title="Basisvelden ingevuld" aria-label="Compleet">✓</span>';
