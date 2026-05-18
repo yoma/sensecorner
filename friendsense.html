@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 12:13">
+<meta name="fs-build" content="18-05-2026 13:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -2222,17 +2222,24 @@ function normalizeAppScopeList(meta){
   var list=Array.isArray(raw)?raw:(typeof raw==='string'?raw.split(/[,\s]+/):[]);
   return list.map(function(v){return String(v||'').toLowerCase().trim();}).filter(Boolean);
 }
-function isFamilyTaggedMeta(meta){
+/** FriendSense-dossier: app_scope `fr` (niet `fs` - dat is FamilySense). */
+function isFriendSenseTaggedMeta(meta){
+  var scopes=normalizeAppScopeList(meta||{});
+  return scopes.indexOf('fr')>=0;
+}
+/** Vóór fr-scope: per ongeluk met alleen `fs` en zonder gezins-velden aangemaakt in FriendSense. */
+function shouldMigrateFsOnlyToFriendScope(meta){
   var m=meta||{};
-  if(String(m.familie_rol||'').trim())return true;
-  if(String(m.familie_relatie||'').trim())return true;
+  if(String(m.familie_rol||'').trim())return false;
+  if(String(m.familie_relatie||'').trim())return false;
   var scopes=normalizeAppScopeList(m);
+  if(scopes.indexOf('fr')>=0)return false;
   return scopes.indexOf('fs')>=0;
 }
 function isFriendSenseVisibleContact(name){
   if(!name||name==='OWN Sense')return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
-  return isFamilyTaggedMeta(m);
+  return isFriendSenseTaggedMeta(m)||shouldMigrateFsOnlyToFriendScope(m);
 }
 function getFriendSenseContactNames(){
   return (S.profiles||[]).filter(function(p){return isFriendSenseVisibleContact(p);});
@@ -4526,13 +4533,13 @@ async function loadAll(){
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
-  try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
+  try{await normalizeLegacyFriendScopes();}catch(e){console.warn('normalizeLegacyFriendScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
 }
 
-/** Herstelt oude gemixte scope-data voor family-dossiers (fs verplicht, ds eruit). */
-async function normalizeLegacyFamilyScopes(){
+/** Herstelt gemixte scope-data voor friend-dossiers (fr verplicht; fs/ds eruit). */
+async function normalizeLegacyFriendScopes(){
   if(!S.user||!Array.isArray(S.profiles)||!S.profiles.length)return;
   var changed=0;
   for(var i=0;i<S.profiles.length;i++){
@@ -4541,10 +4548,10 @@ async function normalizeLegacyFamilyScopes(){
     var d=S.pdata[name];
     if(!d)continue;
     var meta=Object.assign({},d.meta||{});
-    if(!isFamilyTaggedMeta(meta))continue;
+    if(!isFriendSenseTaggedMeta(meta)&&!shouldMigrateFsOnlyToFriendScope(meta))continue;
     var scopes=normalizeAppScopeList(meta);
-    var next=scopes.filter(function(s){return s!=='ds';});
-    if(next.indexOf('fs')<0)next.push('fs');
+    var next=scopes.filter(function(s){return s!=='ds'&&s!=='fs';});
+    if(next.indexOf('fr')<0)next.push('fr');
     var same=next.length===scopes.length&&next.every(function(v,idx){return v===scopes[idx];});
     if(same)continue;
     meta.app_scope=next;
@@ -4563,9 +4570,11 @@ async function ensureP(name){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
       var exScopes=normalizeAppScopeList(existing.meta);
-      if(exScopes.indexOf('fs')<0){
-        exScopes.push('fs');
-        existing.meta.app_scope=exScopes;
+      var nextScopes=exScopes.filter(function(s){return s!=='fs'&&s!=='ds';});
+      if(nextScopes.indexOf('fr')<0)nextScopes.push('fr');
+      var scopeSame=nextScopes.length===exScopes.length&&nextScopes.every(function(v,i){return v===exScopes[i];});
+      if(!scopeSame){
+        existing.meta.app_scope=nextScopes;
         S.pdata[name]=existing;
         await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
       }
@@ -4574,13 +4583,13 @@ async function ensureP(name){
     return;
   }
   var seedProps={...DP};
-  if(name!=='OWN Sense')seedProps.meta={app_scope:['fs']};
+  if(name!=='OWN Sense')seedProps.meta={app_scope:['fr']};
   var createRes=await sb.from('sense_profiles').upsert(
     {user_id:S.user.id,name,props:seedProps,bericht_count:0},
     {onConflict:'user_id,name'}
   );
   if(createRes&&createRes.error)throw new Error(createRes.error.message||'Dossier aanmaken mislukt');
-  var seedMeta=(name!=='OWN Sense')?{app_scope:['fs']}:{};
+  var seedMeta=(name!=='OWN Sense')?{app_scope:['fr']}:{};
   S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:seedMeta};
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
 }
@@ -4617,7 +4626,8 @@ async function saveP(name,props,count,categories,summary,meta){
   if(name!=='OWN Sense'){
     safeMeta=Object.assign({},safeMeta||{});
     var scopeList=Array.isArray(safeMeta.app_scope)?safeMeta.app_scope.slice():[];
-    if(scopeList.map(function(v){return String(v||'').toLowerCase();}).indexOf('fs')<0)scopeList.push('fs');
+    scopeList=scopeList.filter(function(s){return String(s||'').toLowerCase()!=='fs'&&String(s||'').toLowerCase()!=='ds';});
+    if(scopeList.map(function(v){return String(v||'').toLowerCase();}).indexOf('fr')<0)scopeList.push('fr');
     safeMeta.app_scope=scopeList;
   }
   if(safeMeta&&Object.keys(safeMeta).length>0)propsToSave.meta=safeMeta;
@@ -6027,7 +6037,7 @@ function getDossierScopeLabelsForMatch(name){
   var scopes=normalizeAppScopeList(m);
   var out=[];
   if(scopes.indexOf('ds')>=0)out.push('DateSense');
-  if(scopes.indexOf('fs')>=0)out.push('FriendSense');
+  if(scopes.indexOf('fr')>=0)out.push('FriendSense');
   if(scopes.indexOf('ss')>=0)out.push('SelfSense');
   if(!out.length)out.push('FriendSense');
   return out;
@@ -14026,7 +14036,7 @@ function buildCoachContext(){
     });
     lines.push('');
   }
-  var sharedCore=buildSharedCrossAppCoreContext('fs');
+  var sharedCore=buildSharedCrossAppCoreContext('fr');
   if(sharedCore){
     lines.push(sharedCore);
     lines.push('');

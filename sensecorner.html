@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="08-05-2026 15:46">
+<meta name="sc-build" content="18-05-2026 13:12">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -759,20 +759,78 @@ a{text-decoration:none;color:inherit}
       })
     ]);
   }
-
+  var SC_AUTH_STORAGE_KEY='sensecorner-auth-v1';
+  var _scSignOutDebounceTimer=null;
+  var _scSessionKeepAliveTimer=null;
+  function scReadPersistedAuthRaw(){
+    try{
+      var raw=localStorage.getItem(SC_AUTH_STORAGE_KEY);
+      if(!raw)return null;
+      return JSON.parse(raw);
+    }catch(_e){return null;}
+  }
+  function scSessionFromPersisted(){
+    var blob=scReadPersistedAuthRaw();
+    if(!blob)return null;
+    var sess=null;
+    if(blob&&blob.user&&blob.access_token)sess=blob;
+    else if(blob&&blob.currentSession)sess=blob.currentSession;
+    else if(blob&&blob.session)sess=blob.session;
+    if(!sess||!sess.user)return null;
+    var rt=String(sess.refresh_token||'').trim();
+    var exp=(sess.expires_at?sess.expires_at*1000:0)||0;
+    if(!rt&&exp&&exp<Date.now()-120000)return null;
+    return sess;
+  }
+  async function scRefreshSessionSafe(){
+    if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return null;
+    try{
+      var rr=await scTimeoutFallback(sb.auth.refreshSession(),18000,null);
+      if(rr===null)return scSessionFromPersisted();
+      var session=rr&&rr.data&&rr.data.session;
+      if(session&&session.user)return session;
+    }catch(_e){}
+    return scSessionFromPersisted();
+  }
+  function scStartSessionKeepAlive(){
+    if(_scSessionKeepAliveTimer){try{clearInterval(_scSessionKeepAliveTimer);}catch(_c){}}
+    _scSessionKeepAliveTimer=setInterval(function(){
+      if(document.visibilityState!=='visible')return;
+      scRefreshSessionSafe().then(function(sess){
+        if(sess&&sess.user)return;
+        return refreshAuthUi();
+      }).catch(function(){});
+    },7*60*1000);
+  }
   async function scGetSessionRobust(){
-    if(!sb||!sb.auth||typeof sb.auth.getSession!=='function')return null;
+    var persisted=scSessionFromPersisted();
+    if(!sb||!sb.auth||typeof sb.auth.getSession!=='function')return persisted;
     var attempts=[
-      {timeout:9000,wait:300},
-      {timeout:12000,wait:600},
-      {timeout:12000,wait:0}
+      {timeout:12000,wait:400,doRefresh:false},
+      {timeout:15000,wait:700,doRefresh:true},
+      {timeout:15000,wait:0,doRefresh:true}
     ];
     for(var i=0;i<attempts.length;i++){
       var cfg=attempts[i];
       try{
-        var sess=await scTimeoutFallback(sb.auth.getSession(),cfg.timeout,null);
+        if(cfg.doRefresh){
+          var refreshed=await scRefreshSessionSafe();
+          if(refreshed&&refreshed.user)return refreshed;
+        }
+        var sess=await scTimeoutFallback(sb.auth.getSession(),cfg.timeout,undefined);
+        if(sess===undefined){
+          if(persisted&&persisted.user)return persisted;
+          continue;
+        }
         var session=sess&&sess.data&&sess.data.session;
-        if(session&&session.user)return session;
+        if(session&&session.user){
+          var expAt=(session.expires_at?session.expires_at*1000:0)||0;
+          if(expAt&&expAt<Date.now()+180000){
+            var near=await scRefreshSessionSafe();
+            if(near&&near.user)return near;
+          }
+          return session;
+        }
       }catch(_e){}
       if(cfg.wait>0){
         try{await new Promise(function(r){setTimeout(r,cfg.wait);});}catch(_w){}
@@ -780,12 +838,39 @@ a{text-decoration:none;color:inherit}
     }
     if(typeof sb.auth.getUser==='function'){
       try{
-        var gu=await scTimeoutFallback(sb.auth.getUser(),9000,null);
-        var usr=gu&&gu.data&&gu.data.user;
-        if(usr&&usr.id)return {user:usr,access_token:''};
+        var gu=await scTimeoutFallback(sb.auth.getUser(),12000,undefined);
+        if(gu===undefined){
+          if(persisted&&persisted.user)return persisted;
+        }else{
+          var usr=gu&&gu.data&&gu.data.user;
+          if(usr&&usr.id){
+            if(persisted&&persisted.access_token)return persisted;
+            return {user:usr,access_token:''};
+          }
+        }
       }catch(_gu){}
     }
-    return null;
+    return persisted;
+  }
+  async function scHandleAuthStateEvent(event){
+    if(event==='SIGNED_OUT'){
+      if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
+      _scSignOutDebounceTimer=setTimeout(async function(){
+        _scSignOutDebounceTimer=null;
+        var recovered=await scGetSessionRobust();
+        if(recovered&&recovered.user){
+          scStartSessionKeepAlive();
+          Promise.resolve(refreshAuthUi()).catch(function(){});
+          return;
+        }
+        Promise.resolve(refreshAuthUi()).catch(function(){});
+      },900);
+      return;
+    }
+    if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){
+      scStartSessionKeepAlive();
+      Promise.resolve(refreshAuthUi()).catch(function(){});
+    }
   }
 
   async function scHasOnboardingCompleted(userId){
@@ -2086,6 +2171,7 @@ a{text-decoration:none;color:inherit}
       applyGuestOwnHubHeroDom();
     }
     refreshCoachHintsFromServer(user);
+    if(user)scStartSessionKeepAlive();
     return user;
   }
   async function openAppWithAuth(target){
@@ -2192,7 +2278,11 @@ a{text-decoration:none;color:inherit}
   });
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState!=='visible')return;
-    getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
+    (async function(){
+      try{await scRefreshSessionSafe();}catch(_e){}
+      try{await refreshAuthUi();}catch(_e2){}
+      getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
+    })();
   });
   if(hubLoginBtn)hubLoginBtn.onclick=function(){goToIndexLogin('login','');};
   if(hubRegisterBtn)hubRegisterBtn.onclick=function(){goToIndexLogin('register','');};
@@ -2475,11 +2565,7 @@ a{text-decoration:none;color:inherit}
   await refreshAuthUi();
   if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
     sb.auth.onAuthStateChange(function(event){
-      if(event==='SIGNED_OUT'){
-        Promise.resolve(refreshAuthUi()).catch(function(){});
-      }else if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){
-        Promise.resolve(refreshAuthUi()).catch(function(){});
-      }
+      scHandleAuthStateEvent(event);
     });
   }
   var openedReturnToModal=false;
