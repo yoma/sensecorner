@@ -2575,6 +2575,23 @@ async function loadSenseiCoreOverrides(){
   }
   return out;
 }
+/** Admin-grid (app_admin_settings): spiegel/crisis enz. advice_core blijft via SenseiCore. */
+async function loadAdminPromptOverrides(storageKey){
+  if(!sb||!S.user||!S.user.id)return;
+  try{
+    var rs=await sb.from('app_admin_settings').select('value').eq('key',storageKey).maybeSingle();
+    if(rs&&rs.error)throw rs.error;
+    var v=rs&&rs.data&&rs.data.value;
+    if(!v||typeof v!=='object')return;
+    Object.keys(v).forEach(function(k){
+      if(k==='advice_core')return;
+      var txt=String(v[k]||'').trim();
+      if(txt&&Object.prototype.hasOwnProperty.call(PROMPT_DEFAULTS,k))PROMPT_DEFAULTS[k]=txt;
+    });
+  }catch(e){
+    console.warn('loadAdminPromptOverrides',storageKey,e);
+  }
+}
 var SELFSENSE_ADVICE_CORE_OPTS={
   persona:'Je bent SelfSensei, de persoonlijke coach voor zelfreflectie, herstel en regulatie. De gebruiker wil concrete, warme raad waar de context dat ondersteunt, geen coaching die het werk teruggeeft met enkel open vragen.',
   formatRules:'{{mode_instruction}} {{tone_instruction}} {{relationship_guard}}\n\nWERKWIJZE: Begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context. Geen lange herhaling. Daarna geef je jouw advies: wat zeg of doe je, waarom dat helpt, wat te vermijden. Klein en haalbaar, zonder harde oordelen of labels. Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden; vraag nooit hoe zij het zelf zouden aanpakken. Werk NOOIT met scores of percentages.\n\nOUTPUT: Schrijf eerst maximaal 8 zinnen zonder aparte kopregels. Sluit daarna af met exact één aparte regel in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin.'
@@ -2600,6 +2617,7 @@ async function applySenseiCoreToAdviceCore(buildOpts){
 async function ensureSenseiCoreAdviceCore(){
   if(_senseiCoreAdviceReady&&senseiCoreReady())return;
   if(!S.user||!S.user.id)return;
+  await loadAdminPromptOverrides('prompts_selfsense');
   await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
 }
 function getPromptText(key){

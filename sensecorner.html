@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="18-05-2026 15:32">
+<meta name="sc-build" content="18-05-2026 15:39">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1797,6 +1797,32 @@ a{text-decoration:none;color:inherit}
     if(any(['healing','herstel','groei','zelf','burn','trauma','welzijn','reflect']))b.ss+=14;
     return b;
   }
+  /** Activiteit op één profiel (berichten + recent), niet enkel «heeft dossier». */
+  function scActivityPointsFromProfile(d){
+    if(!d)return 0;
+    var pts=0;
+    var cnt=parseInt(d.count,10)||0;
+    if(cnt>0)pts+=Math.min(18,Math.log(1+cnt)*6);
+    if(d.lastActive){
+      var days=Math.floor((Date.now()-new Date(d.lastActive))/86400000);
+      if(days<=1)pts+=16;
+      else if(days<=3)pts+=12;
+      else if(days<=7)pts+=8;
+      else if(days<=30)pts+=4;
+    }
+    return pts;
+  }
+  function scSumScopeActivity(pdata,profiles,tagFn){
+    var sum=0;
+    profiles.forEach(function(p){
+      if(!p||p==='OWN Sense')return;
+      if(scDossierLifecycle(pdata,p)!=='active')return;
+      var m=(pdata[p]||{}).meta||{};
+      if(!tagFn(m))return;
+      sum+=scActivityPointsFromProfile(pdata[p]);
+    });
+    return Math.min(36,sum);
+  }
   function scComputeAppPriorityScores(user,pack){
     var scores={ds:8,fr:8,fs:8,ss:8};
     if(!user)return scores;
@@ -1810,25 +1836,18 @@ a{text-decoration:none;color:inherit}
     if(pack&&pack.pdata){
       var pdata=pack.pdata;
       var profiles=pack.profiles||[];
-      var dsN=0,frN=0,fsN=0,ssN=0;
-      profiles.forEach(function(p){
-        if(!p||p==='OWN Sense')return;
-        if(scDossierLifecycle(pdata,p)!=='active')return;
-        var m=(pdata[p]||{}).meta||{};
-        if(scIsFamilyTaggedMeta(m))fsN++;
-        else if(scIsFriendTaggedMeta(m))frN++;
-        else if(scIsSelfTaggedMeta(m))ssN++;
-        else dsN++;
+      scores.ds+=scSumScopeActivity(pdata,profiles,function(m){
+        return !scIsFamilyTaggedMeta(m)&&!scIsFriendTaggedMeta(m)&&!scIsSelfTaggedMeta(m);
       });
-      scores.ds+=dsN*7;
-      scores.fr+=frN*7;
-      scores.fs+=fsN*7;
-      scores.ss+=ssN*7;
+      scores.fr+=scSumScopeActivity(pdata,profiles,scIsFriendTaggedMeta);
+      scores.fs+=scSumScopeActivity(pdata,profiles,scIsFamilyTaggedMeta);
       if(scGetUsageMode(user)==='single'){
         var focus=scGetFocusDossier(user);
         if(focus&&scDossierLifecycle(pdata,focus)==='active'){
           var fm=((pdata[focus]||{}).meta)||{};
-          if(!scIsFamilyTaggedMeta(fm)&&!scIsFriendTaggedMeta(fm)&&!scIsSelfTaggedMeta(fm))scores.ds+=12;
+          if(!scIsFamilyTaggedMeta(fm)&&!scIsFriendTaggedMeta(fm)&&!scIsSelfTaggedMeta(fm)){
+            scores.ds+=Math.min(14,scActivityPointsFromProfile(pdata[focus]));
+          }
         }
       }
       var ownMeta=((pdata['OWN Sense']||{}).meta)||{};
@@ -1845,17 +1864,18 @@ a{text-decoration:none;color:inherit}
     if(scServerCategories&&typeof scServerCategories==='object'){
       cats=Object.assign(cats,scServerCategories);
     }
-    function depthBoost(catId,key,fbTotal){
+    function depthBoost(catId,key,fbTotal,mult){
       var c=cats[catId]||{};
       var tot=countTotalAnswersInCategory(c,fbTotal);
       var fil=countFilledAnswersInCategory(c);
-      if(tot>0)scores[key]+=Math.round((fil/tot)*22);
+      if(tot>0)scores[key]+=Math.round((fil/tot)*22*(mult||1));
     }
-    depthBoost('datesense_focus','ds',5);
-    depthBoost('friendsense_focus','fr',5);
-    depthBoost('familysense_focus','fs',5);
-    depthBoost('selfsense_focus','ss',6);
-    [{key:'ds',app:'datesense'},{key:'fr',app:'friendsense'},{key:'fs',app:'familysense'}].forEach(function(ca){
+    depthBoost('datesense_focus','ds',5,1);
+    depthBoost('friendsense_focus','fr',5,1);
+    depthBoost('familysense_focus','fs',5,1);
+    /* SelfSense heeft geen contactdossiers: verdieping + hub-bezoeken wegen zwaarder. */
+    depthBoost('selfsense_focus','ss',6,1.35);
+    [{key:'ds',app:'datesense'},{key:'fr',app:'friendsense'},{key:'fs',app:'familysense'},{key:'ss',app:'selfsense'}].forEach(function(ca){
       var n=readScCoachOpenCount(ca.app,user);
       if(n!=null&&n>0)scores[ca.key]+=Math.min(12,n*2);
     });

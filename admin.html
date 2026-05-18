@@ -138,7 +138,7 @@ a{color:inherit}
   <header class="header" role="banner">
     <div>
       <div class="logo-text">Sense Admin</div>
-      <div class="logo-sub">Centraal beheer vanuit SenseCorner. AI-toegang is live; app-specifieke AI-instellingen voor DateSense en FamilySense staan klaar als aparte secties.</div>
+      <div class="logo-sub">Centraal beheer vanuit SenseCorner. AI-toegang is live; app-specifieke AI-instellingen per Sense-app staan hieronder als aparte secties.</div>
     </div>
     <div class="header-actions">
       <a class="linkbtn" href="sensecorner.html">← Terug naar SenseCorner</a>
@@ -214,6 +214,7 @@ a{color:inherit}
       <select id="telFilterApp">
         <option value="">Alle apps</option>
         <option value="datesense">DateSense</option>
+        <option value="friendsense">FriendSense</option>
         <option value="familysense">FamilySense</option>
         <option value="selfsense">SelfSense</option>
         <option value="ownsense">OwnSense</option>
@@ -253,8 +254,8 @@ a{color:inherit}
 
   <section id="adminCoreBasisPanel" class="panel" aria-label="Sensei basisregels" style="display:none">
     <h2>BASISREGELS (gelden voor ALLE Sensei-apps)</h2>
-    <div class="core-basis-warn">Aanpassen op eigen risico. Deze regels raken DateSense, FamilySense, SelfSense en toekomstige apps tegelijk.</div>
-    <p class="core-basis-note">De onderstaande DateSense / FamilySense / SelfSense prompt-grids (<code>advice_core</code> per app) worden in pass 1 niet automatisch in de live apps geladen. Alleen BASISREGELS hierboven geldt runtime voor alle apps (na stap 4-6 in de client-apps).</p>
+    <div class="core-basis-warn">Aanpassen op eigen risico. Deze regels raken DateSense, FriendSense, FamilySense, SelfSense en toekomstige apps tegelijk.</div>
+    <p class="core-basis-note">BASISREGELS hierboven gelden voor alle apps (via SenseiCore). In de app-grids hieronder: <code>tone_*</code>, <code>compare_*</code>, <code>photo_analysis_core</code> enz. worden na inloggen uit <code>app_admin_settings</code> geladen. Het veld <code>advice_core</code> in een grid wordt niet 1-op-1 gebruikt; advies-stijl komt uit BASISREGELS + app-specifieke SenseiCore-opbouw.</p>
     <div id="senseiCoreBasisGrid" class="core-basis-grid"></div>
     <div id="senseiCoreBasisLoadState" class="core-save-state" style="margin-top:8px"></div>
   </section>
@@ -266,11 +267,27 @@ a{color:inherit}
     </summary>
     <div class="collapsible-body">
       <p>Specifieke DateSense stijl en prompts. Pas aan en klik op Opslaan.</p>
-      <p class="subtle" style="margin-top:0;margin-bottom:10px">Grid-prompts (o.a. advice_core) zijn nog niet gekoppeld aan de live app. Gedeelde regels stel je in via BASISREGELS hierboven.</p>
+      <p class="subtle" style="margin-top:0;margin-bottom:10px">Na Opslaan en opnieuw openen van de app (ingelogd) gelden prompts zoals <code>tone_*</code>, compare en foto-analyse. Het advies komt uit BASISREGELS + SenseiCore, niet uit het <code>advice_core</code>-veld hier.</p>
       <div id="dateSensePromptGrid" class="prompt-grid"></div>
       <div class="prompt-controls">
         <button id="saveDatePromptsBtn" type="button" class="prompt-save-btn">Opslaan DateSense</button>
         <div id="saveDatePromptsState" class="prompt-save-state"></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="panel collapsible" aria-label="FriendSense instellingen">
+    <summary class="collapsible-head">
+      <h2>FriendSense · AI instellingen</h2>
+      <span class="collapse-kicker">Inklappen/uitklappen</span>
+    </summary>
+    <div class="collapsible-body">
+      <p>Specifieke FriendSense stijl en prompts. Pas aan en klik op Opslaan.</p>
+      <p class="subtle" style="margin-top:0;margin-bottom:10px">Na Opslaan en opnieuw openen van de app (ingelogd) gelden prompts zoals <code>tone_*</code>, compare en foto-analyse. Het advies komt uit BASISREGELS + SenseiCore, niet uit het <code>advice_core</code>-veld hier.</p>
+      <div id="friendSensePromptGrid" class="prompt-grid"></div>
+      <div class="prompt-controls">
+        <button id="saveFriendPromptsBtn" type="button" class="prompt-save-btn">Opslaan FriendSense</button>
+        <div id="saveFriendPromptsState" class="prompt-save-state"></div>
       </div>
     </div>
   </details>
@@ -282,7 +299,7 @@ a{color:inherit}
     </summary>
     <div class="collapsible-body">
       <p>Specifieke FamilySense stijl en prompts. Pas aan en klik op Opslaan.</p>
-      <p class="subtle" style="margin-top:0;margin-bottom:10px">Grid-prompts (o.a. advice_core) zijn nog niet gekoppeld aan de live app. Gedeelde regels stel je in via BASISREGELS hierboven.</p>
+      <p class="subtle" style="margin-top:0;margin-bottom:10px">Na Opslaan en opnieuw openen van de app (ingelogd) gelden prompts zoals <code>tone_*</code>, compare en foto-analyse. Het advies komt uit BASISREGELS + SenseiCore, niet uit het <code>advice_core</code>-veld hier.</p>
       <div id="familySensePromptGrid" class="prompt-grid"></div>
       <div class="prompt-controls">
         <button id="saveFamilyPromptsBtn" type="button" class="prompt-save-btn">Opslaan FamilySense</button>
@@ -336,12 +353,15 @@ a{color:inherit}
   var adminAiState=document.getElementById('adminAiState');
   var adminAiList=document.getElementById('adminAiList');
   var dateSensePromptGrid=document.getElementById('dateSensePromptGrid');
+  var friendSensePromptGrid=document.getElementById('friendSensePromptGrid');
   var familySensePromptGrid=document.getElementById('familySensePromptGrid');
   var selfSensePromptGrid=document.getElementById('selfSensePromptGrid');
   var saveDatePromptsBtn=document.getElementById('saveDatePromptsBtn');
+  var saveFriendPromptsBtn=document.getElementById('saveFriendPromptsBtn');
   var saveFamilyPromptsBtn=document.getElementById('saveFamilyPromptsBtn');
   var saveSelfPromptsBtn=document.getElementById('saveSelfPromptsBtn');
   var saveDatePromptsState=document.getElementById('saveDatePromptsState');
+  var saveFriendPromptsState=document.getElementById('saveFriendPromptsState');
   var saveFamilyPromptsState=document.getElementById('saveFamilyPromptsState');
   var saveSelfPromptsState=document.getElementById('saveSelfPromptsState');
   var adminFeedbackPanel=document.getElementById('adminFeedbackPanel');
@@ -383,6 +403,15 @@ a{color:inherit}
     tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
     compare_core:'Je bent FamilySensei. Analyseer de dossiers en geef concrete, praktische adviezen over de familiedynamiek en hoe de gebruiker beter kan omgaan met de genoemde personen. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea over de dynamiek), "Aandachtspunten:" (2-3 bullets met concrete observaties), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
     photo_analysis_core:'Je bent FamilySensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
+  };
+  var FRIEND_PROMPTS={
+    advice_core:'Je bent FriendSensei. De gebruiker wil concreet vriendschapsadvies op basis van hun situatie, geen coaching waarin jij het werk teruggeeft met open vragen. Gebruik nooit Unicode U+2014 (em dash) in je antwoord; gebruik komma, punt of een gewone hyphen met spaties. {{mode_instruction}} {{tone_instruction}} {{relationship_guard}} Werk zo: begin met één of twee korte zinnen waarin je laat merken dat je hoort wat er speelt, met minstens één concreet detail uit de context (naam, gevoel, scherp dilemma of feit uit het dossier). Geen lange herhaling van hun hele verhaal. Daarna geef je meteen jouw advies: wat zeg of doe jij in hun schoenen, waarom dat helpt, en wat is slim om te vermijden. Schrijf in gesproken Nederlands, vloeiend, zonder opschrift-koppen, zonder bulletlijsten en zonder afstandsbediende zinnen zoals "het is belangrijk om". Stel alleen één verduidelijkende vraag als je letterlijk niet kan antwoorden zonder die ontbrekende info; nooit een keten van vragen, en vraag nooit hoe zij het zelf zouden aanpakken of vergelijkbare omkering naar de gebruiker. Behandel ze als volwassen die zelf beslist; geen extra juridische of medische disclaimers tenzij er acute veiligheid is, dan wel kort en concreet. Baseer je op gezonde communicatie en grenzen in vriendschap zonder pseudo-studies te citeren. Werk NOOIT met scores of percentages. Geen markdown, geen codeblokken, geen tabellen. Schrijf eerst maximaal 8 zinnen zonder aparte kopregels zoals AANDACHTSPUNTEN: of Inzicht:. Sluit daarna af met exact één aparte regel (zonder tekst erna) in dit vaste formaat: ACTIES:emoji;Titel;Korte uitleg|emoji;Titel;Korte uitleg (of drie stukken, gescheiden door |). Gebruik 2 of 3 concrete acties. Per stuk: één emoji uit 🗣️ ❤️ ⚠️ 🎯 🪄 💬 💡 🤝, titel maximaal 6 woorden, korte uitleg exact één zin. Geen extra tekst vóór of na de ACTIES-regel.',
+    tone_soft:'Wees warm en voorzichtig, bevestigend en mild. Blijf eerlijk, maar formuleer met zachtheid en veiligheid.',
+    tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
+    tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
+    compare_core:'Je bent FriendSensei. Analyseer de dossiers en geef concrete, praktische adviezen over de vriendschapsdynamiek en hoe de gebruiker beter kan omgaan met de genoemde personen. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea over de dynamiek), "Aandachtspunten:" (2-3 bullets met concrete observaties), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
+    compare_extra_followup:'Je bent FriendSensei. De gebruiker ziet net een kort hoofd-vergelijk-advies over meerdere dossiers. Jouw taak is een tweede laag met extra expertise: rollen in jullie vriendschap, spanningen, risico\'s en wat de gebruiker mogelijk over het hoofd ziet. Herhaal de hoofdconclusie niet uitgebreid (hoogstens één korte verwijzingszin). Gebruik GEEN tabellen of markdown. Max 7 zinnen. Nederlands. Gebruik nooit Unicode U+2014 (em dash); gebruik komma\'s of punten.',
+    photo_analysis_core:'Je bent FriendSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
   };
   var SELF_PROMPTS={
     vraag_core:'Je bent SelfSensei. Schrijf warm, rustig en duidelijk in het Nederlands. Gebruik nooit Unicode U+2014. Houd het kort en menselijk. Geen markdown, geen lijstjes, geen tabellen.',
@@ -1139,30 +1168,40 @@ a{color:inherit}
     });
     var legacyOverrides=readLegacyPromptOverrides(user);
     var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
+    var savedFriendPrompts=await loadSavedPromptSet('prompts_friendsense');
     var savedFamilyPrompts=await loadSavedPromptSet('prompts_familysense');
     var savedSelfPrompts=await loadSavedPromptSet('prompts_selfsense');
     var legacyKeys=Object.keys(legacyOverrides);
     var hasLegacy=legacyKeys.length>0;
     var datePrompts=Object.assign({},DATE_PROMPTS);
+    var friendPrompts=Object.assign({},FRIEND_PROMPTS);
     var familyPrompts=Object.assign({},FAMILY_PROMPTS);
     var selfPrompts=Object.assign({},SELF_PROMPTS);
     if(savedDatePrompts&&typeof savedDatePrompts==='object')datePrompts=Object.assign({},datePrompts,savedDatePrompts);
+    if(savedFriendPrompts&&typeof savedFriendPrompts==='object')friendPrompts=Object.assign({},friendPrompts,savedFriendPrompts);
     if(savedFamilyPrompts&&typeof savedFamilyPrompts==='object')familyPrompts=Object.assign({},familyPrompts,savedFamilyPrompts);
     if(savedSelfPrompts&&typeof savedSelfPrompts==='object')selfPrompts=Object.assign({},selfPrompts,savedSelfPrompts);
     legacyKeys.forEach(function(k){
       var v=String(legacyOverrides[k]||'').trim();
       if(!v)return;
       if(!savedDatePrompts&&Object.prototype.hasOwnProperty.call(datePrompts,k))datePrompts[k]=v;
+      if(!savedFriendPrompts&&Object.prototype.hasOwnProperty.call(friendPrompts,k))friendPrompts[k]=v;
       if(!savedFamilyPrompts&&Object.prototype.hasOwnProperty.call(familyPrompts,k))familyPrompts[k]=v;
       if(!savedSelfPrompts&&Object.prototype.hasOwnProperty.call(selfPrompts,k))selfPrompts[k]=v;
     });
     var note='Bron: centrale admin settings'+(hasLegacy?' (fallback naar legacy browser-overrides als er nog niets centraal staat).':'.');
     renderPromptGrid(dateSensePromptGrid,datePrompts,note,'datesense');
+    renderPromptGrid(friendSensePromptGrid,friendPrompts,note,'friendsense');
     renderPromptGrid(familySensePromptGrid,familyPrompts,note,'familysense');
     renderPromptGrid(selfSensePromptGrid,selfPrompts,note,'selfsense');
     if(saveDatePromptsBtn){
       saveDatePromptsBtn.onclick=function(){
         savePromptSet('prompts_datesense','datesense',dateSensePromptGrid,saveDatePromptsState,saveDatePromptsBtn,user);
+      };
+    }
+    if(saveFriendPromptsBtn){
+      saveFriendPromptsBtn.onclick=function(){
+        savePromptSet('prompts_friendsense','friendsense',friendSensePromptGrid,saveFriendPromptsState,saveFriendPromptsBtn,user);
       };
     }
     if(saveFamilyPromptsBtn){
