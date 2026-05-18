@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="18-05-2026 14:46">
+<meta name="sc-build" content="18-05-2026 15:32">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -619,7 +619,7 @@ a{text-decoration:none;color:inherit}
   <p class="section-label">Sense Apps</p>
   <section class="grid" aria-label="Beschikbare apps" role="list">
 
-    <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-link="datesense.html">
+    <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-key="ds" data-app-link="datesense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -639,7 +639,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card people-card clickable" role="listitem" tabindex="0" aria-label="FriendSense" data-app-link="friendsense.html">
+    <article class="app-card people-card clickable" role="listitem" tabindex="0" aria-label="FriendSense" data-app-key="fr" data-app-link="friendsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -659,7 +659,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense" data-app-link="familysense.html">
+    <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense" data-app-key="fs" data-app-link="familysense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -679,7 +679,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card self-card clickable" role="listitem" tabindex="0" aria-label="SelfSense" data-app-link="selfsense.html">
+    <article class="app-card self-card clickable" role="listitem" tabindex="0" aria-label="SelfSense" data-app-key="ss" data-app-link="selfsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -1737,6 +1737,153 @@ a{text-decoration:none;color:inherit}
     var scopes=scNormalizeAppScopeList(m);
     return scopes.indexOf('fr')>=0;
   }
+  function scIsSelfTaggedMeta(meta){
+    var scopes=scNormalizeAppScopeList(meta||{});
+    return scopes.indexOf('ss')>=0;
+  }
+  var SC_APP_LINK_KEY={'datesense.html':'ds','friendsense.html':'fr','familysense.html':'fs','selfsense.html':'ss'};
+  var SC_APP_DEFAULT_RANK={ds:0,fr:1,fs:2,ss:3};
+  function scAppKeyFromCard(card){
+    if(!card)return'';
+    var k=String(card.getAttribute('data-app-key')||'').trim().toLowerCase();
+    if(k)return k;
+    var link=String(card.getAttribute('data-app-link')||'').trim().toLowerCase();
+    return SC_APP_LINK_KEY[link]||'';
+  }
+  function scAppKeyFromHref(href){
+    var low=String(href||'').trim().toLowerCase();
+    var base=low.split('?')[0].split('#')[0];
+    return SC_APP_LINK_KEY[base]||'';
+  }
+  function scAppVisitStorageKey(user){
+    return 'sc_app_visits::'+scUserPart(user);
+  }
+  function scReadAppVisitStats(user){
+    try{
+      var raw=localStorage.getItem(scAppVisitStorageKey(user));
+      if(!raw)return{};
+      var o=JSON.parse(raw);
+      return(o&&typeof o==='object')?o:{};
+    }catch(_e){return{};}
+  }
+  function scBumpAppVisit(user,appKey){
+    if(!user||!appKey)return;
+    var stats=scReadAppVisitStats(user);
+    var row=stats[appKey]||{last:0,n:0};
+    row.last=Date.now();
+    row.n=Math.min(9999,(parseInt(row.n,10)||0)+1);
+    stats[appKey]=row;
+    try{localStorage.setItem(scAppVisitStorageKey(user),JSON.stringify(stats));}catch(_e){}
+  }
+  function scScoreRecencyPoints(lastTs){
+    var ts=parseInt(lastTs,10)||0;
+    if(!ts)return 0;
+    var days=(Date.now()-ts)/86400000;
+    if(days<=1)return 40;
+    if(days<=3)return 32;
+    if(days<=7)return 24;
+    if(days<=30)return 12;
+    if(days<=90)return 6;
+    return 2;
+  }
+  function scIntentKeywordBoost(intentText){
+    var t=String(intentText||'').toLowerCase();
+    var b={ds:0,fr:0,fs:0,ss:0};
+    if(!t)return b;
+    function any(words){return words.some(function(w){return t.indexOf(w)>=0;});}
+    if(any(['date','daten','relatie','partner','liefde','match','single']))b.ds+=14;
+    if(any(['gezin','familie','kind','opvoed','ouder','thuis','schoonfamilie']))b.fs+=14;
+    if(any(['vriend','vriendschap','sociaal','grenzen','vrienden']))b.fr+=14;
+    if(any(['healing','herstel','groei','zelf','burn','trauma','welzijn','reflect']))b.ss+=14;
+    return b;
+  }
+  function scComputeAppPriorityScores(user,pack){
+    var scores={ds:8,fr:8,fs:8,ss:8};
+    if(!user)return scores;
+    var visits=scReadAppVisitStats(user);
+    ['ds','fr','fs','ss'].forEach(function(key){
+      var v=visits[key];
+      if(!v)return;
+      scores[key]+=scScoreRecencyPoints(v.last);
+      scores[key]+=Math.min(15,Math.log(1+(parseInt(v.n,10)||0))*5);
+    });
+    if(pack&&pack.pdata){
+      var pdata=pack.pdata;
+      var profiles=pack.profiles||[];
+      var dsN=0,frN=0,fsN=0,ssN=0;
+      profiles.forEach(function(p){
+        if(!p||p==='OWN Sense')return;
+        if(scDossierLifecycle(pdata,p)!=='active')return;
+        var m=(pdata[p]||{}).meta||{};
+        if(scIsFamilyTaggedMeta(m))fsN++;
+        else if(scIsFriendTaggedMeta(m))frN++;
+        else if(scIsSelfTaggedMeta(m))ssN++;
+        else dsN++;
+      });
+      scores.ds+=dsN*7;
+      scores.fr+=frN*7;
+      scores.fs+=fsN*7;
+      scores.ss+=ssN*7;
+      if(scGetUsageMode(user)==='single'){
+        var focus=scGetFocusDossier(user);
+        if(focus&&scDossierLifecycle(pdata,focus)==='active'){
+          var fm=((pdata[focus]||{}).meta)||{};
+          if(!scIsFamilyTaggedMeta(fm)&&!scIsFriendTaggedMeta(fm)&&!scIsSelfTaggedMeta(fm))scores.ds+=12;
+        }
+      }
+      var ownMeta=((pdata['OWN Sense']||{}).meta)||{};
+      var ib=scIntentKeywordBoost(ownMeta.intent);
+      scores.ds+=ib.ds;
+      scores.fr+=ib.fr;
+      scores.fs+=ib.fs;
+      scores.ss+=ib.ss;
+    }
+    var cats={};
+    if(hubProfile&&hubProfile.categories&&typeof hubProfile.categories==='object'){
+      cats=Object.assign(cats,hubProfile.categories);
+    }
+    if(scServerCategories&&typeof scServerCategories==='object'){
+      cats=Object.assign(cats,scServerCategories);
+    }
+    function depthBoost(catId,key,fbTotal){
+      var c=cats[catId]||{};
+      var tot=countTotalAnswersInCategory(c,fbTotal);
+      var fil=countFilledAnswersInCategory(c);
+      if(tot>0)scores[key]+=Math.round((fil/tot)*22);
+    }
+    depthBoost('datesense_focus','ds',5);
+    depthBoost('friendsense_focus','fr',5);
+    depthBoost('familysense_focus','fs',5);
+    depthBoost('selfsense_focus','ss',6);
+    [{key:'ds',app:'datesense'},{key:'fr',app:'friendsense'},{key:'fs',app:'familysense'}].forEach(function(ca){
+      var n=readScCoachOpenCount(ca.app,user);
+      if(n!=null&&n>0)scores[ca.key]+=Math.min(12,n*2);
+    });
+    return scores;
+  }
+  function scReorderAppGrid(user,pack){
+    try{
+      var grid=document.querySelector('.grid');
+      if(!grid)return;
+      var cards=Array.prototype.slice.call(grid.querySelectorAll('.app-card'));
+      if(!cards.length)return;
+      var scores=scComputeAppPriorityScores(user,pack||_scLastCoachPack||null);
+      cards.sort(function(a,b){
+        var aInactive=a.classList.contains('dimmed')?1:0;
+        var bInactive=b.classList.contains('dimmed')?1:0;
+        if(aInactive!==bInactive)return aInactive-bInactive;
+        var ak=scAppKeyFromCard(a);
+        var bk=scAppKeyFromCard(b);
+        var as=scores[ak]!=null?scores[ak]:0;
+        var bs=scores[bk]!=null?scores[bk]:0;
+        if(bs!==as)return bs-as;
+        return (SC_APP_DEFAULT_RANK[ak]!=null?SC_APP_DEFAULT_RANK[ak]:9)-(SC_APP_DEFAULT_RANK[bk]!=null?SC_APP_DEFAULT_RANK[bk]:9);
+      });
+      cards.forEach(function(card){grid.appendChild(card);});
+    }catch(e){
+      console.warn('sensecorner app grid sort',e);
+    }
+  }
   function scUserPart(user){
     return String(user&&(user.id||user.email)||'').trim()||'guest';
   }
@@ -2095,6 +2242,7 @@ a{text-decoration:none;color:inherit}
       var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(_scLastCoachPack),coachRaw);
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
+      scReorderAppGrid(user,_scLastCoachPack);
     }catch(_e){
       refreshCoachHintsFromServer(user);
     }
@@ -2115,6 +2263,7 @@ a{text-decoration:none;color:inherit}
       var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(pack),coachRaw);
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
+      scReorderAppGrid(user,pack);
     }catch(e){
       console.warn('sensecorner coach hints',e);
       updateAppCardCoachHints(user);
@@ -2203,6 +2352,8 @@ a{text-decoration:none;color:inherit}
   }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
+    if(user)userSession=user;
+    else userSession=null;
     await scTimeoutFallback(Promise.resolve(refreshAdminRole(user)),6000,null).catch(function(){});
     var approval={known:false,approved:false};
     if(user)approval=await scTimeoutFallback(getOwnAiApproval(user),8000,{known:false,approved:false});
@@ -2254,8 +2405,16 @@ a{text-decoration:none;color:inherit}
   async function openAppWithAuth(target){
     var t=String(target||'').trim();
     if(!t)return;
-    var user=await refreshAuthUi();
+    var user=userSession;
+    if(!user){
+      user=await scTimeoutFallback(getCurrentUser(),5000,null);
+      if(user)userSession=user;
+    }
     if(user){
+      var appKey=scAppKeyFromHref(t);
+      if(appKey){
+        try{scBumpAppVisit(user,appKey);}catch(_visit){}
+      }
       window.location.href=t;
       return;
     }
@@ -2319,17 +2478,8 @@ a{text-decoration:none;color:inherit}
   }
   updateHeroWelcome(userSession);
 
-  // Actieve apps bovenaan, niet-actieve (dimmed/binnenkort) onderaan.
-  var grid=document.querySelector('.grid');
+  try{scReorderAppGrid(userSession,null);}catch(_sortInit){}
   var cards=Array.prototype.slice.call(document.querySelectorAll('.app-card'));
-  cards.sort(function(a,b){
-    var aInactive=a.classList.contains('dimmed')?1:0;
-    var bInactive=b.classList.contains('dimmed')?1:0;
-    return aInactive-bInactive;
-  });
-  if(grid){
-    cards.forEach(function(card){ grid.appendChild(card); });
-  }
   cards.forEach(function(c,i){
     setTimeout(function(){c.classList.add('enter');}, 80 + i*60);
   });
@@ -2349,8 +2499,11 @@ a{text-decoration:none;color:inherit}
   });
   window.addEventListener('storage',function(ev){
     var k=String(ev.key||'');
-    if(k.indexOf('dsCoachState')===0||k.indexOf('ds_focus_')===0||k.indexOf('ds_usage_mode')===0||k.indexOf('sc_coach_open_')===0){
-      getCurrentUser().then(function(u){refreshCoachHintsFromCache(u);}).catch(function(){});
+    if(k.indexOf('dsCoachState')===0||k.indexOf('ds_focus_')===0||k.indexOf('ds_usage_mode')===0||k.indexOf('sc_coach_open_')===0||k.indexOf('sc_app_visits')===0){
+      getCurrentUser().then(function(u){
+        refreshCoachHintsFromCache(u);
+        scReorderAppGrid(u,_scLastCoachPack);
+      }).catch(function(){});
     }
   });
   document.addEventListener('visibilitychange',function(){
