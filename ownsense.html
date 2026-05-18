@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="08-05-2026 11:30">
+<meta name="os-build" content="18-05-2026 14:41">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -294,11 +294,21 @@ button.cat-mini-row{width:100%;text-align:left;cursor:pointer;font-family:inheri
 }
 .qrow.qscope-ds{background:color-mix(in srgb,var(--date-licht) 38%,#fff);border-color:color-mix(in srgb,var(--date-medium) 35%,#e6e6e6)}
 .qrow.qscope-fs{background:color-mix(in srgb,var(--family-licht) 38%,#fff);border-color:color-mix(in srgb,var(--family-medium) 35%,#e6e6e6)}
+.qrow.qscope-fr{background:color-mix(in srgb,var(--friend-licht) 38%,#fff);border-color:color-mix(in srgb,var(--friend-medium) 35%,#e6e6e6)}
 .qrow.qscope-ss{background:color-mix(in srgb,var(--self-licht) 40%,#fff);border-color:color-mix(in srgb,var(--self-medium) 38%,#e6e6e6)}
 .qrow.qscope-ds .qrow-icon{background:rgba(232,187,185,.33)}
 .qrow.qscope-fs .qrow-icon{background:rgba(208,199,223,.35)}
+.qrow.qscope-fr .qrow-icon{background:rgba(235,207,155,.45)}
 .qrow.qscope-ss .qrow-icon{background:rgba(188,205,192,.45)}
+.qrow.qscope-ds .qrow-bar-fill{background:var(--date-donker)}
+.qrow.qscope-fs .qrow-bar-fill{background:var(--family-donker)}
+.qrow.qscope-fr .qrow-bar-fill{background:var(--friend-donker)}
 .qrow.qscope-ss .qrow-bar-fill{background:var(--self-donker)}
+/* Shell-accent per app (o.a. FriendSense-verdieping via ?cat=friendsense_focus) */
+body.os-accent-ds{--app-donker:var(--date-donker);--app-medium:var(--date-medium);--app-licht:var(--date-licht);--rl:rgba(232,187,185,.38)}
+body.os-accent-fs{--app-donker:var(--family-donker);--app-medium:var(--family-medium);--app-licht:var(--family-licht);--rl:rgba(208,199,223,.4)}
+body.os-accent-fr{--app-donker:var(--friend-donker);--app-medium:var(--friend-medium);--app-licht:var(--friend-licht);--rl:rgba(235,207,155,.42)}
+body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium);--app-licht:var(--self-licht);--rl:rgba(188,205,192,.4)}
 .qrow-meta{flex:1;min-width:0}
 .qrow-title{font-size:13px;font-weight:700;color:var(--chocolade)}
 .qrow-progress{font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:8px}
@@ -505,6 +515,7 @@ button.cat-mini-row{width:100%;text-align:left;cursor:pointer;font-family:inheri
 .scope-all{background:#8B3A2E}
 .scope-ds{background:#1a56b0}
 .scope-fs{background:#1a7a45}
+.scope-fr{background:var(--friend-donker)}
 .scope-ss{background:var(--self-donker)}
 .scope-gen{background:#6B7280}
 .ins-time{font-size:11px;color:#868c95}
@@ -631,6 +642,7 @@ button.cat-mini-row{width:100%;text-align:left;cursor:pointer;font-family:inheri
 .insight-v2-card--all{--in-accent:#8B3A2E}
 .insight-v2-card--ds{--in-accent:#1a56b0}
 .insight-v2-card--fs{--in-accent:#1a7a45}
+.insight-v2-card--fr{--in-accent:var(--friend-donker)}
 .insight-v2-card--ss{--in-accent:var(--self-donker)}
 .insight-v2-card--gen{--in-accent:#5c6578}
 .insight-v2-inner{padding:14px 16px 16px 14px;flex:1;min-width:0}
@@ -664,6 +676,7 @@ button.cat-mini-row{width:100%;text-align:left;cursor:pointer;font-family:inheri
 .growth-pill--own{background:rgba(200,212,181,.4);border-color:rgba(107,142,111,.4);color:var(--chocolade)}
 .growth-pill--ds{background:#E8F0FC;border-color:#B8CCE8;color:#174a96}
 .growth-pill--fs{background:#E6F5ED;border-color:#A8D4B8;color:#126738}
+.growth-pill--fr{background:#FBF3E3;border-color:#E5CF9B;color:#8A6015}
 .growth-pill--chat{background:#f0f2f5;border-color:#d5dce3;color:#4b5563}
 .growth-pill--misc{background:#faf8f6;border-color:#E0D8D2;color:#5c4f4a}
 .source-list{display:grid;gap:8px}
@@ -1273,8 +1286,38 @@ function renderOwnHubSinglePage(){
   refreshOwnPhotoSlotPreviews().then(function(){renderFotosTab();}).catch(function(){renderFotosTab();});
   renderGroeiTab();
 }
+function applyOwnHubAppAccent(app){
+  var code=String(app||'').toLowerCase();
+  var body=document.body;
+  if(!body)return;
+  body.classList.remove('os-accent-ds','os-accent-fs','os-accent-fr','os-accent-ss');
+  if(code==='ds')body.classList.add('os-accent-ds');
+  else if(code==='fs')body.classList.add('os-accent-fs');
+  else if(code==='fr')body.classList.add('os-accent-fr');
+  else if(code==='ss')body.classList.add('os-accent-ss');
+}
+function ownHubAppFromCatId(catId){
+  var c=APP_CATS.find(function(x){return x.id===String(catId||'').trim();});
+  return c&&c.app?String(c.app):'';
+}
+function syncOwnHubAccentFromContext(){
+  var app='';
+  if(urlBootFocusCat)app=ownHubAppFromCatId(urlBootFocusCat);
+  if(!app&&__openQuestionCatId)app=ownHubAppFromCatId(__openQuestionCatId);
+  if(!app){
+    try{
+      var rt=String(returnToApp||'').toLowerCase();
+      if(rt.indexOf('friendsense')>=0)app='fr';
+      else if(rt.indexOf('familysense')>=0)app='fs';
+      else if(rt.indexOf('datesense')>=0)app='ds';
+      else if(rt.indexOf('selfsense')>=0)app='ss';
+    }catch(_e){}
+  }
+  applyOwnHubAppAccent(app);
+}
 function activateTab(tabId){
   renderOwnHubSinglePage();
+  syncOwnHubAccentFromContext();
   var targetMap={
     mij:'profileHero',
     bron:'vragenlijstenAnchor',
@@ -2133,7 +2176,7 @@ function pickPerAppInsightText(key){
 
 function insightCardHtml(title,badge,text,updatedIso,scopeKey){
   var sk=String(scopeKey||'all');
-  if(['all','ds','fs','ss','gen'].indexOf(sk)<0)sk='all';
+  if(['all','ds','fs','fr','ss','gen'].indexOf(sk)<0)sk='all';
   var body=String(text||'').trim();
   var display=cleanInsightCardProse(body);
   var t=display?escHTML(display):'<span class="subtle">Nog geen inzicht. Gebruik hierboven <strong>Ververs alle inzichten</strong>.</span>';
@@ -2576,6 +2619,7 @@ function initQuickNav(){
     var rt=String(returnToApp||'').toLowerCase();
     if(rt.indexOf('datesense')>=0)backPill.textContent='← Terug naar DateSense';
     else if(rt.indexOf('familysense')>=0)backPill.textContent='← Terug naar FamilySense';
+    else if(rt.indexOf('friendsense')>=0)backPill.textContent='← Terug naar FriendSense';
     else if(rt.indexOf('sensecorner')>=0)backPill.textContent='← Terug naar SenseCorner';
     else backPill.textContent='← Terug naar app';
     backPill.onclick=function(){window.location.href=returnToApp;};
@@ -2588,6 +2632,7 @@ function initQuickNav(){
 function applyUrlTabBoot(){
   try{
     refreshBootFocusCatFromUrl();
+    syncOwnHubAccentFromContext();
     var qp=new URLSearchParams(window.location.search||'');
     var tab=String(qp.get('tab')||'').toLowerCase().trim();
     if(urlBootFocusCat)tab='bron';
@@ -2614,6 +2659,7 @@ function focusBootQuestionCategory(){
   if(!urlBootFocusCat)return;
   try{
     __openQuestionCatId=urlBootFocusCat;
+    syncOwnHubAccentFromContext();
     activateTab('bron');
     if(typeof renderBronTab==='function')renderBronTab();
     if(typeof renderQuestions==='function')renderQuestions();
@@ -4095,7 +4141,7 @@ function renderQuestions(){
     var filled=keys.filter(function(k){return String(c[k]||'').trim().length>0;}).length;
     var totalQ=cat.prompts.length;
     var pct=Math.round((filled*100)/Math.max(1,totalQ));
-    var scopeCls=(cat.app==='ds'?' qscope-ds':(cat.app==='fs'?' qscope-fs':(cat.app==='ss'?' qscope-ss':'')));
+    var scopeCls=(cat.app==='ds'?' qscope-ds':(cat.app==='fs'?' qscope-fs':(cat.app==='fr'?' qscope-fr':(cat.app==='ss'?' qscope-ss':''))));
     var openAttr=(String(__openQuestionCatId||'')===String(cat.id))?' open':'';
     html+='<details class="qcard" id="cat-'+cat.id+'"'+openAttr+'><summary class="qrow'+scopeCls+'">'
       +'<div class="qrow-icon">'+escHTML(cat.icon||'•')+'</div>'
@@ -4126,6 +4172,7 @@ function renderQuestions(){
     card.addEventListener('toggle',function(){
       if(!card.open)return;
       __openQuestionCatId=String(card.id||'').replace(/^cat-/,'');
+      syncOwnHubAccentFromContext();
       cards.forEach(function(other){
         if(other!==card&&other.open)other.removeAttribute('open');
       });
@@ -4440,6 +4487,7 @@ function topDeltas(){
 function scopeBadgeClass(scope){
   if(scope==='ds')return'scope-ds';
   if(scope==='fs')return'scope-fs';
+  if(scope==='fr')return'scope-fr';
   if(scope==='ss')return'scope-ss';
   if(scope==='gen')return'scope-gen';
   return'scope-all';

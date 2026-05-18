@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="18-05-2026 14:28">
+<meta name="sc-build" content="18-05-2026 14:46">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -412,11 +412,13 @@ a{text-decoration:none;color:inherit}
 }
 .app-coach-hint--datesense .app-coach-hint__n{color:var(--date-donker);}
 .app-coach-hint--familysense .app-coach-hint__n{color:var(--family-donker);}
+.app-coach-hint--friendsense .app-coach-hint__n{color:var(--friend-donker);}
 .app-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
 .badge-live{background:color-mix(in srgb,var(--date-licht) 55%,white);color:var(--date-donker);border:1px solid color-mix(in srgb,var(--date-medium) 40%,transparent)}
 /* Actief op FamilySense-kaart: zelfde paarse app-tint als FamilySense (niet DateSense-rood). */
 .badge-live-fs{background:color-mix(in srgb,var(--family-licht) 52%,white);color:var(--family-donker);border:1px solid color-mix(in srgb,var(--family-medium) 42%,transparent)}
+.badge-live-fr{background:color-mix(in srgb,var(--friend-licht) 52%,white);color:var(--friend-donker);border:1px solid color-mix(in srgb,var(--friend-medium) 42%,transparent)}
 .badge-live-self{background:color-mix(in srgb,var(--self-licht) 52%,white);color:var(--self-donker);border:1px solid color-mix(in srgb,var(--self-medium) 42%,transparent)}
 .badge-proto{background:color-mix(in srgb,var(--family-licht) 50%,white);color:var(--family-donker);border:1px solid color-mix(in srgb,var(--family-medium) 35%,transparent)}
 .badge-soon{background:color-mix(in srgb,var(--friend-licht) 45%,white);color:var(--friend-donker);border:1px solid color-mix(in srgb,var(--friend-medium) 35%,transparent)}
@@ -637,7 +639,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card people-card dimmed" role="listitem" aria-label="FriendSense, binnenkort beschikbaar">
+    <article class="app-card people-card clickable" role="listitem" tabindex="0" aria-label="FriendSense" data-app-link="friendsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -650,8 +652,10 @@ a{text-decoration:none;color:inherit}
         <div class="app-name">FriendSense</div>
       </div>
       <p class="app-desc">Inzicht in vriendschappen, grenzen en sociale dynamieken.</p>
+      <p class="app-coach-hint app-coach-hint--friendsense" id="scCoachHintFriendsense" hidden></p>
       <div class="app-footer">
-        <span class="badge badge-soon">Binnenkort</span>
+        <span class="badge badge-live-fr">Actief</span>
+        <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
     </article>
 
@@ -675,7 +679,7 @@ a{text-decoration:none;color:inherit}
       </div>
     </article>
 
-    <article class="app-card self-card clickable" role="listitem" tabindex="0" aria-label="SelfSense, in productie nog niet volledig" data-app-link="selfsense.html">
+    <article class="app-card self-card clickable" role="listitem" tabindex="0" aria-label="SelfSense" data-app-link="selfsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -689,7 +693,7 @@ a{text-decoration:none;color:inherit}
       </div>
       <p class="app-desc">Healing, herstel en persoonlijke groei.</p>
       <div class="app-footer">
-        <span class="badge badge-live-self">Semi Actief - Currently in beta test</span>
+        <span class="badge badge-live-self">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
     </article>
@@ -1726,6 +1730,13 @@ a{text-decoration:none;color:inherit}
     var scopes=scNormalizeAppScopeList(m);
     return scopes.indexOf('fs')>=0;
   }
+  function scIsFriendTaggedMeta(meta){
+    var m=meta||{};
+    if(String(m.friend_rol||'').trim())return true;
+    if(String(m.friend_relatie||'').trim())return true;
+    var scopes=scNormalizeAppScopeList(m);
+    return scopes.indexOf('fr')>=0;
+  }
   function scUserPart(user){
     return String(user&&(user.id||user.email)||'').trim()||'guest';
   }
@@ -1829,6 +1840,7 @@ a{text-decoration:none;color:inherit}
         if(!p||p==='OWN Sense')return false;
         var m=(pdata[p]||{}).meta||{};
         if(scIsFamilyTaggedMeta(m))return false;
+        if(scIsFriendTaggedMeta(m))return false;
         return scDossierLifecycle(pdata,p)==='active';
       });
     }
@@ -1947,6 +1959,57 @@ a{text-decoration:none;color:inherit}
     }
     return tasks;
   }
+  function scBuildFriendSenseCoachTasks(pack){
+    var pdata=pack.pdata||{};
+    var profiles=pack.profiles||[];
+    var tasks=[];
+    function frActiveContacts(){
+      return profiles.filter(function(p){
+        if(!p||p==='OWN Sense')return false;
+        var m=(pdata[p]||{}).meta||{};
+        if(!scIsFriendTaggedMeta(m))return false;
+        return scDossierLifecycle(pdata,p)==='active';
+      });
+    }
+    function notifOn(nm){
+      if(!nm||nm==='OWN Sense')return true;
+      var m=(pdata[nm]||{}).meta||{};
+      return m.notifications_muted!==true;
+    }
+    frActiveContacts().forEach(function(p){
+      if(!notifOn(p))return;
+      var d=pdata[p]||{};
+      var hasRealActivity=!!d.lastActive||((d.count||0)>0);
+      var days=d.lastActive?Math.floor((Date.now()-new Date(d.lastActive))/86400000):0;
+      if(hasRealActivity&&days>=4){
+        tasks.push({id:'check-stale-'+p});
+      }
+      var lastAdviceBlock=((d.meta||{}).last_advice)||{};
+      var lastAdviceAt=lastAdviceBlock.updated_at||'';
+      var hasAdviceBody=!!(lastAdviceBlock.html&&String(lastAdviceBlock.html).trim());
+      if((d.count||0)>=1&&!hasAdviceBody){
+        tasks.push({id:'actie-eerste-advies-'+p});
+      }
+      var adviceOld=!lastAdviceAt||((Date.now()-new Date(lastAdviceAt))/86400000)>=7;
+      if(hasAdviceBody&&(d.count||0)>=8&&adviceOld){
+        tasks.push({id:'actie-advies-'+p});
+      }
+      var m=d.meta||{};
+      var hasPhotoUrl=!!(m&&m.photo_url);
+      var hasAnPhotos=(m.analysis_photos||[]).some(function(u){return!!u;});
+      if((d.count||0)>=1&&!(m&&m.photo_analysis)){
+        if(!hasPhotoUrl&&!hasAnPhotos){
+          tasks.push({id:'sense-foto-'+p});
+        }else if((d.count||0)>=6){
+          tasks.push({id:'sense-foto-analyse-'+p});
+        }
+      }
+    });
+    if(!scProfileMetaComplete(pdata,'OWN Sense')){
+      tasks.push({id:'check-own-profile'});
+    }
+    return tasks;
+  }
   function scCoachOpenCountAfterState(taskList,stateRaw){
     var state={};
     try{state=JSON.parse(stateRaw||'{}')||{};}catch(_e){state={};}
@@ -1961,12 +2024,13 @@ a{text-decoration:none;color:inherit}
     if(!uid)return'';
     return 'sc_coach_open_'+app+'::'+uid;
   }
-  function scPersistCoachHintCache(user,dsCount,fsCount){
+  function scPersistCoachHintCache(user,dsCount,fsCount,frCount){
     try{
       var uid=String(user&&(user.id||user.email)||'').trim();
       if(!uid)return;
       localStorage.setItem(scCoachOpenStorageKey('datesense',user),String(dsCount));
       localStorage.setItem(scCoachOpenStorageKey('familysense',user),String(fsCount));
+      localStorage.setItem(scCoachOpenStorageKey('friendsense',user),String(frCount));
     }catch(_e){}
   }
   function readScCoachOpenCount(app,user){
@@ -1980,9 +2044,10 @@ a{text-decoration:none;color:inherit}
       return Math.min(9999,n);
     }catch(_e){return null;}
   }
-  function updateAppCardCoachHintsWithCounts(user,dsN,fsN){
+  function updateAppCardCoachHintsWithCounts(user,dsN,fsN,frN){
     var dsEl=document.getElementById('scCoachHintDatesense');
     var fsEl=document.getElementById('scCoachHintFamilysense');
+    var frEl=document.getElementById('scCoachHintFriendsense');
     function wipe(el){
       if(!el)return;
       el.textContent='';
@@ -1992,6 +2057,7 @@ a{text-decoration:none;color:inherit}
     if(!user){
       wipe(dsEl);
       wipe(fsEl);
+      wipe(frEl);
       return;
     }
     function applyHint(el,n,appLabel){
@@ -2007,15 +2073,17 @@ a{text-decoration:none;color:inherit}
     }
     applyHint(dsEl,dsN,'DateSense');
     applyHint(fsEl,fsN,'FamilySense');
+    applyHint(frEl,frN,'FriendSense');
   }
   function updateAppCardCoachHints(user){
-    if(!user){updateAppCardCoachHintsWithCounts(null,0,0);return;}
+    if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);return;}
     var dsv=readScCoachOpenCount('datesense',user);
     var fsv=readScCoachOpenCount('familysense',user);
-    updateAppCardCoachHintsWithCounts(user,dsv==null?0:dsv,fsv==null?0:fsv);
+    var frv=readScCoachOpenCount('friendsense',user);
+    updateAppCardCoachHintsWithCounts(user,dsv==null?0:dsv,fsv==null?0:fsv,frv==null?0:frv);
   }
   function refreshCoachHintsFromCache(user){
-    if(!user){updateAppCardCoachHintsWithCounts(null,0,0);return;}
+    if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);return;}
     if(!_scLastCoachPack){
       refreshCoachHintsFromServer(user);
       return;
@@ -2024,15 +2092,16 @@ a{text-decoration:none;color:inherit}
       var coachRaw=scReadCoachState(user);
       var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(_scLastCoachPack,user),coachRaw);
       var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(_scLastCoachPack),coachRaw);
-      scPersistCoachHintCache(user,ds,fs);
-      updateAppCardCoachHintsWithCounts(user,ds,fs);
+      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(_scLastCoachPack),coachRaw);
+      scPersistCoachHintCache(user,ds,fs,fr);
+      updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
     }catch(_e){
       refreshCoachHintsFromServer(user);
     }
   }
   async function refreshCoachHintsFromServer(user){
     if(!user||!sb){
-      updateAppCardCoachHintsWithCounts(null,0,0);
+      updateAppCardCoachHintsWithCounts(null,0,0,0);
       return;
     }
     try{
@@ -2043,8 +2112,9 @@ a{text-decoration:none;color:inherit}
       var coachRaw=scReadCoachState(user);
       var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(pack,user),coachRaw);
       var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(pack),coachRaw);
-      scPersistCoachHintCache(user,ds,fs);
-      updateAppCardCoachHintsWithCounts(user,ds,fs);
+      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(pack),coachRaw);
+      scPersistCoachHintCache(user,ds,fs,fr);
+      updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
     }catch(e){
       console.warn('sensecorner coach hints',e);
       updateAppCardCoachHints(user);
