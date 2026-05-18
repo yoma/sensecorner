@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 12:13">
+<meta name="fs-build" content="18-05-2026 13:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -2953,6 +2953,50 @@ function runSenseiAuthSerialized(fn){
   return run;
 }
 var _authTokenCache={token:null,expiresAt:0};
+var SENSE_AUTH_STORAGE_KEY='sensecorner-auth-v1';
+var _senseSignOutDebounceTimer=null;
+function senseReadPersistedAuthRaw(){
+  try{
+    var raw=localStorage.getItem(SENSE_AUTH_STORAGE_KEY);
+    if(!raw)return null;
+    return JSON.parse(raw);
+  }catch(_e){return null;}
+}
+function senseSessionFromPersisted(){
+  var blob=senseReadPersistedAuthRaw();
+  if(!blob)return null;
+  var sess=null;
+  if(blob&&blob.user&&blob.access_token)sess=blob;
+  else if(blob&&blob.currentSession)sess=blob.currentSession;
+  else if(blob&&blob.session)sess=blob.session;
+  if(!sess||!sess.user)return null;
+  var rt=String(sess.refresh_token||'').trim();
+  var exp=(sess.expires_at?sess.expires_at*1000:0)||0;
+  if(!rt&&exp&&exp<Date.now()-120000)return null;
+  return sess;
+}
+async function senseRefreshSessionSafe(){
+  if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return senseSessionFromPersisted();
+  try{
+    var rr=await withTimeout(sb.auth.refreshSession(),18000,null);
+    if(rr===null)return senseSessionFromPersisted();
+    if(rr&&rr.error)return senseSessionFromPersisted();
+    var session=rr&&rr.data&&rr.data.session;
+    if(session&&session.user)return session;
+  }catch(_e){}
+  return senseSessionFromPersisted();
+}
+async function senseRecoverSession(){
+  var persisted=senseSessionFromPersisted();
+  try{
+    var sess=await withTimeout(sb.auth.getSession(),12000,null);
+    var session=sess&&sess.data&&sess.data.session;
+    if(session&&session.user)return session;
+  }catch(_e){}
+  var refreshed=await senseRefreshSessionSafe();
+  if(refreshed&&refreshed.user)return refreshed;
+  return persisted;
+}
 function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
@@ -2963,10 +3007,32 @@ async function getAccessTokenFresh(forceRefresh){
   if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
     return _authTokenCache.token;
   }
-  var sess=await withTimeout(sb.auth.getSession(),25000,'Sessie laden lukt nu niet. Controleer je netwerk en probeer opnieuw.');
-  var s=sess&&sess.data&&sess.data.session;
-  _setAuthTokenFromSession(s);
-  return s&&s.access_token?String(s.access_token):'';
+  var session=null;
+  try{
+    var sess=await withTimeout(sb.auth.getSession(),12000,null);
+    session=sess&&sess.data&&sess.data.session;
+  }catch(_e){}
+  if(!session||!session.access_token){
+    session=await senseRefreshSessionSafe();
+  }else{
+    var expAt=(session.expires_at?session.expires_at*1000:0)||0;
+    if(forceRefresh||(expAt&&expAt<Date.now()+180000)){
+      var newer=await senseRefreshSessionSafe();
+      if(newer&&newer.access_token)session=newer;
+    }
+  }
+  _setAuthTokenFromSession(session);
+  return session&&session.access_token?String(session.access_token):'';
+}
+function senseIsUnsafePhotoUrl(u){
+  var t=String(u||'').trim();
+  if(!t)return true;
+  if(/^data:/i.test(t)||/^blob:/i.test(t))return false;
+  if(!/^https?:\/\//i.test(t))return false;
+  var low=t.toLowerCase();
+  if(/yoma\.github\.io\/sense-/.test(low)&&low.indexOf('/sensecorner/')<0)return true;
+  if(/yoma\.github\.io\/sense$/.test(low))return true;
+  return false;
 }
 function formatSavePDiag(diag){
   if(!diag)return'';
@@ -3030,7 +3096,7 @@ async function refreshPhotoRef(v,bucketHints){
     var fromFallback=await signWithFallbackBuckets(ref.path,bucketHints||[]);
     if(fromFallback)return fromFallback;
   }
-  if(isDirectlyLoadableImageUrl(s)&&!isLikelyExpiringStorageUrl(s))return s;
+  if(isDirectlyLoadableImageUrl(s)&&!isLikelyExpiringStorageUrl(s)&&!senseIsUnsafePhotoUrl(s))return s;
   return'';
 }
 async function hydrateAllProfilePhotoMetaFromStorage(){
@@ -3144,6 +3210,7 @@ async function analyseerFotoVoorDossier(dosName){
   try{
     var analyses=[];
     for(var i=0;i<targets.length;i++){
+      if(senseIsUnsafePhotoUrl(targets[i]))continue;
       var resp=await fetch(targets[i]);
       if(!resp.ok)continue;
       var blob=await resp.blob();
@@ -3193,7 +3260,7 @@ function renderOwnAvatar(){
   if(!wrap)return;
   var ownMeta=getMetaFor('OWN Sense');
   var fallbackSvg='<svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg>';
-  if(ownMeta.photo_url){
+  if(ownMeta.photo_url&&!senseIsUnsafePhotoUrl(ownMeta.photo_url)){
     wrap.textContent='';
     var im=document.createElement('img');
     im.src=String(ownMeta.photo_url||'').trim();
@@ -4285,17 +4352,39 @@ async function init(){
       try{applySenseDeepLinkFromUrl();}catch(_e){}
       try{scheduleDailyRecoTipRefresh();}catch(_e){}
     } else if(ev==='SIGNED_OUT'){
-      _setAuthTokenFromSession(null);
-      S.apiKey='';
-      applySignedOutClientState();
-      redirectToLandingAfterSignOut();
+      if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
+      _senseSignOutDebounceTimer=setTimeout(async function(){
+        _senseSignOutDebounceTimer=null;
+        var recovered=await senseRecoverSession();
+        if(recovered&&recovered.user){
+          S.user=recovered.user;
+          _setAuthTokenFromSession(recovered);
+          if(!S.apiKey)S.apiKey='hub_server_managed';
+          try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
+          return;
+        }
+        _setAuthTokenFromSession(null);
+        S.apiKey='';
+        applySignedOutClientState();
+        redirectToLandingAfterSignOut();
+      },900);
     }
   });
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState==='hidden')flushPendingAutosaves();
     if(document.visibilityState==='visible'){
-      try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
-      scheduleDailyRecoTipRefresh();
+      (async function(){
+        try{
+          var recovered=await senseRecoverSession();
+          if(recovered&&recovered.user){
+            S.user=recovered.user;
+            _setAuthTokenFromSession(recovered);
+            if(!S.apiKey)S.apiKey='hub_server_managed';
+          }
+        }catch(_e){}
+        try{await getAccessTokenFresh(false);}catch(_e2){}
+        scheduleDailyRecoTipRefresh();
+      })();
     }
   });
   document.addEventListener('click',function(ev){

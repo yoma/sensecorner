@@ -1302,6 +1302,63 @@ function runSenseiAuthSerialized(fn){
   return run;
 }
 var _authTokenCache={token:null,expiresAt:0};
+var SENSE_AUTH_STORAGE_KEY='sensecorner-auth-v1';
+var _senseSignOutDebounceTimer=null;
+function senseReadPersistedAuthRaw(){
+  try{
+    var raw=localStorage.getItem(SENSE_AUTH_STORAGE_KEY);
+    if(!raw)return null;
+    return JSON.parse(raw);
+  }catch(_e){return null;}
+}
+function senseSessionFromPersisted(){
+  var blob=senseReadPersistedAuthRaw();
+  if(!blob)return null;
+  var sess=null;
+  if(blob&&blob.user&&blob.access_token)sess=blob;
+  else if(blob&&blob.currentSession)sess=blob.currentSession;
+  else if(blob&&blob.session)sess=blob.session;
+  if(!sess||!sess.user)return null;
+  var rt=String(sess.refresh_token||'').trim();
+  var exp=(sess.expires_at?sess.expires_at*1000:0)||0;
+  if(!rt&&exp&&exp<Date.now()-120000)return null;
+  return sess;
+}
+async function senseRefreshSessionSafe(authClient){
+  var client=authClient||sb;
+  if(!client||!client.auth||typeof client.auth.refreshSession!=='function')return senseSessionFromPersisted();
+  try{
+    var rr=await withTimeout(client.auth.refreshSession(),18000,null);
+    if(rr===null)return senseSessionFromPersisted();
+    if(rr&&rr.error)return senseSessionFromPersisted();
+    var session=rr&&rr.data&&rr.data.session;
+    if(session&&session.user)return session;
+  }catch(_e){}
+  return senseSessionFromPersisted();
+}
+async function senseRecoverSession(authClient){
+  var client=authClient||sb;
+  var persisted=senseSessionFromPersisted();
+  if(!client||!client.auth)return persisted;
+  try{
+    var sess=await withTimeout(client.auth.getSession(),12000,null);
+    var session=sess&&sess.data&&sess.data.session;
+    if(session&&session.user)return session;
+  }catch(_e){}
+  var refreshed=await senseRefreshSessionSafe(client);
+  if(refreshed&&refreshed.user)return refreshed;
+  return persisted;
+}
+function senseIsUnsafePhotoUrl(u){
+  var t=String(u||'').trim();
+  if(!t)return true;
+  if(/^data:/i.test(t)||/^blob:/i.test(t))return false;
+  if(!/^https?:\/\//i.test(t))return false;
+  var low=t.toLowerCase();
+  if(/yoma\.github\.io\/sense-/.test(low)&&low.indexOf('/sensecorner/')<0)return true;
+  if(/yoma\.github\.io\/sense$/.test(low))return true;
+  return false;
+}
 function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
@@ -1314,10 +1371,22 @@ async function getAccessTokenFresh(forceRefresh){
   if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
     return _authTokenCache.token;
   }
-  var sess=await withTimeout(client.auth.getSession(),25000,'Sessie laden lukt nu niet. Controleer je netwerk en probeer opnieuw.');
-  var s=sess&&sess.data&&sess.data.session;
-  _setAuthTokenFromSession(s);
-  return s&&s.access_token?String(s.access_token):'';
+  var session=null;
+  try{
+    var sess=await withTimeout(client.auth.getSession(),12000,null);
+    session=sess&&sess.data&&sess.data.session;
+  }catch(_e){}
+  if(!session||!session.access_token){
+    session=await senseRefreshSessionSafe(client);
+  }else{
+    var expAt=(session.expires_at?session.expires_at*1000:0)||0;
+    if(forceRefresh||(expAt&&expAt<Date.now()+180000)){
+      var newer=await senseRefreshSessionSafe(client);
+      if(newer&&newer.access_token)session=newer;
+    }
+  }
+  _setAuthTokenFromSession(session);
+  return session&&session.access_token?String(session.access_token):'';
 }
 function normTxt(v){
   return String(v||'').toLowerCase().replace(/[^a-z0-9à-ÿ]+/g,' ').trim();
@@ -2599,18 +2668,34 @@ function initSupabase(){
 var _authClientForEvents=initSupabase();
 if(_authClientForEvents&&_authClientForEvents.auth&&_authClientForEvents.auth.onAuthStateChange){
   _authClientForEvents.auth.onAuthStateChange(function(ev,ses){
-    if(ev==='SIGNED_OUT'||!ses){
+    if(ev==='SIGNED_OUT'){
+      if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
+      _senseSignOutDebounceTimer=setTimeout(async function(){
+        _senseSignOutDebounceTimer=null;
+        var recovered=await senseRecoverSession(_authClientForEvents);
+        if(recovered&&recovered.user){
+          _setAuthTokenFromSession(recovered);
+          return;
+        }
+        _setAuthTokenFromSession(null);
+      },900);
+      return;
+    }
+    if(!ses){
       _setAuthTokenFromSession(null);
       return;
     }
-    if(ev==='TOKEN_REFRESHED'||ev==='SIGNED_IN'){
+    if(ev==='TOKEN_REFRESHED'||ev==='SIGNED_IN'||ev==='INITIAL_SESSION'||ev==='USER_UPDATED'){
       _setAuthTokenFromSession(ses);
     }
   });
 }
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'){
-    try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
+    (async function(){
+      try{await senseRecoverSession(initSupabase());}catch(_e){}
+      try{await getAccessTokenFresh(false);}catch(_e2){}
+    })();
   }
 });
 
