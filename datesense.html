@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="18-05-2026 10:35">
+<meta name="ds-build" content="18-05-2026 10:59">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -7200,7 +7200,7 @@ function rHome(el){
       +'</div>';
   }
 
-  var recoHtml=renderHomeRecoCard();
+  var recoHtml='<div id="homeRecoMount">'+renderHomeRecoCard()+'</div>';
   el.innerHTML=`
 <div class="home-shell">
 
@@ -9091,21 +9091,21 @@ async function fetchDailyRecoTipText(cats){
 async function ensureDailyRecoTipForHome(opts){
   opts=opts||{};
   var forceManual=!!opts.forceManual;
+  var retryCount=parseInt(opts.retryCount,10)||0;
   if(!S.user||!sb)return;
-  var prefs=getRecoPrefs();
-  if(!forceManual&&prefs.auto_enabled===false)return;
-  var cats=getRecoEnabledCategories(prefs);
+  var cats=getRecoEnabledCategories(getRecoPrefs());
   if(!cats.length){
     if(forceManual)toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
     return;
   }
   var cache=getDailyRecoCache();
-  if(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!forceManual)return;
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
+  if(hasValidCache&&!forceManual)return;
   if(_dailyRecoHomeTask&&!forceManual)return _dailyRecoHomeTask;
   var run=async function(){
     _dailyRecoHomeFetching=true;
     _dailyRecoHomeLastError='';
-    refreshHomeRecoCardIfVisible();
+    paintHomeRecoCard();
     try{
       try{
         await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
@@ -9120,9 +9120,13 @@ async function ensureDailyRecoTipForHome(opts){
       _dailyRecoHomeLastError=msg;
       if(forceManual)toast('Tip laden lukte niet. '+msg);
       console.warn('ensureDailyRecoTipForHome',e);
+      if(retryCount<1&&!forceManual){
+        await new Promise(function(r){setTimeout(r,2500);});
+        return ensureDailyRecoTipForHome({retryCount:retryCount+1});
+      }
     }finally{
       _dailyRecoHomeFetching=false;
-      refreshHomeRecoCardIfVisible();
+      paintHomeRecoCard();
     }
   };
   _dailyRecoHomeTask=run();
@@ -11711,16 +11715,26 @@ function hasDailyRecoExpired(cacheObj){
   if(!cacheObj||!cacheObj.ts)return true;
   return senseiLocalDayKey(cacheObj.ts)!==senseiLocalDayKey();
 }
+function paintHomeRecoCard(){
+  var mount=document.getElementById('homeRecoMount');
+  if(mount)mount.innerHTML=renderHomeRecoCard();
+}
 function refreshHomeRecoCardIfVisible(){
   if(S.screen!=='home')return;
-  var mc=document.getElementById('mainContent');
-  if(mc&&typeof rHome==='function')rHome(mc);
+  paintHomeRecoCard();
 }
 function scheduleDailyRecoTipRefresh(){
   if(!S.user)return;
   setTimeout(function(){
     if(S.user)void ensureDailyRecoTipForHome();
-  },900);
+  },400);
+  setTimeout(function(){
+    if(S.user&&!_dailyRecoHomeFetching){
+      var c=getDailyRecoCache();
+      var ok=c&&String(c.text||'').trim()&&!hasDailyRecoExpired(c);
+      if(!ok)void ensureDailyRecoTipForHome();
+    }
+  },3500);
 }
 function extractSenseiWebSearchLogMeta(data){
   var c=(data&&Array.isArray(data.content))?data.content:[];
