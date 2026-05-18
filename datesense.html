@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="18-05-2026 09:40">
+<meta name="ds-build" content="18-05-2026 10:21">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -182,15 +182,27 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .dossier-acc-wrap{max-height:0;overflow:hidden;transition:max-height .38s ease;margin:0 0 8px}
 .dossier-acc-wrap.open{max-height:min(520px,78vh)}
 .dossier-acc-inner{display:flex;gap:12px;padding:10px 0 12px;align-items:flex-start;border-bottom:1px solid var(--b)}
-.dossier-rf-row{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;border:1px solid var(--b);background:#fafbfc;cursor:pointer;font-family:inherit;text-align:left}
+.dossier-rf-card{margin-bottom:12px;border-radius:14px;border:2px solid var(--b);background:#fafbfc;overflow:hidden}
+.dossier-rf-card.rf-level-high{border-color:#E39B9B;background:#FFF1F1}
+.dossier-rf-card.rf-level-mid{border-color:#F2C98E;background:#FFF8EC}
+.dossier-rf-card.rf-level-low{border-color:#A8D8B0;background:#F3FAF4}
+.dossier-rf-row{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;border:0;border-radius:0;background:transparent;cursor:pointer;font-family:inherit;text-align:left}
 .dossier-rf-row .rf-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.dossier-rf-row .rf-mid{flex:1;min-width:0;font-size:14px;font-weight:700;color:#333}
-.dossier-rf-row .rf-pct{font-size:16px;font-weight:800;flex-shrink:0}
-.dossier-rf-row .rf-chev{font-size:11px;color:#888;flex-shrink:0;transition:transform .18s ease}
+.dossier-rf-row .rf-head{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.dossier-rf-row .rf-title{font-size:13px;font-weight:800;color:#333;line-height:1.2}
+.dossier-rf-row .rf-level{font-size:12px;font-weight:600;line-height:1.25}
+.dossier-rf-row .rf-pct{font-size:22px;font-weight:800;flex-shrink:0;line-height:1;letter-spacing:-.02em}
+.dossier-rf-row .rf-chev{font-size:10px;color:#888;flex-shrink:0;transition:transform .18s ease;margin-left:2px}
 .dossier-rf-row[aria-expanded="true"] .rf-chev{transform:rotate(180deg)}
 .dossier-rf-acc{max-height:0;overflow:hidden;transition:max-height .35s ease}
-.dossier-rf-acc.open{max-height:400px}
-.dossier-rf-acc-inn{padding:0 0 14px}
+.dossier-rf-acc.open{max-height:420px}
+.dossier-rf-acc-inn{padding:0 14px 14px}
+.dossier-rf-bar{height:6px;background:#e8ebef;border-radius:999px;overflow:hidden;margin-bottom:10px}
+.dossier-rf-bar>div{height:100%;border-radius:999px;transition:width .25s ease}
+.dossier-rf-reasons{margin:0;padding:0 0 0 1.1em;list-style:disc;color:#374151}
+.dossier-rf-reasons li{margin:0 0 6px;font-size:13px;line-height:1.5}
+.dossier-rf-reasons li:last-child{margin-bottom:0}
+.dossier-rf-note{font-size:11px;color:#6b7280;line-height:1.45;margin:10px 0 0}
 .dossier-open-prof-cta{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;margin-bottom:14px;border-radius:14px;border:1.5px solid #FFE082;background:#FFF8E1;cursor:pointer;font-family:inherit;text-align:left;box-sizing:border-box}
 .dossier-open-prof-cta:focus{outline:2px solid var(--r);outline-offset:2px}
 .dossier-open-prof-cta-strong{font-size:14px;font-weight:800;color:#333;line-height:1.35}
@@ -4260,6 +4272,7 @@ async function init(){
       initSessie(); // Na auth - sessie aanmaken
       if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
       applySenseDeepLinkFromUrl();
+      scheduleDailyRecoTipRefresh();
     } else {
       showFriendlyAuthGate('Geen actieve sessie gevonden.');
       return;
@@ -4280,6 +4293,7 @@ async function init(){
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
       applySenseDeepLinkFromUrl();
+      scheduleDailyRecoTipRefresh();
     } else if(ev==='SIGNED_OUT'){
       _setAuthTokenFromSession(null);
       S.apiKey='';
@@ -4291,6 +4305,7 @@ async function init(){
     if(document.visibilityState==='hidden')flushPendingAutosaves();
     if(document.visibilityState==='visible'){
       try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
+      scheduleDailyRecoTipRefresh();
     }
   });
   document.addEventListener('click',function(ev){
@@ -7237,6 +7252,7 @@ function rHome(el){
 
 </div>`;
   refreshOwnAppDepthHintMounts();
+  void ensureDailyRecoTipForHome();
   setTimeout(function(){
     warmAutoPlannerSuggestions();
   },120);
@@ -9060,14 +9076,23 @@ var _dailyRecoHomeFetching=false;
 async function ensureDailyRecoTipForHome(opts){
   opts=opts||{};
   var forceManual=!!opts.forceManual;
+  if(!S.user)return;
+  if(!S.apiKey){
+    if(forceManual)toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
   var prefs=getRecoPrefs();
   if(!forceManual&&prefs.auto_enabled===false)return;
   var cats=getRecoEnabledCategories(prefs);
-  if(!cats.length)return;
+  if(!cats.length){
+    if(forceManual)toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
+    return;
+  }
   var cache=getDailyRecoCache();
   if(cache&&!hasDailyRecoExpired(cache)&&!forceManual)return;
   if(_dailyRecoHomeFetching)return;
   _dailyRecoHomeFetching=true;
+  refreshHomeRecoCardIfVisible();
   try{
     var allowedDomains=buildRecoDomainsFromCategories(cats);
     var catTxt=cats.join(', ');
@@ -9086,6 +9111,7 @@ async function ensureDailyRecoTipForHome(opts){
     console.warn('ensureDailyRecoTipForHome',e);
   }finally{
     _dailyRecoHomeFetching=false;
+    refreshHomeRecoCardIfVisible();
   }
 }
 async function refreshHomeDailyRecoTipManual(){
@@ -9111,7 +9137,14 @@ function renderHomeRecoCard(){
   var cats=getRecoEnabledCategories(prefs);
   var cache=getDailyRecoCache();
   var hasTip=cache&&cache.text&&!hasDailyRecoExpired(cache);
-  var body=hasTip?formatAiCard(String(cache.text||'')):'Nog geen dagtip klaar. Tik op vernieuwen.';
+  var body;
+  if(_dailyRecoHomeFetching){
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Tip wordt geladen…</div>';
+  }else if(hasTip){
+    body=formatAiCard(String(cache.text||''));
+  }else{
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
+  }
   return '<div class="reco-card">'
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">Op maat</div></div>'
     +'<div class="reco-body">'+body+'</div>'
@@ -9729,26 +9762,25 @@ async function loadTab(name,tab,d){
       if(rfTop&&typeof rfTop.score==='number'){
         var rfTopScore=Math.max(0,Math.min(100,parseInt(rfTop.score,10)||0));
         var rfTopVisual=redFlagVisuals(rfTopScore);
-        var rfTopLevel=rfTopScore>=65?'Let op: verhoogd risico':(rfTopScore>=35?'Waakzaam: gemengd signaal':'Rustiger: lager risico');
-        var rfTopBg=rfTopScore>=65?'#FFF1F1':(rfTopScore>=35?'#FFF8EC':'#F3FAF4');
-        var rfTopBorder=rfTopScore>=65?'#E39B9B':(rfTopScore>=35?'#F2C98E':'#A8D8B0');
         var rfTopReasons=(rfTop.reasons||[]).slice(0,3);
-        html+='<div style="margin-bottom:12px;border-radius:14px;border:2px solid '+rfTopBorder+';background:'+rfTopBg+';overflow:hidden">';
-        html+='<button type="button" class="dossier-rf-row" aria-expanded="false" style="background:transparent;border:0;border-radius:0;padding:12px 14px" onclick="var w=document.getElementById(\'dossierRfTopAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
+        var rfTopLevelShort=rfTopScore>=65?'Let op':(rfTopScore>=35?'Waakzaam':'Rustiger');
+        var rfTopLevelSub=rfTopScore>=65?'verhoogd risico':(rfTopScore>=35?'gemengd signaal':'lager risico');
+        var rfTopCardClass='dossier-rf-card '+(rfTopScore>=65?'rf-level-high':(rfTopScore>=35?'rf-level-mid':'rf-level-low'));
+        html+='<div class="'+rfTopCardClass+'">';
+        html+='<button type="button" class="dossier-rf-row" aria-expanded="false" onclick="var w=document.getElementById(\'dossierRfTopAcc\');if(w){w.classList.toggle(\'open\');this.setAttribute(\'aria-expanded\',w.classList.contains(\'open\')?\'true\':\'false\');}">';
         html+='<span class="rf-dot" style="background:'+rfTopVisual.dot+'"></span>';
-        html+='<span class="rf-mid" style="color:'+rfTopVisual.txt+'">Red flags · '+rfTopLevel+'</span>';
+        html+='<span class="rf-head"><span class="rf-title">Red flags</span><span class="rf-level" style="color:'+rfTopVisual.txt+'">'+escHTML(rfTopLevelShort)+' · '+escHTML(rfTopLevelSub)+'</span></span>';
         html+='<span class="rf-pct" style="color:'+rfTopVisual.bar+'">'+rfTopScore+'%</span>';
         html+='<span class="rf-chev" aria-hidden="true">▼</span>';
         html+='</button>';
-        html+='<div id="dossierRfTopAcc" class="dossier-rf-acc"><div class="dossier-rf-acc-inn" style="padding-top:6px">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><span style="font-size:12px;font-weight:800;color:#333">Score</span><span style="font-size:16px;font-weight:900;color:'+rfTopVisual.bar+'">'+rfTopScore+'%</span></div>';
-        html+='<div style="height:4px;background:#e8ebef;border-radius:999px;overflow:hidden"><div style="height:100%;width:'+rfTopScore+'%;background:'+rfTopVisual.bar+'"></div></div>';
+        html+='<div id="dossierRfTopAcc" class="dossier-rf-acc"><div class="dossier-rf-acc-inn">';
+        html+='<div class="dossier-rf-bar"><div style="width:'+rfTopScore+'%;background:'+rfTopVisual.bar+'"></div></div>';
         if(rfTopReasons.length){
-          html+='<ul class="ai-sec-list" style="margin-top:10px">';
+          html+='<ul class="dossier-rf-reasons">';
           rfTopReasons.forEach(function(rr){ html+='<li>'+escHTML(rr)+'</li>'; });
           html+='</ul>';
         }
-        html+='<p class="ai-sec-text" style="font-size:11px;color:#6b7280;margin-top:8px">Gebaseerd op gedrag, patronen en context (niet op fotoanalyse alleen). Volledige duiding staat ook op tab <strong>Advies</strong>.</p>';
+        html+='<p class="dossier-rf-note">Gebaseerd op gedrag en context (niet op foto alleen). Volledige duiding op tab <strong>Advies</strong>.</p>';
         html+='</div></div></div>';
       }else{
         html+='<div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;border:1px solid #FFE082;background:#FFF8E1">'
@@ -11648,11 +11680,24 @@ function getDailyRecoCache(){
 function setDailyRecoCache(obj){
   try{setScopedStorage(SENSEI_RECO_DAILY_KEY,JSON.stringify(obj||{}));}catch(_e){}
 }
+function senseiLocalDayKey(isoOrDate){
+  var dt=isoOrDate?(typeof isoOrDate==='string'?new Date(isoOrDate):isoOrDate):new Date();
+  if(!dt||!isFinite(dt.getTime()))return '';
+  var y=dt.getFullYear(),mo=dt.getMonth()+1,da=dt.getDate();
+  return y+'-'+(mo<10?'0':'')+mo+'-'+(da<10?'0':'')+da;
+}
 function hasDailyRecoExpired(cacheObj){
   if(!cacheObj||!cacheObj.ts)return true;
-  var ts=Date.parse(cacheObj.ts);
-  if(!isFinite(ts))return true;
-  return (Date.now()-ts)>86400000;
+  return senseiLocalDayKey(cacheObj.ts)!==senseiLocalDayKey();
+}
+function refreshHomeRecoCardIfVisible(){
+  if(S.screen!=='home')return;
+  var mc=document.getElementById('mainContent');
+  if(mc&&typeof rHome==='function')rHome(mc);
+}
+function scheduleDailyRecoTipRefresh(){
+  if(!S.user)return;
+  void ensureDailyRecoTipForHome();
 }
 function extractSenseiWebSearchLogMeta(data){
   var c=(data&&Array.isArray(data.content))?data.content:[];

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 09:29">
+<meta name="fs-build" content="18-05-2026 10:21">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -1849,6 +1849,7 @@ const SENSEI_RECO_CATEGORY_META=[
 ];
 const SENSEI_RECO_PREFS_KEY='ss_reco_prefs_v1';
 const SENSEI_RECO_DAILY_KEY='ss_reco_daily_tip_v1';
+const SENSEI_DAG_ADVIES_KEY='ss_dag_advies_v1';
 function getSenseiTipsWhitelistDomains(){
   return SENSEI_ALLOWED_DOMAINS.slice();
 }
@@ -1897,11 +1898,46 @@ function getDailyRecoCache(){
 function setDailyRecoCache(obj){
   try{setScopedStorage(SENSEI_RECO_DAILY_KEY,JSON.stringify(obj||{}));}catch(_e){}
 }
+function senseiLocalDayKey(isoOrDate){
+  var dt=isoOrDate?(typeof isoOrDate==='string'?new Date(isoOrDate):isoOrDate):new Date();
+  if(!dt||!isFinite(dt.getTime()))return '';
+  var y=dt.getFullYear(),mo=dt.getMonth()+1,da=dt.getDate();
+  return y+'-'+(mo<10?'0':'')+mo+'-'+(da<10?'0':'')+da;
+}
 function hasDailyRecoExpired(cacheObj){
   if(!cacheObj||!cacheObj.ts)return true;
-  var ts=Date.parse(cacheObj.ts);
-  if(!isFinite(ts))return true;
-  return (Date.now()-ts)>86400000;
+  return senseiLocalDayKey(cacheObj.ts)!==senseiLocalDayKey();
+}
+function refreshHomeRecoCardIfVisible(){
+  if(S.screen!=='home')return;
+  var mc=document.getElementById('mainContent');
+  if(mc&&typeof rHome==='function')rHome(mc);
+}
+function scheduleDailyRecoTipRefresh(){
+  if(!S.user)return;
+  void ensureDailyRecoTipForHome();
+}
+function getDagAdviesCache(){
+  try{
+    var raw=getScopedStorage(SENSEI_DAG_ADVIES_KEY,'')||'';
+    if(!raw)return null;
+    return JSON.parse(raw)||null;
+  }catch(_e){return null;}
+}
+function setDagAdviesCache(obj){
+  try{setScopedStorage(SENSEI_DAG_ADVIES_KEY,JSON.stringify(obj||{}));}catch(_e){}
+}
+function hasDagAdviesExpired(cacheObj){
+  return hasDailyRecoExpired(cacheObj);
+}
+function refreshAdviceHubDagAdviesIfVisible(){
+  if(S.screen!=='advice')return;
+  var mc=document.getElementById('mainContent');
+  if(mc&&typeof rAdviceHub==='function')rAdviceHub(mc);
+}
+function scheduleDagAdviesRefresh(){
+  if(!S.user)return;
+  void ensureDagAdviesForAdviceHub();
 }
 function isWhitelistTipRequest(text){
   var t=String(text||'').toLowerCase();
@@ -4757,6 +4793,8 @@ async function init(){
       initSessie(); // Na auth - sessie aanmaken
       goScreen('home');
       applySenseDeepLinkFromUrl();
+      scheduleDailyRecoTipRefresh();
+      scheduleDagAdviesRefresh();
     }else{
       showFriendlyAuthGate('Geen actieve sessie gevonden.');
       return;
@@ -4777,6 +4815,8 @@ async function init(){
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       goScreen('home');
       applySenseDeepLinkFromUrl();
+      scheduleDailyRecoTipRefresh();
+      scheduleDagAdviesRefresh();
     } else if(ev==='SIGNED_OUT'){
       _setAuthTokenFromSession(null);
       S.apiKey='';
@@ -4792,6 +4832,8 @@ async function init(){
     }
     if(document.visibilityState==='visible'){
       try{ getAccessTokenFresh(false).catch(function(){}); }catch(_e){}
+      scheduleDailyRecoTipRefresh();
+      scheduleDagAdviesRefresh();
     }
     if(document.visibilityState==='visible'&&_spiegelWasHiddenDuringSession){
       _spiegelWasHiddenDuringSession=false;
@@ -8689,6 +8731,26 @@ function rAdviceHub(el){
       +'<button type="button" class="btn-g" style="max-width:340px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
       +'</div>'
       +'</div>';
+  }else if(st.route==='dagadvies'){
+    var dagCache=getDagAdviesCache();
+    var dagHas=dagCache&&dagCache.text&&!hasDagAdviesExpired(dagCache);
+    var dagBody;
+    if(_dagAdviesFetching){
+      dagBody='<div style="font-size:13px;color:#6b7280;line-height:1.5">DagAdvies wordt geladen…</div>';
+    }else if(dagHas){
+      dagBody=formatAiCard(String(dagCache.text||''));
+    }else{
+      dagBody='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagadvies wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
+    }
+    routeBody='<div id="adviceHubActiveFlow" class="advice-hub-active-flow">'
+      +'<div class="advice-hub-field-title">DagAdvies</div>'
+      +'<div class="advice-hub-field-help">Algemeen advies voor vandaag, los van een concreet boek of link. Gebaseerd op jouw OWN Sense-context.</div>'
+      +'<div class="advice-hub-result-body" style="margin:0 0 12px">'+dagBody+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button type="button" class="btn-r" style="max-width:280px;padding:10px 12px" onclick="void refreshDagAdviesManual()">Vernieuw DagAdvies</button>'
+      +'<button type="button" class="btn-g" style="max-width:300px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
+      +'</div>'
+      +'</div>';
   }else if(st.route==='recommend'){
     st.recoPrefs=st.recoPrefs||getRecoPrefs();
     var recoChips=SENSEI_RECO_CATEGORY_META.map(function(c){
@@ -8712,6 +8774,7 @@ function rAdviceHub(el){
       +'</div>';
   }else{
     routeBody='<div class="advice-route-grid">'
+      +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'dagadvies\')"><span class="advice-route-icon">☀️</span><span class="advice-route-copy"><span class="advice-route-title">DagAdvies</span><span class="advice-route-desc">Algemeen advies voor vandaag: warm, persoonlijk en haalbaar, op basis van jouw context.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'recommend\')"><span class="advice-route-icon">✨</span><span class="advice-route-copy"><span class="advice-route-title">Aanbevelingen op maat</span><span class="advice-route-desc">Sensei raadt iets concreets aan dat nu bij je past, zoals een boek, activiteit, podcast of video.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'topic\')"><span class="advice-route-icon">🧭</span><span class="advice-route-copy"><span class="advice-route-title">Over een thema</span><span class="advice-route-desc">Typ je thema en lees het advies hier. Wil je doorpraten? Gebruik daarna de knop naar Vertel.</span></span></button>'
       +'<button type="button" class="advice-route-card" onclick="setAdviceHubRoute(\'question\')"><span class="advice-route-icon">💬</span><span class="advice-route-copy"><span class="advice-route-title">Losse vraag stellen</span><span class="advice-route-desc">Stel een concrete vraag en lees het antwoord hier. Vertel open je alleen als je dat zelf kiest.</span></span></button>'
@@ -8727,6 +8790,7 @@ function rAdviceHub(el){
     +routeBody
     +(contacts.length?'<div class="advice-hub-footnote">Beschikbare dossiers: '+escHTML(contacts.slice(0,4).map(dn).join(', '))+(contacts.length>4?'…':'')+'</div>':'<div class="advice-hub-footnote">Nog geen dossier gevonden. Maak er eerst één in Senses.</div>')
     +'</div>';
+  void ensureDagAdviesForAdviceHub();
 }
 function scrollAdviceHubResultIntoView(){
   setTimeout(function(){
@@ -8876,14 +8940,23 @@ var _dailyRecoHomeFetching=false;
 async function ensureDailyRecoTipForHome(opts){
   opts=opts||{};
   var forceManual=!!opts.forceManual;
+  if(!S.user)return;
+  if(!S.apiKey){
+    if(forceManual)toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
   var prefs=getRecoPrefs();
   if(!forceManual&&prefs.auto_enabled===false)return;
   var cats=getRecoEnabledCategories(prefs);
-  if(!cats.length)return;
+  if(!cats.length){
+    if(forceManual)toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
+    return;
+  }
   var cache=getDailyRecoCache();
   if(cache&&!hasDailyRecoExpired(cache)&&!forceManual)return;
   if(_dailyRecoHomeFetching)return;
   _dailyRecoHomeFetching=true;
+  refreshHomeRecoCardIfVisible();
   try{
     var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{}});
     var ownMeta=own.meta||{};
@@ -8904,7 +8977,76 @@ async function ensureDailyRecoTipForHome(opts){
     console.warn('ensureDailyRecoTipForHome',e);
   }finally{
     _dailyRecoHomeFetching=false;
+    refreshHomeRecoCardIfVisible();
   }
+}
+var _dagAdviesFetching=false;
+async function ensureDagAdviesForAdviceHub(opts){
+  opts=opts||{};
+  var forceManual=!!opts.forceManual;
+  if(!S.user)return;
+  if(!S.apiKey){
+    if(forceManual)toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
+  var cache=getDagAdviesCache();
+  if(cache&&!hasDagAdviesExpired(cache)&&!forceManual)return;
+  if(_dagAdviesFetching)return;
+  var st=getAdviceHubState();
+  var updateUi=S.screen==='advice'&&(forceManual||st.route==='dagadvies');
+  _dagAdviesFetching=true;
+  if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  try{
+    var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+    var ownMeta=own.meta||{};
+    var ownCatLines=[];
+    try{
+      Object.values(own.categories||{}).forEach(function(cat){
+        Object.values(cat||{}).forEach(function(v){
+          var t=String(v||'').trim();
+          if(t)ownCatLines.push(t);
+        });
+      });
+    }catch(_oc){}
+    var recentUserLines=[];
+    try{
+      var batch=await loadMsgs('OWN Sense',{limit:12,asc:false});
+      (batch||[]).forEach(function(m){
+        if(!m||m.role!=='user')return;
+        var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        if(clean)recentUserLines.push(clean);
+      });
+    }catch(_rm){}
+    var sys='Je bent SelfSensei. Schrijf een warm, persoonlijk algemeen dagadvies voor vandaag (max 6 zinnen). Focus op zelfzorg, rust, emotieregulatie en herstel. Geen partner- of relatieadvies. Geen links. Begin met 1 zin die aansluit op wat deze gebruiker voelt of meemaakt. Gebruik GEEN markdown-tabellen. Nederlands.';
+    var usr='Context gebruiker:\n'+[ownMeta.city,ownMeta.country,ownMeta.intent,own.summary].filter(Boolean).join(' · ')
+      +(ownCatLines.length?'\nProfielregels:\n- '+ownCatLines.slice(0,8).join('\n- '):'')
+      +(recentUserLines.length?'\nRecente eigen signalen:\n- '+recentUserLines.slice(0,6).join('\n- '):'')
+      +'\n\nDoel: algemeen advies van de dag dat vandaag haalbaar aanvoelt.';
+    var raw=await callAPI(sys,[{role:'user',content:usr}],380,20000);
+    setDagAdviesCache({ts:new Date().toISOString(),text:String(raw||'')});
+    if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  }catch(e){
+    if(forceManual){
+      toast('DagAdvies laden lukte niet. '+(e&&e.message?String(e.message):'Probeer later opnieuw.'));
+    }
+    console.warn('ensureDagAdviesForAdviceHub',e);
+  }finally{
+    _dagAdviesFetching=false;
+    if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  }
+}
+async function refreshDagAdviesManual(){
+  if(_dagAdviesFetching){
+    toast('Er wordt al een DagAdvies geladen.');
+    return;
+  }
+  if(!S.apiKey){
+    toast('⚠️ Stel eerst je API key in via ⚙️.');
+    return;
+  }
+  setDagAdviesCache(null);
+  toast('Bezig met DagAdvies…');
+  await ensureDagAdviesForAdviceHub({forceManual:true});
 }
 async function refreshHomeDailyRecoTipManual(){
   if(_dailyRecoHomeFetching){
@@ -8929,7 +9071,14 @@ function renderHomeRecoCard(){
   var cats=getRecoEnabledCategories(prefs);
   var cache=getDailyRecoCache();
   var hasTip=cache&&cache.text&&!hasDailyRecoExpired(cache);
-  var body=hasTip?formatAiCard(String(cache.text||'')):'Nog geen dagtip klaar. Tik op vernieuwen.';
+  var body;
+  if(_dailyRecoHomeFetching){
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Tip wordt geladen…</div>';
+  }else if(hasTip){
+    body=formatAiCard(String(cache.text||''));
+  }else{
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
+  }
   return '<div class="reco-card">'
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">Op maat</div></div>'
     +'<div class="reco-body">'+body+'</div>'
