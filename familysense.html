@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 10:21">
+<meta name="fs-build" content="18-05-2026 10:35">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -7391,14 +7391,25 @@ async function runAdviceHubRecommendationsNow(){
   scrollAdviceHubResultIntoView();
 }
 var _dailyRecoHomeFetching=false;
+var _dailyRecoHomeLastError='';
+var _dailyRecoHomeTask=null;
+async function fetchDailyRecoTipText(cats){
+  var allowedDomains=buildRecoDomainsFromCategories(cats);
+  var catTxt=cats.join(', ');
+  var usr='Doel: een fijne, concrete suggestie voor vandaag in gezin, verbinding en grenzen.';
+  var sysSearch='Je bent FamilySensei. Geef precies 1 korte, warme dagtip voor vandaag met 1 haalbaar voorstel en 1 echte link. Alleen categorieen: '+catTxt+'. Gebruik alleen URL\'s die je met hoge zekerheid correct vindt; bij twijfel link je naar een stabiele start- of zoekpagina op hetzelfde domein. Start exact met 1 van deze openers: "Ik hoor dat de druk thuis soms zwaar voelt..." of "Ik merk dat verbinding thuis soms spanning oproept...". Houd de tip in de essentie van FamilySense: gezin, communicatie thuis, grenzen en verbinding.';
+  var sysPlain='Je bent FamilySensei. Geef precies 1 korte, warme dagtip voor vandaag (max 5 zinnen). Geen links nodig. Focus op gezin, verbinding en grenzen. Nederlands, warm en concreet.';
+  try{
+    return await callAPI(sysSearch,[{role:'user',content:usr}],420,28000,null,{allowed_domains:allowedDomains});
+  }catch(e1){
+    console.warn('fetchDailyRecoTipText search',e1);
+    return await callAPI(sysPlain,[{role:'user',content:usr}],360,28000,null,{disable_web_search:true});
+  }
+}
 async function ensureDailyRecoTipForHome(opts){
   opts=opts||{};
   var forceManual=!!opts.forceManual;
-  if(!S.user)return;
-  if(!S.apiKey){
-    if(forceManual)toast('⚠️ Stel eerst je API key in via ⚙️.');
-    return;
-  }
+  if(!S.user||!sb)return;
   var prefs=getRecoPrefs();
   if(!forceManual&&prefs.auto_enabled===false)return;
   var cats=getRecoEnabledCategories(prefs);
@@ -7407,34 +7418,45 @@ async function ensureDailyRecoTipForHome(opts){
     return;
   }
   var cache=getDailyRecoCache();
-  if(cache&&!hasDailyRecoExpired(cache)&&!forceManual)return;
-  if(_dailyRecoHomeFetching)return;
-  _dailyRecoHomeFetching=true;
-  refreshHomeRecoCardIfVisible();
-  try{
-    var allowedDomains=buildRecoDomainsFromCategories(cats);
-    var catTxt=cats.join(', ');
-    var sys='Je bent FamilySensei. Geef precies 1 korte, warme dagtip met 1 concreet voorstel dat vandaag uitvoerbaar is en 1 echte link. Alleen categorieen: '+catTxt+'. Gebruik alleen URL\'s die je met hoge zekerheid correct vindt; bij twijfel link je naar een stabiele start- of zoekpagina op hetzelfde domein. Start exact met 1 van deze openers: "Ik hoor dat de druk thuis soms zwaar voelt..." of "Ik merk dat verbinding thuis soms spanning oproept...". Houd de tip in de essentie van FamilySense: gezin, communicatie thuis, grenzen en verbinding.';
-    var usr='Doel: een fijne, concrete suggestie voor vandaag in gezin, verbinding en grenzen.';
-    var raw=await callAPI(sys,[{role:'user',content:usr}],420,22000,null,{allowed_domains:allowedDomains});
-    setDailyRecoCache({ts:new Date().toISOString(),text:String(raw||''),categories:cats});
-    if(S.screen==='home'){
-      var mc=document.getElementById('mainContent');
-      if(mc)rHome(mc);
-    }
-  }catch(e){
-    if(forceManual){
-      toast('Tip laden lukte niet. '+(e&&e.message?String(e.message):'Probeer later opnieuw.'));
-    }
-    console.warn('ensureDailyRecoTipForHome',e);
-  }finally{
-    _dailyRecoHomeFetching=false;
+  if(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!forceManual)return;
+  if(_dailyRecoHomeTask&&!forceManual)return _dailyRecoHomeTask;
+  var run=async function(){
+    _dailyRecoHomeFetching=true;
+    _dailyRecoHomeLastError='';
     refreshHomeRecoCardIfVisible();
+    try{
+      try{
+        await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
+      }catch(_tok){}
+      var raw=await fetchDailyRecoTipText(cats);
+      var text=String(raw||'').trim();
+      if(!text)throw new Error('Leeg antwoord ontvangen.');
+      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats});
+      _dailyRecoHomeLastError='';
+    }catch(e){
+      var msg=(e&&e.message)?String(e.message):'Tip laden lukte niet.';
+      _dailyRecoHomeLastError=msg;
+      if(forceManual)toast('Tip laden lukte niet. '+msg);
+      console.warn('ensureDailyRecoTipForHome',e);
+    }finally{
+      _dailyRecoHomeFetching=false;
+      refreshHomeRecoCardIfVisible();
+    }
+  };
+  _dailyRecoHomeTask=run();
+  try{
+    await _dailyRecoHomeTask;
+  }finally{
+    _dailyRecoHomeTask=null;
   }
 }
 async function refreshHomeDailyRecoTipManual(){
-  if(_dailyRecoHomeFetching){
+  if(_dailyRecoHomeFetching||_dailyRecoHomeTask){
     toast('Er wordt al een tip geladen.');
+    return;
+  }
+  if(!S.user||!sb){
+    toast('Log eerst in om een dagtip te laden.');
     return;
   }
   var cats=getRecoEnabledCategories(getRecoPrefs());
@@ -7442,11 +7464,8 @@ async function refreshHomeDailyRecoTipManual(){
     toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
     return;
   }
-  if(!S.apiKey){
-    toast('⚠️ Stel eerst je API key in via ⚙️.');
-    return;
-  }
   setDailyRecoCache(null);
+  _dailyRecoHomeLastError='';
   toast('Bezig met een nieuwe tip…');
   await ensureDailyRecoTipForHome({forceManual:true});
 }
@@ -7454,12 +7473,14 @@ function renderHomeRecoCard(){
   var prefs=getRecoPrefs();
   var cats=getRecoEnabledCategories(prefs);
   var cache=getDailyRecoCache();
-  var hasTip=cache&&cache.text&&!hasDailyRecoExpired(cache);
+  var hasTip=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
   var body;
   if(_dailyRecoHomeFetching){
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Tip wordt geladen…</div>';
   }else if(hasTip){
     body=formatAiCard(String(cache.text||''));
+  }else if(_dailyRecoHomeLastError){
+    body='<div style="font-size:13px;color:#b91c1c;line-height:1.5">'+escHTML(_dailyRecoHomeLastError)+'</div>';
   }else{
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
   }
@@ -10872,7 +10893,9 @@ function refreshHomeRecoCardIfVisible(){
 }
 function scheduleDailyRecoTipRefresh(){
   if(!S.user)return;
-  void ensureDailyRecoTipForHome();
+  setTimeout(function(){
+    if(S.user)void ensureDailyRecoTipForHome();
+  },900);
 }
 function extractSenseiWebSearchLogMeta(data){
   var c=(data&&Array.isArray(data.content))?data.content:[];
@@ -10984,13 +11007,15 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
-    var webSearchAllowed=true;
-    try{
-      var todaySearchCount=await getTodaySenseiSearchCount(sessionUserId);
-      if(todaySearchCount>=5)webSearchAllowed=false;
-    }catch(countErr){
-      console.log('sensei_search_log count failed',countErr);
-      webSearchAllowed=true;
+    var webSearchAllowed=!(apiOpts&&apiOpts.disable_web_search);
+    if(webSearchAllowed){
+      try{
+        var todaySearchCount=await getTodaySenseiSearchCount(sessionUserId);
+        if(todaySearchCount>=5)webSearchAllowed=false;
+      }catch(countErr){
+        console.log('sensei_search_log count failed',countErr);
+        webSearchAllowed=true;
+      }
     }
     var effectiveSys=String(sys||'');
     if(!webSearchAllowed){
