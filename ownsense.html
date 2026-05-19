@@ -611,6 +611,63 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   box-shadow:0 2px 10px rgba(146,100,10,.12);
 }
 .pending-badge:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(146,100,10,.15)}
+.pending-badge.has-stale{
+  background:linear-gradient(135deg,#FFF4DC 0%,#FFE8B8 100%);
+  border-color:rgba(146,100,10,.45);
+  color:#7A5208;
+  font-weight:800;
+}
+.stale-pending-card{
+  background:linear-gradient(135deg,#FFF9EB 0%,#FFF2D8 100%);
+  border:1px solid rgba(146,100,10,.28);
+  border-radius:14px;
+  padding:12px 14px;
+  margin:0 0 12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.stale-pending-card--compact{margin:0 0 10px;padding:10px 12px;gap:0}
+.stale-pending-msg{
+  font-size:13px;
+  line-height:1.5;
+  color:var(--chocolade);
+}
+.stale-pending-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.own-pending-nav-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:linear-gradient(135deg,#FFF2D8 0%,#FFE8B8 100%);
+  border:1px solid rgba(146,100,10,.35);
+  color:#92640A;font-size:10px;font-weight:800;line-height:1;
+  vertical-align:middle;margin-left:2px;
+}
+.own-pending-nav-badge[hidden]{display:none!important}
+.accepted-facts-list{display:grid;gap:8px;margin-top:10px}
+.accepted-fact-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+  padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;
+}
+.accepted-fact-body{flex:1;min-width:0}
+.accepted-fact-text{font-family:var(--font-serif);font-size:14px;line-height:1.55;color:var(--chocolade)}
+.accepted-fact-meta{font-size:11px;color:var(--warm-bruin);margin-top:4px}
+.auto-fact-tag{
+  display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;
+  font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  background:rgba(146,100,10,.12);color:#7A5208;border:1px solid rgba(146,100,10,.22);
+}
+.btn-mini-delete{
+  background:transparent;border:none;color:var(--warm-bruin);cursor:pointer;
+  font-size:18px;line-height:1;padding:4px 8px;margin:0;flex-shrink:0;
+  opacity:.45;border-radius:50%;transition:opacity .15s ease,background .15s ease;
+}
+.btn-mini-delete:hover{
+  opacity:1;color:var(--date-donker);background:rgba(186,86,84,.08);
+}
 .dim-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid #E6DCD7;background:#FAF8F6;font-size:11px;font-weight:700;color:#6F737B;margin:4px 6px 0 0}
 .cat-open{border:1px solid #E8D7D2;border-radius:12px;padding:10px 12px;background:#FFFEFD}
 .cat-open h4{font-size:14px;margin-bottom:8px}
@@ -749,6 +806,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
       <div></div>
       <a href="index.html" class="top-title-wrap" aria-label="SenseCorner — landingspagina">
         <h1 class="top-title">OWN Sense</h1>
+        <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
       </a>
     </div>
@@ -771,6 +829,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   <section id="hubShell" class="os-v4-shell">
     <section id="profileHero">
       <article class="card" id="mijTopCard"></article>
+      <article class="card" id="mijFactsCard" style="display:none"></article>
     </section>
 
     <section id="quoteBlock">
@@ -874,8 +933,10 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 <div class="import-modal" id="reviewFactsModal" aria-hidden="true">
   <div class="import-modal-bg" onclick="closeReviewFactsModal()"></div>
   <div class="import-modal-sheet">
-    <div style="font-size:16px;font-weight:800">Nieuwe aanvullingen beoordelen</div>
-    <div class="subtle">Feiten: goedkeuren, aanpassen of weigeren.</div>
+    <div style="font-size:16px;font-weight:800">Nieuwe gegevens beoordelen</div>
+    <div class="subtle">Goedkeuren, aanpassen of weigeren. Alles in één keer kan ook.</div>
+    <div id="reviewFactsStaleBanner" style="display:none"></div>
+    <div id="reviewFactsBulkBar" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px"></div>
     <div id="reviewFactsList" style="overflow:auto;max-height:56vh"></div>
     <div style="display:flex;gap:8px">
       <button type="button" class="btn btn-muted" onclick="closeReviewFactsModal()">Sluiten</button>
@@ -1379,6 +1440,20 @@ var ownGrowthEvents=[];
 /* Alleen true tijdens onboarding-only profiel: beperkt lokale mirror/flat16 merges. */
 var __restrictExternalCategorySources=false;
 var AUTO_ACCEPT_THRESHOLD=0.85;
+
+function ownSenseExtractFactsSysPrompt(appLabel){
+  return 'Je analyseert een gebruikersbericht uit '+appLabel+' en het lopende OwnSense-profiel. Doel: extracteer ALLEEN expliciete feiten die de gebruiker zelf heeft gezegd of duidelijk impliceert. Geef een JSON-array (0-3 items).\n\nSTRIKTE REGELS - feit-criteria:\n- WEL extracteren: concrete situaties, gebeurtenissen, voorkeuren, relaties, beslissingen die de gebruiker expliciet noemt. Voorbeelden: "Heeft een kind ingeschreven bij CLB", "Werkt sinds maart 2024 als laboratoriumtechnoloog", "Voelt frustratie over collega Maya".\n- NIET extracteren: AI-interpretaties van gevoelens, gevolgtrekkingen, samengestelde aannames. Vermijd formuleringen met "lijkt", "mogelijk", "potentieel", "uit een ... gecombineerd met", "bevindt zich in een vroeg stadium", "lijkt een ... te zijn", "neemt een ... houding aan".\n- BIJ TWIJFEL: niet extracteren. Een lege array is een goed antwoord als het bericht enkel reflectie of vraag is zonder concrete nieuwe info.\n\nFormat per item: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 korte volzin, derde persoon declaratief, geen disclaimers, geen onzekerheidswoorden), confidence (0.7-1.0 alleen bij expliciet feit in de tekst; geen hoge score voor interpretaties, anders item weglaten).';
+}
+function isRejectedSpeculativeOwnFactText(text){
+  var s=String(text||'').toLowerCase();
+  if(!s.trim())return true;
+  if(/\b(lijkt|mogelijk|potentieel|vermoedelijk|waarschijnlijk|schijnt)\b/.test(s))return true;
+  if(/\bbevindt\s+zich\s+in\s+.+\s+stadium\b/.test(s))return true;
+  if(/\buit\s+.+\s+gecombineerd\s+met\b/.test(s))return true;
+  if(/\bneemt\s+.+\s+houding\s+aan\b/.test(s))return true;
+  return false;
+}
+
 var insightMeta={
   all:{tags:[],updated_at:''},
   ds:{tags:[],updated_at:''},
@@ -1608,6 +1683,157 @@ function getPendingFacts(){
   return ownFacts.filter(function(f){return f&&f.status==='pending';});
 }
 
+function getStalePendingFacts(daysOld){
+  var cutoff=Date.now()-Number(daysOld||5)*24*3600*1000;
+  return getPendingFacts().filter(function(f){
+    var t=Date.parse(f.created_at||'');
+    return !isNaN(t)&&t<=cutoff;
+  });
+}
+
+function shouldShowStaleBanner(){
+  try{
+    var k='os_stale_dismissed_'+(new Date().toDateString());
+    if(sessionStorage.getItem(k)==='1')return false;
+  }catch(_e){}
+  return getStalePendingFacts(5).length>0;
+}
+
+function dismissStalePendingBanner(){
+  try{sessionStorage.setItem('os_stale_dismissed_'+(new Date().toDateString()),'1');}catch(_e){}
+  var el=document.getElementById('stalePendingBanner');
+  if(el){el.innerHTML='';el.style.display='none';}
+}
+
+function renderStalePendingBanner(){
+  var el=document.getElementById('stalePendingBanner');
+  if(!el)return;
+  var stale=getStalePendingFacts(5);
+  if(!stale.length){
+    el.innerHTML='';
+    el.style.display='none';
+    return;
+  }
+  el.style.display='block';
+  el.innerHTML='<div class="stale-pending-card">'
+    +'<div class="stale-pending-msg">Je hebt <strong>'+stale.length+'</strong> '
+    +(stale.length===1?'gegeven':'gegevens')+' die al meer dan 5 dagen wachten. '
+    +'Items die te lang blijven hangen worden binnenkort automatisch toegevoegd.</div>'
+    +'<div class="stale-pending-actions">'
+    +'<button class="btn btn-primary btn-small" type="button" onclick="openReviewFactsModal()">Nu nakijken</button>'
+    +'<button class="btn btn-muted btn-small" type="button" onclick="dismissStalePendingBanner()">Later</button>'
+    +'</div></div>';
+}
+
+function renderReviewModalStaleBanner(){
+  var el=document.getElementById('reviewFactsStaleBanner');
+  if(!el)return;
+  var stale=getStalePendingFacts(5);
+  if(!stale.length){
+    el.style.display='none';
+    el.innerHTML='';
+    return;
+  }
+  el.style.display='block';
+  el.innerHTML='<div class="stale-pending-card stale-pending-card--compact">'
+    +'<div class="stale-pending-msg">Je hebt <strong>'+stale.length+'</strong> '
+    +(stale.length===1?'gegeven':'gegevens')+' die al meer dan 5 dagen wachten. '
+    +'Items die te lang blijven hangen worden binnenkort automatisch toegevoegd.</div>'
+    +'</div>';
+}
+
+function updateOwnPendingNavBadge(){
+  var el=document.getElementById('ownPendingNavBadge');
+  if(!el)return;
+  var n=getPendingFacts().length;
+  if(n<=0){
+    el.hidden=true;
+    el.setAttribute('aria-hidden','true');
+    el.textContent='';
+    return;
+  }
+  el.hidden=false;
+  el.setAttribute('aria-hidden','false');
+  el.textContent=n>9?'9+':String(n);
+  el.setAttribute('title',n+' nieuwe gegevens te beoordelen');
+  el.setAttribute('aria-label',n+' nieuwe gegevens te beoordelen');
+}
+
+function isOwnFactAutoAccepted(f){
+  return !!(f&&f.auto_accepted===true);
+}
+
+function renderAcceptedFactsProfileList(){
+  var el=document.getElementById('mijFactsCard');
+  if(!el)return;
+  var facts=ownFacts.filter(function(f){
+    return f&&f.status==='accepted'&&String(f.category||'')!=='onboarding';
+  });
+  facts.sort(function(a,b){
+    return String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||''));
+  });
+  if(!facts.length){
+    el.innerHTML='';
+    el.style.display='none';
+    return;
+  }
+  el.style.display='';
+  el.innerHTML='<h3>Gegevens in je profiel</h3>'
+    +'<p class="subtle" style="margin-top:4px">Feiten die in je profieltekst zijn verwerkt. Verwijder wat niet klopt.</p>'
+    +'<div class="accepted-facts-list">'+facts.map(function(f){
+      var auto=isOwnFactAutoAccepted(f);
+      return '<div class="accepted-fact-row">'
+        +'<div class="accepted-fact-body">'
+        +'<div class="accepted-fact-text">'+escHTML(f.fact_text||'')+'</div>'
+        +'<div class="accepted-fact-meta">'+escHTML(f.category||'algemeen')
+        +(f.source_app?(' · '+escHTML(f.source_app)):'')
+        +(auto?' · <span class="auto-fact-tag">auto-toegevoegd</span>':'')
+        +'</div>'
+        +'</div>'
+        +'<button class="btn-mini-delete" type="button" onclick="deleteAcceptedFact(\''+escHTML(f.id)+'\')" title="Verwijder dit gegeven uit je profiel" aria-label="Verwijder">×</button>'
+        +'</div>';
+    }).join('')+'</div>';
+}
+
+async function autoAcceptStalePendingFacts(){
+  var stale=getStalePendingFacts(10).filter(function(f){return f&&!isRejectedSpeculativeOwnFactText(f.fact_text);});
+  if(!stale.length)return 0;
+  var count=0;
+  for(var i=0;i<stale.length;i++){
+    try{
+      var updated=await updateOwnFactStatus(stale[i].id,'accepted',undefined,{auto_accepted:true});
+      if(updated){
+        await mergeFactIntoProfile(updated.category,updated.fact_text);
+        await addGrowthEvent('fact_accepted_auto','Auto-geaccepteerd na 10 dagen: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+        count++;
+      }
+    }catch(_e){console.warn('auto-accept fail',_e);}
+  }
+  if(count>0){
+    await loadOwnBrainTables();
+    renderMijTab();
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    var msg=count===1?'1 gegeven is automatisch aan je profiel toegevoegd (ouder dan 10 dagen).':(count+' gegevens zijn automatisch aan je profiel toegevoegd (ouder dan 10 dagen).');
+    flashOwnsenseMessage(msg,false);
+  }
+  return count;
+}
+
+async function deleteAcceptedFact(factId){
+  var fact=ownFacts.find(function(f){return f.id===factId;});
+  if(!fact)return;
+  if(!window.confirm('Dit gegeven verwijderen uit je profiel?\n\n"'+String(fact.fact_text||'').substring(0,200)+'"'))return;
+  var updated=await updateOwnFactStatus(factId,'rejected');
+  if(updated){
+    await addGrowthEvent('fact_deleted_by_user','Door gebruiker verwijderd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    await loadOwnBrainTables();
+    renderMijTab();
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+  }
+}
+
 function categoryLongText(catId){
   if(catId==='algemeen'){
     var ag=String(hubState.algemeen_text||'').trim();
@@ -1822,14 +2048,22 @@ function renderMijTab(){
   var progressEl=document.getElementById('mijProgressCard');
   var catsEl=document.getElementById('mijCategoriesCard');
   if(!topEl||!heroEl||!progressEl||!catsEl)return;
+  var existingBanner=document.getElementById('stalePendingBanner');
+  if(!existingBanner&&topEl.parentNode){
+    var bSlot=document.createElement('div');
+    bSlot.id='stalePendingBanner';
+    bSlot.style.display='none';
+    topEl.parentNode.insertBefore(bSlot,topEl);
+  }
   var pending=getPendingFacts().length;
+  var staleN=getStalePendingFacts(5).length;
   var avInit=escHTML((hubState.display_name||'J').trim().charAt(0).toUpperCase()||'J');
   topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3></div>'
     +'<div class="hero" style="margin-top:10px"><div class="hero-row">'
     +'<div class="hero-profile"><div class="avatar'+(hubState.photo_url?' has-photo':'')+'" data-fallback="'+avInit+'">'+(hubState.photo_url?'<img src="'+escHTML(hubState.photo_url)+'" alt="" onerror="var p=this.parentNode;if(p){this.remove();p.classList.remove(\'has-photo\');p.textContent=p.getAttribute(\'data-fallback\')||\'J\';}">':'J')+'</div>'
     +'<div><div class="hero-title">'+escHTML(hubState.display_name||'Jij')+'</div><div class="hero-sub">OwnSense centrale profielhub</div></div></div>'
     +'<div class="hero-vertel"><div class="hero-vertel-wrap"><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><span class="hero-vertel-rip"></span><button type="button" class="hero-vertel-btn" onclick="openOwnVertelModal()" aria-label="Vertel"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button></div><button type="button" class="hero-vertel-link" onclick="openOwnVertelModal()">Vertel of typ</button></div>'
-    +'</div><div class="pending-badge-row"><button class="pending-badge" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe aanvullingen</button></div></div>';
+    +'</div><div class="pending-badge-row"><button class="pending-badge'+(staleN>0?' has-stale':'')+'" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe gegevens</button></div></div>';
   var q=String(hubState.profile_quote||'').trim();
   if(!q){
     if(ownQuoteRichCount()>=2){
@@ -1872,6 +2106,13 @@ function renderMijTab(){
       return '<button type="button" class="cat-mini-row" onclick="openOwnQuestionsModal(\''+escHTML(c.id)+'\')"><span>'+escHTML(c.label)+'</span><span class="subtle">'+lbl+'</span></button>';
     }).join('')
     +'</div></div></details>';
+  updateOwnPendingNavBadge();
+  renderAcceptedFactsProfileList();
+  if(shouldShowStaleBanner())renderStalePendingBanner();
+  else{
+    var ban=document.getElementById('stalePendingBanner');
+    if(ban){ban.innerHTML='';ban.style.display='none';}
+  }
 }
 
 /* ── OWN Vertel-modal: Web Speech push-to-talk (zelfde gedrag als DateSense Vertel) ── */
@@ -2046,7 +2287,7 @@ async function submitOwnVertel(){
     await extractOwnFactsFromMessage(txt,{source_app:'ownsense',source_dossier:'OWN Sense',source_session_id:null});
     await addGrowthEvent('import','Nieuwe OwnSense-invoer verwerkt uit Vertel','ownsense','OWN Sense',null);
     if(ta)ta.value='';
-    if(st)st.textContent='Opgeslagen. Bekijk je aanvullingen via de badge bovenaan.';
+    if(st)st.textContent='Opgeslagen. Bekijk je nieuwe gegevens via de badge bovenaan.';
     await loadOwnBrainTables();
     renderMijTab();
   }catch(_e){
@@ -2070,10 +2311,20 @@ function closeReviewFactsModal(){
 
 function renderReviewFacts(){
   var el=document.getElementById('reviewFactsList');
+  var bulk=document.getElementById('reviewFactsBulkBar');
   if(!el)return;
+  renderReviewModalStaleBanner();
   var pending=getPendingFacts();
+  if(bulk){
+    if(pending.length>=2){
+      bulk.innerHTML='<button class="btn btn-primary btn-small" type="button" onclick="acceptAllPendingFacts()">Alles accepteren ('+pending.length+')</button>';
+    }else{
+      bulk.innerHTML='';
+    }
+  }
   if(!pending.length){
-    el.innerHTML='<div class="placeholder" style="padding:10px 0">Geen pending aanvullingen.</div>';
+    el.innerHTML='<div class="placeholder" style="padding:10px 0">Geen pending gegevens.</div>';
+    renderReviewModalStaleBanner();
     return;
   }
   el.innerHTML=pending.map(function(f){
@@ -2089,12 +2340,31 @@ function renderReviewFacts(){
   }).join('');
 }
 
-async function updateOwnFactStatus(factId,newStatus,newText){
+async function acceptAllPendingFacts(){
+  var pending=getPendingFacts().slice();
+  if(!pending.length)return;
+  if(!window.confirm('Alle '+pending.length+' gegevens accepteren en aan je profiel toevoegen?'))return;
+  var bulk=document.getElementById('reviewFactsBulkBar');
+  if(bulk)bulk.innerHTML='<span class="subtle">Bezig met accepteren...</span>';
+  for(var i=0;i<pending.length;i++){
+    try{await acceptOwnFact(pending[i].id);}catch(_e){console.warn('bulk-accept fail',_e);}
+  }
+  await loadOwnBrainTables();
+  renderReviewFacts();
+  renderMijTab();
+}
+
+async function updateOwnFactStatus(factId,newStatus,newText,opts){
   var client=initSupabase();
   if(!client)return null;
+  opts=opts||{};
   try{
     var payload={status:newStatus,updated_at:new Date().toISOString()};
     if(typeof newText==='string')payload.fact_text=newText;
+    if(newStatus==='accepted'){
+      payload.accepted_at=opts.accepted_at||new Date().toISOString();
+      if(opts.auto_accepted)payload.auto_accepted=true;
+    }
     var r=await client.from('own_facts').update(payload).eq('id',factId).select('*').maybeSingle();
     if(r&&r.data){
       var idx=ownFacts.findIndex(function(x){return x.id===factId;});
@@ -2202,7 +2472,7 @@ async function extractOwnFactsFromMessage(message,meta){
     gevoels:categoryLongText('gevoels').slice(0,800),
     algemeen:categoryLongText('algemeen').slice(0,800)
   });
-  var sys='Je analyseert een gebruikersbericht. Geef alleen JSON-array met 0-3 feiten over de gebruiker zelf. Velden: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 volzin in derde persoon, zonder em dash), confidence (0-1).';
+  var sys=ownSenseExtractFactsSysPrompt('OwnSense');
   var usr='Gebruikersbericht:\n'+txt.slice(0,2200)+'\n\nLopend OwnSense profiel:\n'+profileCompact;
   var raw=String(await callAnthropicJson(sys,usr,420)||'').trim();
   var clean=raw.replace(/```json/gi,'').replace(/```/g,'').trim();
@@ -2217,9 +2487,10 @@ async function extractOwnFactsFromMessage(message,meta){
     var f=arr[i]||{};
     var cat=normalizeOwnFactCategory(f.category);
     var factText=cleanAiProseForStore(String(f.fact_text||'').trim());
-    if(!factText)continue;
-    var conf=Math.max(0,Math.min(1,parseFloat(f.confidence)));
-    if(isNaN(conf))conf=0.55;
+    if(!factText||isRejectedSpeculativeOwnFactText(factText))continue;
+    var conf=parseFloat(f.confidence);
+    if(isNaN(conf)||conf<0.7)continue;
+    conf=Math.min(1,conf);
     var row={
       user_id:user.id,
       category:cat,
@@ -4715,6 +4986,7 @@ initPhotoPreview();
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
   .then(function(){return loadOwnBrainTables();})
+  .then(function(){return autoAcceptStalePendingFacts();})
   .then(function(){
     hydrateAppDepthSlotsFromOwnFacts();
     if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();

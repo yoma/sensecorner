@@ -11273,6 +11273,19 @@ function _wordOverlapScore(a,b){
   return hit/Math.max(wa.length,wb.length);
 }
 
+function ownSenseExtractFactsSysPrompt(appLabel){
+  return 'Je analyseert een gebruikersbericht uit '+appLabel+' en het lopende OwnSense-profiel. Doel: extracteer ALLEEN expliciete feiten die de gebruiker zelf heeft gezegd of duidelijk impliceert. Geef een JSON-array (0-3 items).\n\nSTRIKTE REGELS - feit-criteria:\n- WEL extracteren: concrete situaties, gebeurtenissen, voorkeuren, relaties, beslissingen die de gebruiker expliciet noemt. Voorbeelden: "Heeft een kind ingeschreven bij CLB", "Werkt sinds maart 2024 als laboratoriumtechnoloog", "Voelt frustratie over collega Maya".\n- NIET extracteren: AI-interpretaties van gevoelens, gevolgtrekkingen, samengestelde aannames. Vermijd formuleringen met "lijkt", "mogelijk", "potentieel", "uit een ... gecombineerd met", "bevindt zich in een vroeg stadium", "lijkt een ... te zijn", "neemt een ... houding aan".\n- BIJ TWIJFEL: niet extracteren. Een lege array is een goed antwoord als het bericht enkel reflectie of vraag is zonder concrete nieuwe info.\n\nFormat per item: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 korte volzin, derde persoon declaratief, geen disclaimers, geen onzekerheidswoorden), confidence (0.7-1.0 alleen bij expliciet feit in de tekst; geen hoge score voor interpretaties, anders item weglaten).';
+}
+function isRejectedSpeculativeOwnFactText(text){
+  var s=String(text||'').toLowerCase();
+  if(!s.trim())return true;
+  if(/\b(lijkt|mogelijk|potentieel|vermoedelijk|waarschijnlijk|schijnt)\b/.test(s))return true;
+  if(/\bbevindt\s+zich\s+in\s+.+\s+stadium\b/.test(s))return true;
+  if(/\buit\s+.+\s+gecombineerd\s+met\b/.test(s))return true;
+  if(/\bneemt\s+.+\s+houding\s+aan\b/.test(s))return true;
+  return false;
+}
+
 async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessionId){
   try{
     if(S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil)return;
@@ -11282,7 +11295,7 @@ async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessio
     if(!user)return;
     var profRes=await sb.from('sense_profiles').select('props,algemeen_text').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
     var profileBrief=JSON.stringify((profRes&&profRes.data&&profRes.data.props)||{}).substring(0,1800);
-    var sys='Je analyseert een gebruikersbericht uit FriendSense en het lopende OwnSense-profiel. Geef enkel een JSON-array met 0-3 feiten over de gebruiker zelf. Velden: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 volzin), confidence (0-1).';
+    var sys=ownSenseExtractFactsSysPrompt('FriendSense');
     var usr='Bericht:\n'+String(userText).substring(0,2200)+'\n\nLopend OwnSense profiel:\n'+profileBrief;
     var raw=await callAPI(sys,[{role:'user',content:usr}],420,14000);
     var clean=String(raw||'').replace(/```json/gi,'').replace(/```/g,'').trim();
@@ -11293,9 +11306,10 @@ async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessio
       var cat=String(f.category||'algemeen').trim();
       if(['karakter','interesses','relatie','gevoels','algemeen'].indexOf(cat)<0)cat='algemeen';
       var factText=String(f.fact_text||'').trim();
-      if(!factText)continue;
-      var conf=Math.max(0,Math.min(1,parseFloat(f.confidence)));
-      if(isNaN(conf))conf=0.55;
+      if(!factText||isRejectedSpeculativeOwnFactText(factText))continue;
+      var conf=parseFloat(f.confidence);
+      if(isNaN(conf)||conf<0.7)continue;
+      conf=Math.min(1,conf);
       var status='pending';
       if(conf>=AUTO_ACCEPT_THRESHOLD&&f.subcategory){
         try{
