@@ -982,6 +982,50 @@ function ownSpiegelCatHasAnswers(catObj){
   }
   return false;
 }
+function ownIsoTimeMs(v){
+  var ms=Date.parse(String(v||''));
+  return isNaN(ms)?0:ms;
+}
+function ownRemoteSelfsenseSpiegelShouldWin(remoteCat,remoteMeta,localCat,localMeta,localUpdatedAt){
+  if(!ownSpiegelCatHasAnswers(remoteCat))return false;
+  var remoteAt=ownIsoTimeMs(remoteMeta&&remoteMeta.selfsense_spiegel_sync_at);
+  if(!remoteAt)return false;
+  var localKnownAt=ownIsoTimeMs(localMeta&&localMeta.selfsense_spiegel_sync_at);
+  if(remoteAt<=localKnownAt)return false;
+  var localEditAt=ownIsoTimeMs(localUpdatedAt);
+  if(localEditAt&&localEditAt>remoteAt&&ownSpiegelCatHasAnswers(localCat))return false;
+  return true;
+}
+async function mergeRemoteSelfsenseSpiegelBeforeOwnSave(client,userId){
+  if(!client||!userId)return;
+  try{
+    var res=await client.from('sense_profiles')
+      .select('props')
+      .eq('user_id',userId)
+      .eq('name','OWN Sense')
+      .maybeSingle();
+    if(!res||res.error||!res.data)return;
+    var props=(res.data.props&&typeof res.data.props==='object')?res.data.props:{};
+    var remoteCats=(props.categories&&typeof props.categories==='object')?props.categories:{};
+    var remoteMeta=(props.meta&&typeof props.meta==='object')?props.meta:{};
+    var remoteCat=(remoteCats.selfsense_spiegel&&typeof remoteCats.selfsense_spiegel==='object')?remoteCats.selfsense_spiegel:null;
+    var localCat=hubState.categories&&hubState.categories.selfsense_spiegel;
+    var localUpdatedAt=hubState.cat_updated&&hubState.cat_updated.selfsense_spiegel;
+    if(!ownRemoteSelfsenseSpiegelShouldWin(remoteCat,remoteMeta,localCat,__ownSensePropsMetaCache,localUpdatedAt))return;
+    hubState.categories=hubState.categories||{};
+    hubState.categories.selfsense_spiegel=Object.assign({},remoteCat);
+    hubState.cat_updated=hubState.cat_updated||{};
+    hubState.cat_updated.selfsense_spiegel=String(remoteMeta.selfsense_spiegel_sync_at||new Date().toISOString());
+    __ownSensePropsMetaCache=Object.assign({},__ownSensePropsMetaCache||{},{
+      selfsense_spiegel_sync_at:remoteMeta.selfsense_spiegel_sync_at,
+      selfsense_spiegel_sync_pattern:remoteMeta.selfsense_spiegel_sync_pattern,
+      selfsense_spiegel_sync_ai:remoteMeta.selfsense_spiegel_sync_ai
+    });
+    try{
+      if(window.__ownSenseUid)ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
+    }catch(_cache){}
+  }catch(_e){}
+}
 function buildOwnSpiegelSlotsFromMirrorRow(row,patternKey){
   var info=ownSpiegelPatternInfo(patternKey);
   var dur=Math.max(1,Number(row&&row.duration_seconds||0));
@@ -1018,10 +1062,7 @@ async function hydrateSelfsenseSpiegelFromMirrorSessions(client,user){
     var pk=ownSpiegelPatternFromNote(res.data.note);
     hubState.categories=hubState.categories||{};
     hubState.categories.selfsense_spiegel=buildOwnSpiegelSlotsFromMirrorRow(res.data,pk);
-    hubState.cat_updated=hubState.cat_updated||{};
-    hubState.cat_updated.selfsense_spiegel=new Date().toISOString();
-    await saveOwnToSupabase();
-    saveHubState(user);
+    /* Fallback only for the current render; SelfSense writes the persisted sync. */
   }catch(_e){}
 }
 var OWN_CATS=[
@@ -3200,6 +3241,7 @@ async function saveOwnToSupabase(){
     var auth=await client.auth.getUser();
     var user=auth&&auth.data&&auth.data.user;
     if(!user)return;
+    await mergeRemoteSelfsenseSpiegelBeforeOwnSave(client,user.id);
     var cleanName=String(hubState.display_name||'').trim();
     var propsOut={
       _v:1,
