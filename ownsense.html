@@ -649,6 +649,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 .own-pending-nav-badge[hidden]{display:none!important}
 .accepted-facts-collapsible summary{font-size:16px;font-weight:800;color:var(--chocolade)}
 .accepted-facts-collapsible .accepted-facts-list{display:grid;gap:8px;margin-top:8px}
+.accepted-facts-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
 .accepted-fact-row{
   display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
   padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;
@@ -1771,6 +1772,16 @@ function isOwnFactAutoAccepted(f){
   return !!(f&&f.auto_accepted===true);
 }
 
+function openAcceptedFactsProfileSection(){
+  var det=document.querySelector('.accepted-facts-collapsible');
+  if(det)det.setAttribute('open','open');
+  var card=document.getElementById('mijFactsCard');
+  if(card){
+    card.style.display='';
+    try{card.scrollIntoView({behavior:'smooth',block:'start'});}catch(_e){}
+  }
+}
+
 function renderAcceptedFactsProfileList(){
   var el=document.getElementById('mijFactsCard');
   if(!el)return;
@@ -1796,9 +1807,10 @@ function renderAcceptedFactsProfileList(){
   el.innerHTML='<details class="cat-mini accepted-facts-collapsible"'+(wasOpen?' open':'')+'>'
     +'<summary>Gegevens in je profiel ('+facts.length+')'+summaryHint+'</summary>'
     +'<div class="cat-mini-body">'
-    +'<p class="subtle" style="margin:0 0 8px">Feiten verwerkt in je profieltekst. Klopt iets niet? Verwijder het hier.</p>'
+    +'<p class="subtle" style="margin:0 0 8px">Ook auto-toegevoegde gegevens staan hier. Klopt iets niet? Wis ze met × of via de knop hieronder.</p>'
     +'<div class="accepted-facts-list">'+facts.map(function(f){
       var auto=isOwnFactAutoAccepted(f);
+      var fid=String(f.id||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       return '<div class="accepted-fact-row">'
         +'<div class="accepted-fact-body">'
         +'<div class="accepted-fact-text">'+escHTML(f.fact_text||'')+'</div>'
@@ -1807,9 +1819,11 @@ function renderAcceptedFactsProfileList(){
         +(auto?' · <span class="auto-fact-tag">auto-toegevoegd</span>':'')
         +'</div>'
         +'</div>'
-        +'<button class="btn-mini-delete" type="button" onclick="deleteAcceptedFact(\''+escHTML(f.id)+'\')" title="Verwijder dit gegeven uit je profiel" aria-label="Verwijder">×</button>'
+        +'<button class="btn-mini-delete" type="button" onclick="deleteAcceptedFact(\''+fid+'\')" title="'+(auto?'Auto-toegevoegd gegeven wissen':'Gegeven wissen')+'" aria-label="Wissen">×</button>'
         +'</div>';
-    }).join('')+'</div></div></details>';
+    }).join('')+'</div>'
+    +(autoN?('<div class="accepted-facts-foot"><button type="button" class="btn btn-muted btn-small" onclick="rejectAllAutoAcceptedFacts()">Alle auto-toegevoegde wissen ('+autoN+')</button></div>'):'')
+    +'</div></details>';
 }
 
 function ownFactsAutoAcceptStaleRpcFireAndForget(){
@@ -1836,8 +1850,12 @@ async function autoAcceptStalePendingFacts(){
       renderMijTab();
       renderReviewFacts();
       updateOwnPendingNavBadge();
-      var msg=count===1?('1 gegeven is automatisch aan je profiel toegevoegd (ouder dan '+OWN_PENDING_AUTO_ACCEPT_DAYS+' dagen).'):(count+' gegevens zijn automatisch aan je profiel toegevoegd (ouder dan '+OWN_PENDING_AUTO_ACCEPT_DAYS+' dagen).');
-      flashOwnsenseMessage(msg,false);
+      var msg=count===1?'1 gegeven is automatisch goedgekeurd.':(count+' gegevens zijn automatisch goedgekeurd.');
+      flashOwnsenseMessage(msg+' Klopt niet alles? Wis wat fout is.',false,{
+        actionLabel:'Bekijk lijst',
+        actionFn:openAcceptedFactsProfileSection,
+        durationMs:9000
+      });
     }
     return count;
   }catch(_e){
@@ -1849,7 +1867,11 @@ async function autoAcceptStalePendingFacts(){
 async function deleteAcceptedFact(factId){
   var fact=ownFacts.find(function(f){return f.id===factId;});
   if(!fact)return;
-  if(!window.confirm('Dit gegeven verwijderen uit je profiel?\n\n"'+String(fact.fact_text||'').substring(0,200)+'"'))return;
+  var auto=isOwnFactAutoAccepted(fact);
+  var prompt=auto
+    ?('Dit gegeven was automatisch goedgekeurd. Wissen = weigeren, het verdwijnt uit je profieloverzicht.\n\n"'+String(fact.fact_text||'').substring(0,200)+'"')
+    :('Dit gegeven wissen uit je profiel?\n\n"'+String(fact.fact_text||'').substring(0,200)+'"');
+  if(!window.confirm(prompt))return;
   var updated=await updateOwnFactStatus(factId,'rejected');
   if(updated){
     await addGrowthEvent('fact_deleted_by_user','Door gebruiker verwijderd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
@@ -1857,7 +1879,34 @@ async function deleteAcceptedFact(factId){
     renderMijTab();
     renderReviewFacts();
     updateOwnPendingNavBadge();
+    flashOwnsenseMessage('Gegeven gewist.',false);
   }
+}
+
+async function rejectAllAutoAcceptedFacts(){
+  var list=ownFacts.filter(function(f){
+    return f&&f.status==='accepted'&&isOwnFactAutoAccepted(f)&&String(f.category||'')!=='onboarding';
+  });
+  if(!list.length){
+    flashOwnsenseMessage('Geen auto-toegevoegde gegevens om te wissen.',true);
+    return;
+  }
+  if(!window.confirm('Alle '+list.length+' auto-toegevoegde gegevens wissen?\n\nZe worden geweigerd en verdwijnen uit je profieloverzicht.'))return;
+  var n=0;
+  for(var i=0;i<list.length;i++){
+    try{
+      var updated=await updateOwnFactStatus(list[i].id,'rejected');
+      if(updated){
+        await addGrowthEvent('fact_deleted_by_user','Auto-toegevoegd gewist: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+        n++;
+      }
+    }catch(_e){console.warn('bulk reject auto fact',_e);}
+  }
+  await loadOwnBrainTables();
+  renderMijTab();
+  renderReviewFacts();
+  updateOwnPendingNavBadge();
+  flashOwnsenseMessage(n===1?'1 auto-toegevoegd gegeven gewist.':(n+' auto-toegevoegde gegevens gewist.'),false);
 }
 
 function categoryLongText(catId){
@@ -1978,7 +2027,7 @@ async function refreshOwnPhotoSlotPreviews(){
   }
 }
 
-function flashOwnsenseMessage(msg,isError){
+function flashOwnsenseMessage(msg,isError,opts){
   var id='osFlashMsg';
   try{
     var old=document.getElementById(id);
@@ -1988,11 +2037,30 @@ function flashOwnsenseMessage(msg,isError){
   d.id=id;
   d.setAttribute('role','status');
   var err=!!isError;
-  d.style.cssText='position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:99999;padding:12px 14px;border-radius:12px;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 10px 32px rgba(0,0,0,.18);'
+  d.style.cssText='position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:99999;padding:12px 14px;border-radius:12px;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 10px 32px rgba(0,0,0,.18);display:flex;flex-wrap:wrap;gap:8px;align-items:center;'
     +(err?'background:rgba(232,187,185,.28);border:1px solid rgba(186,86,84,.38);color:var(--chocolade);':'background:rgba(200,212,181,.35);border:1px solid rgba(107,142,111,.45);color:var(--chocolade);');
-  d.textContent=String(msg||'');
+  opts=opts||{};
+  var actionLabel=String(opts.actionLabel||'').trim();
+  if(actionLabel&&typeof opts.actionFn==='function'){
+    var span=document.createElement('span');
+    span.style.flex='1 1 200px';
+    span.textContent=String(msg||'');
+    d.appendChild(span);
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.className='btn btn-muted btn-small';
+    btn.style.margin='0';
+    btn.textContent=actionLabel;
+    btn.onclick=function(){
+      try{opts.actionFn();}catch(_e){}
+      try{d.remove();}catch(_e2){}
+    };
+    d.appendChild(btn);
+  }else{
+    d.textContent=String(msg||'');
+  }
   document.body.appendChild(d);
-  setTimeout(function(){try{var x=document.getElementById(id);if(x)x.remove();}catch(_e2){}},5200);
+  setTimeout(function(){try{var x=document.getElementById(id);if(x)x.remove();}catch(_e2){}},opts.durationMs||5200);
 }
 
 async function addGrowthEvent(eventType,summary,sourceApp,sourceDossier,refId){
