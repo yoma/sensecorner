@@ -1795,9 +1795,11 @@ function renderAcceptedFactsProfileList(){
     }).join('')+'</div>';
 }
 
+var __ownAutoAcceptBootMax=5;
 async function autoAcceptStalePendingFacts(){
   var stale=getStalePendingFacts(10).filter(function(f){return f&&!isRejectedSpeculativeOwnFactText(f.fact_text);});
   if(!stale.length)return 0;
+  if(stale.length>__ownAutoAcceptBootMax)stale=stale.slice(0,__ownAutoAcceptBootMax);
   var count=0;
   for(var i=0;i<stale.length;i++){
     try{
@@ -4983,10 +4985,12 @@ document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'no
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
 initPhotoPreview();
+function runOwnAutoAcceptStaleInBackground(){
+  autoAcceptStalePendingFacts().catch(function(e){console.warn('[OWN auto-accept]',e);});
+}
 loadOwnFromSupabase()
   .then(function(){return syncDisplayNameFromRegistration();})
   .then(function(){return loadOwnBrainTables();})
-  .then(function(){return autoAcceptStalePendingFacts();})
   .then(function(){
     hydrateAppDepthSlotsFromOwnFacts();
     if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();
@@ -5003,6 +5007,7 @@ loadOwnFromSupabase()
   .then(function(){
     renderFotosTab();
     applyUrlTabBoot();
+    runOwnAutoAcceptStaleInBackground();
   })
   .then(function(){return loadOwnTimelineFromSupabase();})
   .finally(function(){
@@ -5017,7 +5022,12 @@ loadOwnFromSupabase()
   })
   .then(function(){renderFotosTab();})
   .catch(function(){
-    try{renderFotosTab();applyUrlTabBoot();}catch(_e){}
+    try{
+      renderMijTab();
+      renderBronTab();
+      renderFotosTab();
+      applyUrlTabBoot();
+    }catch(_e){}
   });
 
 document.getElementById('photoPicker').addEventListener('change',async function(e){
