@@ -882,6 +882,12 @@ a{text-decoration:none;color:inherit}
     }
     return persisted;
   }
+  function scOwnFactsAutoAcceptStaleRpcFireAndForget(){
+    if(!sb)return;
+    void sb.rpc('auto_accept_stale_own_facts',{days_old:5}).then(function(res){
+      if(res&&res.error)console.warn('[own_facts auto-accept]',res.error);
+    }).catch(function(err){console.warn('[own_facts auto-accept]',err);});
+  }
   async function scHandleAuthStateEvent(event){
     if(event==='SIGNED_OUT'){
       if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
@@ -900,6 +906,7 @@ a{text-decoration:none;color:inherit}
     }
     if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){
       scStartSessionKeepAlive();
+      if(event==='SIGNED_IN'||event==='INITIAL_SESSION')scOwnFactsAutoAcceptStaleRpcFireAndForget();
       Promise.resolve(refreshAuthUi()).catch(function(){});
     }
   }

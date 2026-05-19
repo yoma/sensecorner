@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="19-05-2026 13:01">
+<meta name="ds-build" content="19-05-2026 13:55">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -4387,6 +4387,7 @@ async function init(){
         await applySenseiCoreToAdviceCore(DATESENSE_ADVICE_CORE_OPTS);
         try{await loadAll();}catch(e){console.error('loadAll error:',e);}
         try{await refreshOwnFactsCoachContext();}catch(_e){}
+        try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e){}
       }catch(authErr){console.error('auth SIGNED_IN sync:',authErr);}
       try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
       try{applySenseDeepLinkFromUrl();}catch(_e){}
@@ -12083,6 +12084,12 @@ function isRejectedSpeculativeOwnFactText(text){
   return false;
 }
 
+function ownFactsAutoAcceptStaleRpcFireAndForget(){
+  if(!sb)return;
+  void sb.rpc('auto_accept_stale_own_facts',{days_old:5}).then(function(res){
+    if(res&&res.error)console.warn('[own_facts auto-accept]',res.error);
+  }).catch(function(err){console.warn('[own_facts auto-accept]',err);});
+}
 async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessionId){
   try{
     if(S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil)return;

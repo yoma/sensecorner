@@ -4919,6 +4919,7 @@ async function init(){
         await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
         try{await loadAll();}catch(e){console.error('loadAll error:',e);}
         try{await refreshOwnFactsCoachContext();}catch(_e){}
+        try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e){}
       }catch(authErr){console.error('auth SIGNED_IN sync:',authErr);}
       try{goScreen('home');}catch(_e){}
       try{applySenseDeepLinkFromUrl();}catch(_e){}
@@ -12908,6 +12909,12 @@ function isRejectedSpeculativeOwnFactText(text){
   return false;
 }
 
+function ownFactsAutoAcceptStaleRpcFireAndForget(){
+  if(!sb)return;
+  void sb.rpc('auto_accept_stale_own_facts',{days_old:5}).then(function(res){
+    if(res&&res.error)console.warn('[own_facts auto-accept]',res.error);
+  }).catch(function(err){console.warn('[own_facts auto-accept]',err);});
+}
 async function _extractOwnFactsFireAndForget(userText,sourceDossier,sourceSessionId){
   try{
     if(!sb||!userText)return;

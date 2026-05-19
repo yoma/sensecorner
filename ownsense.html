@@ -647,7 +647,8 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   vertical-align:middle;margin-left:2px;
 }
 .own-pending-nav-badge[hidden]{display:none!important}
-.accepted-facts-list{display:grid;gap:8px;margin-top:10px}
+.accepted-facts-collapsible summary{font-size:16px;font-weight:800;color:var(--chocolade)}
+.accepted-facts-collapsible .accepted-facts-list{display:grid;gap:8px;margin-top:8px}
 .accepted-fact-row{
   display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
   padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;
@@ -1440,6 +1441,8 @@ var ownGrowthEvents=[];
 /* Alleen true tijdens onboarding-only profiel: beperkt lokale mirror/flat16 merges. */
 var __restrictExternalCategorySources=false;
 var AUTO_ACCEPT_THRESHOLD=0.85;
+/** Pending ouder dan dit aantal dagen: banner, has-stale pill, en stille auto-accept bij laden. */
+var OWN_PENDING_AUTO_ACCEPT_DAYS=5;
 
 function ownSenseExtractFactsSysPrompt(appLabel){
   return 'Je analyseert een gebruikersbericht uit '+appLabel+' en het lopende OwnSense-profiel. Doel: extracteer ALLEEN expliciete feiten die de gebruiker zelf heeft gezegd of duidelijk impliceert. Geef een JSON-array (0-3 items).\n\nSTRIKTE REGELS - feit-criteria:\n- WEL extracteren: concrete situaties, gebeurtenissen, voorkeuren, relaties, beslissingen die de gebruiker expliciet noemt. Voorbeelden: "Heeft een kind ingeschreven bij CLB", "Werkt sinds maart 2024 als laboratoriumtechnoloog", "Voelt frustratie over collega Maya".\n- NIET extracteren: AI-interpretaties van gevoelens, gevolgtrekkingen, samengestelde aannames. Vermijd formuleringen met "lijkt", "mogelijk", "potentieel", "uit een ... gecombineerd met", "bevindt zich in een vroeg stadium", "lijkt een ... te zijn", "neemt een ... houding aan".\n- BIJ TWIJFEL: niet extracteren. Een lege array is een goed antwoord als het bericht enkel reflectie of vraag is zonder concrete nieuwe info.\n\nFormat per item: category (karakter|interesses|relatie|gevoels|algemeen), subcategory (of null), fact_text (1 korte volzin, derde persoon declaratief, geen disclaimers, geen onzekerheidswoorden), confidence (0.7-1.0 alleen bij expliciet feit in de tekst; geen hoge score voor interpretaties, anders item weglaten).';
@@ -1696,7 +1699,7 @@ function shouldShowStaleBanner(){
     var k='os_stale_dismissed_'+(new Date().toDateString());
     if(sessionStorage.getItem(k)==='1')return false;
   }catch(_e){}
-  return getStalePendingFacts(5).length>0;
+  return getStalePendingFacts(OWN_PENDING_AUTO_ACCEPT_DAYS).length>0;
 }
 
 function dismissStalePendingBanner(){
@@ -1705,10 +1708,19 @@ function dismissStalePendingBanner(){
   if(el){el.innerHTML='';el.style.display='none';}
 }
 
+function stalePendingExplainMsgHtml(count){
+  var n=Number(count)||0;
+  var w=n===1?'gegeven':'gegevens';
+  var d=OWN_PENDING_AUTO_ACCEPT_DAYS;
+  return 'Je hebt <strong>'+n+'</strong> '+w+' die al '+d+' dagen of langer wachten. '
+    +'Beoordeel wat klopt, zo kent sensei je beter (accepteren of weigeren). '
+    +'Laat je ze liggen? Vanaf '+d+' dagen keuren we ze automatisch goed zodra je ergens in SenseCorner ingelogd bent.';
+}
+
 function renderStalePendingBanner(){
   var el=document.getElementById('stalePendingBanner');
   if(!el)return;
-  var stale=getStalePendingFacts(5);
+  var stale=getStalePendingFacts(OWN_PENDING_AUTO_ACCEPT_DAYS);
   if(!stale.length){
     el.innerHTML='';
     el.style.display='none';
@@ -1716,9 +1728,7 @@ function renderStalePendingBanner(){
   }
   el.style.display='block';
   el.innerHTML='<div class="stale-pending-card">'
-    +'<div class="stale-pending-msg">Je hebt <strong>'+stale.length+'</strong> '
-    +(stale.length===1?'gegeven':'gegevens')+' die al meer dan 5 dagen wachten. '
-    +'Items die te lang blijven hangen worden binnenkort automatisch toegevoegd.</div>'
+    +'<div class="stale-pending-msg">'+stalePendingExplainMsgHtml(stale.length)+'</div>'
     +'<div class="stale-pending-actions">'
     +'<button class="btn btn-primary btn-small" type="button" onclick="openReviewFactsModal()">Nu nakijken</button>'
     +'<button class="btn btn-muted btn-small" type="button" onclick="dismissStalePendingBanner()">Later</button>'
@@ -1728,7 +1738,7 @@ function renderStalePendingBanner(){
 function renderReviewModalStaleBanner(){
   var el=document.getElementById('reviewFactsStaleBanner');
   if(!el)return;
-  var stale=getStalePendingFacts(5);
+  var stale=getStalePendingFacts(OWN_PENDING_AUTO_ACCEPT_DAYS);
   if(!stale.length){
     el.style.display='none';
     el.innerHTML='';
@@ -1736,9 +1746,7 @@ function renderReviewModalStaleBanner(){
   }
   el.style.display='block';
   el.innerHTML='<div class="stale-pending-card stale-pending-card--compact">'
-    +'<div class="stale-pending-msg">Je hebt <strong>'+stale.length+'</strong> '
-    +(stale.length===1?'gegeven':'gegevens')+' die al meer dan 5 dagen wachten. '
-    +'Items die te lang blijven hangen worden binnenkort automatisch toegevoegd.</div>'
+    +'<div class="stale-pending-msg">'+stalePendingExplainMsgHtml(stale.length)+'</div>'
     +'</div>';
 }
 
@@ -1777,9 +1785,18 @@ function renderAcceptedFactsProfileList(){
     el.style.display='none';
     return;
   }
+  var wasOpen=false;
+  try{
+    var prev=el.querySelector('details.accepted-facts-collapsible');
+    if(prev&&prev.open)wasOpen=true;
+  }catch(_e){}
+  var autoN=facts.filter(isOwnFactAutoAccepted).length;
+  var summaryHint=autoN?(' · '+autoN+' auto-toegevoegd'):'';
   el.style.display='';
-  el.innerHTML='<h3>Gegevens in je profiel</h3>'
-    +'<p class="subtle" style="margin-top:4px">Feiten die in je profieltekst zijn verwerkt. Verwijder wat niet klopt.</p>'
+  el.innerHTML='<details class="cat-mini accepted-facts-collapsible"'+(wasOpen?' open':'')+'>'
+    +'<summary>Gegevens in je profiel ('+facts.length+')'+summaryHint+'</summary>'
+    +'<div class="cat-mini-body">'
+    +'<p class="subtle" style="margin:0 0 8px">Feiten verwerkt in je profieltekst. Klopt iets niet? Verwijder het hier.</p>'
     +'<div class="accepted-facts-list">'+facts.map(function(f){
       var auto=isOwnFactAutoAccepted(f);
       return '<div class="accepted-fact-row">'
@@ -1792,34 +1809,41 @@ function renderAcceptedFactsProfileList(){
         +'</div>'
         +'<button class="btn-mini-delete" type="button" onclick="deleteAcceptedFact(\''+escHTML(f.id)+'\')" title="Verwijder dit gegeven uit je profiel" aria-label="Verwijder">×</button>'
         +'</div>';
-    }).join('')+'</div>';
+    }).join('')+'</div></div></details>';
 }
 
-var __ownAutoAcceptBootMax=5;
+function ownFactsAutoAcceptStaleRpcFireAndForget(){
+  var client=initSupabase();
+  if(!client)return;
+  void client.rpc('auto_accept_stale_own_facts',{days_old:OWN_PENDING_AUTO_ACCEPT_DAYS}).then(function(res){
+    if(res&&res.error)console.warn('[own_facts auto-accept]',res.error);
+  }).catch(function(err){console.warn('[own_facts auto-accept]',err);});
+}
 async function autoAcceptStalePendingFacts(){
-  var stale=getStalePendingFacts(10).filter(function(f){return f&&!isRejectedSpeculativeOwnFactText(f.fact_text);});
-  if(!stale.length)return 0;
-  if(stale.length>__ownAutoAcceptBootMax)stale=stale.slice(0,__ownAutoAcceptBootMax);
-  var count=0;
-  for(var i=0;i<stale.length;i++){
-    try{
-      var updated=await updateOwnFactStatus(stale[i].id,'accepted',undefined,{auto_accepted:true});
-      if(updated){
-        await mergeFactIntoProfile(updated.category,updated.fact_text);
-        await addGrowthEvent('fact_accepted_auto','Auto-geaccepteerd na 10 dagen: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
-        count++;
-      }
-    }catch(_e){console.warn('auto-accept fail',_e);}
+  var client=initSupabase();
+  if(!client)return 0;
+  try{
+    var auth=await client.auth.getUser();
+    if(!auth||!auth.data||!auth.data.user)return 0;
+    var r=await client.rpc('auto_accept_stale_own_facts',{days_old:OWN_PENDING_AUTO_ACCEPT_DAYS});
+    if(r.error){
+      console.warn('auto-accept rpc',r.error);
+      return 0;
+    }
+    var count=Number(r.data)||0;
+    if(count>0){
+      await loadOwnBrainTables();
+      renderMijTab();
+      renderReviewFacts();
+      updateOwnPendingNavBadge();
+      var msg=count===1?('1 gegeven is automatisch aan je profiel toegevoegd (ouder dan '+OWN_PENDING_AUTO_ACCEPT_DAYS+' dagen).'):(count+' gegevens zijn automatisch aan je profiel toegevoegd (ouder dan '+OWN_PENDING_AUTO_ACCEPT_DAYS+' dagen).');
+      flashOwnsenseMessage(msg,false);
+    }
+    return count;
+  }catch(_e){
+    console.warn('auto-accept fail',_e);
+    return 0;
   }
-  if(count>0){
-    await loadOwnBrainTables();
-    renderMijTab();
-    renderReviewFacts();
-    updateOwnPendingNavBadge();
-    var msg=count===1?'1 gegeven is automatisch aan je profiel toegevoegd (ouder dan 10 dagen).':(count+' gegevens zijn automatisch aan je profiel toegevoegd (ouder dan 10 dagen).');
-    flashOwnsenseMessage(msg,false);
-  }
-  return count;
 }
 
 async function deleteAcceptedFact(factId){
@@ -2058,7 +2082,7 @@ function renderMijTab(){
     topEl.parentNode.insertBefore(bSlot,topEl);
   }
   var pending=getPendingFacts().length;
-  var staleN=getStalePendingFacts(5).length;
+  var staleN=getStalePendingFacts(OWN_PENDING_AUTO_ACCEPT_DAYS).length;
   var avInit=escHTML((hubState.display_name||'J').trim().charAt(0).toUpperCase()||'J');
   topEl.innerHTML='<div class="hero-head"><h3 style="margin:0">Mij</h3></div>'
     +'<div class="hero" style="margin-top:10px"><div class="hero-row">'
