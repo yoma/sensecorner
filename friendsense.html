@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="18-05-2026 16:32">
+<meta name="fr-build" content="19-05-2026 08:42">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -14316,6 +14316,29 @@ async function laadContextMsgs(){
 
 // ══ Sidebar & Sessies ═══════════════════════════════════════════
 
+function isVertelAppSchemaError(err){
+  var msg=String((err&&err.message)||err||'').toLowerCase();
+  return msg.indexOf('vertel_app')>=0
+    ||(msg.indexOf('column')>=0&&msg.indexOf('does not exist')>=0);
+}
+
+async function querySenseSessionsForSidebar(){
+  var res=await sb.from('sense_sessions')
+    .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
+    .order('updated_at',{ascending:false}).limit(30);
+  if(!res.error)return {data:res.data||[],schemaWarn:''};
+  if(isVertelAppSchemaError(res.error)){
+    var schemaErr=res.error;
+    console.warn('[FriendSense][laadSessies] vertel_app ontbreekt in DB',schemaErr);
+    return {data:[],schemaWarn:'Database-update nodig: kolom <code style="font-size:11px">vertel_app</code> ontbreekt. Draai in Supabase de migratie <code style="font-size:11px">20260507_sense_sessions_vertel_app.sql</code>, daarna opnieuw proberen.'};
+  }
+  res=await sb.from('sense_sessions')
+    .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
+    .order('created_at',{ascending:false}).limit(30);
+  if(res.error)throw res.error;
+  return {data:res.data||[],schemaWarn:''};
+}
+
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebarOverlay').classList.add('open');
@@ -14333,21 +14356,14 @@ async function laadSessies(){
   if(!el)return;
   el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#888;text-align:center">Laden…</div>';
   try{
-    var res=await sb.from('sense_sessions')
-      .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
-      .order('updated_at',{ascending:false}).limit(30);
-    var data=res.data;
-    var err=res.error;
-    if(err){
-      res=await sb.from('sense_sessions')
-        .select('*').eq('user_id',S.user.id).eq('vertel_app',VERTEL_APP_SLUG)
-        .order('created_at',{ascending:false}).limit(30);
-      data=res.data;
-      err=res.error;
+    var listed=await querySenseSessionsForSidebar();
+    var data=listed.data;
+    if(listed.schemaWarn){
+      el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#7A2A2A;text-align:center;line-height:1.45">'+listed.schemaWarn+'</div>';
+      return;
     }
-    if(err)throw err;
     if(!data||!data.length){
-      el.innerHTML='<div style="padding:20px 10px;font-size:13px;color:#666;text-align:center">Nog geen gesprekken</div>';
+      el.innerHTML='<div style="padding:20px 10px;font-size:13px;color:#666;text-align:center;line-height:1.5">Nog geen gesprekken in FriendSense.<br><span style="font-size:12px;color:#888">Stuur eerst een bericht in Vertel; daarna verschijnt het hier.</span></div>';
       return;
     }
     window._sessieIds=data.map(function(s){return s.id;});
@@ -14365,8 +14381,12 @@ async function laadSessies(){
       +'</div>';
     }).join('');
   }catch(e){
-    console.warn('laadSessies error:',e);
-    el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#7A2A2A;text-align:center;line-height:1.45">Geschiedenis laden mislukt. Controleer verbinding en of tabellen <code style="font-size:11px">sense_sessions</code> bestaan.</div>';
+    console.warn('[FriendSense][laadSessies] error:',e);
+    var em=String((e&&e.message)||e||'');
+    var hint=isVertelAppSchemaError(e)
+      ?'Database-update nodig: draai <code style="font-size:11px">20260507_sense_sessions_vertel_app.sql</code> in Supabase.'
+      :'Controleer verbinding en of tabellen <code style="font-size:11px">sense_sessions</code> bestaan.';
+    el.innerHTML='<div style="padding:16px 10px;font-size:12px;color:#7A2A2A;text-align:center;line-height:1.45">Geschiedenis laden mislukt.'+(em?('<div style="margin-top:8px;font-size:11px;color:#8a5a5a">'+em.replace(/</g,'&lt;').substring(0,180)+'</div>'):'')+'<div style="margin-top:8px">'+hint+'</div></div>';
   }
 }
 
@@ -14793,7 +14813,10 @@ async function ensureActiveSessionForMessage(previewText){
       return data.id;
     }
   }catch(e){
-    console.warn('ensureActiveSessionForMessage error:',e);
+    console.warn('[FriendSense][ensureActiveSessionForMessage] error:',e);
+    if(isVertelAppSchemaError(e)){
+      toast('Geschiedenis opslaan lukt nog niet: database mist kolom vertel_app. Draai migratie 20260507_sense_sessions_vertel_app.sql in Supabase.');
+    }
   }
   return null;
 }
@@ -14977,6 +15000,9 @@ try{
   window.laadOudereSessieBerichten=laadOudereSessieBerichten;
   window.openSidebar=openSidebar;
   window.closeSidebar=closeSidebar;
+  window.laadSessie=laadSessie;
+  window.verwijderSessie=verwijderSessie;
+  window.laadSessies=laadSessies;
   window.selectDossierFromPick=selectDossierFromPick;
   window.selectDossierFromPickFromModal=selectDossierFromPickFromModal;
   window.createNewDossierFromPick=createNewDossierFromPick;
