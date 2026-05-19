@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="18-05-2026 14:41">
+<meta name="os-build" content="19-05-2026 11:49">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2753,7 +2753,7 @@ function detectSourceFromMsg(msg){
   var pn=String(msg.profile_name||msg.dossier||'').trim();
   var lk=pn.toLowerCase();
   var mapped=lk?senseProfileScopeByName[lk]:'';
-  if(mapped==='ds'||mapped==='fs'||mapped==='gen')return mapped;
+  if(mapped==='ds'||mapped==='fs'||mapped==='gen'||mapped==='ss')return mapped;
   if(lk==='own sense')return'gen';
 
   var explicit=String(msg.app_source||msg.source_app||msg.app||'').toLowerCase();
@@ -4112,8 +4112,7 @@ function renderQuestions(){
     return catAnswerKeys(catDef).some(function(k){return String(c[k]||'').trim().length>0;});
   }
   function appMessageCount(scope){
-    var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
-    return rows.filter(function(m){return detectSourceFromMsg(m)===scope;}).length;
+    return rowsForInsightScope(scope).length;
   }
   function visibleCats(){
     var list=OWN_CATS.slice();
@@ -4375,12 +4374,69 @@ function renderTimelineTab(){
   });
 }
 
+function isOwnSenseDossierName(pn){
+  return String(pn||'').trim().toLowerCase()==='own sense';
+}
+function insightRowKey(m){
+  if(m&&m.id)return 'id:'+m.id;
+  if(m&&m._synthetic)return 'syn:'+String(m.html||m.content||'').slice(0,96);
+  return 'h:'+String(m.profile_name||m.dossier||'')+'|'+String(m.created_at||'')+'|'+String(m.html||m.content||'').slice(0,72);
+}
+function selfSenseCategoryInsightLines(){
+  var out=[];
+  APP_CATS.filter(function(c){return c.app==='ss';}).forEach(function(cat){
+    var c=hubState.categories[cat.id]||{};
+    cat.prompts.forEach(function(p,idx){
+      var ans=String(c['a'+idx]||'').trim();
+      if(ans.length<8)return;
+      var q=ownHubPromptQ(p);
+      out.push('[SelfSense verdieping · '+cat.title+'] '+q+': '+ans);
+    });
+  });
+  return out;
+}
+function selfSenseFactsInsightLines(){
+  if(!ownFacts||!ownFacts.length)return [];
+  return ownFacts.filter(function(f){
+    return f&&f.status==='accepted'&&String(f.source_app||'').toLowerCase()==='selfsense';
+  }).map(function(f){
+    return '[SelfSense feit] '+String(f.fact_text||'').trim();
+  }).filter(function(s){return s.length>20;});
+}
+function rowsForInsightScope(scope){
+  var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
+  if(scope==='all')return ownTimeline.slice();
+  if(scope==='ss'){
+    var ssMap={};
+    var ssList=[];
+    function addRow(m){
+      var k=insightRowKey(m);
+      if(ssMap[k])return;
+      ssMap[k]=1;
+      ssList.push(m);
+    }
+    rows.forEach(function(m){
+      if(detectSourceFromMsg(m)==='ss')addRow(m);
+      else if(isOwnSenseDossierName(m.profile_name||m.dossier))addRow(m);
+    });
+    selfSenseCategoryInsightLines().forEach(function(line){
+      addRow({profile_name:'OWN Sense',role:'user',html:line,content:line,_synthetic:true});
+    });
+    selfSenseFactsInsightLines().forEach(function(line){
+      addRow({profile_name:'OWN Sense',role:'user',html:line,content:line,_synthetic:true});
+    });
+    return ssList;
+  }
+  if(scope==='gen'){
+    return rows.filter(function(m){
+      if(isOwnSenseDossierName(m.profile_name||m.dossier))return false;
+      return detectSourceFromMsg(m)==='gen';
+    });
+  }
+  return rows.filter(function(m){return detectSourceFromMsg(m)===scope;});
+}
 function timelineByScope(scope){
-  if(scope==='ds')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='ds';});
-  if(scope==='fs')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='fs';});
-  if(scope==='ss')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='ss';});
-  if(scope==='gen')return ownTimeline.filter(function(m){return detectSourceFromMsg(m)==='gen';});
-  return ownTimeline.slice();
+  return rowsForInsightScope(scope);
 }
 
 function insightTextByScope(scope){
@@ -4421,7 +4477,9 @@ function buildInsightPrompt(scope,rows){
   var scopeHint=scope==='all'?'':(' Begin met één zin die expliciet verwijst naar '+scopeLabel(scope)+' (niet hetzelfde openingsakkoord als voor «alle apps»). Herhaal geen algemene profielzin die even goed voor een andere scope zou kunnen.');
   var datasetHint=scope==='all'
     ?'Onderstaande regels komen uit verschillende Sense-dossiers (DateSense, FamilySense, SelfSense, OWN Sense), door de gebruiker geschreven. '
-    :'Onderstaande regels zijn al gefilterd op '+scopeLabel(scope)+' en kunnen uit meerdere dossiers binnen die app komen. ';
+    :(scope==='ss'
+      ?'Onderstaande regels komen uit SelfSense: Vertel op OWN Sense, verdiepingsvragen in OWN Sense en eventuele contactdossiers met SelfSense-tag. '
+      :'Onderstaande regels zijn al gefilterd op '+scopeLabel(scope)+' en kunnen uit meerdere dossiers binnen die app komen. ');
   return 'Je bent OWN Sensei. Schrijf een persoonlijk inzicht in het Nederlands voor scope "'
     +scopeLabel(scope)+'". '+datasetHint+'Gebruik 2-3 korte paragrafen, menselijk en concreet.'+scopeHint+' '
     +'Sluit af met "Tags: tag1, tag2, tag3". '
@@ -4434,6 +4492,11 @@ function buildInsightPrompt(scope,rows){
 async function recomputeInsight(scope,isAuto){
   var rows=timelineByScope(scope);
   if(!rows.length){
+    if(scope==='gen'&&(String(hubState.insight_gen||'').trim()||String(hubState.ai_summary_general||'').trim())){
+      insightMeta.gen.updated_at=new Date().toISOString();
+      saveHubState();
+      return;
+    }
     setInsightTextByScope(scope,'Nog onvoldoende berichten voor dit inzicht.');
     insightMeta[scope].tags=[];
     insightMeta[scope].updated_at=new Date().toISOString();
