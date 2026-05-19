@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="19-05-2026 11:51">
+<meta name="sc-build" content="19-05-2026 12:03">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -753,13 +754,15 @@ a{text-decoration:none;color:inherit}
 
 <script>
 (async function(){
-  var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
-  var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+  var SURL=(window.SENSE_AUTH_URL||'https://ghuqjtdrkwssyqvcubcd.supabase.co');
+  var SKEY=(window.SENSE_AUTH_KEY||'');
   var sb=null;
   try{
-    if(window.__senseLpSupabase){
+    if(window.senseCreateAuthClient){
+      sb=window.senseCreateAuthClient();
+    }else if(window.__senseLpSupabase){
       sb=window.__senseLpSupabase;
-    }else if(window.supabase&&window.supabase.createClient){
+    }else if(window.supabase&&window.supabase.createClient&&SKEY){
       sb=window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY,{
         auth:{
           persistSession:true,
@@ -2738,9 +2741,16 @@ a{text-decoration:none;color:inherit}
         setAuthMsg('Inloggen duurt te lang. Controleer je netwerk en probeer opnieuw.',true);
         return;
       }
-      if(res&&res.error){setAuthMsg(res.error.message||'Inloggen mislukt.',true);return;}
+      if(res&&res.error){
+        setAuthMsg(window.senseMapAuthError?window.senseMapAuthError(res.error):(res.error.message||'Inloggen mislukt.'),true);
+        return;
+      }
+      if(window.sensePersistSignInResult){
+        await window.sensePersistSignInResult(sb,res);
+      }
       setAuthMsg('Even geduld, de pagina wordt vernieuwd.');
       try{sessionStorage.setItem('sc_login_bounce','1');}catch(_lb){}
+      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
       // Login mag niet blokkeren op extra profiel/approval queries.
       Promise.resolve(refreshAuthUi()).catch(function(e){
         console.warn('refreshAuthUi after login', (e&&e.message)||e);
@@ -2855,6 +2865,14 @@ a{text-decoration:none;color:inherit}
   }catch(_e){}
   if(!openedReturnToModal){
     var guestFinal=await getCurrentUser();
+    if(!guestFinal){
+      var bounce='';
+      try{bounce=String(sessionStorage.getItem('sc_login_bounce')||'');}catch(_lb){}
+      if(bounce==='1'){
+        await new Promise(function(r){setTimeout(r,700);});
+        guestFinal=await getCurrentUser();
+      }
+    }
     if(!guestFinal){
       var hx=String(window.location.hash||'');
       if(hx.indexOf('access_token')>=0||hx.indexOf('type=recovery')>=0)return;

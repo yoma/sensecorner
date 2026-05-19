@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Laatste wijziging landingspagina: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="lp-build" content="08-05-2026 15:46">
+<meta name="lp-build" content="19-05-2026 12:03">
 <title>SenseCorner - Een coach die jou echt leert kennen</title>
 <meta name="description" content="Sensei is je persoonlijke coach voor dating, familie, vriendschap en zelfkennis. Eén profiel dat jou begrijpt, in elk levensgebied.">
 <meta property="og:title" content="SenseCorner — Maak kennis met Sensei">
@@ -793,29 +793,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/sense-auth-client.js"></script>
 <script>
 (function(){
-  var SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
-  var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
-  window.getSenseLpSupabase=function(){
-    try{
-      if(window.__senseLpSupabase)return window.__senseLpSupabase;
-      if(!window.supabase||typeof window.supabase.createClient!=='function')return null;
-      window.__senseLpSupabase=window.supabase.createClient(SURL,SKEY,{
-        auth:{
-          persistSession:true,
-          autoRefreshToken:true,
-          detectSessionInUrl:true,
-          flowType:'pkce',
-          storageKey:'sensecorner-auth-v1'
-        }
-      });
-      return window.__senseLpSupabase;
-    }catch(_e){
-      return null;
-    }
-  };
-  window.getSenseLpSupabase();
+  if(window.senseCreateAuthClient)window.senseCreateAuthClient();
 })();
 </script>
 <script>
@@ -1172,6 +1153,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         window.location.href='onboarding.html';
         return;
       }
+      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
       if(pendingReturnTo){
         var t=decodeURIComponent(pendingReturnTo);
         if(t.indexOf('.html')<0||t.indexOf('http')===0)t='ownsense.html';
@@ -1188,8 +1170,9 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var sp;
     try{sp=new URLSearchParams(window.location.search||'');}catch(_e){return;}
     if(!sp.get('login')&&!sp.get('register'))return;
-    var sess=await withTimeout(sb.auth.getSession(),7000,null);
-    var session=sess&&sess.data&&sess.data.session;
+    var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
+    var sess=await withTimeout(sb.auth.getSession(),12000,null);
+    var session=(sess&&sess.data&&sess.data.session)||persisted;
     if(session&&session.user){
       var uid=session.user.id;
       var done=await withTimeout(hasObDone(uid),5000,true);
@@ -1261,9 +1244,19 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         setMsg('Inloggen duurt te lang. Probeer opnieuw of ga via SenseCorner inloggen.',true);
         return;
       }
-      if(res&&res.error){setMsg(res.error.message||'Inloggen mislukt.',true);return;}
+      if(res&&res.error){
+        var mapped=window.senseMapAuthError?window.senseMapAuthError(res.error):'';
+        setMsg(mapped||res.error.message||'Inloggen mislukt.',true);
+        return;
+      }
+      if(window.sensePersistSignInResult){
+        await window.sensePersistSignInResult(sb,res);
+      }
+      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
       await afterAuthSuccess(res);
-    }catch(_e7){setMsg('Inloggen mislukt. Probeer opnieuw.',true);}
+    }catch(_e7){
+      setMsg(window.senseMapAuthError?window.senseMapAuthError(_e7):'Inloggen mislukt. Probeer opnieuw.',true);
+    }
     finally{lpSetAuthBusy(false);}
   };
   if(btnReg)btnReg.onclick=async function(){
