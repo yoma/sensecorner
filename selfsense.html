@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="18-05-2026 13:33">
+<meta name="fs-build" content="19-05-2026 12:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -5869,8 +5869,8 @@ function getProfielProgressCounts(dossierName){
 function ownSenseHubUrl(opt){
   opt=opt||{};
   var base='ownsense.html?returnTo='+encodeURIComponent('selfsense.html');
-  if(opt.cat==='selfsense_focus'){
-    base+='&tab=bron&cat='+encodeURIComponent('selfsense_focus');
+  if(opt.cat==='selfsense_focus'||opt.cat==='selfsense_spiegel'){
+    base+='&tab=bron&cat='+encodeURIComponent(String(opt.cat));
   }
   return base;
 }
@@ -8683,8 +8683,101 @@ async function stopSpiegelAdemSession(saveRow){
     if(!Array.isArray(S.spiegelRecent))S.spiegelRecent=[];
     S.spiegelRecent.unshift({mode:'Adem',meta:getSpiegelAdemPatternInfo(ademKey).shortLabel+' - '+String(dur)+'s',when:new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})});
     S.spiegelRecent=S.spiegelRecent.slice(0,10);
+    syncSelfsenseSpiegelFromAdem(dur,ademKey).catch(function(e){console.warn('[SelfSense] spiegel→OWN',e);});
   }
   _spiegelAdemStartedAt=0;
+}
+function formatSpiegelOwnSyncStamp(d){
+  var dt=d||new Date();
+  try{
+    return dt.toLocaleString('nl-BE',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(_e){
+    return dt.toISOString();
+  }
+}
+function readSelfsenseFocusSlotText(slotIdx){
+  try{
+    var own=(S.pdata&&S.pdata['OWN Sense'])||null;
+    var cat=(own&&own.categories&&own.categories.selfsense_focus)||{};
+    return String(cat['a'+slotIdx]||'').trim();
+  }catch(_e){return '';}
+}
+function buildSelfsenseSpiegelSlotsFromAdem(durSec,patternKey){
+  var info=getSpiegelAdemPatternInfo(patternKey);
+  var dur=Math.max(1,Number(durSec||0));
+  var when=formatSpiegelOwnSyncStamp(new Date());
+  var st=getSpiegelAdemStats();
+  var patSt=(st&&st[info.key])||{sessions:0,duration:0};
+  var sessN=Math.max(1,Number(patSt.sessions||0));
+  var streak=getSpiegelAdemStreak((getSpiegelAdemCompletionState().completed)||{});
+  var focusSit=readSelfsenseFocusSlotText(0);
+  var regulatie='Na '+info.label+' ('+dur+' sec): '+trimMirrorText(info.why,220);
+  var thema=focusSit
+    ?('In je verdieping noem je: '+trimMirrorText(focusSit,180)+'. Adem gaf nu vooral rust en regulatie.')
+    :'Nog geen apart thema in je SelfSense-verdieping. Deze Adem-sessie richtte vooral op landen en regulatie.';
+  var helpt=info.label+' helpt nu: '+trimMirrorText(info.why,200);
+  if(streak>=2)helpt+=' Je ademstreak is '+streak+' dag(en) op rij.';
+  var ctx='Adem · '+info.label+' · '+dur+' sec';
+  if(sessN>1)ctx+=' (sessie '+sessN+' met dit patroon)';
+  return{a0:regulatie,a1:thema,a2:helpt,a3:when,a4:ctx};
+}
+var _SPIEGEL_OWN_AI_SYS='Je vult drie korte OWN Sense Spiegel-signalen in na een Adem-sessie in SelfSense. Geen markdown. Gebruik geen Unicode U+2014 (em dash). Alleen geldig JSON:\n{"a0":"...","a1":"...","a2":"..."}\n\na0 = regulatie-signalen nu (1-2 zinnen). a1 = waar het nu het meest wringt of leeg blijft (1-2 zinnen, voorzichtig). a2 = wat concreet helpt na deze oefening (1-2 zinnen). Max 220 tekens per veld. Gebruik ENKEL de meegegeven feiten; verzin geen trauma of diagnose.';
+async function fillSelfsenseSpiegelSlotsWithAi(baseSlots,durSec,patternKey){
+  var out=Object.assign({},baseSlots||{});
+  if(!S.user||!sb)return out;
+  var info=getSpiegelAdemPatternInfo(patternKey);
+  var dur=Math.max(1,Number(durSec||0));
+  var focus0=readSelfsenseFocusSlotText(0);
+  var focus2=readSelfsenseFocusSlotText(2);
+  var mood=getOwnDailyMoodMeta(((S.pdata['OWN Sense']||{}).meta)||{});
+  var usr='Adem-sessie net afgerond.\n'
+    +'Patroon: '+info.label+' ('+info.key+')\n'
+    +'Duur: '+dur+' seconden\n'
+    +'Waarom dit patroon: '+info.why+'\n';
+  if(focus0)usr+='SelfSense verdieping (actuele situatie): '+focus0+'\n';
+  if(focus2)usr+='SelfSense verdieping (doelen): '+focus2+'\n';
+  if(mood&&mood.label)usr+='Stemming vandaag: '+mood.label+'\n';
+  usr+='\nTemplate (mag je licht herschrijven in eigen woorden):\na0: '+out.a0+'\na1: '+out.a1+'\na2: '+out.a2;
+  try{
+    var raw=await callAPI(_SPIEGEL_OWN_AI_SYS,[{role:'user',content:usr}],380,22000,null,{disable_web_search:true});
+    var parsed=parseFirstJSONObject(String(raw||'').replace(/```json|```/g,''));
+    if(parsed&&typeof parsed==='object'){
+      ['a0','a1','a2'].forEach(function(k){
+        var v=trimMirrorText(parsed[k],220);
+        if(v)out[k]=v;
+      });
+      out._ai_filled=true;
+    }
+  }catch(e){
+    console.warn('[SelfSense] spiegel AI',e);
+  }
+  return out;
+}
+async function syncSelfsenseSpiegelFromAdem(durSec,patternKey){
+  if(!S.user)return;
+  if(!S.pdata['OWN Sense']){
+    try{await ensureP('OWN Sense');}catch(_e){}
+  }
+  var d=S.pdata['OWN Sense'];
+  if(!d)return;
+  var slots=buildSelfsenseSpiegelSlotsFromAdem(durSec,patternKey);
+  slots=await fillSelfsenseSpiegelSlotsWithAi(slots,durSec,patternKey);
+  var usedAi=!!slots._ai_filled;
+  delete slots._ai_filled;
+  d.categories=d.categories||{};
+  d.categories.selfsense_spiegel=slots;
+  d.meta=Object.assign({},d.meta||{},{
+    selfsense_spiegel_sync_at:new Date().toISOString(),
+    selfsense_spiegel_sync_pattern:String(getSpiegelAdemPatternInfo(patternKey).key||''),
+    selfsense_spiegel_sync_ai:usedAi
+  });
+  S.pdata['OWN Sense']=d;
+  try{
+    await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);
+    toast('Spiegel-signalen bijgewerkt in OWN Sense.');
+  }catch(e){
+    console.warn('[SelfSense] spiegel sync saveP',e);
+  }
 }
 function buildSpiegelOwnContext(){
   try{
@@ -8695,6 +8788,11 @@ function buildSpiegelOwnContext(){
     for(var i=0;i<keys.length;i++){
       chunks.push(keys[i]+': '+String(props[keys[i]]));
     }
+    var focus=readSelfsenseFocusSlotText(0);
+    if(focus)chunks.push('SelfSense verdieping (actueel): '+focus);
+    var sp=(own&&own.categories&&own.categories.selfsense_spiegel)||{};
+    var sp0=String(sp.a0||'').trim();
+    if(sp0)chunks.push('Spiegel-signalen (laatste sync): '+sp0);
     return chunks.join('\n').slice(0,1400)||'Geen OWN context beschikbaar.';
   }catch(_e){
     return 'Geen OWN context beschikbaar.';

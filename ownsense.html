@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="19-05-2026 12:09">
+<meta name="os-build" content="19-05-2026 12:26">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -310,7 +310,11 @@ body.os-accent-fs{--app-donker:var(--family-donker);--app-medium:var(--family-me
 body.os-accent-fr{--app-donker:var(--friend-donker);--app-medium:var(--friend-medium);--app-licht:var(--friend-licht);--rl:rgba(235,207,155,.42)}
 body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium);--app-licht:var(--self-licht);--rl:rgba(188,205,192,.4)}
 .qrow-meta{flex:1;min-width:0}
-.qrow-title{font-size:13px;font-weight:700;color:var(--chocolade)}
+.qrow-title{font-size:13px;font-weight:700;color:var(--chocolade);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.qcat-pill{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;line-height:1.2}
+.qcat-pill--auto{background:color-mix(in srgb,var(--self-licht) 55%,#fff);border:1px solid color-mix(in srgb,var(--self-medium) 45%,#e6e6e6);color:var(--self-donker)}
+.qcat-pill--manual{background:rgba(200,212,181,.35);border:1px solid rgba(107,142,111,.35);color:var(--chocolade)}
+.qcat-hint{font-size:11px;line-height:1.4;color:var(--warm-bruin);margin-top:3px;font-weight:500}
 .qrow-progress{font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:8px}
 .qrow-bar{width:66px;height:4px;border-radius:2px;background:rgba(61,47,31,.15);overflow:hidden}
 .qrow-bar-fill{height:100%;background:var(--app-donker)}
@@ -319,6 +323,20 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 .qcard>summary{list-style:none;cursor:pointer}
 .qcard>summary::-webkit-details-marker{display:none}
 .qbody{padding:2px 14px 12px}
+.qbody-intro{
+  font-size:12px;line-height:1.55;color:var(--chocolade);
+  padding:10px 12px;border-radius:10px;margin:8px 0 12px;
+  border:1px solid color-mix(in srgb,var(--self-medium) 32%,#e6e6e6);
+  background:color-mix(in srgb,var(--self-licht) 35%,#fff);
+}
+.qbody-intro--auto{border-color:color-mix(in srgb,var(--self-medium) 40%,#e6e6e6);background:color-mix(in srgb,var(--self-licht) 42%,#fff)}
+.qbody-intro--manual{border-color:rgba(107,142,111,.28);background:color-mix(in srgb,var(--sage-licht) 30%,#fff)}
+.qlist-ss-note{
+  font-size:12px;line-height:1.5;color:var(--warm-bruin);
+  margin:0 0 12px;padding:10px 12px;border-radius:10px;
+  border:1px solid color-mix(in srgb,var(--self-medium) 30%,#e6e6e6);
+  background:color-mix(in srgb,var(--self-licht) 28%,#fff);
+}
 .qlist-foot{text-align:center;margin-top:10px}
 .qlist-repair{
   font-size:11px;color:var(--muted);padding:6px 12px;border-radius:999px;
@@ -916,6 +934,96 @@ function ownHubPromptPh(p){
   if(typeof p==='string')return'';
   return String((p&&p.ph)||'');
 }
+function ownHubCatListHint(cat){
+  if(!cat)return'';
+  if(cat.id==='selfsense_spiegel'){
+    return 'Vult zich aan na Adem in SelfSense. Leeg = nog geen sync.';
+  }
+  if(cat.id==='selfsense_focus'){
+    return 'Zelf invullen: jouw verhaal en context (zoals bij de andere apps).';
+  }
+  return'';
+}
+function ownHubCatBodyIntroHtml(cat){
+  if(!cat)return'';
+  if(cat.id==='selfsense_spiegel'){
+    return '<p class="qbody-intro qbody-intro--auto"><strong>Automatisch</strong> na een Adem-sessie in SelfSense. Hier komt kort wat OWN Sense uit je oefening haalt: regulatie, thema, wat helpt. Je hoeft dit niet zelf te bedenken. Wel even nakijken of het klopt. Tot je Adem gebruikt, blijven de velden leeg.</p>';
+  }
+  if(cat.id==='selfsense_focus'){
+    return '<p class="qbody-intro qbody-intro--manual"><strong>Zelf invullen.</strong> Dit is je vaste SelfSense-context voor Sensei, net als verdieping bij DateSense of FamilySense. Het aparte blok <strong>Spiegel-signalen</strong> eronder vult automatisch aan na Adem.</p>';
+  }
+  return'';
+}
+function ownHubCatTitlePillHtml(cat){
+  if(!cat)return'';
+  if(cat.id==='selfsense_spiegel'){
+    return '<span class="qcat-pill qcat-pill--auto">Automatisch</span>';
+  }
+  if(cat.id==='selfsense_focus'){
+    return '<span class="qcat-pill qcat-pill--manual">Zelf invullen</span>';
+  }
+  return'';
+}
+function ownSpiegelPatternFromNote(note){
+  var n=String(note||'').trim();
+  if(n.indexOf('tech:')===0)return n.slice(5);
+  return 'long_exhale';
+}
+function ownSpiegelPatternInfo(key){
+  var k=String(key||'long_exhale');
+  if(k==='box')return{key:'box',label:'Box 4-4-4-4',why:'Vier gelijke fasen (box / vierkant): 4 sec in, 4 vast, 4 uit, 4 rust. Helpt je landen en brengt focus.'};
+  if(k==='four_seven_eight')return{key:'four_seven_eight',label:'4-7-8',why:'Adem zacht in 4 sec, houd 7 sec vast, en adem in 8 sec uit. De lange uitademing helpt spanning loslaten.'};
+  return{key:'long_exhale',label:'Verlengd uitademen 4-6',why:'4 sec in, 6 sec uit. Door net wat langer uit te ademen geef je je lichaam een kalm signaal.'};
+}
+function ownSpiegelCatHasAnswers(catObj){
+  if(!catObj||typeof catObj!=='object')return false;
+  for(var i=0;i<5;i++){
+    if(String(catObj['a'+i]||'').trim())return true;
+  }
+  return false;
+}
+function buildOwnSpiegelSlotsFromMirrorRow(row,patternKey){
+  var info=ownSpiegelPatternInfo(patternKey);
+  var dur=Math.max(1,Number(row&&row.duration_seconds||0));
+  var when='';
+  try{
+    when=new Date(row.created_at).toLocaleString('nl-BE',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(_e){when=String((row&&row.created_at)||'');}
+  var focus=String(((hubState.categories||{}).selfsense_focus||{}).a0||'').trim();
+  var regulatie='Na '+info.label+' ('+dur+' sec): '+info.why.slice(0,220);
+  var thema=focus
+    ?('In je verdieping noem je: '+focus.slice(0,180)+'. Adem gaf vooral rust en regulatie.')
+    :'Adem-sessie uit SelfSense. Thema: landen en regulatie.';
+  return{
+    a0:regulatie,
+    a1:thema,
+    a2:info.label+' helpt: '+info.why.slice(0,200),
+    a3:when,
+    a4:'Adem · '+info.label+' · '+dur+' sec'
+  };
+}
+async function hydrateSelfsenseSpiegelFromMirrorSessions(client,user){
+  if(!client||!user||!user.id)return;
+  var cur=hubState.categories&&hubState.categories.selfsense_spiegel;
+  if(ownSpiegelCatHasAnswers(cur))return;
+  try{
+    var res=await client.from('selfsense_mirror_sessions')
+      .select('created_at,mode,duration_seconds,note')
+      .eq('user_id',user.id)
+      .eq('mode','adem')
+      .order('created_at',{ascending:false})
+      .limit(1)
+      .maybeSingle();
+    if(!res||res.error||!res.data)return;
+    var pk=ownSpiegelPatternFromNote(res.data.note);
+    hubState.categories=hubState.categories||{};
+    hubState.categories.selfsense_spiegel=buildOwnSpiegelSlotsFromMirrorRow(res.data,pk);
+    hubState.cat_updated=hubState.cat_updated||{};
+    hubState.cat_updated.selfsense_spiegel=new Date().toISOString();
+    await saveOwnToSupabase();
+    saveHubState(user);
+  }catch(_e){}
+}
 var OWN_CATS=[
   {id:'karakter',title:'Wie ben jij',icon:'🧠',prompts:[
     {q:'Hoe zouden je beste vrienden jou omschrijven?',ph:'Bv: warm, eerlijk, nadenkend, grappig, soms een beetje te streng voor mezelf...'},
@@ -973,11 +1081,11 @@ var APP_CATS=[
     {q:'Heb je dingen waar je op kan terugvallen? Mensen, gewoontes, plekken, professionele hulp, wat voor jou werkt.',ph:'Alles wat je ondersteunt mag hier staan.',sub:'steunbronnen',fromOnboarding:true}
   ]}
   ,{id:'selfsense_spiegel',app:'ss',title:'SelfSense Spiegel-signalen',icon:'🪞',prompts:[
-    {q:'Welke signalen ziet OWN Sense nu in je regulatie?',ph:'Wordt automatisch bijgewerkt vanuit recente Adem-sessies.'},
-    {q:'Waar worstel je op dit moment het meest mee?',ph:'Kernthema dat momenteel het meeste weegt.'},
-    {q:'Wat helpt nu concreet om te reguleren?',ph:'Kleine stappen die op dit moment echt werken.'},
-    {q:'Wanneer is dit voor het laatst bijgewerkt?',ph:'Tijd van de meest recente SelfSense-sync.'},
-    {q:'Wat was de context van de laatste sessie?',ph:'Techniek, duur en ritme van je laatste Adem-sessie.'}
+    {q:'Welke signalen ziet OWN Sense nu in je regulatie?',ph:'Vult aan na Adem. Staat hier wanneer er een sessie is gesynchroniseerd.'},
+    {q:'Waar worstel je op dit moment het meest mee?',ph:'Kernthema uit je recente SelfSense-sessies.'},
+    {q:'Wat helpt nu concreet om te reguleren?',ph:'Wat uit je oefening of check-in naar voren kwam.'},
+    {q:'Wanneer is dit voor het laatst bijgewerkt?',ph:'Datum en tijd van de laatste sync uit SelfSense.'},
+    {q:'Wat was de context van de laatste sessie?',ph:'Bv. Adem-oefening, duur, hoe het voelde.'}
   ]}
 ];
 var ALL_CATS=OWN_CATS.concat(APP_CATS);
@@ -3015,6 +3123,7 @@ async function loadOwnFromSupabase(){
         }catch(_eSlot){}
       }
     }
+    await hydrateSelfsenseSpiegelFromMirrorSessions(client,user);
     if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
     applyOwnHubAppDepthV2Migration();
   }catch(e){}
@@ -4130,7 +4239,7 @@ function renderQuestions(){
     var list=OWN_CATS.slice();
     APP_CATS.forEach(function(cat){
       var active=appMessageCount(cat.app)>=1;
-      if(active||hasAnswersInCatId(cat.id)||cat.id==='selfsense_focus'||cat.id==='friendsense_focus')list.push(cat);
+      if(active||hasAnswersInCatId(cat.id)||cat.id==='selfsense_focus'||cat.id==='selfsense_spiegel'||cat.id==='friendsense_focus')list.push(cat);
     });
     if(urlBootFocusCat){
       var forced=APP_CATS.find(function(c){return c.id===urlBootFocusCat;});
@@ -4145,8 +4254,13 @@ function renderQuestions(){
   if(typeof __restrictExternalCategorySources!=='undefined'&&__restrictExternalCategorySources){
     obNote='<p class="subtle" style="margin:0 0 12px;font-size:12px;line-height:1.45">Je antwoorden uit de SenseCorner-kennistanding staan bij de gemarkeerde verdiepingsvragen. Andere velden zijn bewust open om later te verdiepen.</p>';
   }
-  var html=obNote+'<div class="qlist">';
-  visibleCats().forEach(function(cat){
+  var html=obNote;
+  var vis=visibleCats();
+  if(vis.some(function(c){return c.id==='selfsense_focus';})&&vis.some(function(c){return c.id==='selfsense_spiegel';})){
+    html+='<p class="qlist-ss-note">SelfSense heeft twee blokken: <strong>verdieping</strong> vul je zelf in; <strong>Spiegel-signalen</strong> vullen we aan na Adem in de SelfSense-app.</p>';
+  }
+  html+='<div class="qlist">';
+  vis.forEach(function(cat){
     var c=hubState.categories[cat.id]||{};
     var keys=catAnswerKeys(cat);
     var filled=keys.filter(function(k){return String(c[k]||'').trim().length>0;}).length;
@@ -4154,12 +4268,21 @@ function renderQuestions(){
     var pct=Math.round((filled*100)/Math.max(1,totalQ));
     var scopeCls=(cat.app==='ds'?' qscope-ds':(cat.app==='fs'?' qscope-fs':(cat.app==='fr'?' qscope-fr':(cat.app==='ss'?' qscope-ss':''))));
     var openAttr=(String(__openQuestionCatId||'')===String(cat.id))?' open':'';
+    var listHint=ownHubCatListHint(cat);
+    var progressTxt;
+    if(cat.id==='selfsense_spiegel'&&filled===0){
+      progressTxt='nog leeg · vult aan na Adem in SelfSense';
+    }else{
+      progressTxt=filled+'/'+totalQ+' vragen · '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at);
+    }
+    var titlePill=ownHubCatTitlePillHtml(cat);
     html+='<details class="qcard" id="cat-'+cat.id+'"'+openAttr+'><summary class="qrow'+scopeCls+'">'
       +'<div class="qrow-icon">'+escHTML(cat.icon||'•')+'</div>'
       +'<div class="qrow-meta">'
-      +'<div class="qrow-title">'+escHTML(cat.title)+'</div>'
-      +'<div class="qrow-progress"><div class="qrow-bar"><div class="qrow-bar-fill" style="width:'+pct+'%"></div></div>'+filled+'/'+totalQ+' vragen · '+fmtDate(hubState.cat_updated[cat.id]||hubState.updated_at)+'</div>'
-      +'</div><span class="qrow-arrow">›</span></summary><div class="qbody">';
+      +'<div class="qrow-title">'+escHTML(cat.title)+titlePill+'</div>'
+      +(listHint?'<div class="qcat-hint">'+escHTML(listHint)+'</div>':'')
+      +'<div class="qrow-progress"><div class="qrow-bar"><div class="qrow-bar-fill" style="width:'+pct+'%"></div></div>'+progressTxt+'</div>'
+      +'</div><span class="qrow-arrow">›</span></summary><div class="qbody">'+ownHubCatBodyIntroHtml(cat);
     cat.prompts.forEach(function(p,idx){
       var key='a'+idx;
       var qtext=ownHubPromptQ(p);
@@ -4256,9 +4379,15 @@ function openOwnQuestionsModal(catId){
   var b=document.getElementById('ownQuestionsModalBody');
   if(!t||!s||!b)return;
   t.textContent=(cat.icon?cat.icon+' ':'')+cat.title;
-  s.textContent='Vul je antwoorden in en sla op. '+cat.prompts.length+' vragen.';
+  if(cat.id==='selfsense_spiegel'){
+    s.textContent='Vult zich aan na Adem in SelfSense. '+cat.prompts.length+' signalen.';
+  }else if(cat.id==='selfsense_focus'){
+    s.textContent='Zelf invullen voor vaste context. '+cat.prompts.length+' vragen.';
+  }else{
+    s.textContent='Vul je antwoorden in en sla op. '+cat.prompts.length+' vragen.';
+  }
   var c=hubState.categories[cat.id]||{};
-  var html='';
+  var html=ownHubCatBodyIntroHtml(cat);
   cat.prompts.forEach(function(p,idx){
     var key='a'+idx;
     var qtext=ownHubPromptQ(p);
