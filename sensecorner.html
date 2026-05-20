@@ -2714,8 +2714,11 @@ a{text-decoration:none;color:inherit}
       }
     }).catch(function(){});
   };
-  if(authOverlay)authOverlay.addEventListener('click',function(e){
-    if(e.target!==authOverlay)return;
+  function tryCloseAuthModal(){
+    if(authBusy){
+      setAuthMsg('Even wachten tot inloggen klaar is…');
+      return;
+    }
     closeAuthModal();
     getCurrentUser().then(function(u){
       if(!u){
@@ -2723,6 +2726,10 @@ a{text-decoration:none;color:inherit}
         catch(_e){window.location.replace('index.html');}
       }
     }).catch(function(){});
+  }
+  if(authOverlay)authOverlay.addEventListener('click',function(e){
+    if(e.target!==authOverlay)return;
+    tryCloseAuthModal();
   });
   var authBusy=false;
   function setAuthBusy(b){
@@ -2752,22 +2759,19 @@ a{text-decoration:none;color:inherit}
         setAuthMsg(window.senseMapAuthError?window.senseMapAuthError(res.error):(res.error.message||'Inloggen mislukt.'),true);
         return;
       }
-      if(window.sensePersistSignInResult){
-        await window.sensePersistSignInResult(sb,res);
+      var confirmFn=window.senseConfirmSessionAfterSignIn;
+      var session=confirmFn?await confirmFn(sb,res,{attempts:16}):null;
+      if(!session||!session.user){
+        setAuthMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
+        return;
       }
-      setAuthMsg('Even geduld, de pagina wordt vernieuwd.');
-      try{sessionStorage.setItem('sc_login_bounce','1');}catch(_lb){}
-      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
-      // Login mag niet blokkeren op extra profiel/approval queries.
-      Promise.resolve(refreshAuthUi()).catch(function(e){
-        console.warn('refreshAuthUi after login', (e&&e.message)||e);
-      });
+      setAuthMsg('Welkom! Je bent aangemeld.');
       closeAuthModal();
       if(pendingReturnTo){
         window.location.href=pendingReturnTo;
-      }else{
-        setTimeout(function(){try{window.location.reload();}catch(_r){window.location.href=window.location.pathname||'sensecorner.html';}},0);
+        return;
       }
+      await refreshAuthUi();
     }catch(_e){setAuthMsg('Inloggen mislukt. Probeer opnieuw.',true);}
     finally{setAuthBusy(false);}
   };

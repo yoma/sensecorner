@@ -3005,17 +3005,40 @@ async function senseRecoverSessionAfterSignOutEvent(authClient){
   }catch(_e){}
   return null;
 }
-async function runPostAuthSync(){
-  if(!S.user)return;
-  try{
-    await refreshAdminRoleFromSupabase();
-    await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
-    try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-    try{await refreshOwnFactsCoachContext();}catch(_e){}
-    try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e){}
-    try{applySenseDeepLinkFromUrl();}catch(_e){}
-    try{scheduleDailyRecoTipRefresh();}catch(_e){}
-  }catch(authErr){console.error('post-auth sync:',authErr);}
+var _authBootstrapInFlight=null;
+var _authBootstrappedUserId='';
+function resetAuthenticatedBootState(){
+  _authBootstrappedUserId='';
+  _authBootstrapInFlight=null;
+}
+function getPostAuthTargetScreen(){
+  return shouldBootScreenVertelForCrossAppSeed()?'vertel':'home';
+}
+function applyAuthSessionToState(session){
+  if(!session||!session.user)return false;
+  S.user=session.user;
+  _setAuthTokenFromSession(session);
+  if(!S.apiKey)S.apiKey='hub_server_managed';
+  return true;
+}
+async function resolveSession(opts){
+  opts=opts||{};
+  var client=opts.authClient||sb;
+  if(!client||!client.auth)return null;
+  var attempts=opts.attempts!=null?opts.attempts:2;
+  var delayMs=opts.delayMs!=null?opts.delayMs:450;
+  var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
+  for(var i=0;i<attempts;i++){
+    try{
+      var res=await withTimeout(client.auth.getSession(),getTimeout,null);
+      var session=res&&res.data&&res.data.session;
+      if(session&&session.user&&String(session.access_token||'').trim())return session;
+    }catch(_e){}
+    if(i<attempts-1)await new Promise(function(r){setTimeout(r,delayMs);});
+  }
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim())return persisted;
+  return null;
 }
 async function persistLoginSessionFromSignIn(signRes){
   if(!sb||!signRes||!signRes.data)return false;
@@ -3031,43 +3054,82 @@ async function persistLoginSessionFromSignIn(signRes){
   }
   return !!(signRes.data.user);
 }
-async function waitForLoginSession(maxMs){
-  var deadline=Date.now()+(maxMs||16000);
-  while(Date.now()<deadline){
-    var fromStore=senseSessionFromPersisted();
-    if(fromStore&&fromStore.user)return fromStore;
-    try{
-      var gs=await withTimeout(sb.auth.getSession(),2500,null);
-      var session=gs&&gs.data&&gs.data.session;
-      if(session&&session.user)return session;
-    }catch(_e){}
-    await new Promise(function(r){setTimeout(r,350);});
+async function confirmSessionAfterSignIn(signRes,opts){
+  opts=opts||{};
+  var data=signRes&&signRes.data;
+  var session=data&&data.session;
+  if(session&&session.user&&String(session.access_token||'').trim()){
+    void persistLoginSessionFromSignIn(signRes);
+    return session;
   }
-  return null;
+  if(signRes)void persistLoginSessionFromSignIn(signRes);
+  return resolveSession({attempts:opts.attempts||14,delayMs:400,getTimeout:4000});
 }
-function reloadAfterLogin(){
-  try{sessionStorage.setItem('sense_login_reload','1');}catch(_e){}
-  setTimeout(function(){
-    try{window.location.reload();}catch(_e2){
-      window.location.href=window.location.pathname||'friendsense.html';
+async function bootstrapAuthenticated(session,opts){
+  opts=opts||{};
+  if(!applyAuthSessionToState(session))return false;
+  if(opts.fullSync!==false){
+    try{
+      await refreshAdminRoleFromSupabase();
+      await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
+      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      try{await refreshOwnFactsCoachContext();}catch(_e){}
+      try{initSessie();}catch(_e2){}
+      try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
+      try{applySenseDeepLinkFromUrl();}catch(_e4){}
+      try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+    }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
+  }
+  _authBootstrappedUserId=String(session.user.id||'');
+  return true;
+}
+function showAuthenticatedShell(targetScreen){
+  var sc=targetScreen||getPostAuthTargetScreen();
+  try{setBuildTag();}catch(_e){}
+  try{goScreen(sc,{skipFlush:true});}catch(_e2){console.error('showAuthenticatedShell:',_e2);}
+}
+async function enterAuthenticatedApp(session,opts){
+  opts=opts||{};
+  if(!session||!session.user)return false;
+  var uid=String(session.user.id||'');
+  if(_authBootstrapInFlight)return _authBootstrapInFlight;
+  if(!opts.forceResync&&_authBootstrappedUserId&&uid&&_authBootstrappedUserId===uid&&S.user){
+    showAuthenticatedShell(opts.screen);
+    return true;
+  }
+  _authBootstrapInFlight=(async function(){
+    try{
+      applyAuthSessionToState(session);
+      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen;
+      if(navEarly)showAuthenticatedShell(opts.screen);
+      await bootstrapAuthenticated(session,opts);
+      if(!navEarly)showAuthenticatedShell(opts.screen);
+      return true;
+    }catch(e){
+      console.error('enterAuthenticatedApp:',e);
+      return false;
+    }finally{
+      _authBootstrapInFlight=null;
     }
-  },120);
+  })();
+  return _authBootstrapInFlight;
+}
+async function handleAuthSignedIn(session,opts){
+  return enterAuthenticatedApp(session,opts||{});
 }
 function registerAuthStateListener(){
   if(!sb||sb.__senseAuthListenerOn)return;
   sb.__senseAuthListenerOn=true;
   sb.auth.onAuthStateChange(function(ev,ses){
     if(ev==='SIGNED_IN'&&ses){
-      S.user=ses.user;
-      _setAuthTokenFromSession(ses||null);
-      if(!S.apiKey)S.apiKey='hub_server_managed';
-      if(S.screen==='login'||S.screen==='register'){
-        reloadAfterLogin();
-        return;
-      }
-      try{setBuildTag();}catch(_e){}
-      try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
-      void runPostAuthSync();
+      var onLoginScreen=(S.screen==='login'||S.screen==='register');
+      var uid=String((ses.user&&ses.user.id)||'');
+      var needsBootstrap=onLoginScreen||!_authBootstrappedUserId||(_authBootstrappedUserId!==uid);
+      void handleAuthSignedIn(ses,{
+        screen:onLoginScreen?getPostAuthTargetScreen():undefined,
+        fullSync:needsBootstrap,
+        forceResync:needsBootstrap
+      });
     } else if(ev==='SIGNED_OUT'){
       if(_userSigningOut)return;
       if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
@@ -3075,10 +3137,7 @@ function registerAuthStateListener(){
         _senseSignOutDebounceTimer=null;
         var recovered=await senseRecoverSessionAfterSignOutEvent();
         if(recovered&&recovered.user){
-          S.user=recovered.user;
-          _setAuthTokenFromSession(recovered);
-          if(!S.apiKey)S.apiKey='hub_server_managed';
-          try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
+          void enterAuthenticatedApp(recovered,{fullSync:false,forceResync:false});
           return;
         }
         _setAuthTokenFromSession(null);
@@ -3088,22 +3147,6 @@ function registerAuthStateListener(){
       },900);
     }
   });
-}
-async function applyLoginSuccessImmediate(signRes){
-  if(signRes)await persistLoginSessionFromSignIn(signRes);
-  var data=signRes&&signRes.data;
-  var session=data&&data.session;
-  var user=(session&&session.user)||(data&&data.user);
-  if(!user||!session){
-    var waited=await waitForLoginSession(14000);
-    if(waited){session=waited;user=waited.user;}
-  }
-  if(!user)return false;
-  S.user=user;
-  if(session)_setAuthTokenFromSession(session);
-  if(!S.apiKey)S.apiKey='hub_server_managed';
-  reloadAfterLogin();
-  return true;
 }
 function senseReadPersistedAuthRaw(){
   try{
@@ -4463,46 +4506,17 @@ async function init(){
   registerAuthStateListener();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var sessionRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden time-out');
-    var session=sessionRes&&sessionRes.data&&sessionRes.data.session;
-    if(!session){
-      await new Promise(function(r){setTimeout(r,900);});
-      var retryRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden retry time-out');
-      session=retryRes&&retryRes.data&&retryRes.data.session;
-    }
-    if(!session&&!S.user){
-      var late=senseSessionFromPersisted();
-      if(!late)late=await waitForLoginSession(3500);
-      if(late&&late.user)session=late;
-    }
+    var session=await resolveSession({attempts:3,delayMs:500,getTimeout:10000});
     if(session){
-      S.user=session.user;
-      _setAuthTokenFromSession(session);
-      if(!S.apiKey)S.apiKey='hub_server_managed';
-      try{
-        await refreshAdminRoleFromSupabase();
-        await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
-        try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-        try{await refreshOwnFactsCoachContext();}catch(_e){}
-        initSessie(); // Na auth - sessie aanmaken
-      }catch(postErr){console.error('init post-auth:',postErr);}
-      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
-      try{applySenseDeepLinkFromUrl();}catch(_e){}
-      try{scheduleDailyRecoTipRefresh();}catch(_e){}
-    }else if(S.user){
-      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
-      void runPostAuthSync();
+      await enterAuthenticatedApp(session,{screen:getPostAuthTargetScreen(),forceResync:true,fullSync:true});
     }else{
+      resetAuthenticatedBootState();
       goScreen('login');
       return;
     }
   }catch(e){
     console.error('init bg auth error:',e);
-    if(S.user){
-      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
-      void runPostAuthSync();
-      return;
-    }
+    resetAuthenticatedBootState();
     goScreen('login');
     try{toast(String((e&&e.message)||'Kon sessie niet laden. Log opnieuw in.'));}catch(_e){}
     return;
@@ -4545,100 +4559,47 @@ async function doLogin(){
   if(_loginInFlight)return;
   var token=++_loginAttemptId;
   _loginInFlight=true;
-
   var eEl=document.getElementById('lEmail');
   var pEl=document.getElementById('lPw');
   var err=document.getElementById('lErr');
   var e=eEl?eEl.value.trim():'';
   var p=pEl?pEl.value:'';
-
   if(!e||!p){
     if(err){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';}
     _loginInFlight=false;
     return;
   }
-
   var btn=document.getElementById('lLoginBtn');
   setButtonSaveBusy(btn,true,{busyLabel:'Inloggen…'});
-
   if(err){err.textContent='Even wachten...';err.style.color='#888';}
-
-  var uiTimer=setTimeout(function(){
-    if(token!==_loginAttemptId)return;
-    _loginInFlight=false;
-    setButtonSaveBusy(btn,false);
-    var e2=document.getElementById('lErr')||err;
-    if(e2){
-      e2.style.color='#888';
-      e2.textContent='Even geduld, sessie wordt gecontroleerd…';
-    }
-    (async function(){
-      if(token!==_loginAttemptId)return;
-      var recovered=await waitForLoginSession(12000);
-      if(recovered&&recovered.user){
-        var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
-        if(ok&&token===_loginAttemptId){
-          if(e2){e2.style.color='#2E7D32';e2.textContent='Je bent aangemeld. Pagina wordt geladen…';}
-          return;
-        }
-      }
-      if(token!==_loginAttemptId)return;
-      if(e2){
-        e2.style.color='var(--r)';
-        e2.textContent='Inloggen duurt te lang. Controleer je netwerk en probeer opnieuw.';
-      }
-    })();
-  },22000);
-
   try{
     var signRes=await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
-      22000,
+      25000,
       'Inloggen time-out. Probeer opnieuw.'
     );
-    if(signRes && signRes.error){
+    if(signRes&&signRes.error){
       throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
     }
-    if(signRes){
-      var loggedIn=await applyLoginSuccessImmediate(signRes);
-      if(loggedIn){
-        if(err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
-      }else{
-        var recovered=await waitForLoginSession(10000);
-        if(recovered&&recovered.user){
-          loggedIn=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
-          if(loggedIn&&err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
-        }
-        if(!loggedIn&&err){
-          err.style.color='var(--r)';
-          err.textContent='Inloggen lijkt gelukt maar de sessie ontbreekt. De pagina wordt vernieuwd…';
-          reloadAfterLogin();
-        }
-      }
+    var session=await confirmSessionAfterSignIn(signRes,{attempts:16});
+    if(!session||!session.user){
+      throw new Error('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.');
     }
+    var ok=await enterAuthenticatedApp(session,{screen:getPostAuthTargetScreen(),forceResync:true,fullSync:true});
+    if(!ok)throw new Error('Kon je account niet laden. Probeer opnieuw.');
+    if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je bent aangemeld.';}
   }catch(x){
     if(token!==_loginAttemptId)return;
-    var recovered=await waitForLoginSession(8000);
-    if(recovered&&recovered.user){
-      var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
-      if(ok){
-        if(err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
-        return;
-      }
-    }
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
     if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
     else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';
     else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';
     else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';
+    else if(msg.includes('sessie'))friendly=String(x.message||friendly);
     var e3=document.getElementById('lErr')||err;
-    if(e3){
-      e3.style.color='var(--r)';
-      e3.textContent=friendly;
-    }
+    if(e3){e3.style.color='var(--r)';e3.textContent=friendly;}
   }finally{
-    clearTimeout(uiTimer);
     if(token===_loginAttemptId){
       _loginInFlight=false;
       setButtonSaveBusy(btn,false);
@@ -4711,6 +4672,7 @@ async function doRegister(){
 }
 
 function applySignedOutClientState(){
+  resetAuthenticatedBootState();
   S.user=null;
   S.adminRole='user';
   S.profiles=['OWN Sense'];

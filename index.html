@@ -922,6 +922,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
           descEl.textContent='Afmelden duurt iets langer dan normaal. We ronden het nu veilig af.';
         }
       },2600);
+      if(window.senseClearAuthStorage)window.senseClearAuthStorage();
       try{
         localStorage.removeItem('ownsense_hub_profile_v2');
         localStorage.removeItem('ownsense_profile_v1');
@@ -964,8 +965,35 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }
     resetBusyUi();
   }
+  async function afterLandingLogin(session){
+    if(!session||!session.user)return;
+    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
+    if(!client)return;
+    var uid=session.user.id;
+    var done=await hasOnboardingCompleted(client,uid);
+    if(!done){
+      window.location.href='onboarding.html';
+      return;
+    }
+    try{sessionStorage.removeItem(K_HUB_HIDE);}catch(_h){}
+    var nm=lpDisplayNameFromUser(session.user);
+    titleEl.textContent=nm?('Welkom terug, '+nm):'Welkom terug';
+    descEl.textContent=nm
+      ?('Je bent ingelogd als '+nm+'. Ga naar je hub of blijf op deze pagina.')
+      :('Je bent ingelogd. Ga naar je hub of blijf op deze pagina.');
+    primary.textContent='Naar mijn SenseCorner-hub';
+    primary.href='sensecorner.html';
+    secondary.textContent='Blijf op deze pagina';
+    if(signOutBtn)signOutBtn.style.display='';
+    shell.setAttribute('data-lp-mode','hub');
+    show();
+  }
   window.doLandingSignOut=doLandingSignOut;
-  if(signOutBtn)signOutBtn.addEventListener('click',doLandingSignOut);
+  window.lpAfterLandingLogin=afterLandingLogin;
+  if(signOutBtn)signOutBtn.addEventListener('click',function(ev){
+    if(ev&&ev.preventDefault)ev.preventDefault();
+    doLandingSignOut();
+  });
   if(backdrop)backdrop.addEventListener('click',function(){rememberHideForSession();hide();});
 
   document.addEventListener('keydown',function(ev){
@@ -984,8 +1012,14 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }catch(_sg){}
     var sb=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
     if(!sb)return;
-    var sess=await sb.auth.getSession();
-    var session=sess&&sess.data&&sess.data.session;
+    var session=null;
+    if(window.senseResolveSession){
+      session=await window.senseResolveSession(sb,{attempts:3,delayMs:400,getTimeout:8000});
+    }
+    if(!session){
+      var sess=await sb.auth.getSession();
+      session=sess&&sess.data&&sess.data.session;
+    }
     if(!session||!session.user)return;
     var uid=session.user.id;
     var done=await hasOnboardingCompleted(sb,uid);
@@ -1080,6 +1114,13 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     try{document.documentElement.classList.remove('lp-auth-noscroll');document.body.classList.remove('lp-auth-noscroll');}catch(_e2){}
     stripLoginQuery();
   }
+  function tryCloseLogin(){
+    if(lpAuthBusy){
+      setMsg('Even wachten tot inloggen klaar is…',false);
+      return;
+    }
+    closeLogin();
+  }
   function pauseResumePopup(){
     if(resumeShell&&!resumeShell.hidden){
       resumeShell.hidden=true;
@@ -1126,38 +1167,36 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var res=await sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
     return !!(res&&res.data);
   }
-  async function afterAuthSuccess(signInRes){
+  async function afterAuthSuccess(signInRes,session){
     try{
-      signInRes=signInRes||{};
-      var u=(signInRes.data&&signInRes.data.user)?signInRes.data.user:null;
-      var uid=u&&u.id;
-      if(!uid){
+      session=session||null;
+      if(!session||!session.user){
+        signInRes=signInRes||{};
+        session=(signInRes.data&&signInRes.data.session)||null;
+      }
+      if(!session||!session.user){
         var sw=await withTimeout(sb.auth.getSession(),8000,null);
-        var ses=sw&&sw.data&&sw.data.session;
-        if(ses&&ses.user&&ses.user.id){u=ses.user;uid=u.id;}
+        session=sw&&sw.data&&sw.data.session;
       }
-      if(!uid){
-        var gu=await withTimeout(sb.auth.getUser(),8000,null);
-        var u2=gu&&gu.data&&gu.data.user;
-        if(u2&&u2.id){u=u2;uid=u2.id;}
+      if(!session||!session.user){
+        var confirmFn=window.senseConfirmSessionAfterSignIn;
+        if(confirmFn)session=await confirmFn(sb,signInRes||{},{attempts:10});
       }
-      if(!uid){
+      if(!session||!session.user){
         setMsg('Inloggen lijkt gelukt, maar je sessie kon niet worden bevestigd. Vernieuw de pagina of probeer opnieuw.',true);
         return;
       }
-      setMsg('Profiel controleren…',false);
-      var done=await withTimeout(hasObDone(uid),8000,true);
       stripLoginQuery();
       closeLogin();
-      if(!done){
-        window.location.href='onboarding.html';
-        return;
-      }
-      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
       if(pendingReturnTo){
+        if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
         var t=decodeURIComponent(pendingReturnTo);
         if(t.indexOf('.html')<0||t.indexOf('http')===0)t='ownsense.html';
         window.location.href=t;
+        return;
+      }
+      if(window.lpAfterLandingLogin){
+        await window.lpAfterLandingLogin(session);
         return;
       }
       window.location.href='sensecorner.html';
@@ -1170,13 +1209,23 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var sp;
     try{sp=new URLSearchParams(window.location.search||'');}catch(_e){return;}
     if(!sp.get('login')&&!sp.get('register'))return;
-    var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
-    var sess=await withTimeout(sb.auth.getSession(),12000,null);
-    var session=(sess&&sess.data&&sess.data.session)||persisted;
+    var session=null;
+    if(window.senseResolveSession){
+      session=await window.senseResolveSession(sb,{attempts:3,delayMs:400,getTimeout:10000});
+    }
+    if(!session){
+      var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
+      var sess=await withTimeout(sb.auth.getSession(),12000,null);
+      session=(sess&&sess.data&&sess.data.session)||persisted;
+    }
     if(session&&session.user){
+      stripLoginQuery();
+      if(window.lpAfterLandingLogin){
+        await window.lpAfterLandingLogin(session);
+        return;
+      }
       var uid=session.user.id;
       var done=await withTimeout(hasObDone(uid),5000,true);
-      stripLoginQuery();
       if(!done)window.location.replace('onboarding.html');
       else window.location.replace('sensecorner.html');
       return;
@@ -1184,12 +1233,11 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(sp.get('register')==='1')openLogin('register');
     else openLogin('login');
   }
-  if(btnClose)btnClose.onclick=function(){closeLogin();};
-  if(bd)bd.onclick=function(){closeLogin();};
+  if(btnClose)btnClose.onclick=tryCloseLogin;
   document.addEventListener('keydown',function(ev){
     if(ev.key!=='Escape')return;
     if(!loginShell||loginShell.hidden)return;
-    closeLogin();
+    tryCloseLogin();
   });
   if(btnEye&&elPw)btnEye.onclick=function(){
     var isPw=elPw.type==='password';
@@ -1209,6 +1257,23 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }catch(_e6){setMsg('Reset-link kon niet verstuurd worden.',true);}
   };
   var lpAuthBusy=false;
+  var lpLoginAttemptId=0;
+  function lpGetLoginTarget(){
+    if(pendingReturnTo){
+      var t=decodeURIComponent(pendingReturnTo);
+      if(t.indexOf('.html')>=0&&t.indexOf('http')!==0)return t;
+    }
+    return'sensecorner.html';
+  }
+  function lpFinishLoginNavigate(){
+    if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
+    var target=lpGetLoginTarget();
+    if(window.senseFinishLoginNavigate){
+      window.senseFinishLoginNavigate(target);
+      return;
+    }
+    window.location.replace(target);
+  }
   function lpSetAuthBusy(b){
     lpAuthBusy=!!b;
     if(btnLogin)btnLogin.disabled=lpAuthBusy;
@@ -1223,6 +1288,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var email=String((elEmail&&elEmail.value)||'').trim();
     var pw=String((elPw&&elPw.value)||'');
     if(!email||!pw){setMsg('Vul e-mail en wachtwoord in.',true);return;}
+    var attemptId=++lpLoginAttemptId;
     setMsg('Bezig met inloggen…',false);
     lpSetAuthBusy(true);
     try{
@@ -1241,7 +1307,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         }catch(_eRetry){}
       }
       if(res===null){
-        setMsg('Inloggen duurt te lang. Probeer opnieuw of ga via SenseCorner inloggen.',true);
+        setMsg('Inloggen time-out. Probeer opnieuw.',true);
         return;
       }
       if(res&&res.error){
@@ -1249,15 +1315,26 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         setMsg(mapped||res.error.message||'Inloggen mislukt.',true);
         return;
       }
-      if(window.sensePersistSignInResult){
-        await window.sensePersistSignInResult(sb,res);
+      var confirmFn=window.senseConfirmSessionAfterSignIn;
+      var session=confirmFn?await confirmFn(sb,res,{attempts:16}):null;
+      if(!session||!session.user){
+        setMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
+        return;
       }
-      if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
-      await afterAuthSuccess(res);
+      if(attemptId!==lpLoginAttemptId)return;
+      setMsg('Je bent aangemeld.',false);
+      try{
+        await afterAuthSuccess(res,session);
+      }catch(_ae){
+        if(pendingReturnTo)lpFinishLoginNavigate();
+        else setMsg('Kon inloggen niet afronden. Probeer opnieuw.',true);
+      }
     }catch(_e7){
       setMsg(window.senseMapAuthError?window.senseMapAuthError(_e7):'Inloggen mislukt. Probeer opnieuw.',true);
     }
-    finally{lpSetAuthBusy(false);}
+    finally{
+      if(attemptId===lpLoginAttemptId)lpSetAuthBusy(false);
+    }
   };
   if(btnReg)btnReg.onclick=async function(){
     if(lpAuthBusy)return;
