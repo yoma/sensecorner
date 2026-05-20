@@ -2973,6 +2973,51 @@ function runSenseiAuthSerialized(fn){
 var _authTokenCache={token:null,expiresAt:0};
 var SENSE_AUTH_STORAGE_KEY='sensecorner-auth-v1';
 var _senseSignOutDebounceTimer=null;
+var _userSigningOut=false;
+function senseClearAuthStorage(){
+  try{localStorage.removeItem(SENSE_AUTH_STORAGE_KEY);}catch(_e){}
+}
+async function senseRecoverSessionAfterSignOutEvent(authClient){
+  var client=authClient||sb;
+  if(!client||!client.auth)return null;
+  try{
+    var sess=await withTimeout(client.auth.getSession(),3000,null);
+    var session=sess&&sess.data&&sess.data.session;
+    if(session&&session.user)return session;
+  }catch(_e){}
+  return null;
+}
+async function runPostAuthSync(){
+  if(!S.user)return;
+  try{
+    await refreshAdminRoleFromSupabase();
+    await applySenseiCoreToAdviceCore(FAMILYSENSE_ADVICE_CORE_OPTS);
+    try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+    try{await refreshOwnFactsCoachContext();}catch(_e){}
+    try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e){}
+    try{applySenseDeepLinkFromUrl();}catch(_e){}
+    try{scheduleDailyRecoTipRefresh();}catch(_e){}
+  }catch(authErr){console.error('post-auth sync:',authErr);}
+}
+async function applyLoginSuccessImmediate(signRes){
+  var data=signRes&&signRes.data;
+  var session=data&&data.session;
+  var user=(session&&session.user)||(data&&data.user);
+  if(!user){
+    try{
+      var gs=await withTimeout(sb.auth.getSession(),4000,null);
+      session=gs&&gs.data&&gs.data.session;
+      user=session&&session.user;
+    }catch(_e){}
+  }
+  if(!user)return false;
+  S.user=user;
+  if(session)_setAuthTokenFromSession(session);
+  if(!S.apiKey)S.apiKey='hub_server_managed';
+  try{setBuildTag();}catch(_e){}
+  try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
+  return true;
+}
 function senseReadPersistedAuthRaw(){
   try{
     var raw=localStorage.getItem(SENSE_AUTH_STORAGE_KEY);
@@ -4355,26 +4400,20 @@ async function init(){
     try{toast(String((e&&e.message)||'Kon sessie niet laden. Log opnieuw in.'));}catch(_e){}
     return;
   }
-  sb.auth.onAuthStateChange(async(ev,ses)=>{
+  sb.auth.onAuthStateChange(function(ev,ses){
     if(ev==='SIGNED_IN'&&ses){
       S.user=ses.user;
       _setAuthTokenFromSession(ses||null);
       if(!S.apiKey)S.apiKey='hub_server_managed';
-      try{
-        await refreshAdminRoleFromSupabase();
-        await applySenseiCoreToAdviceCore(FAMILYSENSE_ADVICE_CORE_OPTS);
-        try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-        try{await refreshOwnFactsCoachContext();}catch(_e){}
-        try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e){}
-      }catch(authErr){console.error('auth SIGNED_IN sync:',authErr);}
-      try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
-      try{applySenseDeepLinkFromUrl();}catch(_e){}
-      try{scheduleDailyRecoTipRefresh();}catch(_e){}
+      try{setBuildTag();}catch(_e){}
+      try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
+      void runPostAuthSync();
     } else if(ev==='SIGNED_OUT'){
+      if(_userSigningOut)return;
       if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
       _senseSignOutDebounceTimer=setTimeout(async function(){
         _senseSignOutDebounceTimer=null;
-        var recovered=await senseRecoverSession();
+        var recovered=await senseRecoverSessionAfterSignOutEvent();
         if(recovered&&recovered.user){
           S.user=recovered.user;
           _setAuthTokenFromSession(recovered);
@@ -4452,21 +4491,29 @@ async function doLogin(){
     var e2=document.getElementById('lErr')||err;
     if(e2){
       e2.style.color='var(--r)';
-      e2.textContent='Inloggen time-out (5s). Probeer opnieuw.';
+      e2.textContent='Inloggen time-out (12s). Probeer opnieuw.';
     }
-  },5000);
+  },12000);
 
   try{
     var signRes=await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
-      5000,
-      'Inloggen time-out (5s). Probeer opnieuw.'
+      12000,
+      'Inloggen time-out (12s). Probeer opnieuw.'
     );
-    // Supabase kan bij fout wachtwoord "error" returnen zonder throw.
     if(signRes && signRes.error){
       throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
     }
-    // Success: UI wordt via AUTH state change aangepast.
+    if(signRes){
+      var loggedIn=await applyLoginSuccessImmediate(signRes);
+      if(loggedIn){
+        void runPostAuthSync();
+        if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
+      }else if(err){
+        err.style.color='var(--r)';
+        err.textContent='Inloggen lijkt gelukt maar de sessie ontbreekt. Vernieuw de pagina.';
+      }
+    }
   }catch(x){
     if(token!==_loginAttemptId)return;
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
@@ -4562,18 +4609,28 @@ function applySignedOutClientState(){
 }
 async function doSignOut(){
   closeDrawer();
-  try{
-    if(sb){
-      var res=await sb.auth.signOut();
-      if(res&&res.error)console.warn('auth.signOut error:',res.error);
-    }
-  }catch(e){
-    console.warn('doSignOut:',e);
-  }
-  // Altijd lokaal afmelden + naar login - niet enkel vertrouwen op onAuthStateChange (kan uitblijven in sommige browsers/extensies).
+  _userSigningOut=true;
+  if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);_senseSignOutDebounceTimer=null;}catch(_t){}}
+  senseClearAuthStorage();
+  _setAuthTokenFromSession(null);
   applySignedOutClientState();
   redirectToLandingAfterSignOut();
   toast('👋 Tot ziens!');
+  if(sb){
+    void Promise.race([
+      sb.auth.signOut({scope:'local'}),
+      new Promise(function(r){setTimeout(r,3500);})
+    ]).then(function(){
+      return Promise.race([
+        sb.auth.signOut({scope:'global'}),
+        new Promise(function(r){setTimeout(r,6000);})
+      ]);
+    }).catch(function(e){console.warn('doSignOut bg:',e);}).finally(function(){
+      setTimeout(function(){_userSigningOut=false;},1500);
+    });
+  }else{
+    setTimeout(function(){_userSigningOut=false;},1500);
+  }
 }
 
 // ══ Data ═════════════════════════════════════════════════════════
