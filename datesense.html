@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="20-05-2026 09:00">
+<meta name="ds-build" content="20-05-2026 09:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -2910,23 +2910,61 @@ async function runPostAuthSync(){
     try{scheduleDailyRecoTipRefresh();}catch(_e){}
   }catch(authErr){console.error('post-auth sync:',authErr);}
 }
+async function persistLoginSessionFromSignIn(signRes){
+  if(!sb||!signRes||!signRes.data)return false;
+  var session=signRes.data.session||null;
+  if(session&&sb.auth&&typeof sb.auth.setSession==='function'){
+    try{
+      var setRes=await withTimeout(sb.auth.setSession({
+        access_token:session.access_token,
+        refresh_token:session.refresh_token
+      }),8000,null);
+      return !!(setRes&&!setRes.error);
+    }catch(_e){}
+  }
+  return !!(signRes.data.user);
+}
+async function waitForLoginSession(maxMs){
+  var deadline=Date.now()+(maxMs||16000);
+  while(Date.now()<deadline){
+    var fromStore=senseSessionFromPersisted();
+    if(fromStore&&fromStore.user)return fromStore;
+    try{
+      var gs=await withTimeout(sb.auth.getSession(),2500,null);
+      var session=gs&&gs.data&&gs.data.session;
+      if(session&&session.user)return session;
+    }catch(_e){}
+    await new Promise(function(r){setTimeout(r,350);});
+  }
+  return null;
+}
+function scheduleLoginScreenEscapeFallback(){
+  setTimeout(function(){
+    if(!S.user)return;
+    if(S.screen==='login'||S.screen==='register'){
+      try{window.location.reload();}catch(_e){
+        window.location.href=window.location.pathname||'datesense.html';
+      }
+    }
+  },750);
+}
 async function applyLoginSuccessImmediate(signRes){
+  if(signRes)await persistLoginSessionFromSignIn(signRes);
   var data=signRes&&signRes.data;
   var session=data&&data.session;
   var user=(session&&session.user)||(data&&data.user);
-  if(!user){
-    try{
-      var gs=await withTimeout(sb.auth.getSession(),4000,null);
-      session=gs&&gs.data&&gs.data.session;
-      user=session&&session.user;
-    }catch(_e){}
+  if(!user||!session){
+    var waited=await waitForLoginSession(14000);
+    if(waited){session=waited;user=waited.user;}
   }
   if(!user)return false;
   S.user=user;
   if(session)_setAuthTokenFromSession(session);
   if(!S.apiKey)S.apiKey='hub_server_managed';
   try{setBuildTag();}catch(_e){}
-  try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
+  var target=shouldBootScreenVertelForCrossAppSeed()?'vertel':'home';
+  try{goScreen(target,{skipFlush:true});}catch(_e2){}
+  scheduleLoginScreenEscapeFallback();
   return true;
 }
 function senseReadPersistedAuthRaw(){
@@ -4512,16 +4550,33 @@ async function doLogin(){
     setButtonSaveBusy(btn,false);
     var e2=document.getElementById('lErr')||err;
     if(e2){
-      e2.style.color='var(--r)';
-      e2.textContent='Inloggen time-out (12s). Probeer opnieuw.';
+      e2.style.color='#888';
+      e2.textContent='Even geduld, sessie wordt gecontroleerd…';
     }
-  },12000);
+    (async function(){
+      if(token!==_loginAttemptId)return;
+      var recovered=await waitForLoginSession(12000);
+      if(recovered&&recovered.user){
+        var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
+        if(ok&&token===_loginAttemptId){
+          void runPostAuthSync();
+          if(e2){e2.style.color='#2E7D32';e2.textContent='Welkom! Je gegevens worden geladen…';}
+          return;
+        }
+      }
+      if(token!==_loginAttemptId)return;
+      if(e2){
+        e2.style.color='var(--r)';
+        e2.textContent='Inloggen duurt te lang. Controleer je netwerk en probeer opnieuw.';
+      }
+    })();
+  },22000);
 
   try{
     var signRes=await withTimeout(
       sb.auth.signInWithPassword({email:e,password:p}),
-      12000,
-      'Inloggen time-out (12s). Probeer opnieuw.'
+      22000,
+      'Inloggen time-out. Probeer opnieuw.'
     );
     if(signRes && signRes.error){
       throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
@@ -4531,13 +4586,33 @@ async function doLogin(){
       if(loggedIn){
         void runPostAuthSync();
         if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
-      }else if(err){
-        err.style.color='var(--r)';
-        err.textContent='Inloggen lijkt gelukt maar de sessie ontbreekt. Vernieuw de pagina.';
+      }else{
+        var recovered=await waitForLoginSession(10000);
+        if(recovered&&recovered.user){
+          loggedIn=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
+          if(loggedIn){
+            void runPostAuthSync();
+            if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
+          }
+        }
+        if(!loggedIn&&err){
+          err.style.color='var(--r)';
+          err.textContent='Inloggen lijkt gelukt maar de sessie ontbreekt. De pagina wordt vernieuwd…';
+          setTimeout(function(){try{window.location.reload();}catch(_r){}},900);
+        }
       }
     }
   }catch(x){
     if(token!==_loginAttemptId)return;
+    var recovered=await waitForLoginSession(8000);
+    if(recovered&&recovered.user){
+      var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
+      if(ok){
+        void runPostAuthSync();
+        if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
+        return;
+      }
+    }
     var msg=(x&&x.message?String(x.message):'').toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
     if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
@@ -5103,17 +5178,25 @@ function goBack(){
   goScreen(S.prev===S.screen?'home':S.prev);
 }
 
-function goScreen(sc){
+function goScreen(sc,opts){
   var reqId=++_goScreenReqId;
   var runGoScreen=function(){
     if(reqId!==_goScreenReqId)return;
     _goScreenBody(sc);
   };
-  if(S.user){
-    flushPendingAutosavesAsync().then(runGoScreen,function(err){
-      console.warn('goScreen autosave flush',err);
+  var skipFlush=opts&&opts.skipFlush;
+  if(S.user&&!skipFlush){
+    var proceeded=false;
+    var proceed=function(){
+      if(proceeded)return;
+      proceeded=true;
       runGoScreen();
+    };
+    flushPendingAutosavesAsync().then(proceed,function(err){
+      console.warn('goScreen autosave flush',err);
+      proceed();
     });
+    setTimeout(proceed,2200);
   }else{
     runGoScreen();
   }
