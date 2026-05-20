@@ -86,6 +86,50 @@
     try{sessionStorage.setItem(LOGIN_BOUNCE_KEY,'1');}catch(_e){}
   }
 
+  function senseFinishLoginNavigate(defaultPath){
+    var path=String(defaultPath||'').trim()||'sensecorner.html';
+    if(path.indexOf('http')===0){
+      window.location.replace(path);
+      return;
+    }
+    if(path.indexOf('.html')<0)path='sensecorner.html';
+    window.location.replace(path);
+  }
+
+  async function senseResolveSession(sb,opts){
+    opts=opts||{};
+    if(!sb||!sb.auth)return null;
+    var attempts=opts.attempts!=null?opts.attempts:2;
+    var delayMs=opts.delayMs!=null?opts.delayMs:450;
+    var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
+    for(var i=0;i<attempts;i++){
+      try{
+        var res=await Promise.race([
+          sb.auth.getSession(),
+          new Promise(function(r){setTimeout(function(){r(null);},getTimeout);})
+        ]);
+        var session=res&&res.data&&res.data.session;
+        if(session&&session.user&&String(session.access_token||'').trim())return session;
+      }catch(_e){}
+      if(i<attempts-1)await new Promise(function(r){setTimeout(r,delayMs);});
+    }
+    var persisted=senseReadPersistedSession();
+    if(persisted&&persisted.user&&String(persisted.access_token||'').trim())return persisted;
+    return null;
+  }
+
+  async function senseConfirmSessionAfterSignIn(sb,signRes,opts){
+    opts=opts||{};
+    var data=signRes&&signRes.data;
+    var session=data&&data.session;
+    if(session&&session.user&&String(session.access_token||'').trim()){
+      await sensePersistSignInResult(sb,signRes);
+      return session;
+    }
+    if(signRes)await sensePersistSignInResult(sb,signRes);
+    return senseResolveSession(sb,{attempts:opts.attempts||14,delayMs:400,getTimeout:4000});
+  }
+
   async function sensePersistSignInResult(sb,res){
     if(!sb||!res||!res.data)return false;
     var session=res.data.session||null;
@@ -113,6 +157,9 @@
   global.senseClearAuthStorage=senseClearAuthStorage;
   global.senseMarkLoginBounce=senseMarkLoginBounce;
   global.sensePersistSignInResult=sensePersistSignInResult;
+  global.senseResolveSession=senseResolveSession;
+  global.senseConfirmSessionAfterSignIn=senseConfirmSessionAfterSignIn;
+  global.senseFinishLoginNavigate=senseFinishLoginNavigate;
   global.getSenseLpSupabase=function(){
     return senseCreateAuthClient();
   };
