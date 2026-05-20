@@ -3660,17 +3660,15 @@ async function bootstrapAuthenticated(session,opts){
   opts=opts||{};
   if(!applyAuthSessionToState(session))return false;
   if(opts.fullSync!==false){
-    try{
-      await refreshAdminRoleFromSupabase();
-      await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);
-      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
-      try{await refreshOwnFactsCoachContext();}catch(_e){}
-      try{initSessie();}catch(_e2){}
-      try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
-      try{applySenseDeepLinkFromUrl();}catch(_e4){}
-      try{scheduleDailyRecoTipRefresh();}catch(_e5){}
-      try{scheduleDagAdviesRefresh();}catch(_e6){}
-    }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
+    try{await refreshAdminRoleFromSupabase();}catch(authErr){console.error('refreshAdminRoleFromSupabase:',authErr);}
+    try{await applySenseiCoreToAdviceCore(SELFSENSE_ADVICE_CORE_OPTS);}catch(coreErr){console.error('applySenseiCoreToAdviceCore:',coreErr);}
+    try{await loadAll();}catch(e){console.error('loadAll error:',e);return false;}
+    try{await refreshOwnFactsCoachContext();}catch(_e){}
+    try{initSessie();}catch(_e2){}
+    try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
+    try{applySenseDeepLinkFromUrl();}catch(_e4){}
+    try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+    try{scheduleDagAdviesRefresh();}catch(_e6){}
   }
   _authBootstrappedUserId=String(session.user.id||'');
   return true;
@@ -3691,11 +3689,9 @@ async function enterAuthenticatedApp(session,opts){
   }
   _authBootstrapInFlight=(async function(){
     try{
-      applyAuthSessionToState(session);
-      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen;
-      if(navEarly)showAuthenticatedShell(opts.screen);
-      await bootstrapAuthenticated(session,opts);
-      if(!navEarly)showAuthenticatedShell(opts.screen);
+      var ok=await bootstrapAuthenticated(session,opts);
+      if(!ok)return false;
+      showAuthenticatedShell(opts.screen);
       return true;
     }catch(e){
       console.error('enterAuthenticatedApp:',e);
