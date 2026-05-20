@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="20-05-2026 09:33">
+<meta name="ds-build" content="20-05-2026 09:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./senseiCore-loader.js"></script>
@@ -2938,15 +2938,49 @@ async function waitForLoginSession(maxMs){
   }
   return null;
 }
-function scheduleLoginScreenEscapeFallback(){
+function reloadAfterLogin(){
+  try{sessionStorage.setItem('sense_login_reload','1');}catch(_e){}
   setTimeout(function(){
-    if(!S.user)return;
-    if(S.screen==='login'||S.screen==='register'){
-      try{window.location.reload();}catch(_e){
-        window.location.href=window.location.pathname||'datesense.html';
-      }
+    try{window.location.reload();}catch(_e2){
+      window.location.href=window.location.pathname||'datesense.html';
     }
-  },750);
+  },120);
+}
+function registerAuthStateListener(){
+  if(!sb||sb.__dsAuthListenerOn)return;
+  sb.__dsAuthListenerOn=true;
+  sb.auth.onAuthStateChange(function(ev,ses){
+    if(ev==='SIGNED_IN'&&ses){
+      S.user=ses.user;
+      _setAuthTokenFromSession(ses||null);
+      if(!S.apiKey)S.apiKey='hub_server_managed';
+      if(S.screen==='login'||S.screen==='register'){
+        reloadAfterLogin();
+        return;
+      }
+      try{setBuildTag();}catch(_e){}
+      try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
+      void runPostAuthSync();
+    } else if(ev==='SIGNED_OUT'){
+      if(_userSigningOut)return;
+      if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
+      _senseSignOutDebounceTimer=setTimeout(async function(){
+        _senseSignOutDebounceTimer=null;
+        var recovered=await senseRecoverSessionAfterSignOutEvent();
+        if(recovered&&recovered.user){
+          S.user=recovered.user;
+          _setAuthTokenFromSession(recovered);
+          if(!S.apiKey)S.apiKey='hub_server_managed';
+          try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
+          return;
+        }
+        _setAuthTokenFromSession(null);
+        S.apiKey='';
+        applySignedOutClientState();
+        redirectToLandingAfterSignOut();
+      },900);
+    }
+  });
 }
 async function applyLoginSuccessImmediate(signRes){
   if(signRes)await persistLoginSessionFromSignIn(signRes);
@@ -2961,10 +2995,7 @@ async function applyLoginSuccessImmediate(signRes){
   S.user=user;
   if(session)_setAuthTokenFromSession(session);
   if(!S.apiKey)S.apiKey='hub_server_managed';
-  try{setBuildTag();}catch(_e){}
-  var target=shouldBootScreenVertelForCrossAppSeed()?'vertel':'home';
-  try{goScreen(target,{skipFlush:true});}catch(_e2){}
-  scheduleLoginScreenEscapeFallback();
+  reloadAfterLogin();
   return true;
 }
 function senseReadPersistedAuthRaw(){
@@ -4427,6 +4458,7 @@ async function init(){
     return;
   }
   ensureSessionTables();
+  registerAuthStateListener();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
     var sessionRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden time-out');
@@ -4435,6 +4467,11 @@ async function init(){
       await new Promise(function(r){setTimeout(r,900);});
       var retryRes=await withTimeout(sb.auth.getSession(),12000,'Sessie laden retry time-out');
       session=retryRes&&retryRes.data&&retryRes.data.session;
+    }
+    if(!session&&!S.user){
+      var late=senseSessionFromPersisted();
+      if(!late)late=await waitForLoginSession(3500);
+      if(late&&late.user)session=late;
     }
     if(session){
       S.user=session.user;
@@ -4450,44 +4487,24 @@ async function init(){
       if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
       try{applySenseDeepLinkFromUrl();}catch(_e){}
       try{scheduleDailyRecoTipRefresh();}catch(_e){}
+    } else if(S.user){
+      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
+      void runPostAuthSync();
     } else {
       goScreen('login');
       return;
     }
   }catch(e){
     console.error('init error:',e);
+    if(S.user){
+      if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');
+      void runPostAuthSync();
+      return;
+    }
     goScreen('login');
     try{toast(String((e&&e.message)||'Kon sessie niet laden. Log opnieuw in.'));}catch(_e){}
     return;
   }
-  sb.auth.onAuthStateChange(function(ev,ses){
-    if(ev==='SIGNED_IN'&&ses){
-      S.user=ses.user;
-      _setAuthTokenFromSession(ses||null);
-      if(!S.apiKey)S.apiKey='hub_server_managed';
-      try{setBuildTag();}catch(_e){}
-      try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e2){}
-      void runPostAuthSync();
-    } else if(ev==='SIGNED_OUT'){
-      if(_userSigningOut)return;
-      if(_senseSignOutDebounceTimer){try{clearTimeout(_senseSignOutDebounceTimer);}catch(_t){}}
-      _senseSignOutDebounceTimer=setTimeout(async function(){
-        _senseSignOutDebounceTimer=null;
-        var recovered=await senseRecoverSessionAfterSignOutEvent();
-        if(recovered&&recovered.user){
-          S.user=recovered.user;
-          _setAuthTokenFromSession(recovered);
-          if(!S.apiKey)S.apiKey='hub_server_managed';
-          try{if(shouldBootScreenVertelForCrossAppSeed())goScreen('vertel');else goScreen('home');}catch(_e){}
-          return;
-        }
-        _setAuthTokenFromSession(null);
-        S.apiKey='';
-        applySignedOutClientState();
-        redirectToLandingAfterSignOut();
-      },900);
-    }
-  });
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState==='hidden')flushPendingAutosaves();
     if(document.visibilityState==='visible'){
@@ -4559,8 +4576,7 @@ async function doLogin(){
       if(recovered&&recovered.user){
         var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
         if(ok&&token===_loginAttemptId){
-          void runPostAuthSync();
-          if(e2){e2.style.color='#2E7D32';e2.textContent='Welkom! Je gegevens worden geladen…';}
+          if(e2){e2.style.color='#2E7D32';e2.textContent='Je bent aangemeld. Pagina wordt geladen…';}
           return;
         }
       }
@@ -4584,21 +4600,17 @@ async function doLogin(){
     if(signRes){
       var loggedIn=await applyLoginSuccessImmediate(signRes);
       if(loggedIn){
-        void runPostAuthSync();
-        if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
+        if(err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
       }else{
         var recovered=await waitForLoginSession(10000);
         if(recovered&&recovered.user){
           loggedIn=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
-          if(loggedIn){
-            void runPostAuthSync();
-            if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
-          }
+          if(loggedIn&&err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
         }
         if(!loggedIn&&err){
           err.style.color='var(--r)';
           err.textContent='Inloggen lijkt gelukt maar de sessie ontbreekt. De pagina wordt vernieuwd…';
-          setTimeout(function(){try{window.location.reload();}catch(_r){}},900);
+          reloadAfterLogin();
         }
       }
     }
@@ -4608,8 +4620,7 @@ async function doLogin(){
     if(recovered&&recovered.user){
       var ok=await applyLoginSuccessImmediate({data:{session:recovered,user:recovered.user}});
       if(ok){
-        void runPostAuthSync();
-        if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je gegevens worden geladen…';}
+        if(err){err.style.color='#2E7D32';err.textContent='Je bent aangemeld. Pagina wordt geladen…';}
         return;
       }
     }
