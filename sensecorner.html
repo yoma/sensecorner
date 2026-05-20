@@ -918,13 +918,21 @@ a{text-decoration:none;color:inherit}
       return !!(oc&&oc.data);
     }catch(_e){return false;}
   }
+  async function scRequireOnboardingCompleted(userId){
+    if(!userId)return false;
+    try{
+      return !!(await scTimeoutFallback(scHasOnboardingCompleted(userId),8000,false));
+    }catch(_e){
+      return false;
+    }
+  }
 
   if(sb){
     try{
       var sessEarly=await scGetSessionRobust();
       var uEarly=sessEarly&&sessEarly.user?sessEarly.user:null;
       if(uEarly){
-        var doneEarly=await scTimeoutFallback(scHasOnboardingCompleted(uEarly.id),8000,true);
+        var doneEarly=await scRequireOnboardingCompleted(uEarly.id);
         if(!doneEarly){
           window.location.replace('onboarding.html');
           return;
@@ -2765,6 +2773,13 @@ a{text-decoration:none;color:inherit}
         setAuthMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
         return;
       }
+      var onboardingDone=await scRequireOnboardingCompleted(session.user.id);
+      if(!onboardingDone){
+        setAuthMsg('Rond eerst je kennismaking af. We sturen je daar nu naartoe.');
+        closeAuthModal();
+        window.location.href='onboarding.html';
+        return;
+      }
       setAuthMsg('Welkom! Je bent aangemeld.');
       closeAuthModal();
       if(pendingReturnTo){
@@ -2866,6 +2881,11 @@ a{text-decoration:none;color:inherit}
       if(target.indexOf('.html')===-1||target.indexOf('http')===0)target='ownsense.html';
       var user=await getCurrentUser();
       if(user){
+        var returnDone=await scRequireOnboardingCompleted(user.id);
+        if(!returnDone){
+          window.location.replace('onboarding.html');
+          return;
+        }
         window.location.href=target;
         skipHubHelpIntro=true;
       }else{

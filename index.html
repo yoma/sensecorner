@@ -1167,6 +1167,14 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var res=await sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
     return !!(res&&res.data);
   }
+  async function isObDoneChecked(uid,timeoutMs){
+    if(!uid)return false;
+    try{
+      return !!(await withTimeout(hasObDone(uid),timeoutMs||8000,false));
+    }catch(_e){
+      return false;
+    }
+  }
   async function afterAuthSuccess(signInRes,session){
     try{
       session=session||null;
@@ -1186,8 +1194,14 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         setMsg('Inloggen lijkt gelukt, maar je sessie kon niet worden bevestigd. Vernieuw de pagina of probeer opnieuw.',true);
         return;
       }
+      setMsg('Profiel controleren…',false);
+      var done=await isObDoneChecked(session.user.id,8000);
       stripLoginQuery();
       closeLogin();
+      if(!done){
+        window.location.href='onboarding.html';
+        return;
+      }
       if(pendingReturnTo){
         if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
         var t=decodeURIComponent(pendingReturnTo);
@@ -1225,7 +1239,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         return;
       }
       var uid=session.user.id;
-      var done=await withTimeout(hasObDone(uid),5000,true);
+      var done=await isObDoneChecked(uid,5000);
       if(!done)window.location.replace('onboarding.html');
       else window.location.replace('sensecorner.html');
       return;
