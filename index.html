@@ -43,6 +43,8 @@ a{color:inherit}
 .lp-nav__bar{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:10px 14px;align-items:center;min-width:0}
 .lp-nav__brand{display:flex;align-items:center;gap:10px;text-decoration:none;min-width:0;grid-column:1;grid-row:1}
 .lp-nav__actions{display:flex;align-items:center;gap:8px;flex-shrink:0;grid-column:2;grid-row:1;justify-self:end}
+.lp-nav__user{font-size:12px;font-weight:600;color:var(--warm-bruin);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+.lp-nav__user[hidden]{display:none!important}
 .lp-nav__actions .lp-btn--ghost{font-size:12px;padding:9px 16px;border-radius:20px;font-weight:600}
 .lp-nav__actions .lp-btn--primary{padding:10px 18px;border-radius:22px;font-size:13px}
 .lp-nav a.lp-btn--primary,
@@ -446,7 +448,8 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         </div>
       </div>
       <div class="lp-nav__actions">
-        <a class="lp-btn lp-btn--ghost" href="?login=1">Inloggen</a>
+        <span class="lp-nav__user" id="lpNavAuthUser" hidden aria-live="polite"></span>
+        <a class="lp-btn lp-btn--ghost" href="?login=1" id="lpNavAuthBtn">Inloggen</a>
         <a class="lp-btn lp-btn--primary" href="onboarding.html"><span class="lp-nav__cta-long">Start gratis</span><span class="lp-nav__cta-short">Start</span></a>
       </div>
     </div>
@@ -717,7 +720,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         <a href="#prijzen">Prijzen</a>
       </nav>
       <nav class="sc-footer-utility" aria-label="Overige links">
-        <a href="?login=1">Inloggen</a>
+        <a href="?login=1" id="lpFooterAuthLink">Inloggen</a>
         <a href="privacy.html">Privacyverklaring</a>
         <a href="ai-disclaimer.html">Disclaimer AI-output</a>
         <a href="voorwaarden.html">Algemene voorwaarden</a>
@@ -899,6 +902,83 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(em.indexOf('@')>0)return em.split('@')[0];
     return '';
   }
+  var navAuthBtn=document.getElementById('lpNavAuthBtn');
+  var navAuthUser=document.getElementById('lpNavAuthUser');
+  var footerAuthLink=document.getElementById('lpFooterAuthLink');
+  function lpApplyNavLoggedOut(){
+    if(navAuthUser){
+      navAuthUser.hidden=true;
+      navAuthUser.textContent='';
+      navAuthUser.removeAttribute('title');
+    }
+    if(navAuthBtn){
+      navAuthBtn.textContent='Inloggen';
+      navAuthBtn.href='?login=1';
+      navAuthBtn.onclick=null;
+    }
+    if(footerAuthLink){
+      footerAuthLink.textContent='Inloggen';
+      footerAuthLink.href='?login=1';
+      footerAuthLink.onclick=null;
+    }
+  }
+  function lpApplyNavLoggedIn(session){
+    if(!session||!session.user){lpApplyNavLoggedOut();return;}
+    var nm=lpDisplayNameFromUser(session.user);
+    if(navAuthUser){
+      if(nm){
+        navAuthUser.textContent=nm;
+        navAuthUser.title='Ingelogd als '+nm;
+        navAuthUser.hidden=false;
+      }else{
+        navAuthUser.hidden=true;
+        navAuthUser.textContent='';
+      }
+    }
+    if(navAuthBtn){
+      navAuthBtn.textContent='Afmelden';
+      navAuthBtn.href='?logout=1';
+      navAuthBtn.onclick=function(ev){
+        if(ev&&ev.preventDefault)ev.preventDefault();
+        doLandingSignOut();
+        return false;
+      };
+    }
+    if(footerAuthLink){
+      footerAuthLink.textContent='Afmelden';
+      footerAuthLink.href='?logout=1';
+      footerAuthLink.onclick=function(ev){
+        if(ev&&ev.preventDefault)ev.preventDefault();
+        doLandingSignOut();
+        return false;
+      };
+    }
+  }
+  async function lpRefreshNavAuth(){
+    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
+    if(!client){lpApplyNavLoggedOut();return;}
+    var session=null;
+    if(window.senseResolveSession){
+      try{
+        session=await window.senseResolveSession(client,{attempts:2,delayMs:300,getTimeout:5000});
+      }catch(_rs){}
+    }
+    if(!session){
+      try{
+        var gs=await client.auth.getSession();
+        session=gs&&gs.data&&gs.data.session;
+      }catch(_gs){}
+    }
+    if(!session&&window.senseReadPersistedSession){
+      session=window.senseReadPersistedSession();
+    }
+    if(session&&session.user)lpApplyNavLoggedIn(session);
+    else lpApplyNavLoggedOut();
+  }
+  window.lpDisplayNameFromUser=lpDisplayNameFromUser;
+  window.lpApplyNavLoggedIn=lpApplyNavLoggedIn;
+  window.lpApplyNavLoggedOut=lpApplyNavLoggedOut;
+  window.lpRefreshNavAuth=lpRefreshNavAuth;
 
   secondary.addEventListener('click',function(){rememberHideForSession();hide();});
   async function doLandingSignOut(){
@@ -1032,7 +1112,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   }
 
   function bootLpAuthPop(){
-    run();
+    void lpRefreshNavAuth();
+    run().finally(function(){
+      void lpRefreshNavAuth();
+    });
   }
   if(document.readyState==='complete')bootLpAuthPop();
   else window.addEventListener('load',bootLpAuthPop,{once:true});
@@ -1185,6 +1268,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       }
       stripLoginQuery();
       closeLogin();
+      if(window.lpRefreshNavAuth)void window.lpRefreshNavAuth();
       if(pendingReturnTo){
         if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
         var t=decodeURIComponent(pendingReturnTo);
@@ -1395,6 +1479,19 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(h==='?register=1'){ev.preventDefault();openLogin('register');}
   });
   function bootLpLogin(){
+    if(sb&&!sb.__lpNavAuthListenerOn){
+      sb.__lpNavAuthListenerOn=true;
+      sb.auth.onAuthStateChange(function(ev,ses){
+        if(ev==='SIGNED_IN'&&ses){
+          if(window.lpApplyNavLoggedIn)window.lpApplyNavLoggedIn(ses);
+          else if(window.lpRefreshNavAuth)void window.lpRefreshNavAuth();
+        }else if(ev==='SIGNED_OUT'){
+          if(window.lpApplyNavLoggedOut)window.lpApplyNavLoggedOut();
+          else if(window.lpRefreshNavAuth)void window.lpRefreshNavAuth();
+        }
+      });
+    }
+    void(window.lpRefreshNavAuth&&window.lpRefreshNavAuth());
     bootFromUrl();
   }
   if(document.readyState==='complete')bootLpLogin();
