@@ -860,8 +860,17 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   }
 
   async function hasOnboardingCompleted(sb,userId){
-    var res=await sb.from('own_facts').select('id').eq('user_id',userId).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
-    return !!(res&&res.data);
+    try{
+      var res=await withTimeout(
+        sb.from('own_facts').select('id').eq('user_id',userId).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle(),
+        6000,
+        null
+      );
+      if(res===null)return null;
+      return !!(res&&res.data);
+    }catch(_e){
+      return null;
+    }
   }
 
   async function countOnboardingNonCompleted(sb,userId){
@@ -965,16 +974,8 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }
     resetBusyUi();
   }
-  async function afterLandingLogin(session){
-    if(!session||!session.user)return;
-    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
-    if(!client)return;
-    var uid=session.user.id;
-    var done=await hasOnboardingCompleted(client,uid);
-    if(!done){
-      window.location.href='onboarding.html';
-      return;
-    }
+  function showHubWelcomeForSession(session){
+    if(!session||!session.user||!shell)return;
     try{sessionStorage.removeItem(K_HUB_HIDE);}catch(_h){}
     var nm=lpDisplayNameFromUser(session.user);
     titleEl.textContent=nm?('Welkom terug, '+nm):'Welkom terug';
@@ -987,6 +988,17 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(signOutBtn)signOutBtn.style.display='';
     shell.setAttribute('data-lp-mode','hub');
     show();
+  }
+  async function afterLandingLogin(session){
+    if(!session||!session.user)return;
+    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
+    if(!client)return;
+    showHubWelcomeForSession(session);
+    var uid=session.user.id;
+    var done=await hasOnboardingCompleted(client,uid);
+    if(done===false){
+      window.location.href='onboarding.html';
+    }
   }
   window.doLandingSignOut=doLandingSignOut;
   window.lpAfterLandingLogin=afterLandingLogin;
@@ -1023,7 +1035,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     if(!session||!session.user)return;
     var uid=session.user.id;
     var done=await hasOnboardingCompleted(sb,uid);
-    if(done){
+    if(done===true||done===null){
       try{if(sessionStorage.getItem(K_HUB_HIDE)==='1')return;}catch(_e2){}
       var nm=lpDisplayNameFromUser(session.user);
       titleEl.textContent=nm?('Welkom terug, '+nm):'Welkom terug';
@@ -1164,23 +1176,47 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     return window.location.origin+window.location.pathname.replace(/[^/]*$/,'')+t;
   }
   async function hasObDone(uid){
-    var res=await sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle();
-    return !!(res&&res.data);
+    try{
+      var res=await withTimeout(
+        sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle(),
+        6000,
+        null
+      );
+      if(res===null)return null;
+      return !!(res&&res.data);
+    }catch(_e){
+      return null;
+    }
+  }
+  function sessionFromSignInRes(signInRes){
+    var data=signInRes&&signInRes.data;
+    var session=data&&data.session;
+    if(session&&session.user&&String(session.access_token||'').trim())return session;
+    return null;
   }
   async function afterAuthSuccess(signInRes,session){
     try{
-      session=session||null;
+      session=session||sessionFromSignInRes(signInRes);
       if(!session||!session.user){
-        signInRes=signInRes||{};
-        session=(signInRes.data&&signInRes.data.session)||null;
-      }
-      if(!session||!session.user){
-        var sw=await withTimeout(sb.auth.getSession(),8000,null);
+        var sw=await withTimeout(sb.auth.getSession(),5000,null);
         session=sw&&sw.data&&sw.data.session;
       }
       if(!session||!session.user){
         var confirmFn=window.senseConfirmSessionAfterSignIn;
-        if(confirmFn)session=await confirmFn(sb,signInRes||{},{attempts:10});
+        if(confirmFn){
+          session=await withTimeout(
+            confirmFn(sb,signInRes||{},{attempts:5,maxMs:8000}),
+            9000,
+            null
+          );
+        }
+      }
+      if(!session||!session.user){
+        session=sessionFromSignInRes(signInRes);
+      }
+      if(!session||!session.user){
+        var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
+        if(persisted&&persisted.user)session=persisted;
       }
       if(!session||!session.user){
         setMsg('Inloggen lijkt gelukt, maar je sessie kon niet worden bevestigd. Vernieuw de pagina of probeer opnieuw.',true);
@@ -1196,7 +1232,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         return;
       }
       if(window.lpAfterLandingLogin){
-        await window.lpAfterLandingLogin(session);
+        await withTimeout(window.lpAfterLandingLogin(session),10000,null);
         return;
       }
       window.location.href='sensecorner.html';
@@ -1315,8 +1351,19 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         setMsg(mapped||res.error.message||'Inloggen mislukt.',true);
         return;
       }
-      var confirmFn=window.senseConfirmSessionAfterSignIn;
-      var session=confirmFn?await confirmFn(sb,res,{attempts:16}):null;
+      var session=sessionFromSignInRes(res);
+      if(!session||!session.user){
+        var confirmFn=window.senseConfirmSessionAfterSignIn;
+        session=confirmFn?await withTimeout(
+          confirmFn(sb,res,{attempts:5,maxMs:8000}),
+          10000,
+          null
+        ):null;
+      }
+      if(!session||!session.user){
+        var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
+        if(persisted&&persisted.user)session=persisted;
+      }
       if(!session||!session.user){
         setMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
         return;

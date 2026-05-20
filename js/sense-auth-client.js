@@ -96,22 +96,34 @@
     window.location.replace(path);
   }
 
+  function sensePromiseTimeout(promise,ms,fallback){
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise(function(resolve){
+        setTimeout(function(){resolve(fallback);},Math.max(500,ms||5000));
+      })
+    ]);
+  }
+
   async function senseResolveSession(sb,opts){
     opts=opts||{};
     if(!sb||!sb.auth)return null;
     var attempts=opts.attempts!=null?opts.attempts:2;
     var delayMs=opts.delayMs!=null?opts.delayMs:450;
     var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
+    var maxMs=opts.maxMs!=null?opts.maxMs:12000;
+    var deadline=Date.now()+maxMs;
     for(var i=0;i<attempts;i++){
+      if(Date.now()>=deadline)break;
       try{
-        var res=await Promise.race([
-          sb.auth.getSession(),
-          new Promise(function(r){setTimeout(function(){r(null);},getTimeout);})
-        ]);
+        var waitMs=Math.min(getTimeout,Math.max(500,deadline-Date.now()));
+        var res=await sensePromiseTimeout(sb.auth.getSession(),waitMs,null);
         var session=res&&res.data&&res.data.session;
         if(session&&session.user&&String(session.access_token||'').trim())return session;
       }catch(_e){}
-      if(i<attempts-1)await new Promise(function(r){setTimeout(r,delayMs);});
+      if(i<attempts-1&&Date.now()<deadline){
+        await new Promise(function(r){setTimeout(r,Math.min(delayMs,deadline-Date.now()));});
+      }
     }
     var persisted=senseReadPersistedSession();
     if(persisted&&persisted.user&&String(persisted.access_token||'').trim())return persisted;
@@ -123,11 +135,16 @@
     var data=signRes&&signRes.data;
     var session=data&&data.session;
     if(session&&session.user&&String(session.access_token||'').trim()){
-      await sensePersistSignInResult(sb,signRes);
+      void sensePersistSignInResult(sb,signRes);
       return session;
     }
-    if(signRes)await sensePersistSignInResult(sb,signRes);
-    return senseResolveSession(sb,{attempts:opts.attempts||14,delayMs:400,getTimeout:4000});
+    if(signRes)void sensePersistSignInResult(sb,signRes);
+    return senseResolveSession(sb,{
+      attempts:Math.min(opts.attempts||5,6),
+      delayMs:opts.delayMs||350,
+      getTimeout:opts.getTimeout||2500,
+      maxMs:opts.maxMs||10000
+    });
   }
 
   async function sensePersistSignInResult(sb,res){
@@ -135,10 +152,15 @@
     var session=res.data.session||null;
     if(session&&sb.auth&&typeof sb.auth.setSession==='function'){
       try{
-        var setRes=await sb.auth.setSession({
-          access_token:session.access_token,
-          refresh_token:session.refresh_token
-        });
+        var setRes=await sensePromiseTimeout(
+          sb.auth.setSession({
+            access_token:session.access_token,
+            refresh_token:session.refresh_token
+          }),
+          6000,
+          null
+        );
+        if(setRes===null)return false;
         if(setRes&&setRes.error)return false;
         return true;
       }catch(_e){

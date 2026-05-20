@@ -2759,8 +2759,19 @@ a{text-decoration:none;color:inherit}
         setAuthMsg(window.senseMapAuthError?window.senseMapAuthError(res.error):(res.error.message||'Inloggen mislukt.'),true);
         return;
       }
-      var confirmFn=window.senseConfirmSessionAfterSignIn;
-      var session=confirmFn?await confirmFn(sb,res,{attempts:16}):null;
+      var session=(res.data&&res.data.session)||null;
+      if(!session||!session.user){
+        var confirmFn=window.senseConfirmSessionAfterSignIn;
+        session=confirmFn?await scTimeoutFallback(
+          confirmFn(sb,res,{attempts:5,maxMs:8000}),
+          10000,
+          null
+        ):null;
+      }
+      if(!session||!session.user){
+        var persisted=window.senseReadPersistedSession?window.senseReadPersistedSession():null;
+        if(persisted&&persisted.user)session=persisted;
+      }
       if(!session||!session.user){
         setAuthMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
         return;
