@@ -135,10 +135,8 @@
     var data=signRes&&signRes.data;
     var session=data&&data.session;
     if(session&&session.user&&String(session.access_token||'').trim()){
-      void sensePersistSignInResult(sb,signRes);
       return session;
     }
-    if(signRes)void sensePersistSignInResult(sb,signRes);
     return senseResolveSession(sb,{
       attempts:Math.min(opts.attempts||5,6),
       delayMs:opts.delayMs||350,
