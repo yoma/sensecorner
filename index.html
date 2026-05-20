@@ -956,19 +956,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     show();
   }
   async function afterLandingLogin(session){
-    if(!session||!session.user){window.location.replace('sensecorner.html');return;}
-    var client=(window.getSenseLpSupabase&&window.getSenseLpSupabase())||window.__senseLpSupabase||null;
-    if(!client){window.location.replace('sensecorner.html');return;}
-    var uid=session.user.id;
-    var done=null;
-    try{
-      var _res=await Promise.race([
-        client.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle(),
-        new Promise(function(resolve){setTimeout(function(){resolve(null);},4000);})
-      ]);
-      done=(_res===null)?null:!!(_res&&_res.data);
-    }catch(_e){}
-    window.location.replace(done===false?'onboarding.html':'sensecorner.html');
+    // sensecorner.html controleert zelf of onboarding klaar is — navigeer altijd daarheen.
+    // Wis K_HUB_HIDE zodat de hub-popup correct verschijnt bij een volgende bezoek aan index.html.
+    try{sessionStorage.removeItem(K_HUB_HIDE);}catch(_e){}
+    window.location.replace('sensecorner.html');
   }
   window.doLandingSignOut=doLandingSignOut;
   window.lpAfterLandingLogin=afterLandingLogin;
