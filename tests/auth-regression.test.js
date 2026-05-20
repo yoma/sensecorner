@@ -107,9 +107,15 @@ assert(
     !enter.includes('navEarly'),
     `${file}: authenticated shell must not be shown before bootstrap completes`
   );
+  const freshBootstrap = between(
+    enter,
+    '_authBootstrapInFlight=(async function(){',
+    '})();',
+    `${file} fresh bootstrap`
+  );
   assert(
-    enter.indexOf('bootstrapAuthenticated(session,opts)') <
-      enter.indexOf('showAuthenticatedShell(opts.screen)'),
+    freshBootstrap.indexOf('bootstrapAuthenticated(session,opts)') <
+      freshBootstrap.indexOf('showAuthenticatedShell(opts.screen)'),
     `${file}: authenticated shell must be shown only after bootstrap succeeds`
   );
 });
