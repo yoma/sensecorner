@@ -35,6 +35,50 @@ function getBearerToken(req: Request) {
   return m ? m[1] : "";
 }
 
+type RateLimitCheck =
+  | { ok: true }
+  | { ok: false; status: 429 | 503; code: "RATE_LIMITED" | "RATE_LIMIT_UNAVAILABLE"; message: string };
+
+async function countRecentAiRequests(userId: string, windowStart: string) {
+  return await sb
+    .from("ai_rate_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", windowStart);
+}
+
+async function reserveAiRequestSlot(userId: string): Promise<RateLimitCheck> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const limitMessage = `Limiet bereikt: max ${RATE_LIMIT_MAX} AI-verzoeken per uur. Probeer het later opnieuw.`;
+  const unavailableMessage = "Kan de AI-limiet nu niet veilig controleren. Probeer het later opnieuw.";
+
+  const before = await countRecentAiRequests(userId, windowStart);
+  if (before.error) {
+    console.warn("ai_rate_log count failed:", before.error.message);
+    return { ok: false, status: 503, code: "RATE_LIMIT_UNAVAILABLE", message: unavailableMessage };
+  }
+  if ((before.count ?? 0) >= RATE_LIMIT_MAX) {
+    return { ok: false, status: 429, code: "RATE_LIMITED", message: limitMessage };
+  }
+
+  const inserted = await sb.from("ai_rate_log").insert({ user_id: userId });
+  if (inserted.error) {
+    console.warn("ai_rate_log insert failed:", inserted.error.message);
+    return { ok: false, status: 503, code: "RATE_LIMIT_UNAVAILABLE", message: unavailableMessage };
+  }
+
+  const after = await countRecentAiRequests(userId, windowStart);
+  if (after.error) {
+    console.warn("ai_rate_log recount failed:", after.error.message);
+    return { ok: false, status: 503, code: "RATE_LIMIT_UNAVAILABLE", message: unavailableMessage };
+  }
+  if ((after.count ?? 0) > RATE_LIMIT_MAX) {
+    return { ok: false, status: 429, code: "RATE_LIMITED", message: limitMessage };
+  }
+
+  return { ok: true };
+}
+
 async function resolveAuthUserId(req: Request): Promise<string | null> {
   const token = getBearerToken(req);
   if (!token) return null;
@@ -274,23 +318,6 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    // ── Rate limiting ─────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count, error: countError } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", windowStart);
-      if (countError) {
-        console.warn("ai_rate_log fout:", countError.message);
-      } else if ((count ?? 0) >= RATE_LIMIT_MAX) {
-        return json({
-          error: `Limiet bereikt: max ${RATE_LIMIT_MAX} AI-verzoeken per uur. Probeer het later opnieuw.`,
-        }, 429);
-      }
-    }
-
     // ── Verzoek verwerken ─────────────────────────────────────────────────
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
@@ -300,6 +327,12 @@ Deno.serve(async (req: Request) => {
     const model = String(body?.model || "claude-sonnet-4-6");
     const messages = Array.isArray(body?.messages) ? body.messages : [];
     if (!messages.length) return json({ error: "messages is required" }, 400);
+
+    // ── Rate limiting ─────────────────────────────────────────────────────
+    if (!isAdmin) {
+      const quota = await reserveAiRequestSlot(userId);
+      if (!quota.ok) return json({ error: quota.message, code: quota.code }, quota.status);
+    }
 
     const roep = await resolveRoepnaam(userId);
 
@@ -370,13 +403,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError }) => {
-        if (logError) console.warn("Loggen mislukt:", logError.message);
-      });
     }
 
     return json(claudeData, 200);
