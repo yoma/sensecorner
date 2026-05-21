@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
+<script src="./js/sense-depth-ui.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -1546,7 +1547,7 @@ const PROMPT_DEFAULTS={
   tone_honest:'Wees warm, direct en eerlijk. Benoem duidelijk wat helpt en wat risico geeft, zonder hard te klinken.',
   tone_strict:'Wees streng, direct en eerlijk, maar blijf empathisch en waardig. Als er duidelijke risico signalen zijn, benoem ze expliciet en zonder omwegen. Als stoppen verstandiger is, zeg dat helder en geef een korte, respectvolle afwijzings- en afrondzin.',
   compare_core:'Je bent FriendSensei. Analyseer de dossiers en geef concrete, praktische adviezen over de vriendschapsdynamiek en hoe de gebruiker beter kan omgaan met de genoemde personen. Schrijf ALLEEN in duidelijke, menselijke taal. Gebruik GEEN tabellen, geen markdown-tabellen, geen ASCII, geen pipes (|). Gebruik OOK recente context. Structuur exact zo: "Inzicht:" (1 korte alinea over de dynamiek), "Aandachtspunten:" (2-3 bullets met concrete observaties), "Advies:" (1-2 concrete volgende stappen). Max 8 zinnen totaal. Nederlands.',
-  compare_extra_followup:'Je bent FriendSensei. De gebruiker ziet net een kort hoofd-vergelijk-advies over meerdere dossiers. Jouw taak is een tweede laag met extra expertise: rollen in jullie vriendschap, spanningen, risico\'s en wat de gebruiker mogelijk over het hoofd ziet. Herhaal de hoofdconclusie niet uitgebreid (hoogstens één korte verwijzingszin). Gebruik GEEN tabellen of markdown. Max 7 zinnen. Nederlands. Gebruik nooit Unicode U+2014 (em dash); gebruik komma\'s of punten.',
+  compare_extra_followup:'Je bent FriendSensei. EXPERTISE-LAAG na Standaard-vergelijkadvies. Vriendschapspatronen, spanningen en risico\'s. Alleen claims met bron op toegelaten expert-domeinen; anders expliciet geen onderbouwde bron. Herhaal hoofdconclusie niet (max 1 korte verwijzing). Geen tabellen/markdown. Max 7 zinnen. Nederlands. Geen Unicode U+2014 (em dash).',
   photo_analysis_core:'Je bent FriendSensei Vision. Analyseer foto-indruk op een respectvolle, neutrale manier. Geef ENKEL geldig JSON zonder markdown. Gebruik dit formaat exact: {"openheid":0-100,"glimlach":0-100,"energie":0-100,"verzorging":0-100,"benaderbaarheid":0-100,"mood":"korte omschrijving","summary":"max 2 zinnen, neutraal en menselijk"}'
 };
 
@@ -2853,6 +2854,24 @@ function cleanCompareAiText(txt){
     return true;
   });
   return lines.join('\n');
+}
+function polishExpertisePlainText(txt){
+  if(window.SenseDepthUi&&window.SenseDepthUi.sanitizeOutput)return window.SenseDepthUi.sanitizeOutput(txt);
+  if(window.SenseiCore&&window.SenseiCore.sanitizeExpertiseOutput)return window.SenseiCore.sanitizeExpertiseOutput(txt);
+  return String(txt||'').trim();
+}
+async function callExpertiseAdviceAPI(sys,msgs,maxTok){
+  var domains=(window.SenseDepthUi&&window.SenseDepthUi.getExpertiseDomains)?window.SenseDepthUi.getExpertiseDomains():['standaardboekhandel.be','bol.com','apa.org'];
+  var raw=await callAPI(sys,msgs,maxTok||480,32000,null,{allowed_domains:domains});
+  return polishExpertisePlainText(raw);
+}
+function renderAdviceHubDepthCompact(help){
+  if(window.SenseDepthUi&&window.SenseDepthUi.renderDepth)return window.SenseDepthUi.renderDepth((S&&S.adviceHubDepthMode)||'standard',help);
+  var depth=(S&&S.adviceHubDepthMode)||'standard';
+  function depthBtn(id,label){var on=depth===id;return '<button type="button" class="'+(on?'btn-r':'btn-g')+' advice-depth-btn" onclick="setAdviceHubDepthMode(\''+id+'\')">'+label+'</button>';}
+  return '<div class="advice-depth-wrap" style="margin:0 0 10px;padding:10px 10px;border-radius:12px"><div class="advice-depth-label" style="margin-bottom:6px">Diepgang</div>'
+    +(help?('<p class="advice-depth-help" style="margin:0 0 8px;font-size:11px;line-height:1.45;color:#5c6570">'+help+'</p>'):'')
+    +'<div class="advice-depth-row" style="gap:6px">'+depthBtn('standard','Standaard')+depthBtn('extra','Expertise')+depthBtn('both','Beide')+'</div></div>';
 }
 
 function toBase64FromBlob(blob){
@@ -7364,21 +7383,8 @@ function adviceHubSafeId(raw){
 function rAdviceHub(el){
   var contacts=sortDossiersByVertelPriority(getFriendSenseContactNames().filter(function(n){return n&&n!=='OWN Sense';}));
   var st=getAdviceHubState();
-  var depth=(S&&S.adviceHubDepthMode)||'standard';
-  function depthBtn(id,label){
-    var on=depth===id;
-    return '<button type="button" class="'+(on?'btn-r':'btn-g')+' advice-depth-btn" onclick="setAdviceHubDepthMode(\''+id+'\')">'+label+'</button>';
-  }
   function renderDepthCompact(help){
-    return '<div class="advice-depth-wrap" style="margin:0 0 10px;padding:10px 10px;border-radius:12px">'
-      +'<div class="advice-depth-label" style="margin-bottom:6px">Diepgang</div>'
-      +(help?('<p class="advice-depth-help" style="margin:0 0 8px;font-size:11px;line-height:1.4">'+help+'</p>'):'')
-      +'<div class="advice-depth-row" style="gap:6px">'
-      +depthBtn('standard','Gewoon')
-      +depthBtn('extra','Extra')
-      +depthBtn('both','Beide')
-      +'</div>'
-      +'</div>';
+    return renderAdviceHubDepthCompact(help);
   }
   function renderResultCard(){
     if(!st.resultHtml)return'';
@@ -7420,7 +7426,7 @@ function rAdviceHub(el){
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch">'
       +'<button type="button" class="btn-r" style="flex:1;min-width:170px;padding:10px 12px" onclick="runAdviceHubPerson()">Genereer advies</button>'
       +'</div>'
-      +'<div class="advice-hub-muted" style="margin:6px 0 10px">De diepgang hierboven bepaalt of je gewoon, extra of beide krijgt. Je focusvraag blijft in het vak staan tot je ze wist.</div>'
+      +'<div class="advice-hub-muted" style="margin:6px 0 10px">Standaard = hoofdadvies. Expertise = onderbouwde inzichten (geen boekentips; optionele bronverwijzing). Beide = eerst Standaard, daarna Expertise.</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
       +'<button type="button" class="btn-g" style="max-width:300px;padding:10px 12px;font-weight:700" onclick="resetAdviceHubFlow()">Terug naar start adviesvragen</button>'
       +'</div>'
@@ -7806,12 +7812,12 @@ async function runAdviceHubPerson(depthOverride){
     var extra=String(cache.extra_html||'');
     var html='';
     if(core){
-      html+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Hoofdadvies</div>'+core+'</div>';
+      html+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Standaard</div>'+core+'</div>';
     }
     if((depthMode==='extra'||depthMode==='both')&&extra){
-      html+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Extra expertise</div>'+extra+'</div>';
+      html+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+extra+'</div>';
     }else if((depthMode==='extra'||depthMode==='both')&&!extra){
-      html+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Extra expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Hoofd + extra</strong>.</div>';
+      html+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Expertise of Beide</strong>.</div>';
     }
     st.resultHtml=html||('<div class="advice-lowinfo-card">'
       +'<strong>Nog geen advies beschikbaar.</strong><br>'
@@ -7883,16 +7889,16 @@ async function runAdviceHubCompare(){
     var sys=getPromptText('compare_core');
     if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
     if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
-    coreText=await callAPI(sys,[{role:'user',content:userBase}],760);
+    coreText=await callAPI(sys,[{role:'user',content:userBase}],760,28000,null,{disable_web_search:true});
     coreText=cleanCompareAiText(coreText);
     if(depthMode==='extra'||depthMode==='both'){
-      var sysX=getPromptText('compare_extra_followup');
+      var sysX=(window.SenseDepthUi&&window.SenseDepthUi.buildCompareExpertiseSys)?window.SenseDepthUi.buildCompareExpertiseSys('FriendSensei'):getPromptText('compare_extra_followup');
       if(usageLine)sysX+=' CONTEXT GEBRUIKSMODE: '+usageLine;
-      var userX='Zojuist gegeven vergelijk-advies (hoofdtekst voor de gebruiker):\n'+coreText
+      var userX='Standaard-vergelijkadvies:\n'+coreText
         +'\n\nBrondata (JSON):\n'+JSON.stringify(payload)
         +(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
       if(st.question)userX+='\n\nFocusvraag: '+st.question;
-      extraText=cleanCompareAiText(await callAPI(sysX,[{role:'user',content:userX}],520));
+      extraText=cleanCompareAiText(await callExpertiseAdviceAPI(sysX,[{role:'user',content:userX}],520));
     }
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
@@ -7913,18 +7919,18 @@ async function runAdviceHubCompare(){
     var bodyHtml='';
     if(depthMode==='extra'){
       if(extraText){
-        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Extra expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
       }else{
-        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Extra expertise kon niet worden toegevoegd. Controleer je verbinding en probeer opnieuw.</div>';
+        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en probeer opnieuw.</div>';
       }
     }else{
       if(coreText){
-        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Hoofdadvies</div>'+formatAiCard(coreText)+'</div>';
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Standaard</div>'+formatAiCard(coreText)+'</div>';
       }
       if((depthMode==='both')&&extraText){
-        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Extra expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
       }else if((depthMode==='both')&&!extraText){
-        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Extra expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Beide tegelijk</strong> of <strong>Met extra expertise</strong>.</div>';
+        bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Beide tegelijk</strong> of <strong>Met extra expertise</strong>.</div>';
       }
     }
     st.resultHtml=summaryHtml+bodyHtml;
@@ -9766,10 +9772,10 @@ async function loadTab(name,tab,d){
     }
     if(cache||hasAdviceInput){
       advHtml+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;align-items:stretch">'
-        +(cache?'<button id="advRefreshBtnTop" style="flex:1;min-width:160px;padding:11px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(200,136,31,.22)">Hoofdadvies vernieuwen</button>':'')
-        +'<button id="advGroundBtnTop" type="button" style="flex:1;min-width:160px;padding:11px 14px;font-size:13px;font-weight:800;border:2px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;border-radius:11px;cursor:pointer;font-family:inherit">Extra expertise toevoegen</button>'
+        +(cache?'<button id="advRefreshBtnTop" style="flex:1;min-width:160px;padding:11px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(200,136,31,.22)">Standaard vernieuwen</button>':'')
+        +'<button id="advGroundBtnTop" type="button" style="flex:1;min-width:160px;padding:11px 14px;font-size:13px;font-weight:800;border:2px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;border-radius:11px;cursor:pointer;font-family:inherit">Expertise toevoegen</button>'
         +'</div>'
-        +'<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:0 0 10px">Hoofdadvies = je vaste rapport. Extra expertise = korte waarom-laag op basis van dat rapport.</div>';
+        +'<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:0 0 10px">Standaard = je vaste rapport. Expertise = onderbouwde inzichten uit erkende bronnen (geen boekentips; optionele bronverwijzing).</div>';
       advHtml+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 12px">'
         +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionCore\')">💡 Naar advies</button>'
         +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advExtraWrap\')">✨ Naar extra expertise</button>'
@@ -9779,7 +9785,7 @@ async function loadTab(name,tab,d){
     }
     // Herstel ook acties uit cache
     var cachedActies=cache&&cache.acties||'';
-    advHtml+='<div id="advSectionCore"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0 0 6px">Hoofdadvies</div><div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
+    advHtml+='<div id="advSectionCore"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0 0 6px">Standaard</div><div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
     if(cache){
       if(hasNewData&&currentCount>0){
         advHtml+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
@@ -9797,13 +9803,13 @@ async function loadTab(name,tab,d){
     var extraHtml=cache&&cache.extra_html?cache.extra_html:'';
     if(extraHtml){
       advHtml+='<div id="advExtraWrap" style="margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
-        +'<div style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra expertise (na hoofdadvies)'+(cache.extra_ts?'<span style="font-weight:600;color:#6B7280"> · '+escHTML(cache.extra_ts)+'</span>':'')+'</div>'
+        +'<div style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Expertise (na Standaard)'+(cache.extra_ts?'<span style="font-weight:600;color:#6B7280"> · '+escHTML(cache.extra_ts)+'</span>':'')+'</div>'
         +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155">'+extraHtml+'</div>'
         +'<div style="margin-top:10px"><button id="advTalkExtraBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#D7DEE7;background:#fff;color:#334155;font-weight:800">🗣️ Bespreek extra expertise in Vertel</button></div>'
         +'</div>';
     }else{
       advHtml+='<div id="advExtraWrap" style="display:none;margin-top:12px;padding:12px 12px;background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px">'
-        +'<div id="advExtraHdr" style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Extra expertise (na hoofdadvies)</div>'
+        +'<div id="advExtraHdr" style="font-size:12px;font-weight:800;color:#2E3A4A;margin-bottom:6px">Expertise (na Standaard)</div>'
         +'<div id="advExtraTxt" style="font-size:14px;line-height:1.65;color:#334155"></div>'
         +'<div style="margin-top:10px"><button id="advTalkExtraBtn" type="button" class="coach-save-other" style="font-size:12px;padding:8px 12px;border-color:#D7DEE7;background:#fff;color:#334155;font-weight:800">🗣️ Bespreek extra expertise in Vertel</button></div>'
         +'</div>';
@@ -10139,13 +10145,11 @@ async function genAdviesOnderbouwd(name){
     var cache=(S.adviesCache&&S.adviesCache[name])||{};
     var adviesPlain=String(cache.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     var ctx=buildAdviceContextPayload(name,d,msgs);
-    var sys='Je bent FriendSensei. Het hoofdadvies staat al vast; jij vult alleen kort de waarom-laag aan in eenvoudige taal. '
-      +'Geen vragen naar de gebruiker, geen "hoe zou jij dit aanpakken". Maximaal 5 zinnen, warm en concreet, Nederlands. '
-      +'Gebruik nooit Unicode U+2014 (em dash).';
+    var sys=(window.SenseDepthUi&&window.SenseDepthUi.buildDossierExpertiseSys)?window.SenseDepthUi.buildDossierExpertiseSys('FriendSensei'):'Je bent FriendSensei. Expertise-laag: alleen erkende bronnen, nooit verzinnen.';
     var advKort=adviesPlain.length>900?adviesPlain.substring(0,900)+'…':adviesPlain;
     var ctxKort=ctx.length>9000?ctx.substring(0,9000)+'\n\n[Context ingekort.]':ctx;
-    var userContent='Bestaand advies (samengevat): '+advKort+'\n\nDossiercontext (ingekort):\n'+ctxKort;
-    var raw=await callAPI(sys,[{role:'user',content:userContent}],380,18000);
+    var userContent='Standaard-advies (samengevat): '+advKort+'\n\nDossiercontext (ingekort):\n'+ctxKort;
+    var raw=await callExpertiseAdviceAPI(sys,[{role:'user',content:userContent}],480);
     var txt=String(raw||'').trim();
     var card=formatAiCard(txt);
     var wrap=document.getElementById('advExtraWrap');
@@ -10155,7 +10159,7 @@ async function genAdviesOnderbouwd(name){
     var tsTime=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
     var ts='Gegenereerd op '+tsDate+' om '+tsTime;
     if(wrap)wrap.style.display='block';
-    if(hdr)hdr.innerHTML='Extra expertise (na hoofdadvies) <span style="font-weight:600;color:#6B7280">· '+ts+'</span>';
+    if(hdr)hdr.innerHTML='Expertise (na Standaard) <span style="font-weight:600;color:#6B7280">· '+ts+'</span>';
     if(box)box.innerHTML=card;
     scrollToAdviceSection('advExtraWrap');
     if(!S.adviesCache)S.adviesCache={};
@@ -10168,11 +10172,11 @@ async function genAdviesOnderbouwd(name){
     d.meta.last_advice.extra_ts=ts;
     await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
   }catch(e){
-    toast('Extra expertise mislukt: '+(e&&e.message?e.message:'onbekend'));
+    toast('Expertise mislukt: '+(e&&e.message?e.message:'onbekend'));
   }finally{
     if(btn){
       btn.disabled=false;
-      btn.textContent='Extra expertise toevoegen';
+      btn.textContent='Expertise toevoegen';
     }
   }
 }
@@ -12076,7 +12080,7 @@ async function vraagExtraAdviesOpVertelAntwoord(msgIdx,mode){
     if(arr[j]&&arr[j].role==='ai'){lastAiIdx=j;break;}
   }
   var prompt=mode==='expertise'
-    ?'Kan je daar extra expertise bij geven met professionele diepgang: wat zie je mogelijk over het hoofd, waarom dit helpt, en 2 concrete vervolgstappen? Als relevant: verwijs kort naar 1 of 2 betrouwbare professionele bronnen of instanties voor deze doelgroep, zonder te verzinnen.'
+    ?((window.SenseDepthUi&&window.SenseDepthUi.vertelExpertiseUserPrompt)?window.SenseDepthUi.vertelExpertiseUserPrompt():'Geef expertise met alleen onderbouwde bronnen; verzin niets.')
     :'Kan je daar extra advies bij geven met 2 heel concrete vervolgstappen voor vandaag?';
   var anti='Antwoord rechtstreeks met nieuwe punten; herhaal mijn eerdere vraag niet en vat die niet samen.';
   var full;
@@ -12089,7 +12093,7 @@ async function vraagExtraAdviesOpVertelAntwoord(msgIdx,mode){
   var displayHtml=mode==='expertise'
     ?'Expertise: professionele diepgang op dit antwoord'
     :'Extra advies: meer diepgang op dit antwoord';
-  S._vertelFollowUpSend={apiPrompt:full,displayHtml:displayHtml};
+  S._vertelFollowUpSend={apiPrompt:full,displayHtml:displayHtml,expertise:mode==='expertise'};
   await sendMsg();
 }
 
@@ -12697,6 +12701,7 @@ async function sendMsg(){
   var inp=document.getElementById('msgInput');
   if(_micActive)stopMic(true);
   var fu=S._vertelFollowUpSend;
+  var vertelExpertiseFollowUp=!!(fu&&fu.expertise);
   var txt,userFacingTxt;
   if(fu&&String(fu.apiPrompt||'').trim()){
     try{S._vertelFollowUpSend=null;}catch(_e){}
@@ -12901,6 +12906,7 @@ async function sendMsg(){
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
     var raw=await callAPI(fullSys,messages,420,22000);
+    if(vertelExpertiseFollowUp)raw=polishExpertisePlainText(raw);
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}

@@ -8,7 +8,22 @@ import {
   getDunneContext,
   getCrisisRegel,
   getRedflagsRubriek,
-  buildAdviceCore
+  buildAdviceCore,
+  DEPTH_MODE_LABELS,
+  DEPTH_MODE_UI_HELP,
+  normalizeDepthMode,
+  EXPERTISE_DOMAINS_BASE,
+  EXPERTISE_DOMAINS_APP,
+  getExpertiseDomains,
+  EXPERTISE_LAYER_RULES,
+  buildExpertiseLayerPrompt,
+  buildExpertiseDossierTask,
+  buildExpertiseCompareTask,
+  buildVertelExpertiseUserPrompt,
+  renderAdviceDepthCompactHtml,
+  sanitizeExpertiseOutput,
+  sentenceLooksLikeBookRecommendation,
+  EXPERTISE_FALLBACK_NO_RECO
 } from './senseiCore.js';
 
 window.SenseiCore = {
@@ -21,5 +36,20 @@ window.SenseiCore = {
   getDunneContext,
   getCrisisRegel,
   getRedflagsRubriek,
-  buildAdviceCore
+  buildAdviceCore,
+  DEPTH_MODE_LABELS,
+  DEPTH_MODE_UI_HELP,
+  normalizeDepthMode,
+  EXPERTISE_DOMAINS_BASE,
+  EXPERTISE_DOMAINS_APP,
+  getExpertiseDomains,
+  EXPERTISE_LAYER_RULES,
+  buildExpertiseLayerPrompt,
+  buildExpertiseDossierTask,
+  buildExpertiseCompareTask,
+  buildVertelExpertiseUserPrompt,
+  renderAdviceDepthCompactHtml,
+  sanitizeExpertiseOutput,
+  sentenceLooksLikeBookRecommendation,
+  EXPERTISE_FALLBACK_NO_RECO
 };
