@@ -41,6 +41,50 @@ function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
+type RateLimitCheck =
+  | { ok: true }
+  | { ok: false; code: "RATE_LIMITED" | "RATE_LIMIT_UNAVAILABLE"; reply: string };
+
+async function countRecentAiRequests(userId: string, windowStart: string) {
+  return await sb
+    .from("ai_rate_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", windowStart);
+}
+
+async function reserveAiRequestSlot(userId: string): Promise<RateLimitCheck> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const limitReply = `Je AI-limiet is bereikt: maximaal ${RATE_LIMIT_MAX} berichten per uur. Probeer het straks opnieuw.`;
+  const unavailableReply = "Ik kan je AI-limiet nu niet veilig controleren. Probeer het straks opnieuw.";
+
+  const before = await countRecentAiRequests(userId, windowStart);
+  if (before.error) {
+    console.warn("ai_rate_log count failed:", before.error.message);
+    return { ok: false, code: "RATE_LIMIT_UNAVAILABLE", reply: unavailableReply };
+  }
+  if ((before.count ?? 0) >= RATE_LIMIT_MAX) {
+    return { ok: false, code: "RATE_LIMITED", reply: limitReply };
+  }
+
+  const inserted = await sb.from("ai_rate_log").insert({ user_id: userId });
+  if (inserted.error) {
+    console.warn("ai_rate_log insert failed:", inserted.error.message);
+    return { ok: false, code: "RATE_LIMIT_UNAVAILABLE", reply: unavailableReply };
+  }
+
+  const after = await countRecentAiRequests(userId, windowStart);
+  if (after.error) {
+    console.warn("ai_rate_log recount failed:", after.error.message);
+    return { ok: false, code: "RATE_LIMIT_UNAVAILABLE", reply: unavailableReply };
+  }
+  if ((after.count ?? 0) > RATE_LIMIT_MAX) {
+    return { ok: false, code: "RATE_LIMITED", reply: limitReply };
+  }
+
+  return { ok: true };
+}
+
 function readNestedString(obj: Record<string, unknown>, path: string[]) {
   let cur: unknown = obj;
   for (const p of path) {
@@ -942,15 +986,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const ownUser = lookup.kind === "ok" ? lookup.row : null;
-    if (ownUser?.user_id) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", ownUser.user_id)
-        .gte("created_at", windowStart);
-      if ((count ?? 0) >= RATE_LIMIT_MAX) return twilioWebhookAck();
-    }
     let waMirrorDossier = "";
     let mirrorConsentHint = "";
     let consentMandatoryPrefix = "";
@@ -1125,6 +1160,16 @@ Deno.serve(async (req: Request) => {
         "en vraag om het optioneel te zetten in SenseCorner bij het account (WhatsApp), niet in het OWN Sense-dossier.";
     }
 
+    if (ownUser?.user_id) {
+      const quota = await reserveAiRequestSlot(ownUser.user_id);
+      if (!quota.ok) {
+        await saveMsg(userPhone, "assistant", quota.reply, quota.code.toLowerCase(), waMirrorDossier);
+        await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", quota.reply, waMirrorDossier);
+        await sendTwilio(fromRaw, quota.reply);
+        return twilioWebhookAck();
+      }
+    }
+
     let reply = await callClaude(system, [...history, { role: "user", content: body }]);
 
     if (displayName) {
@@ -1140,11 +1185,6 @@ Deno.serve(async (req: Request) => {
     await saveMsg(userPhone, "assistant", reply);
     if (ownUser?.user_id) await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reply, waMirrorDossier);
     await sendTwilio(fromRaw, reply);
-    if (ownUser?.user_id) {
-      sb.from("ai_rate_log").insert({ user_id: ownUser.user_id }).then(({ error }) => {
-        if (error) console.warn("rate log failed:", error.message);
-      });
-    }
 
     return twilioWebhookAck();
   } catch (error) {
