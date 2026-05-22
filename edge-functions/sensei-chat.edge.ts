@@ -51,6 +51,76 @@ function normStr(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+type AiRateLimitReservation =
+  | { ok: true }
+  | { ok: false; status: number; message: string };
+
+function aiRateLimitReachedMessage(maxRequests: number): string {
+  return `Limiet bereikt: max ${maxRequests} AI-verzoeken per uur. Probeer het later opnieuw.`;
+}
+
+async function reserveAiRateLimitSlot(userId: string, maxRequests: number): Promise<AiRateLimitReservation> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const baseQuery = () =>
+    sb
+      .from("ai_rate_log")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", windowStart);
+
+  const before = await baseQuery();
+  if (before.error) {
+    console.warn("ai_rate_log count failed:", before.error.message);
+    return {
+      ok: false,
+      status: 503,
+      message: "AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.",
+    };
+  }
+  if ((before.count ?? 0) >= maxRequests) {
+    return { ok: false, status: 429, message: aiRateLimitReachedMessage(maxRequests) };
+  }
+
+  const inserted = await sb
+    .from("ai_rate_log")
+    .insert({ user_id: userId })
+    .select("created_at")
+    .single();
+  if (inserted.error) {
+    console.warn("ai_rate_log reserve failed:", inserted.error.message);
+    return {
+      ok: false,
+      status: 503,
+      message: "AI-limiet kon niet gereserveerd worden. Probeer het later opnieuw.",
+    };
+  }
+
+  const reservedAt = normStr(inserted.data?.created_at);
+  if (!reservedAt) {
+    console.warn("ai_rate_log reserve returned no created_at");
+    return {
+      ok: false,
+      status: 503,
+      message: "AI-limiet kon niet gecontroleerd worden. Probeer het later opnieuw.",
+    };
+  }
+
+  const after = await baseQuery().lte("created_at", reservedAt);
+  if (after.error) {
+    console.warn("ai_rate_log recount failed:", after.error.message);
+    return {
+      ok: false,
+      status: 503,
+      message: "AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.",
+    };
+  }
+  if ((after.count ?? 0) > maxRequests) {
+    return { ok: false, status: 429, message: aiRateLimitReachedMessage(maxRequests) };
+  }
+
+  return { ok: true };
+}
+
 function emailLocalFromAddress(email: string): string {
   const e = normStr(email).toLowerCase();
   const at = e.indexOf("@");
@@ -274,23 +344,6 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    // ── Rate limiting ─────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count, error: countError } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", windowStart);
-      if (countError) {
-        console.warn("ai_rate_log fout:", countError.message);
-      } else if ((count ?? 0) >= RATE_LIMIT_MAX) {
-        return json({
-          error: `Limiet bereikt: max ${RATE_LIMIT_MAX} AI-verzoeken per uur. Probeer het later opnieuw.`,
-        }, 429);
-      }
-    }
-
     // ── Verzoek verwerken ─────────────────────────────────────────────────
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
@@ -359,6 +412,12 @@ Deno.serve(async (req: Request) => {
       anthropicPayload.tools = anthropicTools;
     }
 
+    // ── Rate limiting ─────────────────────────────────────────────────────
+    if (!isAdmin) {
+      const reservation = await reserveAiRateLimitSlot(userId, RATE_LIMIT_MAX);
+      if (!reservation.ok) return json({ error: reservation.message }, reservation.status);
+    }
+
     // ── Anthropic aanroepen ───────────────────────────────────────────────
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -370,13 +429,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError }) => {
-        if (logError) console.warn("Loggen mislukt:", logError.message);
-      });
     }
 
     return json(claudeData, 200);
