@@ -23,6 +23,89 @@ function norm(v: unknown) {
   return String(v || "").trim();
 }
 
+type AiAccessDecision =
+  | { allowed: true; isAdmin: boolean }
+  | { allowed: false; message: string };
+
+type AiRateLimitReservation =
+  | { ok: true }
+  | { ok: false; message: string };
+
+function aiRateLimitReachedMessage(maxRequests: number): string {
+  return `Je hebt de WhatsApp Sensei-limiet bereikt: max ${maxRequests} AI-antwoorden per uur. Probeer het later opnieuw.`;
+}
+
+async function resolveAiAccessForUser(userId: string): Promise<AiAccessDecision> {
+  const roleRes = await sb.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (roleRes.error) {
+    console.warn("whatsapp ai_access role check", roleRes.error.message);
+    return {
+      allowed: false,
+      message: "Ik kan je AI-toegang nu niet controleren. Probeer het later opnieuw.",
+    };
+  }
+  const isAdmin = String(roleRes.data?.role || "").toLowerCase() === "admin";
+  if (isAdmin) return { allowed: true, isAdmin: true };
+
+  const accessRes = await sb.from("ai_access").select("ai_enabled").eq("user_id", userId).maybeSingle();
+  if (accessRes.error) {
+    console.warn("whatsapp ai_access check", accessRes.error.message);
+    return {
+      allowed: false,
+      message: "Ik kan je AI-toegang nu niet controleren. Probeer het later opnieuw.",
+    };
+  }
+  if (!accessRes.data?.ai_enabled) {
+    return {
+      allowed: false,
+      message: "AI-toegang is nog niet geactiveerd voor je account. Vraag een admin om je te approven in SenseCorner.",
+    };
+  }
+  return { allowed: true, isAdmin: false };
+}
+
+async function reserveAiRateLimitSlot(userId: string, maxRequests: number): Promise<AiRateLimitReservation> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const baseQuery = () =>
+    sb
+      .from("ai_rate_log")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", windowStart);
+
+  const before = await baseQuery();
+  if (before.error) {
+    console.warn("whatsapp ai_rate_log count failed:", before.error.message);
+    return { ok: false, message: "Ik kan je AI-limiet nu niet controleren. Probeer het later opnieuw." };
+  }
+  if ((before.count ?? 0) >= maxRequests) return { ok: false, message: aiRateLimitReachedMessage(maxRequests) };
+
+  const inserted = await sb
+    .from("ai_rate_log")
+    .insert({ user_id: userId })
+    .select("created_at")
+    .single();
+  if (inserted.error) {
+    console.warn("whatsapp ai_rate_log reserve failed:", inserted.error.message);
+    return { ok: false, message: "Ik kan je AI-limiet nu niet reserveren. Probeer het later opnieuw." };
+  }
+
+  const reservedAt = norm(inserted.data?.created_at);
+  if (!reservedAt) {
+    console.warn("whatsapp ai_rate_log reserve returned no created_at");
+    return { ok: false, message: "Ik kan je AI-limiet nu niet controleren. Probeer het later opnieuw." };
+  }
+
+  const after = await baseQuery().lte("created_at", reservedAt);
+  if (after.error) {
+    console.warn("whatsapp ai_rate_log recount failed:", after.error.message);
+    return { ok: false, message: "Ik kan je AI-limiet nu niet controleren. Probeer het later opnieuw." };
+  }
+  if ((after.count ?? 0) > maxRequests) return { ok: false, message: aiRateLimitReachedMessage(maxRequests) };
+
+  return { ok: true };
+}
+
 function normalizePhoneE164(raw: string) {
   let s = norm(raw);
   s = s.replace(/^whatsapp:/i, "");
@@ -942,15 +1025,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const ownUser = lookup.kind === "ok" ? lookup.row : null;
-    if (ownUser?.user_id) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", ownUser.user_id)
-        .gte("created_at", windowStart);
-      if ((count ?? 0) >= RATE_LIMIT_MAX) return twilioWebhookAck();
-    }
     let waMirrorDossier = "";
     let mirrorConsentHint = "";
     let consentMandatoryPrefix = "";
@@ -1080,6 +1154,23 @@ Deno.serve(async (req: Request) => {
       return twilioWebhookAck();
     }
 
+    if (!ownUser?.user_id) {
+      const reply =
+        "Hey, ik vind nog geen gekoppeld account-nummer op dit telefoonnummer. " +
+        "Zet je gsm optioneel in SenseCorner bij je account (WhatsApp), dan kan ik je veilig herkennen.";
+      await saveMsg(userPhone, "assistant", reply);
+      await sendTwilio(fromRaw, reply);
+      return twilioWebhookAck();
+    }
+
+    const aiAccess = await resolveAiAccessForUser(ownUser.user_id);
+    if (!aiAccess.allowed) {
+      await saveMsg(userPhone, "assistant", aiAccess.message, "ai_access_blocked", waMirrorDossier || null);
+      await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", aiAccess.message, waMirrorDossier);
+      await sendTwilio(fromRaw, aiAccess.message);
+      return twilioWebhookAck();
+    }
+
     const history = await getHistory(userPhone);
     const knownDossiers = ownUser?.user_id ? await listContactDossierNames(ownUser.user_id) : [];
     const knownDossiersLine = knownDossiers.length
@@ -1125,6 +1216,16 @@ Deno.serve(async (req: Request) => {
         "en vraag om het optioneel te zetten in SenseCorner bij het account (WhatsApp), niet in het OWN Sense-dossier.";
     }
 
+    if (!aiAccess.isAdmin) {
+      const reservation = await reserveAiRateLimitSlot(ownUser.user_id, RATE_LIMIT_MAX);
+      if (!reservation.ok) {
+        await saveMsg(userPhone, "assistant", reservation.message, "rate_limited", waMirrorDossier || null);
+        await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reservation.message, waMirrorDossier);
+        await sendTwilio(fromRaw, reservation.message);
+        return twilioWebhookAck();
+      }
+    }
+
     let reply = await callClaude(system, [...history, { role: "user", content: body }]);
 
     if (displayName) {
@@ -1140,11 +1241,6 @@ Deno.serve(async (req: Request) => {
     await saveMsg(userPhone, "assistant", reply);
     if (ownUser?.user_id) await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reply, waMirrorDossier);
     await sendTwilio(fromRaw, reply);
-    if (ownUser?.user_id) {
-      sb.from("ai_rate_log").insert({ user_id: ownUser.user_id }).then(({ error }) => {
-        if (error) console.warn("rate log failed:", error.message);
-      });
-    }
 
     return twilioWebhookAck();
   } catch (error) {
