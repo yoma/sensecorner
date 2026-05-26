@@ -6,6 +6,8 @@
 (function () {
   'use strict';
 
+  document.documentElement.classList.add('sc-pwa-js');
+
   const INSTALL_BUTTON_ID = 'sc-install-btn';
   const MODAL_ID = 'sc-install-modal';
 
@@ -41,49 +43,58 @@
     return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
   }
 
+  function setBtnVisible(btn, visible) {
+    if (visible) {
+      btn.classList.remove('sc-install-btn--off', 'sc-install-btn--pending');
+      btn.style.display = 'inline-flex';
+    } else {
+      btn.classList.add('sc-install-btn--off');
+      btn.style.display = 'none';
+    }
+  }
+
   function init() {
     const btn = document.getElementById(INSTALL_BUTTON_ID);
     if (!btn) return;
 
     if (isInstalled()) {
-      btn.style.display = 'none';
+      setBtnVisible(btn, false);
       return;
     }
 
     if (!isMobileContext()) {
-      btn.style.display = 'none';
+      setBtnVisible(btn, false);
       return;
     }
 
     const os = detectOS();
 
     if (os === 'ios') {
-      btn.style.display = '';
+      setBtnVisible(btn, true);
       btn.addEventListener('click', showIosInstructions);
     } else if (os === 'android') {
       let promptBound = false;
-      btn.style.display = 'none';
+      setBtnVisible(btn, false);
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        btn.style.display = '';
+        setBtnVisible(btn, true);
         if (!promptBound) {
           promptBound = true;
           btn.addEventListener('click', handleNativeInstall);
         }
       });
-      // Geen beforeinstallprompt (Samsung Internet, Firefox, of PWA nog niet klaar): toch knop + uitleg
       window.setTimeout(() => {
-        if (deferredPrompt || btn.style.display !== 'none') return;
-        btn.style.display = '';
+        if (deferredPrompt) return;
+        setBtnVisible(btn, true);
         btn.addEventListener('click', showAndroidInstructions);
       }, 2000);
     } else {
-      btn.style.display = 'none';
+      setBtnVisible(btn, false);
     }
 
     window.addEventListener('appinstalled', () => {
-      btn.style.display = 'none';
+      setBtnVisible(btn, false);
       deferredPrompt = null;
     });
   }
