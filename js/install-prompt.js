@@ -72,6 +72,17 @@
     if (os === 'ios') {
       setBtnVisible(btn, true);
       btn.addEventListener('click', showIosInstructions);
+      // iOS heeft geen native install-popup; eenmalig per sessie uitleg tonen
+      try {
+        if (!sessionStorage.getItem('sc-install-hint-seen')) {
+          window.setTimeout(() => {
+            if (!isInstalled()) showIosInstructions();
+            sessionStorage.setItem('sc-install-hint-seen', '1');
+          }, 1200);
+        }
+      } catch (_e) {
+        /* private mode */
+      }
     } else if (os === 'android') {
       let promptBound = false;
       setBtnVisible(btn, false);
