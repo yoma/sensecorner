@@ -10,9 +10,10 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="20-05-2026 15:06">
+<meta name="ds-build" content="26-05-2026 11:34">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/sense-common.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -3184,16 +3185,6 @@ async function senseRecoverSession(authClient){
   if(refreshed&&refreshed.user)return refreshed;
   return persisted;
 }
-function senseIsUnsafePhotoUrl(u){
-  var t=String(u||'').trim();
-  if(!t)return true;
-  if(/^data:/i.test(t)||/^blob:/i.test(t))return false;
-  if(!/^https?:\/\//i.test(t))return false;
-  var low=t.toLowerCase();
-  if(/yoma\.github\.io\/sense-/.test(low)&&low.indexOf('/sensecorner/')<0)return true;
-  if(/yoma\.github\.io\/sense$/.test(low))return true;
-  return false;
-}
 function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
@@ -4479,10 +4470,9 @@ function initQuickNavBackToApp(){
   if(!back)return;
   try{
     var sp=new URLSearchParams(window.location.search||'');
-    var rt=String(sp.get('returnTo')||'').trim();
+    var rt=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(String(sp.get('returnTo')||'').trim(),''):'';
     if(!rt)return;
     var low=rt.toLowerCase();
-    if(low.indexOf('http://')===0||low.indexOf('https://')===0)return;
     if(low.indexOf('datesense.html')>=0)return;
     if(low.indexOf('.html')<0)return;
     if(low.indexOf('familysense')>=0)back.textContent='Terug naar je huidige app: FamilySense';

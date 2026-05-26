@@ -87,12 +87,8 @@
   }
 
   function senseFinishLoginNavigate(defaultPath){
-    var path=String(defaultPath||'').trim()||'sensecorner.html';
-    if(path.indexOf('http')===0){
-      window.location.replace(path);
-      return;
-    }
-    if(path.indexOf('.html')<0)path='sensecorner.html';
+    var norm=global.senseNormalizeReturnTo;
+    var path=norm?norm(defaultPath,'sensecorner.html'):'sensecorner.html';
     window.location.replace(path);
   }
 

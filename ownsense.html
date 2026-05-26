@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/sense-theme.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/sense-common.js"></script>
 <style>
 :root{
   /* OWN: eigen semantiek + shell; kleuren uit css/sense-theme.css */
@@ -1591,16 +1592,6 @@ async function senseRecoverSession(authClient){
   if(refreshed&&refreshed.user)return refreshed;
   return persisted;
 }
-function senseIsUnsafePhotoUrl(u){
-  var t=String(u||'').trim();
-  if(!t)return true;
-  if(/^data:/i.test(t)||/^blob:/i.test(t))return false;
-  if(!/^https?:\/\//i.test(t))return false;
-  var low=t.toLowerCase();
-  if(/yoma\.github\.io\/sense-/.test(low)&&low.indexOf('/sensecorner/')<0)return true;
-  if(/yoma\.github\.io\/sense$/.test(low))return true;
-  return false;
-}
 function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
@@ -3095,7 +3086,8 @@ function renderBronTab(){
 function initQuickNav(){
   try{
     var qp=new URLSearchParams(window.location.search||'');
-    returnToApp=String(qp.get('returnTo')||'').trim();
+    var raw=String(qp.get('returnTo')||'').trim();
+    returnToApp=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(raw,''):'';
   }catch(_e){returnToApp='';}
   var backPill=document.getElementById('topBackPill');
   var menuPill=document.getElementById('topMenuPill');

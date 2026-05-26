@@ -13,6 +13,7 @@
 <meta name="fs-build" content="18-05-2026 13:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/sense-common.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -3218,16 +3219,6 @@ async function getAccessTokenFresh(forceRefresh){
   _setAuthTokenFromSession(session);
   return session&&session.access_token?String(session.access_token):'';
 }
-function senseIsUnsafePhotoUrl(u){
-  var t=String(u||'').trim();
-  if(!t)return true;
-  if(/^data:/i.test(t)||/^blob:/i.test(t))return false;
-  if(!/^https?:\/\//i.test(t))return false;
-  var low=t.toLowerCase();
-  if(/yoma\.github\.io\/sense-/.test(low)&&low.indexOf('/sensecorner/')<0)return true;
-  if(/yoma\.github\.io\/sense$/.test(low))return true;
-  return false;
-}
 function formatSavePDiag(diag){
   if(!diag)return'';
   var ms=diag.totalMs!=null?String(diag.totalMs)+'ms':'?';
@@ -4377,10 +4368,9 @@ function initQuickNavBackToApp(){
   if(!back)return;
   try{
     var sp=new URLSearchParams(window.location.search||'');
-    var rt=String(sp.get('returnTo')||'').trim();
+    var rt=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(String(sp.get('returnTo')||'').trim(),''):'';
     if(!rt)return;
     var low=rt.toLowerCase();
-    if(low.indexOf('http://')===0||low.indexOf('https://')===0)return;
     if(low.indexOf('familysense.html')>=0)return;
     if(low.indexOf('.html')<0)return;
     if(low.indexOf('datesense')>=0)back.textContent='Terug naar je huidige app: DateSense';

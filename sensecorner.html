@@ -8,6 +8,7 @@
 <meta name="sc-build" content="19-05-2026 12:03">
 <title>SenseCorner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/sense-common.js"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1644,7 +1645,7 @@ a{text-decoration:none;color:inherit}
     authMsg.style.color=isErr?'var(--date-donker)':'var(--m)';
   }
   function openAuthModal(mode,targetApp){
-    pendingReturnTo=targetApp||'';
+    pendingReturnTo=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(targetApp,''):String(targetApp||'').trim();
     var isRegister=(mode==='register');
     if(authTitle)authTitle.textContent=(mode==='register'?'Account aanmaken':'Inloggen in SenseCorner');
     if(authSub)authSub.textContent=(mode==='register'
@@ -1672,7 +1673,7 @@ a{text-decoration:none;color:inherit}
   }
   function goToIndexLogin(mode,targetApp){
     mode=String(mode||'login').toLowerCase()==='register'?'register':'login';
-    var rt=String(targetApp||'').trim();
+    var rt=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(targetApp,''):String(targetApp||'').trim();
     var q=[];
     if(mode==='register')q.push('register=1');
     else q.push('login=1');
@@ -2779,7 +2780,7 @@ a{text-decoration:none;color:inherit}
       setAuthMsg('Welkom! Je bent aangemeld.');
       closeAuthModal();
       if(pendingReturnTo){
-        window.location.href=pendingReturnTo;
+        window.location.href=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(pendingReturnTo,'sensecorner.html'):pendingReturnTo;
         return;
       }
       await refreshAuthUi();
@@ -2874,7 +2875,7 @@ a{text-decoration:none;color:inherit}
     var returnTo=String(params.get('returnTo')||'').trim();
     if(returnTo){
       var target=decodeURIComponent(returnTo);
-      if(target.indexOf('.html')===-1||target.indexOf('http')===0)target='ownsense.html';
+      target=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(target,'ownsense.html'):((target.indexOf('.html')>=0&&target.indexOf('http')!==0)?target:'ownsense.html');
       var user=await getCurrentUser();
       if(user){
         window.location.href=target;

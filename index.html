@@ -796,6 +796,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/sense-common.js"></script>
 <script src="js/sense-auth-client.js"></script>
 <script>
 (function(){
@@ -1188,7 +1189,8 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     pendingReturnTo='';
     try{
       var u=new URL(window.location.href);
-      pendingReturnTo=String(u.searchParams.get('returnTo')||'').trim();
+      var rawRt=String(u.searchParams.get('returnTo')||'').trim();
+      pendingReturnTo=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(rawRt,''):rawRt;
     }catch(_e3){}
     pauseResumePopup();
     if(mode==='register'){
@@ -1271,8 +1273,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       if(window.lpRefreshNavAuth)void window.lpRefreshNavAuth();
       if(pendingReturnTo){
         if(window.senseMarkLoginBounce)window.senseMarkLoginBounce();
-        var t=decodeURIComponent(pendingReturnTo);
-        if(t.indexOf('.html')<0||t.indexOf('http')===0)t='ownsense.html';
+        var t=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(decodeURIComponent(pendingReturnTo),'ownsense.html'):'ownsense.html';
         window.location.href=t;
         return;
       }
@@ -1341,8 +1342,8 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   var lpLoginAttemptId=0;
   function lpGetLoginTarget(){
     if(pendingReturnTo){
-      var t=decodeURIComponent(pendingReturnTo);
-      if(t.indexOf('.html')>=0&&t.indexOf('http')!==0)return t;
+      var t=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(decodeURIComponent(pendingReturnTo),'sensecorner.html'):'sensecorner.html';
+      if(t)return t;
     }
     return'sensecorner.html';
   }
