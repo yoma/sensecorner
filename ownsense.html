@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="19-05-2026 12:26">
+<meta name="os-build" content="26-05-2026 12:08">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2431,12 +2431,45 @@ async function acceptAllPendingFacts(){
   if(!window.confirm('Alle '+pending.length+' gegevens accepteren en aan je profiel toevoegen?'))return;
   var bulk=document.getElementById('reviewFactsBulkBar');
   if(bulk)bulk.innerHTML='<span class="subtle">Bezig met accepteren...</span>';
+  pending.sort(function(a,b){
+    var ta=new Date(a&&a.created_at||0).getTime();
+    var tb=new Date(b&&b.created_at||0).getTime();
+    return ta-tb;
+  });
+  var accepted=[];
   for(var i=0;i<pending.length;i++){
-    try{await acceptOwnFact(pending[i].id);}catch(_e){console.warn('bulk-accept fail',_e);}
+    var updated=await updateOwnFactStatus(pending[i].id,'accepted');
+    if(updated){
+      accepted.push(updated);
+      await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    }
+  }
+  var byCat={};
+  accepted.forEach(function(f){
+    var cat=normalizeOwnFactCategory(f.category);
+    if(!byCat[cat])byCat[cat]=[];
+    var txt=String(f.fact_text||'').trim();
+    if(txt)byCat[cat].push(txt);
+  });
+  var mergeFailLabels=[];
+  for(var catKey in byCat){
+    if(!Object.prototype.hasOwnProperty.call(byCat,catKey))continue;
+    var res=await mergeFactsIntoProfile(catKey,byCat[catKey]);
+    if(!res||!res.ok)mergeFailLabels.push(ownCategoryDisplayLabel(catKey));
   }
   await loadOwnBrainTables();
   renderReviewFacts();
   renderMijTab();
+  var n=accepted.length;
+  if(!n){
+    flashOwnsenseMessage('Geen gegevens konden worden opgeslagen.',true);
+    return;
+  }
+  if(mergeFailLabels.length){
+    flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd. Profieltekst kon niet automatisch worden bijgewerkt voor: '+mergeFailLabels.join(', ')+'.',true,{durationMs:8200});
+  }else{
+    flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd en verwerkt in je profiel.',false);
+  }
 }
 
 async function updateOwnFactStatus(factId,newStatus,newText,opts){
@@ -2465,8 +2498,11 @@ async function acceptOwnFact(factId){
   if(!fact)return;
   var updated=await updateOwnFactStatus(factId,'accepted');
   if(updated){
-    await mergeFactIntoProfile(updated.category,updated.fact_text);
     await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
+    if(!mergeRes||!mergeRes.ok){
+      flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
+    }
     await loadOwnBrainTables();
     renderReviewFacts();
     renderMijTab();
@@ -2482,8 +2518,11 @@ async function editOwnFact(factId){
   if(!txt)return;
   var updated=await updateOwnFactStatus(factId,'accepted',txt);
   if(updated){
-    await mergeFactIntoProfile(updated.category,updated.fact_text);
     await addGrowthEvent('fact_accepted','Fact aangepast en geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
+    if(!mergeRes||!mergeRes.ok){
+      flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
+    }
     await loadOwnBrainTables();
     renderReviewFacts();
     renderMijTab();
@@ -2499,24 +2538,59 @@ async function rejectOwnFact(factId){
   }
 }
 
-async function mergeFactIntoProfile(category,newFact){
+function ownCategoryDisplayLabel(cat){
+  var id=normalizeOwnFactCategory(cat);
+  var labels={karakter:'Karakter',interesses:'Interesses',relatie:'Relatie',gevoels:'Gevoelswereld',algemeen:'Algemeen'};
+  return labels[id]||id;
+}
+function applyMergedTextToCategory(category,merged){
   category=normalizeOwnFactCategory(category);
-  var current=categoryLongText(category);
-  var sys='Je krijgt de huidige profieltekst van categorie '+category+' en een nieuw feit. Herschrijf de profieltekst zodat het nieuwe feit naadloos geintegreerd is. Geen opsomming. Tweede persoon, vloeiende volzinnen, max 200 woorden. Gebruik geen typografische lange streep (em dash); gebruik komma\'s of punten. Geen markdown-koppen (#) of horizontale lijnen (---).';
-  var usr='Huidige tekst:\n'+(current||'(leeg)')+'\n\nNieuw feit:\n'+newFact;
-  var merged=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,520)||'').trim());
-  if(!merged)return;
+  var text=cleanAiProseForStore(String(merged||'').trim());
+  if(!text)return false;
   if(category==='algemeen'){
-    hubState.algemeen_text=merged;
+    hubState.algemeen_text=text;
   }else{
     if(!hubState.categories[category])hubState.categories[category]={a0:'',a1:'',a2:'',a3:''};
-    hubState.categories[category].a0=merged;
+    hubState.categories[category].a0=text;
     hubState.categories[category].a1='';
     hubState.categories[category].a2='';
     hubState.categories[category].a3='';
   }
   saveHubState();
-  await addGrowthEvent('profile_rewritten','Profieltekst herschreven voor '+category,'ownsense','OWN Sense',null);
+  return true;
+}
+async function mergeFactsIntoProfile(category,factTexts){
+  category=normalizeOwnFactCategory(category);
+  var facts=(factTexts||[]).map(function(t){return String(t||'').trim();}).filter(Boolean);
+  if(!facts.length)return{ok:false,error:'no_facts'};
+  var current=categoryLongText(category);
+  var multi=facts.length>1;
+  var sys='Je krijgt de huidige profieltekst van categorie '+category+' en '
+    +(multi?'meerdere nieuwe feiten':'een nieuw feit')
+    +'. Herschrijf de profieltekst zodat '
+    +(multi?'alle nieuwe feiten':'het nieuwe feit')
+    +' naadloos geintegreerd '
+    +(multi?'zijn':'is')
+    +'. Geen opsomming. Tweede persoon, vloeiende volzinnen, max 200 woorden. Gebruik geen typografische lange streep (em dash); gebruik komma\'s of punten. Geen markdown-koppen (#) of horizontale lijnen (---).';
+  var usr='Huidige tekst:\n'+(current||'(leeg)');
+  if(multi){
+    usr+='\n\nNieuwe feiten (oudste eerst):\n';
+    facts.forEach(function(f,idx){usr+=(idx+1)+'. '+f+'\n';});
+  }else{
+    usr+='\n\nNieuw feit:\n'+facts[0];
+  }
+  try{
+    var merged=String(await callAnthropicJson(sys,usr,520)||'').trim();
+    if(!applyMergedTextToCategory(category,merged))return{ok:false,error:'empty_merge'};
+    await addGrowthEvent('profile_rewritten','Profieltekst herschreven voor '+category,'ownsense','OWN Sense',null);
+    return{ok:true};
+  }catch(e){
+    console.warn('[mergeFactsIntoProfile]',category,e);
+    return{ok:false,error:e&&e.message?String(e.message):'merge_failed'};
+  }
+}
+async function mergeFactIntoProfile(category,newFact){
+  return await mergeFactsIntoProfile(category,[newFact]);
 }
 
 function tokenizeOverlapScore(a,b){
