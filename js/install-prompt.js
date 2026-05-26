@@ -1,12 +1,13 @@
 /**
  * PWA install-hint op sensecorner.html alleen.
- * Android: tik opent native install als beschikbaar.
- * iOS: alleen zichtbare pill (geen popup; Safari → deel → Zet op beginscherm).
+ * Tik op de knop opent instructies (iOS) of native install (Android).
  */
 (function () {
   'use strict';
 
   const INSTALL_BUTTON_ID = 'sc-install-btn';
+  const MODAL_ID = 'sc-install-modal';
+
   let deferredPrompt = null;
 
   if ('serviceWorker' in navigator) {
@@ -46,6 +47,58 @@
     }
   }
 
+  function showInstallModal(kind) {
+    let modal = document.getElementById(MODAL_ID);
+    if (!modal) {
+      modal = buildInstallModal(kind);
+      document.body.appendChild(modal);
+    } else {
+      const fresh = buildInstallModal(kind);
+      modal.innerHTML = fresh.innerHTML;
+      modal.querySelectorAll('[data-close]').forEach((el) => {
+        el.addEventListener('click', () => {
+          modal.style.display = 'none';
+        });
+      });
+    }
+    modal.style.display = 'flex';
+  }
+
+  function buildInstallModal(kind) {
+    const modal = document.createElement('div');
+    modal.id = MODAL_ID;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'sc-install-title');
+    const steps =
+      kind === 'android'
+        ? `
+          <li>Tik op het <strong>menu</strong> (⋮) rechtsboven in Chrome.</li>
+          <li>Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong>.</li>
+          <li>Bevestig met <strong>Installeren</strong>.</li>
+        `
+        : `
+          <li>Tik op het <strong>deel-icoon</strong> <span aria-hidden="true">⎙</span> onderaan in Safari.</li>
+          <li>Scroll naar beneden en kies <strong>Zet op beginscherm</strong>.</li>
+          <li>Tik rechtsboven op <strong>Voeg toe</strong>.</li>
+        `;
+    modal.innerHTML = `
+      <div class="sc-install-modal__overlay" data-close></div>
+      <div class="sc-install-modal__panel">
+        <h2 id="sc-install-title" class="sc-install-modal__title">SenseCorner op je telefoon</h2>
+        <p class="sc-install-modal__intro">In drie tikken klaar:</p>
+        <ol class="sc-install-modal__steps">${steps}</ol>
+        <button type="button" class="sc-install-modal__close" data-close>Sluiten</button>
+      </div>
+    `;
+    modal.querySelectorAll('[data-close]').forEach((el) => {
+      el.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+    });
+    return modal;
+  }
+
   function init() {
     const btn = document.getElementById(INSTALL_BUTTON_ID);
     if (!btn) return;
@@ -56,11 +109,10 @@
     }
 
     const os = detectOS();
-    setBtnVisible(btn, true);
 
     if (os === 'ios') {
-      btn.setAttribute('aria-disabled', 'true');
-      btn.title = 'Safari: deel-knop → Zet op beginscherm';
+      setBtnVisible(btn, true);
+      btn.addEventListener('click', () => showInstallModal('ios'));
       return;
     }
 
@@ -73,7 +125,6 @@
         setBtnVisible(btn, true);
         if (!promptBound) {
           promptBound = true;
-          btn.removeAttribute('aria-disabled');
           btn.addEventListener('click', () => {
             if (!deferredPrompt) return;
             deferredPrompt.prompt();
@@ -85,16 +136,17 @@
       });
       window.setTimeout(() => {
         if (deferredPrompt) return;
+        setBtnVisible(btn, true);
+        btn.addEventListener('click', () => showInstallModal('android'));
+      }, 2000);
+      window.addEventListener('appinstalled', () => {
         setBtnVisible(btn, false);
-      }, 2500);
-    } else {
-      setBtnVisible(btn, false);
+        deferredPrompt = null;
+      });
+      return;
     }
 
-    window.addEventListener('appinstalled', () => {
-      setBtnVisible(btn, false);
-      deferredPrompt = null;
-    });
+    setBtnVisible(btn, false);
   }
 
   if (document.readyState === 'loading') {
