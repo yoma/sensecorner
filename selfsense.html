@@ -5685,6 +5685,38 @@ function inferVertelContinuityFocusDossier(skipLastUserTurn){
   return null;
 }
 
+/** Vast dossier voor dit Vertel-gesprek (koppeling, topic-keuze, sticky of expliciete chatverklaring). */
+function getVertelSessionDeclaredDossier(){
+  var forced=getForcedDossier();
+  if(forced)return forced;
+  var sticky=String(S.vertelSessionStickyDossier||'').trim();
+  if(sticky&&sticky!=='OWN Sense')return sticky;
+  var g=String(S.vertelGesprekDossier||'').trim();
+  if(g&&g!=='OWN Sense')return g;
+  var f=String(S.vertelFrom||'').trim();
+  if(f&&f!=='OWN Sense')return f;
+  return null;
+}
+
+/** Gebruiker zegt in chat dat dit gesprek bij een dossier hoort (bv. «in deze chat verder over Lena»). */
+function parseVertelSessionDossierFromUserText(userTxt){
+  var t=String(userTxt||'').trim();
+  if(t.length<10)return null;
+  var meta=/\b(in\s+deze\s+chat|in\s+dit\s+gesprek|deze\s+chatsessie|dit\s+vertel\s*gesprek|voor\s+dit\s+gesprek|in\s+deze\s+sessie|koppel\s+(?:dit\s+gesprek|deze\s+chat)|dit\s+gesprek\s+(?:gaat|blijft)\s+over)\b/i;
+  var meta2=/\b(verder\s+(?:in|bij|met)|blijf\s+(?:in|bij)|wil\s+.{0,24}(?:in|bij)\s+(?:dit|deze)\s+gesprek|alleen\s+(?:in|bij)\s+(?:dit|deze)\s+gesprek)\b/i;
+  if(!meta.test(t)&&!meta2.test(t))return null;
+  var pick=pickBestDossierForVertelText(t);
+  if(pick&&pick!=='OWN Sense')return pick;
+  return null;
+}
+
+/** Expliciete naam in alleen het user-bericht wijst naar ander dossier dan de vaste gespreksfocus. */
+function userExplicitlySwitchesVertelDossier(userTxt,declaredDossier){
+  if(!declaredDossier)return false;
+  var explicit=pickBestDossierForVertelText(String(userTxt||'').trim());
+  return !!(explicit&&explicit!=='OWN Sense'&&explicit!==declaredDossier);
+}
+
 async function exportDossierTimelineTxt(dossierName){
   if(!S.user||!sb){toast('Log eerst in.');return;}
   try{
@@ -14567,12 +14599,20 @@ async function sendMsg(){
     txtForAI=_preloadText.length>2800?_preloadText.substring(0,2800):_preloadText;
   }
   if(!_skipUserBubble)addMsg('user',userFacingTxt,userOpts);
+  var parsedSessDossier=parseVertelSessionDossierFromUserText(userFacingTxt);
+  if(parsedSessDossier){
+    S.vertelGesprekDossier=parsedSessDossier;
+    S.vertelFrom=parsedSessDossier;
+    if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+    toast('Oké - dit gesprek gaat verder over '+dn(parsedSessDossier)+'.');
+  }
   var crossBarHtml='';
   var crossBarId=null;
   var crossGoBarHtml='';
   var crossGoBarId='';
   // Detecteer over wie het gaat voor opslagvoorstel (gespreksfocus na vorige opslag of vanuit dossier)
   var forcedDossier=getForcedDossier();
+  var declaredDossier=getVertelSessionDeclaredDossier();
   var voorgesteldDossier=forcedDossier||S.vertelSessionStickyDossier||S.vertelGesprekDossier||S.vertelFrom||null;
   var continuityFocusDossier=inferVertelContinuityFocusDossier(true);
   var matchTxtFull=buildVertelDossierMatchText(userFacingTxt);
@@ -14591,14 +14631,28 @@ async function sendMsg(){
   if(!voorgesteldDossier){
     voorgesteldDossier=pronounAwareMatch||continuityFocusDossier;
   }
+  var dossierSwitch=declaredDossier?userExplicitlySwitchesVertelDossier(userFacingTxt,declaredDossier):false;
+  if(dossierSwitch&&explicitMentionDossier&&explicitMentionDossier!=='OWN Sense'){
+    S.vertelGesprekDossier=explicitMentionDossier;
+    S.vertelFrom=explicitMentionDossier;
+    declaredDossier=explicitMentionDossier;
+    if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+  }
   var contextDossier=voorgesteldDossier||null;
-  if(!forcedDossier&&mentionFocusDossier){
+  if(!forcedDossier&&mentionFocusDossier&&(!declaredDossier||dossierSwitch)){
     contextDossier=mentionFocusDossier;
   }
   var hasStrongMentionFocus=!!mentionFocusDossier;
   var aiContextDossier=contextDossier||null;
-  if(hasStrongMentionFocus&&mentionFocusDossier!==forcedDossier){
+  if(hasStrongMentionFocus&&mentionFocusDossier!==forcedDossier&&(!declaredDossier||dossierSwitch)){
     aiContextDossier=mentionFocusDossier;
+  }
+  if(declaredDossier&&!dossierSwitch){
+    mentionFocusDossier=declaredDossier;
+    hasStrongMentionFocus=true;
+    contextDossier=declaredDossier;
+    aiContextDossier=declaredDossier;
+    if(!voorgesteldDossier||voorgesteldDossier==='OWN Sense')voorgesteldDossier=declaredDossier;
   }
 
   // Topic-detectie + keuzekaart-halt: bij triggerwoord zonder expliciete naam in jouw zin
@@ -14606,12 +14660,12 @@ async function sendMsg(){
   var topicHypo=null;
   var topicResult=null;
   try{
-    if(!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+    if(!forcedDossier&&!S.vertelSessionStickyDossier&&!declaredDossier&&!_skipTopicHypo){
       topicResult=await findTopicCandidatesForVertel(txtForAI);
     }
   }catch(_eTh){topicResult=null;}
   var chooserCand=null;
-  if(hasTopicTrig&&!explicitMentionDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!_skipTopicHypo){
+  if(hasTopicTrig&&!explicitMentionDossier&&!forcedDossier&&!S.vertelSessionStickyDossier&&!declaredDossier&&!_skipTopicHypo){
     chooserCand=mergeTopicChooserCandidates((topicResult&&topicResult.candidates)||[],continuityFocusDossier);
   }
   if(chooserCand&&chooserCand.length>=1){
@@ -14781,6 +14835,8 @@ async function sendMsg(){
       opslagVastNote='\nLET OP OPSLAG: Deze sessie schrijft automatisch naar dossier «'+dn(forcedDossier)+'». Neem géén extra bewaarvraag of pseudo-menu in je antwoordtekst; dat hoort bij de vaste melding onder je tekst.\n';
     }else if(S.vertelSessionStickyDossier){
       opslagVastNote='\nLET OP OPSLAG: De gebruiker koos «Altijd in dit gesprek» - notities gaan vast naar dossier «'+dn(S.vertelSessionStickyDossier)+'». Neem géén aparte bewaarvraag of lijstjes die op knoppen lijken; de app toont al «Opgeslagen bij…».\n';
+    }else if(declaredDossier){
+      opslagVastNote='\nLET OP GESPREK: De gebruiker wil in dit Vertel-gesprek verder over dossier «'+dn(declaredDossier)+'». Stel in je antwoord geen ander dossier voor; vraag niet opnieuw «bij wie» of «welk dossier» tenzij hij of zij duidelijk van persoon wisselt.\n';
     }
     var vertelLeadingThread=buildVertelLeadingThreadBlock(S.vertelMsgs,txtForAI,12,1600,1200);
     var fullSys=sys
@@ -14881,7 +14937,7 @@ async function sendMsg(){
             }
           }
         }catch(_eVx){_voorgesteldIsCrossApp=false;}
-        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp&&!_skipCrossAppBars){
+        if(autoDossier==='OWN Sense'&&voorgesteldDossier&&voorgesteldDossier!==autoDossier&&!_voorgesteldIsCrossApp&&!_skipCrossAppBars&&!declaredDossier){
           var saveId='sv'+Date.now();
           window._saveData=window._saveData||{};
           window._saveData[saveId]={tekst:userFacingTxt+'\n'+raw,dossier:voorgesteldDossier,sessionUserMsgId:userSessionMsgId};
@@ -14909,10 +14965,14 @@ async function sendMsg(){
     updateSessiePreview(S.currentSessionId,userFacingTxt);
     try{
       if(mentionFocusDossier&&mentionFocusDossier!=='OWN Sense'&&!forcedDossier){
-        S.vertelGesprekDossier=mentionFocusDossier;
-        S.vertelFrom=mentionFocusDossier;
-        updateVertelGesprekBanner();
-        if(S.screen==='vertel')renderVertelInputCoachTip();
+        var curDeclared=getVertelSessionDeclaredDossier();
+        var switched=curDeclared&&userExplicitlySwitchesVertelDossier(userFacingTxt,curDeclared);
+        if(!curDeclared||switched||mentionFocusDossier===curDeclared){
+          S.vertelGesprekDossier=mentionFocusDossier;
+          S.vertelFrom=mentionFocusDossier;
+          updateVertelGesprekBanner();
+          if(S.screen==='vertel')renderVertelInputCoachTip();
+        }
       }
     }catch(_vg){}
 
