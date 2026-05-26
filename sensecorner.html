@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="26-05-2026 15:12">
+<meta name="sc-build" content="26-05-2026 15:28">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -806,6 +806,27 @@ a{text-decoration:none;color:inherit}
   var SC_AUTH_STORAGE_KEY='sensecorner-auth-v1';
   var _scSignOutDebounceTimer=null;
   var _scSessionKeepAliveTimer=null;
+  var _scApprovalCache={};
+  function scCacheApproval(userId,approval){
+    if(!userId||!approval||!approval.known)return;
+    _scApprovalCache[String(userId)]={known:true,approved:!!approval.approved,at:Date.now()};
+    try{
+      sessionStorage.setItem('sc_ai_approval_'+userId,JSON.stringify({known:true,approved:!!approval.approved,at:Date.now()}));
+    }catch(_e){}
+  }
+  function scReadCachedApproval(userId){
+    var id=String(userId||'').trim();
+    if(!id)return null;
+    var mem=_scApprovalCache[id];
+    if(mem&&mem.known&&Date.now()-mem.at<15*60*1000)return mem;
+    try{
+      var raw=sessionStorage.getItem('sc_ai_approval_'+id);
+      if(!raw)return null;
+      var o=JSON.parse(raw);
+      if(!o||!o.known||Date.now()-(o.at||0)>15*60*1000)return null;
+      return{known:true,approved:!!o.approved,at:o.at||Date.now()};
+    }catch(_e2){return null;}
+  }
   function scReadPersistedAuthRaw(){
     try{
       var raw=localStorage.getItem(SC_AUTH_STORAGE_KEY);
@@ -1145,27 +1166,60 @@ a{text-decoration:none;color:inherit}
       hubSettingsToggle.textContent='Inklappen';
     }
   }
+  function resolveApprovalForDisplay(user,approval){
+    if(!user)return approval||{known:false,approved:false};
+    if(approval&&approval.known)return approval;
+    var cached=scReadCachedApproval(user.id);
+    if(cached)return cached;
+    return approval||{known:false,approved:false};
+  }
+  function setHubAuthStateFromApproval(user,approval){
+    if(!hubAuthState)return;
+    if(!user){
+      hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
+      return;
+    }
+    var em=String(user.email||'').trim();
+    if(!approval||!approval.known){
+      hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
+      return;
+    }
+    if(approval.approved){
+      hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang goedgekeurd, je kan de apps gebruiken.';
+      return;
+    }
+    hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang wacht op approval.';
+  }
   function updateHubHealthUi(user,approval){
-    var isApproved=!!(approval&&approval.approved);
+    approval=resolveApprovalForDisplay(user,approval);
+    var known=!!(approval&&approval.known);
+    var isApproved=known&&!!approval.approved;
     var isOk=!!user&&isApproved;
+    var email=String((user&&user.email)||'').trim();
     if(hubSettingsCard){
       hubSettingsCard.classList.remove('ok','warn');
-      hubSettingsCard.classList.add(isOk?'ok':'warn');
+      if(!user)hubSettingsCard.classList.add('warn');
+      else hubSettingsCard.classList.add(isOk?'ok':'warn');
     }
     if(hubPill){
       hubPill.classList.remove('ok','warn');
-      hubPill.classList.add(isOk?'ok':'warn');
+      if(!user)hubPill.classList.add('warn');
+      else hubPill.classList.add(isOk?'ok':'warn');
     }
     if(hubPillText){
       if(isOk){
-        var email=String((user&&user.email)||'').trim();
         hubPillText.textContent='✓ AI actief'+(email?' · '+email:'');
       }else if(user){
-        hubPillText.textContent='⏳ Wacht op AI approval';
+        if(!known){
+          hubPillText.textContent='✓ Ingelogd'+(email?' · '+email:'');
+        }else{
+          hubPillText.textContent='⏳ Wacht op AI approval';
+        }
       }else{
         hubPillText.textContent='⚠ Log in (Hub)';
       }
     }
+    setHubAuthStateFromApproval(user,approval);
   }
   function openHubDock(){
     if(hubDock)hubDock.classList.add('open');
@@ -2417,28 +2471,31 @@ a{text-decoration:none;color:inherit}
       if(ins&&ins.error)throw new Error(ins.error.message||'Profiel aanmaken mislukt');
     }
   }
+  async function fetchOwnAiApprovalForUi(user){
+    if(!user||!user.id)return{known:false,approved:false};
+    var approval=await scTimeoutFallback(getOwnAiApproval(user),10000,{known:false,approved:false});
+    if(approval.known){
+      scCacheApproval(user.id,approval);
+      return approval;
+    }
+    var cached=scReadCachedApproval(user.id);
+    if(cached)return cached;
+    approval=await scTimeoutFallback(getOwnAiApproval(user),12000,{known:false,approved:false});
+    if(approval.known)scCacheApproval(user.id,approval);
+    return approval;
+  }
   async function refreshAuthUi(){
     var user=await getCurrentUser();
     if(user)userSession=user;
     else userSession=null;
     await scTimeoutFallback(Promise.resolve(refreshAdminRole(user)),6000,null).catch(function(){});
     var approval={known:false,approved:false};
-    if(user)approval=await scTimeoutFallback(getOwnAiApproval(user),8000,{known:false,approved:false});
+    if(user)approval=await fetchOwnAiApprovalForUi(user);
     updateHubHealthUi(user,approval);
     if(adminPill){
       adminPill.style.display=(user&&currentAdminRole==='admin')?'inline-flex':'none';
     }
     if(user){
-      var em=String(user.email||'').trim();
-      if(hubAuthState){
-        if(!approval.known){
-          hubAuthState.textContent='Ingelogd als '+(em||'account')+'.';
-        }else if(approval.approved){
-          hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang goedgekeurd, je kan de apps gebruiken.';
-        }else{
-          hubAuthState.textContent='Ingelogd als '+(em||'account')+'. AI toegang wacht op approval.';
-        }
-      }
       if(hubLoginBtn)hubLoginBtn.style.display='none';
       if(hubRegisterBtn)hubRegisterBtn.style.display='none';
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
@@ -2467,6 +2524,17 @@ a{text-decoration:none;color:inherit}
     }
     refreshCoachHintsFromServer(user);
     if(user)scStartSessionKeepAlive();
+    if(user&&!approval.known){
+      void (async function(){
+        try{await new Promise(function(r){setTimeout(r,2000);});}catch(_w){}
+        if(document.visibilityState!=='visible')return;
+        var u2=await getCurrentUser();
+        if(!u2||u2.id!==user.id)return;
+        var again=await fetchOwnAiApprovalForUi(u2);
+        if(!again.known)return;
+        updateHubHealthUi(u2,again);
+      })();
+    }
     return user;
   }
   async function openAppWithAuth(target){
@@ -2573,13 +2641,19 @@ a{text-decoration:none;color:inherit}
       }).catch(function(){});
     }
   });
-  document.addEventListener('visibilitychange',function(){
-    if(document.visibilityState!=='visible')return;
+  function scOnPageVisibleAgain(){
     (async function(){
       try{await scRefreshSessionSafe();}catch(_e){}
       try{await refreshAuthUi();}catch(_e2){}
       getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
     })();
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState!=='visible')return;
+    scOnPageVisibleAgain();
+  });
+  window.addEventListener('pageshow',function(ev){
+    if(ev.persisted||document.visibilityState==='visible')scOnPageVisibleAgain();
   });
   if(hubLoginBtn)hubLoginBtn.onclick=function(){goToIndexLogin('login','');};
   if(hubRegisterBtn)hubRegisterBtn.onclick=function(){goToIndexLogin('register','');};
