@@ -14,7 +14,7 @@
 
   var GEO = {
     full: { rL: 400, rM: 357.33, rD: 314.67, rC: 202.67, s: 0.74 },
-    compact: { rL: 388, rM: 348, rD: 308, rC: 252, s: 0.9 },
+    compact: { rL: 388, rM: 348, rD: 308, rC: 252, s: 0.92 },
   };
 
   var TONE_VARS = {
@@ -71,6 +71,14 @@
     return '<path class="sc-mark__s" transform="' + sTransform(geo.s) + '" d="' + S_PATH + '"/>';
   }
 
+  /** Compact: vult de smalle taille van de S (anders chocolade-gap op klein formaat). */
+  function svgSMidBridge(geo) {
+    if (geo !== GEO.compact) return '';
+    return (
+      '<rect class="sc-mark__s sc-mark__s-bridge" x="468" y="504" width="88" height="26" rx="13" transform="rotate(-10 512 517)"/>'
+    );
+  }
+
   function scMarkHtml(opts) {
     opts = opts || {};
     var mode = opts.mode || 'ripple-s';
@@ -98,6 +106,7 @@
       svgRings(geo) +
       svgCore(mode, geo) +
       svgS(mode, geo) +
+      svgSMidBridge(geo) +
       '</svg></span>'
     );
   }
