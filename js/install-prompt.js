@@ -82,9 +82,12 @@
           <li>Scroll naar beneden en kies <strong>Zet op beginscherm</strong>.</li>
           <li>Tik rechtsboven op <strong>Voeg toe</strong>.</li>
         `;
+    const markFn = typeof window.scMarkHtml === 'function' ? window.scMarkHtml : null;
+    const markHtml = markFn ? markFn({ mode: 'ripple-s', tone: 'sage', size: 40 }) : '';
     modal.innerHTML = `
       <div class="sc-install-modal__overlay" data-close></div>
       <div class="sc-install-modal__panel">
+        ${markHtml ? `<div class="sc-install-modal__mark">${markHtml}</div>` : ''}
         <h2 id="sc-install-title" class="sc-install-modal__title">SenseCorner op je telefoon</h2>
         <p class="sc-install-modal__intro">In drie tikken klaar:</p>
         <ol class="sc-install-modal__steps">${steps}</ol>
