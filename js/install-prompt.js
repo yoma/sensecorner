@@ -83,7 +83,7 @@
           <li>Tik rechtsboven op <strong>Voeg toe</strong>.</li>
         `;
     const markFn = typeof window.scMarkHtml === 'function' ? window.scMarkHtml : null;
-    const markHtml = markFn ? markFn({ mode: 'ripple-s', tone: 'sage', size: 40 }) : '';
+    const markHtml = markFn ? markFn({ mode: 'ripple-s', tone: 'sage', size: 40, full: true }) : '';
     modal.innerHTML = `
       <div class="sc-install-modal__overlay" data-close></div>
       <div class="sc-install-modal__panel">
