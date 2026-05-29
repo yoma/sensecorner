@@ -2154,12 +2154,25 @@ function onOwnBasisAgePreview(){
   var age=calcOwnAgeFromBirthdate(inp.value);
   prev.textContent=age?('Leeftijd: '+age+' jaar'):'Leeftijd wordt automatisch berekend';
 }
+/** Bewaar wat in het formulier staat vóór we de kaart opnieuw tekenen (anders verdwijnen velden bij geslacht-keuze). */
+function readBasisprofielFromDom(){
+  var bdEl=document.getElementById('ownBirthdate');
+  var cityEl=document.getElementById('ownCity');
+  var countryEl=document.getElementById('ownCountry');
+  var customEl=document.getElementById('ownGenderCustom');
+  if(bdEl)hubState.birthdate=String(bdEl.value||'').trim();
+  if(cityEl)hubState.city=String(cityEl.value||'').trim();
+  if(countryEl)hubState.country=String(countryEl.value||'').trim();
+  if(customEl)hubState.gender_custom=String(customEl.value||'').trim();
+}
 function onOwnGenderPick(val){
+  readBasisprofielFromDom();
   hubState.gender=String(val||'').trim();
   if(hubState.gender!=='overig')hubState.gender_custom='';
   renderBasisprofielCard();
 }
 function onOwnGenderPreferNot(){
+  readBasisprofielFromDom();
   hubState.gender='prefer_not';
   hubState.gender_custom='';
   renderBasisprofielCard();
@@ -2190,6 +2203,7 @@ function renderBasisprofielCard(opt){
   opt=opt||{};
   var el=document.getElementById('basisprofiel');
   if(!el)return;
+  if(document.getElementById('ownBirthdate'))readBasisprofielFromDom();
   var bd=String(hubState.birthdate||'').trim();
   var age=calcOwnAgeFromBirthdate(bd);
   var city=String(hubState.city||'').trim();
@@ -2264,8 +2278,9 @@ async function saveOwnBasisprofiel(btn){
     ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
     await saveOwnToSupabase();
     flashOwnsenseMessage('Basisprofiel opgeslagen.',false);
-  }catch(_e){
-    flashOwnsenseMessage('Opslaan mislukt. Probeer opnieuw.',true);
+  }catch(e){
+    var msg=String((e&&e.message)||e||'').trim();
+    flashOwnsenseMessage(msg?('Opslaan mislukt: '+msg):'Opslaan mislukt. Probeer opnieuw.',true);
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Opslaan';}
   }
@@ -2874,10 +2889,10 @@ function sanitizeInsightCardText(text){
   if(!t)return'';
   if(/nog onvoldoende berichten voor dit inzicht/i.test(t))return t;
   if(/kon inzicht nu niet herberekenen/i.test(t)){
-    if(/429|rate limit|too many requests/i.test(t)){
-      return'Nog onvoldoende berichten voor dit inzicht.';
-    }
     return'Inzicht kon nu niet worden bijgewerkt. Probeer later opnieuw via Ververs alle inzichten.';
+  }
+  if(/Limiet bereikt|OWN Sense profiel-ai|AI-verzoeken per uur|inzicht-verversingen per uur/i.test(t)){
+    return t;
   }
   if(/^http\s*\d{3}/i.test(t)||/\bHTTP\s*\d{3}\b/.test(t)){
     return'Inzicht kon nu niet worden bijgewerkt. Probeer later opnieuw via Ververs alle inzichten.';
@@ -2922,8 +2937,10 @@ async function refreshAllAppInsights(){
     await recomputeAllInsightsAuto();
     window.__insightRefreshNote='Klaar. Opgeslagen in je profiel.';
   }catch(e){
-    if(e&&e.__insightRateLimited){
-      window.__insightRefreshNote='Deel klaar. AI was even druk (te veel verzoeken). Wacht een paar minuten en ververs opnieuw.';
+    if(e&&e.__insightQuota){
+      window.__insightRefreshNote='Niet alles kon worden bijgewerkt: uurlimiet voor OWN-inzichten bereikt (los van Sensei-chat). Probeer over een uur opnieuw.';
+    }else if(e&&e.__insightRateLimited){
+      window.__insightRefreshNote='Deel klaar. De AI-service was tijdelijk overbelast. Probeer over een paar minuten opnieuw.';
     }else{
       window.__insightRefreshNote='Mislukt: '+((e&&e.message)?String(e.message):'onbekend');
     }
@@ -3098,7 +3115,7 @@ async function handleOwnPhotoSlotPicked(file){
       flashOwnsenseMessage('Opslaan mislukt: geen bevestiging van de server.',true);
     }
   }catch(e){
-    flashOwnsenseMessage(String(e&&e.message?e.message:'Onbekende fout bij upload.'),true);
+    flashOwnsenseMessage(formatSenseiErrForUser(e,'Onbekende fout bij upload.'),true);
   }finally{
     _pendingOwnPhotoSlot=0;
   }
@@ -3188,14 +3205,14 @@ async function analyzeOwnPhotoSlot(slot){
     console.warn('analyzeOwnPhotoSlot vision prep',e);
     var sysFallback='Beschrijf kort (2 zinnen) dat er geen beeld kon worden geladen voor analyse, en nodig uit om opnieuw te uploaden. Nederlands.';
     var userContentFallback='Technische fout: '+String(e&&e.message?e.message:e)+'.';
-    var analysisFb=cleanAiProseForStore(String(await callAnthropicJson(sysFallback,userContentFallback,200)||'').trim());
+    var analysisFb=cleanAiProseForStore(String(await callAnthropicJson(sysFallback,userContentFallback,200,null,{ownsense_hub:true})||'').trim());
     if(analysisFb){
       await client.from('own_photos').update({ai_analysis:analysisFb}).eq('id',row.id);
       row.ai_analysis=analysisFb;
     }
     return;
   }
-  var raw=String(await callAnthropicJson(OWN_PHOTO_ANALYSIS_SYS,userContent,520,90000,{raw:true})||'').trim();
+  var raw=String(await callAnthropicJson(OWN_PHOTO_ANALYSIS_SYS,userContent,520,90000,{raw:true,ownsense_hub:true})||'').trim();
   var parsed=parseFirstJSONObject(raw);
   var analysis='';
   if(parsed){
@@ -3224,7 +3241,7 @@ async function reanalyzeOwnPhotoSlot(slot){
     await analyzeOwnPhotoSlot(s);
     flashOwnsenseMessage('Observaties bijgewerkt voor slot '+s+'.',false);
   }catch(e){
-    flashOwnsenseMessage(String(e&&e.message?e.message:'Analyse mislukt.'),true);
+    flashOwnsenseMessage(formatSenseiErrForUser(e,'Foto-analyse mislukt. Probeer later opnieuw.'),true);
   }finally{
     window.__ownsenseSlotReanalyzeBusy=0;
     renderFotosTab();
@@ -3240,7 +3257,7 @@ async function computePhotoPatterns(){
     var sys='Beschrijf welk type persoon naar voren komt over alle foto\'s samen. Focus op karakterindruk, energie en relationele stijl. Noem niet expliciet wat er op foto\'s te zien is. 1 korte alinea, menselijk en voorzichtig. Geen em dash; gebruik komma\'s of punten. Geen markdown-koppen.';
     var usr='Per-foto analyse (DateSense-stijl: scores + sfeer + korte samenvatting per slot, geen ruwe foto-urls):\n'+(analyses.length?analyses.join('\n\n'):'(nog geen per-foto analyse, dat mag)')+'\n\n'
       +'Werk enkel met de tekst hierboven. Als dat te weinig is, geef korte tips om foto\'s toe te voegen en per-slot analyse af te wachten.';
-    var out=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,520,120000)||'').trim());
+    var out=cleanAiProseForStore(String(await callAnthropicJson(sys,usr,520,120000,{ownsense_hub:true})||'').trim());
     if(!out){
       window.__photoPatternLastStatus='Geen bruikbaar antwoord van de AI. Probeer later opnieuw.';
       return;
@@ -3249,7 +3266,7 @@ async function computePhotoPatterns(){
     saveHubState();
     window.__photoPatternLastStatus='Opgeslagen als patroon in je profiel.';
   }catch(e){
-    window.__photoPatternLastStatus='Patroonanalyse mislukt: '+((e&&e.message)?String(e.message):'onbekend');
+    window.__photoPatternLastStatus='Patroonanalyse mislukt: '+formatSenseiErrForUser(e,'onbekende fout');
   }finally{
     window.__ownsensePhotoPatternBusy=false;
     renderFotosTab();
@@ -3859,7 +3876,6 @@ async function saveOwnToSupabase(){
       last_active:new Date().toISOString(),
       props:propsOut,
       foto_urls:hubState.photo_urls,
-      foto_paths:hubState.photo_paths||[],
       foto_analyse:hubState.foto_analyse,
       insight_all:hubState.insight_all||null,
       insight_ds:hubState.insight_ds||null,
@@ -3878,12 +3894,20 @@ async function saveOwnToSupabase(){
     var up=await client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'});
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
     __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
+    hubState.birthdate=cleanBirthdate;
+    hubState.city=String(propsOut.meta.city||'').trim();
+    hubState.country=String(propsOut.meta.country||'').trim();
+    hubState.gender=String(propsOut.meta.gender||'').trim();
+    hubState.gender_custom=String(propsOut.meta.gender_custom||'').trim();
     if(cleanName){
       try{
         await client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}});
       }catch(_e){}
     }
-  }catch(e){}
+  }catch(e){
+    console.warn('saveOwnToSupabase',e);
+    throw e;
+  }
 }
 
 function purgeCrossUserOwnsenseLocalCaches(uid){
@@ -4477,6 +4501,27 @@ function aiShortErr(msg,max){
   var n=max||240;
   return s.length>n?s.substring(0,n-1)+'…':s;
 }
+function senseiApiErrorMessage(j,status){
+  if(!j)return'HTTP '+(status||0);
+  var e=j.error;
+  if(typeof e==='string'&&e.trim())return e.trim();
+  if(e&&typeof e==='object'&&e.message)return String(e.message).trim();
+  if(typeof j.message==='string'&&j.message.trim())return j.message.trim();
+  return'HTTP '+(status||0);
+}
+function formatSenseiErrForUser(e,fallback){
+  var msg=String((e&&e.message)||e||'').trim();
+  if(!msg)return fallback||'Onbekende fout.';
+  if(/Limiet bereikt|AI-verzoeken per uur|inzicht-verversingen per uur|OWN Sense profiel-ai|Sensei-berichten in DateSense/i.test(msg))return msg;
+  if(/^HTTP\s+429$/i.test(msg)){
+    return'Je uurlimiet voor AI is bereikt. Probeer over een uur opnieuw.';
+  }
+  if(/429|rate limit|too many requests/i.test(msg)){
+    return'De AI-service was tijdelijk overbelast. Probeer over een paar minuten opnieuw.';
+  }
+  if(/^HTTP\s+\d{3}$/i.test(msg))return fallback||'Er ging iets mis bij de AI-aanvraag. Probeer later opnieuw.';
+  return msg;
+}
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs,opts){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
@@ -4487,6 +4532,11 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
   var outerTimer=setTimeout(function(){
     try{controller.abort();}catch(_e){}
   },timeoutMs);
+  var reqBody={model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}]};
+  if(opts&&(opts.ownsense_hub||opts.ownsense_insight)){
+    reqBody.ownsense_hub=true;
+    if(opts.ownsense_insight)reqBody.ownsense_insight=true;
+  }
   try{
     var r=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
@@ -4494,7 +4544,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
         'Content-Type':'application/json',
         'Authorization':'Bearer '+token
       },
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}] }),
+      body:JSON.stringify(reqBody),
       signal:controller.signal
     });
     if(r.status===401){
@@ -4507,7 +4557,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
               'Content-Type':'application/json',
               'Authorization':'Bearer '+freshToken
             },
-            body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}] }),
+            body:JSON.stringify(reqBody),
             signal:controller.signal
           });
         }
@@ -4524,11 +4574,11 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
       throw new Error('Ongeldig antwoord van API (geen JSON).');
     }
     if(!r.ok){
-      var apiMsg=(j&&j.error&&j.error.message)||('HTTP '+r.status);
+      var apiMsg=senseiApiErrorMessage(j,r.status);
       if(r.status===403)apiMsg='AI toegang nog niet geactiveerd. Vraag admin approval in SenseCorner.';
       throw new Error(apiMsg);
     }
-    if(j&&j.error)throw new Error(j.error.message||'AI-fout');
+    if(j&&j.error)throw new Error(senseiApiErrorMessage(j,r.status)||'AI-fout');
     var txt='';
     if(j&&Array.isArray(j.content)){
       j.content.forEach(function(c){if(c&&c.type==='text')txt+=String(c.text||'');});
@@ -4580,6 +4630,37 @@ function parseJsonFromAiSlotRepair(raw){
   t=t.replace(/```json\s*/gi,'').replace(/```/g,'').trim();
   return JSON.parse(t);
 }
+var _ownSlotRepairOfferVisible=false;
+var _OWN_SLOT_REPAIR_OFFER_KEY='own_slot_repair_offer';
+function shouldShowOwnSlotRepairFoot(){
+  if(_ownSlotRepairOfferVisible)return true;
+  try{return sessionStorage.getItem(_OWN_SLOT_REPAIR_OFFER_KEY)==='1';}catch(_e){return false;}
+}
+function showOwnSlotRepairAfterImport(){
+  _ownSlotRepairOfferVisible=true;
+  try{sessionStorage.setItem(_OWN_SLOT_REPAIR_OFFER_KEY,'1');}catch(_e){}
+}
+function dismissOwnSlotRepairOffer(){
+  _ownSlotRepairOfferVisible=false;
+  try{sessionStorage.removeItem(_OWN_SLOT_REPAIR_OFFER_KEY);}catch(_e){}
+}
+function ownSlotRepairFootHtml(){
+  var anyAns=hasOwnFourCatAnyAnswer();
+  return '<div class="qlist-foot import-repair-offer">'
+    +'<p class="subtle" style="font-size:12px;margin:0 0 8px">Na een chat-import kunnen antwoorden in het verkeerde vak staan. Optioneel even laten herschikken.</p>'
+    +'<button type="button" class="qlist-repair" id="ownSlotRepairBtn"'+(anyAns?'':' disabled')+'><span style="color:var(--app-donker)">✨</span> AI: antwoorden laten passen bij vragen</button>'
+    +'<div id="ownSlotRepairMsg" class="subtle" style="font-size:12px;margin-top:6px"></div>'
+    +'<button type="button" class="btn-link subtle" id="ownSlotRepairDismiss" style="font-size:12px;margin-top:8px">Niet nodig</button></div>';
+}
+function bindOwnSlotRepairFoot(){
+  var repairBtn=document.getElementById('ownSlotRepairBtn');
+  if(repairBtn)repairBtn.addEventListener('click',function(){runOwnSlotRepairAi();});
+  var dismissBtn=document.getElementById('ownSlotRepairDismiss');
+  if(dismissBtn)dismissBtn.addEventListener('click',function(){
+    dismissOwnSlotRepairOffer();
+    renderQuestions();
+  });
+}
 async function runOwnSlotRepairAi(){
   if(_ownSlotRepairBusy)return;
   var msgEl=document.getElementById('ownSlotRepairMsg');
@@ -4625,6 +4706,7 @@ async function runOwnSlotRepairAi(){
       hubState.cat_updated[cid]=nowIso;
     });
     saveHubState();
+    dismissOwnSlotRepairOffer();
     renderProps();
     renderMijTab();
     renderQuestions();
@@ -4779,6 +4861,7 @@ async function confirmAiImportSave(){
       hubState.cat_updated[it.catId]=nowIso;
     });
     saveHubState();
+    showOwnSlotRepairAfterImport();
     renderProfileTab();
     importStatus('OWN Sense bijgewerkt.');
     closeAiImportModal();
@@ -4813,7 +4896,7 @@ async function runPhotoAnalysis(){
   }
   try{
     var prompt='Je bent OWN Sense Vision. Geef een korte, empathische analyse in het Nederlands over hoe deze persoon overkomt op anderen. Sluit aan bij 9 eigenschappen: gevoeligheid, openheid, humor, directheid, avontuur, stabiliteit, vertrouwen, communicatie, onafhankelijkheid. Geef 4-6 zinnen en noem 3 korte tags op het einde als "Tags: ...". Geen em dash; gebruik komma\'s of punten.\n<foto_urls>\n'+hubState.photo_urls.join('\n')+'\n</foto_urls>';
-    hubState.foto_analyse=cleanAiProseForStore(String(await callAnthropicJson('',prompt,380)||'').trim());
+    hubState.foto_analyse=cleanAiProseForStore(String(await callAnthropicJson('',prompt,380,null,{ownsense_hub:true})||'').trim());
     saveHubState();
     renderPhotoSection();
   }catch(e){
@@ -4894,7 +4977,6 @@ function renderQuestions(){
   }
   var el=document.getElementById('questionsCard');
   if(!el)return;
-  var ownAnyAns=hasOwnFourCatAnyAnswer();
   var obNote='';
   if(typeof __restrictExternalCategorySources!=='undefined'&&__restrictExternalCategorySources){
     obNote='<p class="subtle" style="margin:0 0 12px;font-size:12px;line-height:1.45">Je antwoorden uit de SenseCorner-kennistanding staan bij de gemarkeerde verdiepingsvragen. Andere velden zijn bewust open om later te verdiepen.</p>';
@@ -4940,12 +5022,10 @@ function renderQuestions(){
     html+='<div style="margin-top:10px"><button type="button" class="btn btn-primary btn-small" onclick="saveOwnQuestionsInline(\''+String(cat.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">Opslaan</button></div>'
       +'</div></details>';
   });
-  html+='</div>'
-    +'<div class="qlist-foot"><button type="button" class="qlist-repair" id="ownSlotRepairBtn"'+(ownAnyAns?'':' disabled')+'><span style="color:var(--app-donker)">✨</span> AI: antwoorden laten passen bij vragen</button>'
-    +'<div id="ownSlotRepairMsg" class="subtle" style="font-size:12px;margin-top:6px"></div></div>';
+  html+='</div>';
+  if(shouldShowOwnSlotRepairFoot())html+=ownSlotRepairFootHtml();
   el.innerHTML=html;
-  var repairBtn=document.getElementById('ownSlotRepairBtn');
-  if(repairBtn)repairBtn.addEventListener('click',function(){runOwnSlotRepairAi();});
+  if(shouldShowOwnSlotRepairFoot())bindOwnSlotRepairFoot();
   var cards=el.querySelectorAll('details.qcard');
   cards.forEach(function(card){
     card.addEventListener('toggle',function(){
@@ -5289,11 +5369,10 @@ function buildInsightPrompt(scope,rows){
 }
 
 function insightErrUserMessage(e){
-  var msg=String((e&&e.message)||e||'').trim();
-  if(/429|rate limit|too many requests/i.test(msg)){
-    return{user:'Inzicht kon nu niet worden bijgewerkt (even druk). Probeer over een paar minuten opnieuw.',rateLimited:true};
-  }
-  return{user:'Inzicht kon nu niet worden bijgewerkt. Probeer later opnieuw via Ververs alle inzichten.',rateLimited:false};
+  var friendly=formatSenseiErrForUser(e,'Inzicht kon nu niet worden bijgewerkt. Probeer later opnieuw via Ververs alle inzichten.');
+  var quota=/Limiet bereikt|OWN Sense profiel-ai|uurlimiet voor AI/i.test(friendly);
+  var rateLimited=quota||/429|rate limit|too many requests|overbelast/i.test(String((e&&e.message)||e||''));
+  return{user:friendly,rateLimited:rateLimited,quota:quota};
 }
 function sleepMs(ms){
   return new Promise(function(resolve){setTimeout(resolve,ms);});
@@ -5316,7 +5395,7 @@ async function recomputeInsight(scope,isAuto){
     return;
   }
   try{
-    var out=cleanInsightCardProse(String(await callAnthropicJson('',buildInsightPrompt(scope,rows),850,120000)||'').trim());
+    var out=cleanInsightCardProse(String(await callAnthropicJson('',buildInsightPrompt(scope,rows),850,120000,{ownsense_hub:true})||'').trim());
     setInsightTextByScope(scope,out);
     insightMeta[scope].tags=extractTags(out);
     insightMeta[scope].updated_at=new Date().toISOString();
@@ -5337,23 +5416,30 @@ async function recomputeInsight(scope,isAuto){
     insightMeta[scope].tags=[];
     insightMeta[scope].updated_at=new Date().toISOString();
     saveHubState();
+    return errInfo;
   }
+  return null;
 }
 
 async function recomputeAllInsightsAuto(){
   var scopes=['all','ds','fs','ss','gen'];
-  var rateLimited=false;
+  var quotaHit=false;
+  var overloadHit=false;
   for(var i=0;i<scopes.length;i++){
-    try{
-      if(i>0)await sleepMs(650);
-      await recomputeInsight(scopes[i],true);
-    }catch(e){
-      if(insightErrUserMessage(e).rateLimited)rateLimited=true;
+    if(i>0)await sleepMs(650);
+    var errInfo=await recomputeInsight(scopes[i],true);
+    if(errInfo&&errInfo.rateLimited){
+      if(errInfo.quota)quotaHit=true;
+      else overloadHit=true;
     }
-    if(rateLimited)break;
   }
-  if(rateLimited){
-    var rateErr=new Error('RATE_LIMIT');
+  if(quotaHit){
+    var quotaErr=new Error('AI_QUOTA');
+    quotaErr.__insightQuota=true;
+    throw quotaErr;
+  }
+  if(overloadHit){
+    var rateErr=new Error('AI_OVERLOAD');
     rateErr.__insightRateLimited=true;
     throw rateErr;
   }

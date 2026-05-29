@@ -11,8 +11,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
-const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_MAX_OWNSENSE_HUB = 24;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
+const OWNSENSE_HUB_PURPOSES = ["ownsense_hub", "ownsense_insight"] as const;
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -85,6 +87,41 @@ function pickFirstFromAuth(candidates: string[], emailLocal: string): string {
     return s;
   }
   return "";
+}
+
+async function countAiRateLog(
+  userId: string,
+  windowStart: string,
+  mode: "all" | "general" | "hub",
+): Promise<{ count: number | null; purposeSupported: boolean }> {
+  let query = sb
+    .from("ai_rate_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", windowStart);
+  if (mode === "hub") {
+    query = query.in("purpose", [...OWNSENSE_HUB_PURPOSES]);
+  } else if (mode === "general") {
+    query = query.or(
+      "purpose.is.null,and(purpose.neq.ownsense_hub,purpose.neq.ownsense_insight)",
+    );
+  }
+  const { count, error } = await query;
+  if (!error) return { count: count ?? 0, purposeSupported: mode !== "all" };
+  if (mode !== "all" && /purpose/i.test(String(error.message || ""))) {
+    const fallback = await sb
+      .from("ai_rate_log")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", windowStart);
+    if (fallback.error) {
+      console.warn("ai_rate_log fout:", fallback.error.message);
+      return { count: null, purposeSupported: false };
+    }
+    return { count: fallback.count ?? 0, purposeSupported: false };
+  }
+  console.warn("ai_rate_log fout:", error.message);
+  return { count: null, purposeSupported: false };
 }
 
 async function resolveRoepnaam(userId: string): Promise<string> {
@@ -274,27 +311,31 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    // ── Rate limiting ─────────────────────────────────────────────────────
+    // ── Verzoek verwerken ─────────────────────────────────────────────────
+    const body = (await req.json()) as Record<string, unknown>;
+    const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
+
+    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
     if (!isAdmin) {
       const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count, error: countError } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", windowStart);
-      if (countError) {
-        console.warn("ai_rate_log fout:", countError.message);
-      } else if ((count ?? 0) >= RATE_LIMIT_MAX) {
+      const mode = isOwnsenseHub ? "hub" : "general";
+      const counted = await countAiRateLog(userId, windowStart, mode);
+      const maxAllowed = counted.purposeSupported
+        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+        : RATE_LIMIT_MAX;
+      if (counted.count != null && counted.count >= maxAllowed) {
+        const label = isOwnsenseHub
+          ? "OWN Sense profiel-ai (inzichten en foto's)"
+          : "Sensei-berichten in DateSense, FamilySense en SelfSense";
         return json({
-          error: `Limiet bereikt: max ${RATE_LIMIT_MAX} AI-verzoeken per uur. Probeer het later opnieuw.`,
+          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+          code: "AI_RATE_LIMIT",
         }, 429);
       }
     }
 
-    // ── Verzoek verwerken ─────────────────────────────────────────────────
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
-    const body = (await req.json()) as Record<string, unknown>;
     let system = String(body?.system || "").trim();
     const maxTokens = Math.max(64, Math.min(2000, Number(body?.max_tokens || 800)));
     const model = String(body?.model || "claude-sonnet-4-6");
@@ -374,8 +415,16 @@ Deno.serve(async (req: Request) => {
 
     // ── Gebruik loggen ────────────────────────────────────────────────────
     if (!isAdmin) {
-      sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError }) => {
-        if (logError) console.warn("Loggen mislukt:", logError.message);
+      const logRow: Record<string, unknown> = { user_id: userId };
+      if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
+      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
+        if (logError && isOwnsenseHub && /purpose/i.test(String(logError.message || ""))) {
+          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
+            if (logError2) console.warn("Loggen mislukt:", logError2.message);
+          });
+        } else if (logError) {
+          console.warn("Loggen mislukt:", logError.message);
+        }
       });
     }
 
