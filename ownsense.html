@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="29-05-2026 16:10">
+<meta name="os-build" content="29-05-2026 17:07">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2341,7 +2341,10 @@ function ownTodayIso(){
 function onOwnBasisAgePreview(){
   var inp=document.getElementById('ownBirthdate');
   var prev=document.getElementById('ownAgePreview');
-  if(!inp||!prev)return;
+  if(!inp)return;
+  /* hubState direct synct met wat de gebruiker typt; voorkomt verlies bij re-render. */
+  hubState.birthdate=String(inp.value||'').trim();
+  if(!prev)return;
   var age=calcOwnAgeFromBirthdate(inp.value);
   prev.textContent=age?('Leeftijd: '+age+' jaar'):'Leeftijd wordt automatisch berekend';
 }
@@ -2401,7 +2404,9 @@ function renderBasisprofielCard(opt){
   opt=opt||{};
   var el=document.getElementById('basisprofiel');
   if(!el)return;
-  if(document.getElementById('ownBirthdate'))readBasisprofielFromDom();
+  /* Niet uit het DOM teruglezen bij elke render: dat overschreef server-geladen
+     basisvelden met lege inputs (repaint na load). hubState blijft live via oninput
+     en de gender-knoppen, dus we renderen rechtstreeks uit hubState. */
   var bd=String(hubState.birthdate||'').trim();
   var age=calcOwnAgeFromBirthdate(bd);
   var city=String(hubState.city||'').trim();
@@ -2440,7 +2445,7 @@ function renderBasisprofielCard(opt){
     +'<input class="field" type="date" id="ownBirthdate" value="'+escHTML(bd)+'" max="'+escHTML(ownTodayIso())+'" oninput="onOwnBasisAgePreview()">'
     +'<div class="field field-readonly" id="ownAgePreview" aria-readonly="true">'+(age?('Leeftijd: '+age+' jaar'):'Leeftijd wordt automatisch berekend')+'</div>'
     +'<label class="subtle" style="display:block;margin-top:12px;font-weight:700" for="ownCity">Woonplaats (gemeente)</label>'
-    +'<input class="field" type="text" id="ownCity" value="'+escHTML(city)+'" placeholder="Bv: Leuven" autocomplete="address-level2">'
+    +'<input class="field" type="text" id="ownCity" value="'+escHTML(city)+'" placeholder="Bv: Leuven" autocomplete="address-level2" oninput="hubState.city=String(this.value||\'\').trim()">'
     +'<p class="subtle" style="margin-top:4px">Enkel je gemeente, geen straat of huisnummer.</p>'
     +'<label class="subtle" style="display:block;margin-top:12px;font-weight:700">Geslacht</label>'
     +'<div class="ob-gender-row" role="group" aria-label="Geslacht">'
@@ -2449,7 +2454,7 @@ function renderBasisprofielCard(opt){
     +customWrap
     +'<button type="button" class="ob-gender-skip" onclick="onOwnGenderPreferNot()">Zeg ik liever niet</button>'
     +'<label class="subtle" style="display:block;margin-top:12px;font-weight:700" for="ownCountry">Land</label>'
-    +'<input class="field" type="text" id="ownCountry" value="'+escHTML(country)+'" placeholder="Bv: België" autocomplete="country-name">'
+    +'<input class="field" type="text" id="ownCountry" value="'+escHTML(country)+'" placeholder="Bv: België" autocomplete="country-name" oninput="hubState.country=String(this.value||\'\').trim()">'
     +'<div class="save-row" style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px"><span class="save-ind" id="basisSaveInd"></span><button class="btn btn-primary btn-small" type="button" onclick="saveOwnBasisprofiel(this)">Opslaan</button></div>'
     +'</div></details>';
 }

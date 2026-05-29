@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 16:54">
+<meta name="sc-build" content="29-05-2026 17:07">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261654"></script>
+<script src="js/sense-common.js?v=2905261707"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1897,10 +1897,27 @@ a{text-decoration:none;color:inherit}
     try{
       var qp=new URLSearchParams(window.location.search||'');
       if(dbg){
-        if(String(qp.get('debug')||'')==='1'&&!basisComplete){
+        if(String(qp.get('debug')||'')==='1'){
+          /* Altijd tonen onder ?debug=1, ook als basis 'compleet' is, zodat de
+             waarheid zichtbaar is bij een 100%/geen-nudge-tegenstrijdigheid. */
+          var dv=function(k){return String((meta&&meta[k]!=null?meta[k]:'')||'').trim()||'-';};
+          var slots=typeof senseCountOwnBasisSlots==='function'?senseCountOwnBasisSlots(meta):{filled:0,total:3};
+          var ownStat={filled:0,total:0};
+          try{
+            var sc=calcOwnScopeStats();
+            if(sc&&sc[0])ownStat={filled:sc[0].filled,total:sc[0].total};
+          }catch(_os){}
+          var propsLoaded=scOwnProfileProps&&typeof scOwnProfileProps==='object';
           dbg.hidden=false;
           dbg.style.display='block';
-          dbg.textContent='basis debug: server meta keys='+Object.keys(meta).join(',')+'; incomplete=1';
+          dbg.textContent='basis debug: props.meta birthdate='+dv('birthdate')+
+            ' city='+dv('city')+' country='+dv('country')+' gender='+dv('gender')+
+            ' age='+dv('age')+' address='+dv('address')+
+            ' | metaComplete='+(basisComplete?'1':'0')+
+            ' | basisSlots='+slots.filled+'/'+slots.total+
+            ' | OWN='+ownStat.filled+'/'+ownStat.total+
+            ' | propsLoaded='+(propsLoaded?'1':'0')+
+            ' | metaKeys='+Object.keys(meta).join(',');
         }else{
           dbg.textContent='';
           dbg.hidden=true;
