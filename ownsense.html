@@ -272,6 +272,8 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 }
 .cat-mini{margin-top:10px}
 .cat-mini summary{cursor:pointer;font-weight:700}
+.own-basis-details summary{font-family:var(--font-serif);font-size:17px;color:var(--chocolade)}
+.own-basis-details .own-basis-summary-hint{font-weight:500;font-size:12px;color:#7A6F66;font-family:var(--font-sans)}
 .cat-mini-body{margin-top:8px}
 .cat-mini-list{display:grid;gap:6px}
 .cat-mini-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:0.5px solid var(--border);border-radius:10px;background:#fff}
@@ -2162,7 +2164,30 @@ function onOwnGenderPreferNot(){
   hubState.gender_custom='';
   renderBasisprofielCard();
 }
-function renderBasisprofielCard(){
+function ownBasisprofielIsComplete(){
+  var meta={
+    birthdate:hubState.birthdate,
+    city:hubState.city,
+    country:hubState.country
+  };
+  if(typeof senseOwnBasisMetaComplete==='function')return senseOwnBasisMetaComplete(meta);
+  return !!(String(meta.birthdate||'').trim()&&(String(meta.city||'').trim()||String(meta.country||'').trim()));
+}
+function ownBasisprofielSummaryHint(){
+  var bd=String(hubState.birthdate||'').trim();
+  var age=calcOwnAgeFromBirthdate(bd);
+  var city=String(hubState.city||'').trim();
+  var parts=[];
+  if(age)parts.push(age+' jaar');
+  if(city)parts.push(city);
+  if(typeof senseFormatOwnBasisGender==='function'){
+    var g=senseFormatOwnBasisGender({gender:hubState.gender,gender_custom:hubState.gender_custom});
+    if(g)parts.push(g);
+  }
+  return parts.length?parts.join(' · '):'ingevuld';
+}
+function renderBasisprofielCard(opt){
+  opt=opt||{};
   var el=document.getElementById('basisprofiel');
   if(!el)return;
   var bd=String(hubState.birthdate||'').trim();
@@ -2171,6 +2196,20 @@ function renderBasisprofielCard(){
   var country=String(hubState.country||'').trim();
   var gender=String(hubState.gender||'').trim().toLowerCase();
   var genderCustom=String(hubState.gender_custom||'').trim();
+  var complete=ownBasisprofielIsComplete();
+  var forceOpen=false;
+  try{
+    forceOpen=String(new URLSearchParams(window.location.search||'').get('focus')||'').toLowerCase()==='basis';
+  }catch(_fo){}
+  var wasOpen=false;
+  try{
+    var prev=document.getElementById('ownBasisDetails');
+    if(prev&&prev.open)wasOpen=true;
+  }catch(_wo){}
+  var openAttr='';
+  if(forceOpen)openAttr=' open';
+  else if(!complete)openAttr=' open';
+  else if(wasOpen&&!(opt&&opt.collapseIfComplete))openAttr=' open';
   function genderBtn(val,label){
     var on=gender===val?' ob-gender-btn--on':'';
     return '<button type="button" class="ob-gender-btn'+on+'" onclick="onOwnGenderPick(\''+val+'\')">'+escHTML(label)+'</button>';
@@ -2179,8 +2218,11 @@ function renderBasisprofielCard(){
     ?'<label class="subtle" style="display:block;margin-top:10px;font-weight:700" for="ownGenderCustom">Toelichting (optioneel)</label>'
       +'<input class="field" type="text" id="ownGenderCustom" value="'+escHTML(genderCustom)+'" placeholder="Bv: non-binair" maxlength="80" oninput="hubState.gender_custom=String(this.value||\'\').trim()">'
     :'';
+  var summaryHint=complete?' <span class="own-basis-summary-hint">('+escHTML(ownBasisprofielSummaryHint())+')</span>':'';
   el.innerHTML=''
-    +'<div class="hero-head"><h3 style="margin:0">Basisprofiel</h3></div>'
+    +'<details id="ownBasisDetails" class="cat-mini own-basis-details"'+openAttr+'>'
+    +'<summary>Basisprofiel'+summaryHint+'</summary>'
+    +'<div class="cat-mini-body">'
     +'<p class="subtle" style="margin-top:4px">Een paar feiten helpen Sensei om advies op jouw situatie af te stemmen. Advies voor iemand van 18 is anders dan voor iemand van 80. Alles blijft in je eigen account.</p>'
     +'<label class="subtle" style="display:block;margin-top:12px;font-weight:700" for="ownBirthdate">Geboortedatum</label>'
     +'<input class="field" type="date" id="ownBirthdate" value="'+escHTML(bd)+'" max="'+escHTML(ownTodayIso())+'" oninput="onOwnBasisAgePreview()">'
@@ -2196,7 +2238,8 @@ function renderBasisprofielCard(){
     +'<button type="button" class="ob-gender-skip" onclick="onOwnGenderPreferNot()">Zeg ik liever niet</button>'
     +'<label class="subtle" style="display:block;margin-top:12px;font-weight:700" for="ownCountry">Land</label>'
     +'<input class="field" type="text" id="ownCountry" value="'+escHTML(country)+'" placeholder="Bv: België" autocomplete="country-name">'
-    +'<div class="save-row" style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px"><span class="save-ind" id="basisSaveInd"></span><button class="btn btn-primary btn-small" type="button" onclick="saveOwnBasisprofiel(this)">Opslaan</button></div>';
+    +'<div class="save-row" style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px"><span class="save-ind" id="basisSaveInd"></span><button class="btn btn-primary btn-small" type="button" onclick="saveOwnBasisprofiel(this)">Opslaan</button></div>'
+    +'</div></details>';
 }
 async function saveOwnBasisprofiel(btn){
   var bdEl=document.getElementById('ownBirthdate');
@@ -2226,7 +2269,7 @@ async function saveOwnBasisprofiel(btn){
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Opslaan';}
   }
-  renderBasisprofielCard();
+  renderBasisprofielCard({collapseIfComplete:ownBasisprofielIsComplete()});
 }
 function renderMijTab(){
   var topEl=document.getElementById('mijTopCard');
@@ -3328,6 +3371,8 @@ function applyUrlTabBoot(){
     }
     if(focus==='basis'){
       var scrollBasis=function(){
+        var det=document.getElementById('ownBasisDetails');
+        if(det)det.open=true;
         var el=document.getElementById('basisprofiel');
         if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
         var bdInp=document.getElementById('ownBirthdate');
