@@ -977,7 +977,7 @@
       <section class="ob-screen ob-screen--wide" data-ob="mir0">
         <div class="ob-ripple ob-ripple--sm pulsing"><div class="ob-ripple-inner"></div></div>
         <p class="ob-sensei" data-type="Voor ik je leer kennen,"></p>
-        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Kies de spiegels die nu voor jou gelden."></p>
+        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Alle spiegels staan al aan. Heb je geen interesse in een spiegel? Vink die dan gerust uit."></p>
         <div class="ob-mirror-grid-wrap" id="obGridWrap">
           <div class="ob-mirror-grid" id="obMirrorGrid">
             <div class="ob-mirror-item own active" data-mirror="own">
@@ -986,31 +986,29 @@
               <h3>OwnSense</h3>
               <p>Jouw basis. Altijd aan.</p>
             </div>
-            <div class="ob-mirror-item" data-mirror="date" role="button" tabindex="0">
+            <div class="ob-mirror-item active" data-mirror="date" role="button" tabindex="0">
               <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
               <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">D</div></div>
               <h3>DateSense</h3>
               <p>Bewuster daten, met meer helderheid.</p>
             </div>
-            <div class="ob-mirror-item" data-mirror="family" role="button" tabindex="0">
+            <div class="ob-mirror-item active" data-mirror="family" role="button" tabindex="0">
               <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
               <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">F</div></div>
               <h3>FamilySense</h3>
               <p>Rust en inzicht in familierelaties.</p>
             </div>
-            <div class="ob-mirror-item" data-mirror="friend" role="button" tabindex="0">
+            <div class="ob-mirror-item active" data-mirror="friend" role="button" tabindex="0">
               <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
               <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">V</div></div>
               <h3>FriendSense</h3>
               <p>Vriendschappen met balans en verbinding.</p>
-              <span class="ob-mirror-tag">in opbouw</span>
             </div>
-            <div class="ob-mirror-item" data-mirror="self" role="button" tabindex="0">
+            <div class="ob-mirror-item active" data-mirror="self" role="button" tabindex="0">
               <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
               <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">S</div></div>
               <h3>SelfSense</h3>
               <p>Herstel in je eigen tempo.</p>
-              <span class="ob-mirror-tag">in opbouw</span>
             </div>
           </div>
         </div>
@@ -1044,7 +1042,7 @@
   var __obUserId = "";
   var userName = "";
   var userEmail = "";
-  var selectedMirrors = new Set(["own"]);
+  var selectedMirrors = new Set(["own", "date", "family", "friend", "self"]);
   var answers = {};
   var photo = "";
   var photoCaption = "";
@@ -2996,7 +2994,7 @@
   async function sendOtpAndGoToCode() {
     var errEl = document.getElementById("obEmailErr");
     if (errEl) errEl.textContent = "";
-    userEmail = emailInput.value.trim();
+    userEmail = emailInput.value.trim().toLowerCase();
     if (!emailOk()) return;
     if (!sb) {
       if (errEl) errEl.textContent = "Verbinding wordt geladen. Even geduld en opnieuw.";
@@ -3111,19 +3109,31 @@
       .map(function (b) {
         return b.value;
       })
-      .join("");
-    if (token.length !== 6 || !userEmail) return;
+      .join("")
+      .replace(/\D/g, "");
+    var verifyEmail = (userEmail || "").trim().toLowerCase();
+    if (token.length !== 6 || !verifyEmail) return;
     if (!sb) {
       if (errEl) errEl.textContent = "Geen verbinding. Vernieuw de pagina.";
       return;
     }
     codeBtn.disabled = true;
-    var res = await sb.auth.verifyOtp({ email: userEmail, token: token, type: "email" });
+    var res = await sb.auth.verifyOtp({ email: verifyEmail, token: token, type: "email" });
     codeBtn.disabled = false;
     if (res && res.error) {
+      var rawErr = String((res.error && res.error.message) || "").toLowerCase();
+      var expired = rawErr.indexOf("expir") >= 0 || rawErr.indexOf("invalid") >= 0;
       if (errEl) {
-        errEl.textContent =
-          "De code is onjuist of verlopen. Probeer opnieuw of vraag een nieuwe code aan.";
+        errEl.textContent = expired
+          ? "Deze code werkt niet meer (verlopen of al gebruikt). Vraag hieronder een nieuwe code aan."
+          : "De code is onjuist. Controleer de cijfers en probeer opnieuw.";
+      }
+      if (expired) {
+        clearInterval(resendInterval);
+        var resendNow = document.getElementById("obResendBtn");
+        var resendTimerEl = document.getElementById("obResendTimer");
+        if (resendNow) resendNow.disabled = false;
+        if (resendTimerEl) resendTimerEl.textContent = "";
       }
       codeBoxes.forEach(function (b) {
         b.value = "";
