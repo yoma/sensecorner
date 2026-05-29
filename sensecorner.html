@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261144"></script>
+<script src="js/sense-common.js?v=2905261205"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1401,6 +1401,22 @@ a{text-decoration:none;color:inherit}
   var SC_ALL_CATS=SC_OWN_CATS.concat(SC_APP_CATS);
   var scServerCategories=null;
   var scOwnBasisMeta={};
+  var scOwnProfileProps=null;
+  function scApplyOwnBasisMeta(){
+    var props=scOwnProfileProps;
+    if(typeof senseExtractOwnBasisMeta==='function'){
+      scOwnBasisMeta=senseExtractOwnBasisMeta(props,hubProfile);
+    }else{
+      var pmeta=(props&&props.meta&&typeof props.meta==='object')?props.meta:{};
+      scOwnBasisMeta=Object.assign({},pmeta);
+      if(hubProfile&&typeof hubProfile==='object'){
+        if(!scOwnBasisMeta.birthdate)scOwnBasisMeta.birthdate=String(hubProfile.birthdate||'').trim();
+        if(!scOwnBasisMeta.city)scOwnBasisMeta.city=String(hubProfile.city||'').trim();
+        if(!scOwnBasisMeta.country)scOwnBasisMeta.country=String(hubProfile.country||'').trim();
+        if(!scOwnBasisMeta.gender)scOwnBasisMeta.gender=String(hubProfile.gender||'').trim();
+      }
+    }
+  }
   function countOwnSlotsFromCategories(cats){
     cats=cats||{};
     var filled=0,total=0;
@@ -1433,7 +1449,7 @@ a{text-decoration:none;color:inherit}
     }
     if(hubProfile&&typeof hubProfile==='object'){
       var hOwn=String(hubProfile.__ownsense_uid||hubProfile.__uid||'').trim();
-      if(!hOwn||hOwn!==sid){
+      if(hOwn&&hOwn!==sid){
         hubProfile=null;
         try{
           scOwnBridgeRemove('ownsense_hub_profile_v2',sid);
@@ -1458,19 +1474,16 @@ a{text-decoration:none;color:inherit}
   if(userSession&&sb){
     try{
       var row=await sb.from('sense_profiles').select('props,foto_urls,foto_paths').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
-      if(row&&!row.error&&row.data&&row.data.props){
+      if(row&&!row.error&&row.data){
+        if(row.data.props&&typeof row.data.props==='object'){
+          scOwnProfileProps=row.data.props;
+        }
+        scApplyOwnBasisMeta();
+        if(row.data.props){
         var scResolved=scExtractOwnPhotoFromProfileRow(row.data);
         serverOwnPhotoUrl=String(scResolved.url||scResolved.path||'').trim();
         var pcats=(row.data.props&&row.data.props.categories)||{};
         scServerCategories=(pcats&&typeof pcats==='object')?pcats:null;
-        var pmeta=(row.data.props&&row.data.props.meta&&typeof row.data.props.meta==='object')?row.data.props.meta:{};
-        scOwnBasisMeta=Object.assign({},pmeta);
-        if(hubProfile&&typeof hubProfile==='object'){
-          if(!scOwnBasisMeta.birthdate)scOwnBasisMeta.birthdate=String(hubProfile.birthdate||'').trim();
-          if(!scOwnBasisMeta.city)scOwnBasisMeta.city=String(hubProfile.city||'').trim();
-          if(!scOwnBasisMeta.country)scOwnBasisMeta.country=String(hubProfile.country||'').trim();
-          if(!scOwnBasisMeta.gender)scOwnBasisMeta.gender=String(hubProfile.gender||'').trim();
-        }
         var sc=countOwnSlotsFromCategories(pcats);
         if(sc.total>0){
           if(sc.filled>filledAnswers)filledAnswers=sc.filled;
@@ -1486,13 +1499,34 @@ a{text-decoration:none;color:inherit}
             profile.status='completed';
           }
         }
+        }
+      }else{
+        scApplyOwnBasisMeta();
       }
     }catch(err){
       console.warn('sensecorner OWN server sync',err&&err.message?err.message:err);
+      scApplyOwnBasisMeta();
+    }
+    if(userSession&&typeof senseOwnBasisMetaComplete==='function'&&!senseOwnBasisMetaComplete(scOwnBasisMeta)){
+      try{
+        var hubLate=scOwnBridgeGet('ownsense_hub_profile_v2',userSession.id)||'';
+        if(hubLate){
+          var hpLate=JSON.parse(hubLate);
+          if(hpLate&&typeof hpLate==='object'){
+            var hLateOwn=String(hpLate.__ownsense_uid||hpLate.__uid||'').trim();
+            if(!hLateOwn||hLateOwn===String(userSession.id)){
+              hubProfile=hpLate;
+              scApplyOwnBasisMeta();
+            }
+          }
+        }
+      }catch(_hubLate){}
     }
     try{
       await scRefreshOwnScopeFromFacts(userSession);
     }catch(_scopeInit){}
+  }else if(userSession){
+    scApplyOwnBasisMeta();
   }
   /* Hub/local parity: zolang er antwoorden zijn en niet bewust overgeslagen, toon "actief" zoals op PC. */
   if(profile&&filledAnswers>0&&profile.status!=='skipped'){

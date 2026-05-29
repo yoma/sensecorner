@@ -2274,6 +2274,15 @@ async function saveOwnBasisprofiel(btn){
   hubState.updated_at=new Date().toISOString();
   if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
   try{
+    if(!window.__ownSenseUid){
+      var clientUid=initSupabase();
+      if(clientUid){
+        try{
+          var au=await clientUid.auth.getUser();
+          if(au&&au.data&&au.data.user)window.__ownSenseUid=String(au.data.user.id);
+        }catch(_au){}
+      }
+    }
     if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
     ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
     await saveOwnToSupabase();
@@ -3765,6 +3774,12 @@ async function loadOwnFromSupabase(){
     }
     await hydrateSelfsenseSpiegelFromMirrorSessions(client,user);
     if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
+    if(ownBasisprofielIsComplete()){
+      var cacheOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(__ownSensePropsMetaCache):true;
+      if(!cacheOk){
+        try{await saveOwnToSupabase();}catch(_syncMeta){}
+      }
+    }
     applyOwnHubAppDepthV2Migration();
   }catch(e){}
 }
@@ -3945,12 +3960,13 @@ function mergeHubStateFromLocalStorage(user){
   var local=safeJsonParse(ownBridgeStorageGet(HUB_KEY,user.id)||'');
   if(!local||typeof local!=='object')return;
   var tag=String(local.__ownsense_uid||'').trim();
-  if(!tag||tag!==String(user.id)){
+  if(tag&&tag!==String(user.id)){
     try{
       ownBridgeStorageRemove(HUB_KEY,user.id);
     }catch(_e){}
     return;
   }
+  if(!tag)local.__ownsense_uid=String(user.id);
   var localClean={};
   Object.keys(local).forEach(function(k){
     /* Geen categories: idem geen foto-velden uit hub-cache (zelfde uid-label met verouderde blobs komt voor). */

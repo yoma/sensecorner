@@ -87,6 +87,24 @@
     );
   }
 
+  /** props.meta + legacy props-root + optioneel hub-bridge (zelfde velden als OwnSense hubState). */
+  function senseExtractOwnBasisMeta(props, hubFallback) {
+    props = props && typeof props === 'object' ? props : {};
+    var meta =
+      props.meta && typeof props.meta === 'object' ? Object.assign({}, props.meta) : {};
+    ['birthdate', 'city', 'country', 'gender', 'gender_custom', 'age'].forEach(function (k) {
+      if (!String(meta[k] || '').trim() && props[k] != null && String(props[k]).trim()) {
+        meta[k] = String(props[k]).trim();
+      }
+    });
+    if (hubFallback && typeof hubFallback === 'object') {
+      ['birthdate', 'city', 'country', 'gender', 'gender_custom'].forEach(function (k) {
+        if (!String(meta[k] || '').trim()) meta[k] = String(hubFallback[k] || '').trim();
+      });
+    }
+    return meta;
+  }
+
   function senseFormatOwnBasisGender(meta) {
     meta = meta && typeof meta === 'object' ? meta : {};
     var g = String(meta.gender || '').trim().toLowerCase();
@@ -256,6 +274,7 @@
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
   global.senseCalcAgeFromBirthdate = senseCalcAgeFromBirthdate;
   global.senseOwnBasisMetaComplete = senseOwnBasisMetaComplete;
+  global.senseExtractOwnBasisMeta = senseExtractOwnBasisMeta;
   global.senseFormatOwnBasisGender = senseFormatOwnBasisGender;
   global.senseOwnBasisContextParts = senseOwnBasisContextParts;
   global.appendOwnBasisMetaCoachContext = appendOwnBasisMetaCoachContext;
