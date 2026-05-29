@@ -77,6 +77,7 @@
     }
   }
 
+  /** Alleen auth-tokens; OwnSense hub/profile-cache (ownsense_hub_profile_v2::uid) blijft staan. Serverdata in sense_profiles wordt niet gewist. */
   function senseClearAuthStorage(){
     try{localStorage.removeItem(STORAGE_KEY);}catch(_e){}
     try{sessionStorage.removeItem(LOGIN_BOUNCE_KEY);}catch(_e2){}

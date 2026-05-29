@@ -1892,7 +1892,9 @@
     }
     try {
       var key = "ownsense_hub_profile_v2";
-      var raw = localStorage.getItem(key);
+      var scopedKey = key + "::" + String(userId);
+      var raw = localStorage.getItem(scopedKey);
+      if (raw == null) raw = localStorage.getItem(key);
       var o = raw ? JSON.parse(raw) : {};
       if (!o || typeof o !== "object") o = {};
       /* Zelfde regel als ownsense mergeHubState: ontbrekende of vreemde uid = geen merge.
@@ -1904,7 +1906,8 @@
       o.photo_urls = topUrls.slice(0, 4);
       o.photo_paths = topPaths.slice(0, 4);
       o.updated_at = iso;
-      localStorage.setItem(key, JSON.stringify(o));
+      localStorage.setItem(scopedKey, JSON.stringify(o));
+      if (scopedKey !== key) localStorage.removeItem(key);
     } catch (_loc) {}
   }
 
@@ -2500,6 +2503,25 @@
       if (ins && ins.error) return { error: String(ins.error.message || "Opslaan mislukt") };
     }
     obOwnBasisMetaCache = Object.assign({}, meta);
+    try {
+      var hubKey = "ownsense_hub_profile_v2";
+      var scopedKey = hubKey + "::" + String(userId);
+      var raw = localStorage.getItem(scopedKey);
+      if (raw == null) raw = localStorage.getItem(hubKey);
+      var o = raw ? JSON.parse(raw) : {};
+      if (!o || typeof o !== "object") o = {};
+      var hubUid = String(o.__ownsense_uid || "").trim();
+      if (!hubUid || hubUid !== String(userId)) o = {};
+      o.__ownsense_uid = String(userId);
+      o.birthdate = String(meta.birthdate || "").trim();
+      o.city = String(meta.city || "").trim();
+      o.country = String(meta.country || "").trim();
+      o.gender = String(meta.gender || "").trim();
+      o.gender_custom = String(meta.gender_custom || "").trim();
+      o.updated_at = iso;
+      localStorage.setItem(scopedKey, JSON.stringify(o));
+      if (scopedKey !== hubKey) localStorage.removeItem(hubKey);
+    } catch (_hubBasis) {}
     return { error: "" };
   }
 

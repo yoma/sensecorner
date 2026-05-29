@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="29-05-2026 15:35">
+<meta name="os-build" content="29-05-2026 15:45">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1456,20 +1456,66 @@ function ownFillString(localVal,serverVal){
   var s=String(serverVal||'').trim();
   return l||s;
 }
+/** Supabase props.meta is bron van waarheid bij laden; lokale hub-cache is fallback. */
+function ownFillStringPreferServer(serverVal,localVal){
+  var s=String(serverVal||'').trim();
+  var l=String(localVal||'').trim();
+  return s||l;
+}
+function ownBuildBasisMetaForSave(opts){
+  opts=opts||{};
+  var basisSave=!!opts.basisSave;
+  var out={};
+  OWN_BASIS_FIELDS.forEach(function(k){
+    var fromHub=String(hubState[k]!=null?hubState[k]:'').trim();
+    if(basisSave){
+      out[k]=fromHub;
+    }else{
+      out[k]=ownFillString(fromHub,String(__ownSensePropsMetaCache[k]||'').trim());
+    }
+  });
+  if(out.gender!=='overig')out.gender_custom='';
+  else if(basisSave)out.gender_custom=String(hubState.gender_custom||'').trim();
+  var bd=String(out.birthdate||'').trim();
+  out.birthdate=bd;
+  out.age=calcOwnAgeFromBirthdate(bd);
+  return out;
+}
+function ownSyncBasisMetaCacheFromHubState(){
+  if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
+  OWN_BASIS_FIELDS.forEach(function(k){
+    __ownSensePropsMetaCache[k]=ownFillString(hubState[k],__ownSensePropsMetaCache[k]);
+  });
+  var bd=String(hubState.birthdate||__ownSensePropsMetaCache.birthdate||'').trim();
+  if(bd)__ownSensePropsMetaCache.age=calcOwnAgeFromBirthdate(bd);
+}
 function ownMergeBasisFromServer(pm,p){
   pm=(pm&&typeof pm==='object')?pm:{};
   p=(p&&typeof p==='object')?p:{};
-  hubState.birthdate=ownFillString(hubState.birthdate,pm.birthdate||p.birthdate);
-  hubState.city=ownFillString(hubState.city,pm.city||p.city);
-  hubState.country=ownFillString(hubState.country,pm.country||p.country);
-  hubState.gender=ownFillString(hubState.gender,pm.gender||p.gender);
-  hubState.gender_custom=ownFillString(hubState.gender_custom,pm.gender_custom||p.gender_custom);
+  OWN_BASIS_FIELDS.forEach(function(k){
+    var serverVal=pm[k]!=null?pm[k]:(p[k]!=null?p[k]:'');
+    hubState[k]=ownFillStringPreferServer(serverVal,hubState[k]);
+  });
   if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
   var mergedMeta=Object.assign({},pm);
   OWN_BASIS_FIELDS.forEach(function(k){
-    mergedMeta[k]=ownFillString(__ownSensePropsMetaCache[k],pm[k]||p[k]);
+    var serverVal=pm[k]!=null?pm[k]:(p[k]!=null?p[k]:'');
+    mergedMeta[k]=ownFillStringPreferServer(serverVal,ownFillString(hubState[k],__ownSensePropsMetaCache[k]));
   });
   __ownSensePropsMetaCache=mergedMeta;
+  ownSyncBasisMetaCacheFromHubState();
+}
+function ownApplyLocalBasisFallback(user){
+  if(!user||!user.id)return;
+  var local=safeJsonParse(ownBridgeStorageGet(HUB_KEY,user.id)||'');
+  if(!local||typeof local!=='object')return;
+  var tag=String(local.__ownsense_uid||'').trim();
+  if(tag&&tag!==String(user.id))return;
+  OWN_BASIS_FIELDS.forEach(function(k){
+    if(!String(hubState[k]||'').trim()&&local[k]!=null){
+      hubState[k]=String(local[k]||'').trim();
+    }
+  });
 }
 function ownPersistHubStateLocal(){
   hubState.updated_at=new Date().toISOString();
@@ -2395,26 +2441,26 @@ async function saveOwnBasisprofiel(btn){
   if(hubState.gender==='overig'&&!hubState.gender_custom){/* leeg mag */}
   if(hubState.gender!=='overig')hubState.gender_custom='';
   hubState.updated_at=new Date().toISOString();
+  ownSyncBasisMetaCacheFromHubState();
   if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
+  ownShowSaveFeedback('basisSaveInd','Synchroniseren…',{durationMs:60000});
   try{
     if(!window.__ownSenseUid){
       var u=await ownAuthUserFast(initSupabase());
       if(u)window.__ownSenseUid=String(u.id);
     }
     ownPersistHubStateLocal();
-    ownShowSaveFeedback('basisSaveInd','Opgeslagen');
-    var res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:22000});
+    var res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:22000,basisSave:true});
     if(res&&res.reason==='timeout'){
-      res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:28000});
+      res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:28000,basisSave:true});
     }
     if(res&&res.synced){
       ownPersistHubStateLocal();
-      flashOwnsenseMessage('Basisprofiel opgeslagen.',false);
-    }else if(res&&res.ok){
-      flashOwnsenseMessage('Lokaal opgeslagen. Cloud-sync volgt zodra de verbinding terug is.',false,{durationMs:5600});
+      ownShowSaveFeedback('basisSaveInd','Opgeslagen');
+      flashOwnsenseMessage('Basisprofiel opgeslagen en gesynchroniseerd.',false);
     }else{
-      ownShowSaveFeedback('basisSaveInd','Lokaal opgeslagen',{isError:true,durationMs:2800});
-      flashOwnsenseMessage('Lokaal opgeslagen. Cloud-sync mislukt, probeer later opnieuw.',true,{durationMs:5600});
+      ownShowSaveFeedback('basisSaveInd','Cloud-sync mislukt',{isError:true,durationMs:5200});
+      flashOwnsenseMessage('Lokaal bewaard, maar cloud-sync mislukt. Controleer je verbinding en druk opnieuw op Opslaan.',true,{durationMs:6800});
     }
   }catch(e){
     var msg=String((e&&e.message)||e||'').trim();
@@ -3888,6 +3934,7 @@ async function loadOwnFromSupabase(){
       hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
       hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
       ownMergeBasisFromServer(pm,p);
+      ownApplyLocalBasisFallback(user);
       if(!restrictExternalCategorySources){
         try{
           var mSlot=safeJsonParse(ownBridgeStorageGet('ownsense_datesense_v1',window.__ownSenseUid)||'');
@@ -3902,15 +3949,17 @@ async function loadOwnFromSupabase(){
           }
         }catch(_eSlot){}
       }
+    }else{
+      ownApplyLocalBasisFallback(user);
     }
     void hydrateSelfsenseSpiegelFromMirrorSessions(client,user).then(function(){
       renderBronTab();
     }).catch(function(){});
-    if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
+    ownSyncBasisMetaCacheFromHubState();
     if(ownBasisprofielIsComplete()){
       var cacheOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(__ownSensePropsMetaCache):true;
       if(!cacheOk){
-        void saveOwnToSupabase().catch(function(){});
+        void saveOwnToSupabase({throwOnFail:false,basisSave:true,timeoutMs:22000}).catch(function(){});
       }
     }
     applyOwnHubAppDepthV2Migration();
@@ -4000,6 +4049,7 @@ async function saveOwnToSupabase(opts){
       return {ok:false,synced:false,reason:'no_user'};
     }
     var cleanName=String(hubState.display_name||'').trim();
+    var basisMeta=ownBuildBasisMetaForSave({basisSave:!!opts.basisSave});
     var propsOut={
       _v:1,
       roepnaam:cleanName||'',
@@ -4011,17 +4061,16 @@ async function saveOwnToSupabase(opts){
       foto_paths:hubState.photo_paths||[],
       foto_analyse:hubState.foto_analyse
     };
-    var cleanBirthdate=String(hubState.birthdate||'').trim();
     propsOut.meta=Object.assign({},__ownSensePropsMetaCache,{
       roepnaam:cleanName||'',
       display_name:cleanName||'',
       full_name:cleanName||'',
-      birthdate:cleanBirthdate,
-      age:calcOwnAgeFromBirthdate(cleanBirthdate),
-      city:String(hubState.city||'').trim(),
-      country:String(hubState.country||'').trim(),
-      gender:String(hubState.gender||'').trim(),
-      gender_custom:hubState.gender==='overig'?String(hubState.gender_custom||'').trim():'',
+      birthdate:basisMeta.birthdate||'',
+      age:basisMeta.age||null,
+      city:basisMeta.city||'',
+      country:basisMeta.country||'',
+      gender:basisMeta.gender||'',
+      gender_custom:basisMeta.gender_custom||'',
       photo_url:String(hubState.photo_url||'').trim()||(hubState.photo_urls&&hubState.photo_urls[0]?String(hubState.photo_urls[0]).trim():''),
       foto_urls:Array.isArray(hubState.photo_urls)?hubState.photo_urls.slice(0,4):[],
       foto_paths:Array.isArray(hubState.photo_paths)?hubState.photo_paths.slice(0,4):[]
@@ -4062,7 +4111,7 @@ async function saveOwnToSupabase(opts){
     }
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
     __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
-    hubState.birthdate=cleanBirthdate;
+    hubState.birthdate=String(propsOut.meta.birthdate||'').trim();
     hubState.city=String(propsOut.meta.city||'').trim();
     hubState.country=String(propsOut.meta.country||'').trim();
     hubState.gender=String(propsOut.meta.gender||'').trim();
@@ -4134,14 +4183,13 @@ function mergeHubStateFromLocalStorage(user){
   if(!tag)local.__ownsense_uid=String(user.id);
   var localClean={};
   Object.keys(local).forEach(function(k){
-    /* Geen categories: idem geen foto-velden uit hub-cache (zelfde uid-label met verouderde blobs komt voor). */
+    /* Geen categories/foto/basis: server props.meta is bron; lokale basis alleen als fallback na load. */
     if(k==='categories'||k==='photo_url'||k==='photo_urls'||k==='photo_paths'||k==='foto_analyse')return;
+    if(OWN_BASIS_FIELDS.indexOf(k)>=0)return;
     localClean[k]=local[k];
   });
   hubState=Object.assign(createEmptyHubState(),hubState,localClean);
-  OWN_BASIS_FIELDS.forEach(function(k){
-    hubState[k]=ownFillString(hubState[k],local[k]);
-  });
+  ownSyncBasisMetaCacheFromHubState();
   if(!tag){
     hubState.__ownsense_uid=String(user.id);
     ownPersistHubStateLocal();
