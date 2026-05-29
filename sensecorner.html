@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 16:19">
+<meta name="sc-build" content="29-05-2026 16:29">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261619"></script>
+<script src="js/sense-common.js?v=2905261629"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1237,8 +1237,13 @@ a{text-decoration:none;color:inherit}
   function renderOwnCompletionDashboard(){
     var scopes=calcOwnScopeStats();
     var own=scopes[0]||{filled:0,total:16};
+    var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
+    var basisOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+    var qTotal=Math.max(0,(own.total||0)-basisSlots.total);
+    var qFilled=Math.max(0,(own.filled||0)-basisSlots.filled);
+    var qLeft=Math.max(0,qTotal-qFilled);
     var pct=Math.max(0,Math.min(100,Math.round(((own.total?own.filled/own.total:0)*100))));
-    var left=Math.max(0,(own.total||0)-(own.filled||0));
+    if(!basisOk&&pct>=100)pct=99;
     if(ownMiniDashboard){
       ownMiniDashboard.classList.remove('low','mid','high');
       if(pct>=75)ownMiniDashboard.classList.add('high');
@@ -1249,6 +1254,9 @@ a{text-decoration:none;color:inherit}
     if(ownScopeGrid){
       ownScopeGrid.innerHTML=scopes.map(function(s){
         var p=s.total>0?Math.max(0,Math.min(100,Math.round((s.filled/s.total)*100))):0;
+        if(s.key==='own'&&!basisOk&&s.total>0){
+          p=Math.max(0,Math.min(99,Math.round((s.filled/s.total)*100)));
+        }
         var radius=16;
         var c=2*Math.PI*radius;
         var off=c*(1-p/100);
@@ -1275,9 +1283,8 @@ a{text-decoration:none;color:inherit}
       });
     }
     if(ownMiniSub){
-      var basisOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
-      if(left>0){
-        ownMiniSub.textContent=left+' OWN-vragen (Over jou) nog open in OwnSense. Onboarding-antwoorden tellen al mee; de rest vul je aan onder Vragenlijsten.';
+      if(qLeft>0){
+        ownMiniSub.textContent=qLeft+' OWN-vragen (Over jou) nog open in OwnSense. Onboarding-antwoorden tellen al mee; de rest vul je aan onder Vragenlijsten.';
       }else if(!basisOk){
         ownMiniSub.textContent='OWN-vragen staan ingevuld; vul je basisprofiel aan (leeftijd, adres en geslacht) om OWN compleet te maken.';
       }else{
@@ -1431,8 +1438,6 @@ a{text-decoration:none;color:inherit}
     var props=scOwnProfileProps;
     if(typeof senseExtractOwnBasisMetaServerOnly==='function'){
       scOwnBasisMetaServer=senseExtractOwnBasisMetaServerOnly(props);
-    }else if(typeof senseExtractOwnBasisMeta==='function'){
-      scOwnBasisMetaServer=senseExtractOwnBasisMeta(props,null);
     }else{
       var pmetaS=(props&&props.meta&&typeof props.meta==='object')?props.meta:{};
       scOwnBasisMetaServer=Object.assign({},pmetaS);
@@ -1876,7 +1881,18 @@ a{text-decoration:none;color:inherit}
       mount.innerHTML='';
       return;
     }
-    var html=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded(scOwnBasisMetaServer||{},'sc'):'';
+    var meta=scOwnBasisMetaServer||{};
+    if(typeof senseOwnBasisMetaComplete==='function'&&senseOwnBasisMetaComplete(meta)){
+      mount.innerHTML='';
+      return;
+    }
+    var html='';
+    if(typeof getBasisprofielNudge==='function'&&typeof renderBasisprofielNudgeHtml==='function'){
+      var nudge=getBasisprofielNudge(meta,'sc');
+      if(nudge)html=renderBasisprofielNudgeHtml(nudge,'sc');
+    }else if(typeof renderBasisprofielNudgeIfNeeded==='function'){
+      html=renderBasisprofielNudgeIfNeeded(meta,'sc')||'';
+    }
     mount.innerHTML=html||'';
   }
   function updateHeroWelcome(user){

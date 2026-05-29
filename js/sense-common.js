@@ -111,9 +111,13 @@
     );
   }
 
-  /** Alleen sense_profiles props (+ legacy props-root); geen hub-bridge (nudge / server-truth). */
+  /** Alleen sense_profiles props.meta; geen props-root of hub-bridge (zelfde bron als OwnSense UI). */
   function senseExtractOwnBasisMetaServerOnly(props) {
-    return senseExtractOwnBasisMeta(props, null);
+    props = props && typeof props === 'object' ? props : {};
+    if (props.meta && typeof props.meta === 'object') {
+      return Object.assign({}, props.meta);
+    }
+    return {};
   }
 
   /** props.meta + legacy props-root + optioneel hub-bridge (zelfde velden als OwnSense hubState). */
@@ -230,7 +234,8 @@
     appKey = String(appKey || 'sc').toLowerCase();
     var link = 'ownsense.html?tab=mij&focus=basis';
     if (senseOwnBasisMetaComplete(meta)) return null;
-    if (senseBasisprofielNudgeSeenToday(appKey, 'basis')) return null;
+    /* SenseCorner: altijd zichtbaar zolang basis op server incompleet is (geen dismiss vandaag). */
+    if (appKey !== 'sc' && senseBasisprofielNudgeSeenToday(appKey, 'basis')) return null;
     var missing = [];
     if (!senseOwnBasisHasAge(meta)) missing.push('leeftijd');
     if (!senseOwnBasisHasLocation(meta)) missing.push('adres');

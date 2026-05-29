@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SenseCorner - Kennismaking</title>
-  <meta name="ob-build" content="04-05-2026 13:52">
+  <meta name="ob-build" content="29-05-2026 16:32">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -336,6 +336,33 @@
       color: var(--ob-muted);
       font-family: var(--font-serif);
       font-style: italic;
+    }
+    .ob-pw-field {
+      position: relative;
+      width: 100%;
+    }
+    .ob-pw-field .ob-text-input {
+      padding-right: 72px;
+      text-align: left;
+    }
+    .ob-pw-field + .ob-pw-field {
+      margin-top: 12px;
+    }
+    .ob-pw-eye {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: 13px;
+      color: var(--warm-bruin);
+      cursor: pointer;
+      padding: 6px 8px;
+    }
+    .ob-pw-eye:hover {
+      color: var(--chocolade-diep);
     }
     .ob-code-wrap {
       display: flex;
@@ -997,14 +1024,33 @@
       </section>
 
       <section class="ob-screen" data-ob="acc5">
+        <div class="ob-ripple"><div class="ob-ripple-inner"></div></div>
+        <p class="ob-sensei" data-type="Kies een wachtwoord."></p>
+        <p class="ob-sensei smaller" data-type="Zo kun je later ook inloggen op de landingspagina."></p>
+        <div class="ob-input-wrap" id="obWrapPw">
+          <div class="ob-pw-field">
+            <input type="password" class="ob-text-input" id="obPwInput" placeholder="Wachtwoord (min. 6)" autocomplete="new-password">
+            <button type="button" class="ob-pw-eye" id="obPwToggle" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
+          </div>
+          <div class="ob-pw-field">
+            <input type="password" class="ob-text-input" id="obPwConfirm" placeholder="Herhaal wachtwoord" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="ob-cta-wrap" id="obCtaPw">
+          <button type="button" class="ob-cta-primary" id="obBtnPw" disabled>Opslaan en verder</button>
+        </div>
+        <p class="ob-inline-error" id="obPwErr" aria-live="polite"></p>
+      </section>
+
+      <section class="ob-screen" data-ob="acc6">
         <div class="ob-success-check">
           <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5,12 10,17 19,7"/></svg>
         </div>
         <p class="ob-sensei" data-type="Top, <em>{{name}}</em>."></p>
         <p class="ob-sensei smaller" data-type="Je account is veilig opgezet. Alles wat we bespreken bewaar ik nu automatisch."></p>
         <p class="ob-sensei smaller" data-type="Klaar voor het echte gesprek?"></p>
-        <div class="ob-cta-wrap" id="obCtaAcc5">
-          <button type="button" class="ob-cta-primary" id="obBtnAcc5">Laten we beginnen</button>
+        <div class="ob-cta-wrap" id="obCtaAcc6">
+          <button type="button" class="ob-cta-primary" id="obBtnAcc6">Laten we beginnen</button>
         </div>
       </section>
 
@@ -1090,6 +1136,26 @@
     try {
       sessionStorage.removeItem(OB_SS_PREFIX + "pending_otp_email");
     } catch (_e2) {}
+  }
+  function obPasswordDoneKey(uid) {
+    return OB_SS_PREFIX + (uid || "") + "_pw_done";
+  }
+  function obIsPasswordDone(uid) {
+    try {
+      return localStorage.getItem(obPasswordDoneKey(uid)) === "1";
+    } catch (_e) {
+      return false;
+    }
+  }
+  function obMarkPasswordDone(uid) {
+    if (!uid) return;
+    try {
+      localStorage.setItem(obPasswordDoneKey(uid), "1");
+    } catch (_e) {}
+  }
+  function obRouteAfterEmailVerified(uid) {
+    if (uid && obIsPasswordDone(uid)) goToStatic("acc6");
+    else goToStatic("acc5");
   }
   function obSaveStaticProgress(step) {
     if (!step) return;
@@ -1767,12 +1833,14 @@
       }
       if (otpDone || obUserEmailConfirmed(user)) {
         if (!otpDone && obUserEmailConfirmed(user)) obMarkOtpDone(uid);
-        goToStatic("acc5");
+        obRouteAfterEmailVerified(uid);
         return;
       }
       await obClearAuthSession();
       var savedStale = obRestoreStaticProgress();
-      goToStatic(savedStale && savedStale !== "acc5" && savedStale !== "acc0" ? savedStale : "acc0");
+      goToStatic(
+        savedStale && savedStale !== "acc5" && savedStale !== "acc6" && savedStale !== "acc0" ? savedStale : "acc0"
+      );
       return;
     }
 
@@ -3494,7 +3562,7 @@
           emailBtn.disabled = false;
           __obUserId = curUid;
           obMarkOtpDone(curUid);
-          goToStatic("acc5");
+          obRouteAfterEmailVerified(curUid);
           return;
         }
         // Ingelogd met een ander adres: die sessie eerst opruimen.
@@ -3677,7 +3745,7 @@
     } catch (_rpc) {
       console.warn("auto ai access rpc", _rpc);
     }
-    goToStatic("acc5");
+    obRouteAfterEmailVerified(u && u.id ? u.id : __obUserId);
   }
   codeBoxes.forEach(function (box, i) {
     box.addEventListener("input", function (e) {
@@ -3734,7 +3802,91 @@
     goToStatic("acc3");
   });
 
-  document.getElementById("obBtnAcc5").addEventListener("click", function () {
+  var pwInput = document.getElementById("obPwInput");
+  var pwConfirm = document.getElementById("obPwConfirm");
+  var pwBtn = document.getElementById("obBtnPw");
+  var pwToggle = document.getElementById("obPwToggle");
+  function obPasswordFormOk() {
+    var pw = String((pwInput && pwInput.value) || "");
+    var pw2 = String((pwConfirm && pwConfirm.value) || "");
+    return pw.length >= 6 && pw === pw2;
+  }
+  function obSyncPasswordBtn() {
+    if (pwBtn) pwBtn.disabled = !obPasswordFormOk();
+  }
+  if (pwInput) {
+    pwInput.addEventListener("input", obSyncPasswordBtn);
+    pwInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && pwBtn && !pwBtn.disabled) savePasswordAndContinue();
+    });
+  }
+  if (pwConfirm) {
+    pwConfirm.addEventListener("input", obSyncPasswordBtn);
+    pwConfirm.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && pwBtn && !pwBtn.disabled) savePasswordAndContinue();
+    });
+  }
+  if (pwToggle && pwInput) {
+    pwToggle.addEventListener("click", function () {
+      var isPw = pwInput.type === "password";
+      pwInput.type = isPw ? "text" : "password";
+      pwToggle.textContent = isPw ? "Verberg" : "Toon";
+      pwToggle.setAttribute("aria-label", isPw ? "Verberg wachtwoord" : "Toon wachtwoord");
+      pwToggle.setAttribute("aria-pressed", isPw ? "true" : "false");
+    });
+  }
+  async function savePasswordAndContinue() {
+    var errEl = document.getElementById("obPwErr");
+    if (errEl) errEl.textContent = "";
+    var pw = String((pwInput && pwInput.value) || "");
+    var pw2 = String((pwConfirm && pwConfirm.value) || "");
+    if (pw.length < 6) {
+      if (errEl) errEl.textContent = "Wachtwoord moet minstens 6 tekens hebben.";
+      return;
+    }
+    if (pw !== pw2) {
+      if (errEl) errEl.textContent = "Wachtwoorden komen niet overeen.";
+      return;
+    }
+    if (!sb) {
+      if (errEl) errEl.textContent = "Geen verbinding. Vernieuw de pagina.";
+      return;
+    }
+    var gu = await sb.auth.getUser();
+    var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+    if (!uid) {
+      if (errEl) errEl.textContent = "Je sessie is verlopen. Vernieuw de pagina.";
+      return;
+    }
+    var btnLabel = pwBtn ? pwBtn.textContent : "";
+    if (pwBtn) {
+      pwBtn.disabled = true;
+      pwBtn.textContent = "Even geduld…";
+    }
+    var upd = await sb.auth.updateUser({ password: pw });
+    if (pwBtn) {
+      pwBtn.textContent = btnLabel || "Opslaan en verder";
+      obSyncPasswordBtn();
+    }
+    if (upd && upd.error) {
+      var raw = String((upd.error && upd.error.message) || "").toLowerCase();
+      if (errEl) {
+        errEl.textContent =
+          raw.indexOf("same") >= 0
+            ? "Kies een ander wachtwoord dan je huidige."
+            : window.senseMapAuthError
+              ? window.senseMapAuthError(upd.error)
+              : "Kon wachtwoord niet opslaan. Probeer opnieuw.";
+      }
+      return;
+    }
+    __obUserId = uid;
+    obMarkPasswordDone(uid);
+    goToStatic("acc6");
+  }
+  if (pwBtn) pwBtn.addEventListener("click", savePasswordAndContinue);
+
+  document.getElementById("obBtnAcc6").addEventListener("click", function () {
     goToStatic("mir0");
     updateMirrorCTA();
   });
