@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SenseCorner - Kennismaking</title>
-  <meta name="ob-build" content="29-05-2026 16:32">
+  <meta name="ob-build" content="29-05-2026 16:40">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1152,10 +1152,113 @@
     try {
       localStorage.setItem(obPasswordDoneKey(uid), "1");
     } catch (_e) {}
+    obClearNeedsPassword(uid);
   }
-  function obRouteAfterEmailVerified(uid) {
-    if (uid && obIsPasswordDone(uid)) goToStatic("acc6");
-    else goToStatic("acc5");
+  function obNeedsPasswordKey(uid) {
+    return OB_SS_PREFIX + (uid || "") + "_needs_pw";
+  }
+  function obMarkNeedsPassword(uid) {
+    if (!uid) return;
+    try {
+      localStorage.setItem(obNeedsPasswordKey(uid), "1");
+    } catch (_e) {}
+  }
+  function obClearNeedsPassword(uid) {
+    if (!uid) return;
+    try {
+      localStorage.removeItem(obNeedsPasswordKey(uid));
+    } catch (_e) {}
+  }
+  function obLocalNeedsPassword(uid) {
+    try {
+      return localStorage.getItem(obNeedsPasswordKey(uid)) === "1";
+    } catch (_e) {
+      return false;
+    }
+  }
+  function obOtpSignupIntentStorageKey() {
+    return OB_SS_PREFIX + "otp_signup_intent";
+  }
+  function obSetOtpSignupIntent(isSignup, email) {
+    try {
+      sessionStorage.setItem(
+        obOtpSignupIntentStorageKey(),
+        JSON.stringify({
+          signup: !!isSignup,
+          email: String(email || "").trim().toLowerCase()
+        })
+      );
+    } catch (_e) {}
+    obOtpVerifyAsSignup = !!isSignup;
+  }
+  function obIsOtpSignupIntentForEmail(email) {
+    var em = String(email || userEmail || "").trim().toLowerCase();
+    if (!em) return !!obOtpVerifyAsSignup;
+    try {
+      var raw = sessionStorage.getItem(obOtpSignupIntentStorageKey());
+      if (!raw) return !!obOtpVerifyAsSignup;
+      var o = JSON.parse(raw);
+      return !!(o && o.signup && String(o.email || "").trim().toLowerCase() === em);
+    } catch (_e2) {
+      return !!obOtpVerifyAsSignup;
+    }
+  }
+  function obUserUsesOAuthProvider(user) {
+    if (!user) return false;
+    var prov = String((user.app_metadata && user.app_metadata.provider) || "").toLowerCase();
+    if (prov === "google") return true;
+    var ids = Array.isArray(user.identities) ? user.identities : [];
+    for (var i = 0; i < ids.length; i++) {
+      if (String((ids[i] && ids[i].provider) || "").toLowerCase() === "google") return true;
+    }
+    return false;
+  }
+  function obUserMetadataNeedsPassword(user) {
+    if (!user || !user.user_metadata || typeof user.user_metadata !== "object") return false;
+    return user.user_metadata.onboarding_needs_password === true;
+  }
+  function obShouldRequirePasswordStep(uid, user) {
+    if (obUserUsesOAuthProvider(user)) return false;
+    if (uid && obIsPasswordDone(uid)) return false;
+    if (uid && obLocalNeedsPassword(uid)) return true;
+    if (obUserMetadataNeedsPassword(user)) return true;
+    var em = String((user && user.email) || userEmail || "").trim().toLowerCase();
+    if (obIsOtpSignupIntentForEmail(em)) return true;
+    return false;
+  }
+  function obRouteAfterEmailVerified(uid, user) {
+    if (obShouldRequirePasswordStep(uid, user)) goToStatic("acc5");
+    else goToStatic("acc6");
+  }
+  async function obMarkSignupNeedsPassword(uid, user) {
+    if (!uid) return;
+    obMarkNeedsPassword(uid);
+    try {
+      localStorage.removeItem(obPasswordDoneKey(uid));
+    } catch (_clr) {}
+    if (!sb || !sb.auth || typeof sb.auth.updateUser !== "function") return;
+    var meta =
+      user && user.user_metadata && typeof user.user_metadata === "object"
+        ? Object.assign({}, user.user_metadata)
+        : {};
+    if (meta.onboarding_needs_password === true) return;
+    meta.onboarding_needs_password = true;
+    try {
+      await sb.auth.updateUser({ data: meta });
+    } catch (_metaPw) {}
+  }
+  async function obClearSignupNeedsPassword(uid) {
+    obClearNeedsPassword(uid);
+    if (!sb || !sb.auth || typeof sb.auth.updateUser !== "function") return;
+    try {
+      var gu = await sb.auth.getUser();
+      var u = gu && gu.data && gu.data.user;
+      if (!u || !u.user_metadata || typeof u.user_metadata !== "object") return;
+      if (u.user_metadata.onboarding_needs_password !== true) return;
+      var meta = Object.assign({}, u.user_metadata);
+      delete meta.onboarding_needs_password;
+      await sb.auth.updateUser({ data: meta });
+    } catch (_clrMeta) {}
   }
   function obSaveStaticProgress(step) {
     if (!step) return;
@@ -1825,6 +1928,15 @@
     var otpDone = obIsOtpDone(uid);
     var pendingOtp = obPendingOtpEmail();
 
+    if (
+      obShouldRequirePasswordStep(uid, user) &&
+      (otpDone || obUserEmailConfirmed(user) || pendingOtp)
+    ) {
+      if (!otpDone && obUserEmailConfirmed(user)) obMarkOtpDone(uid);
+      obRouteAfterEmailVerified(uid, user);
+      return;
+    }
+
     if (factsSub.size === 0 && mirrorsDb.size <= 1) {
       if (pendingOtp) {
         userEmail = pendingOtp;
@@ -1833,7 +1945,7 @@
       }
       if (otpDone || obUserEmailConfirmed(user)) {
         if (!otpDone && obUserEmailConfirmed(user)) obMarkOtpDone(uid);
-        obRouteAfterEmailVerified(uid);
+        obRouteAfterEmailVerified(uid, user);
         return;
       }
       await obClearAuthSession();
@@ -3544,7 +3656,7 @@
     } catch (_mailCheckErr) {
       // Fail-open: onboarding mag doorgaan als de check tijdelijk niet bereikbaar is.
     }
-    obOtpVerifyAsSignup = !existingActive;
+    obSetOtpSignupIntent(!existingActive, userEmail);
     emailBtn.disabled = true;
     obEnsureAuthClient();
     try {
@@ -3562,7 +3674,7 @@
           emailBtn.disabled = false;
           __obUserId = curUid;
           obMarkOtpDone(curUid);
-          obRouteAfterEmailVerified(curUid);
+          obRouteAfterEmailVerified(curUid, curUser);
           return;
         }
         // Ingelogd met een ander adres: die sessie eerst opruimen.
@@ -3738,6 +3850,9 @@
     if (u && u.id) {
       __obUserId = u.id;
       obMarkOtpDone(u.id);
+      if (obIsOtpSignupIntentForEmail(verifyEmail)) {
+        await obMarkSignupNeedsPassword(u.id, u);
+      }
     }
     try {
       var rpcAi = await sb.rpc("apply_auto_ai_access_after_email_verify");
@@ -3745,7 +3860,14 @@
     } catch (_rpc) {
       console.warn("auto ai access rpc", _rpc);
     }
-    obRouteAfterEmailVerified(u && u.id ? u.id : __obUserId);
+    var routeUser = u || null;
+    if (!routeUser) {
+      try {
+        var guRoute = await sb.auth.getUser();
+        routeUser = guRoute && guRoute.data && guRoute.data.user;
+      } catch (_guR) {}
+    }
+    obRouteAfterEmailVerified(routeUser && routeUser.id ? routeUser.id : __obUserId, routeUser);
   }
   codeBoxes.forEach(function (box, i) {
     box.addEventListener("input", function (e) {
@@ -3881,6 +4003,7 @@
       return;
     }
     __obUserId = uid;
+    await obClearSignupNeedsPassword(uid);
     obMarkPasswordDone(uid);
     goToStatic("acc6");
   }

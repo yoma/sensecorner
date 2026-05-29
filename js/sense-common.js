@@ -82,7 +82,11 @@
   function senseOwnBasisHasAge(meta, calcAgeFn) {
     meta = meta && typeof meta === 'object' ? meta : {};
     calcAgeFn = calcAgeFn || senseCalcAgeFromBirthdate;
-    if (String(meta.age || '').trim()) return true;
+    var ageRaw = String(meta.age || '').trim();
+    if (ageRaw) {
+      var ageNum = parseInt(ageRaw, 10);
+      if (ageNum > 0 && ageNum < 130) return true;
+    }
     var bd = String(meta.birthdate || '').trim();
     return !!(bd && calcAgeFn(bd));
   }
@@ -255,13 +259,16 @@
         missing[1] +
         ' aan in je basisprofiel in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
     }
-    return {
+    var nudge = {
       id: 'basis',
       title: 'Basisprofiel aanvullen',
       message: msg,
       link: link,
       linkLabel: 'Nu aanvullen'
     };
+    /* SenseCorner: incomplete server meta mag nooit stil blijven (geen null na deze check). */
+    if (appKey === 'sc' && !senseOwnBasisMetaComplete(meta)) return nudge;
+    return nudge;
   }
 
   function senseEscHtml(s) {
