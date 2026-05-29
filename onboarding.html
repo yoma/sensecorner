@@ -1140,8 +1140,13 @@
       try {
         body = await r.json();
       } catch (_json) {}
+      console.log(
+        "[OTP] verify type=" + type + " status=" + r.status,
+        body && (body.error_code || body.msg || body.error_description) ? body : "(ok)"
+      );
       if (!r.ok) {
         return {
+          status: r.status,
           data: { user: null, session: null },
           error: {
             message: body.msg || body.error_description || body.message || "Verificatie mislukt",
@@ -1150,6 +1155,7 @@
         };
       }
       return {
+        status: r.status,
         data: {
           user: body.user || null,
           session: {
@@ -1164,28 +1170,35 @@
         error: null
       };
     } catch (_net) {
+      console.warn("[OTP] verify netwerkfout type=" + type, _net);
       return {
+        status: 0,
         data: { user: null, session: null },
         error: { message: "Netwerkfout bij verifiëren", code: "network_error" }
       };
     }
   }
   async function obVerifyOtpAllTypes(email, token, preferSignup) {
-    var types = preferSignup
-      ? ["email", "signup", "magiclink"]
-      : ["email", "signup", "magiclink"];
-    var last = null;
-    var ti;
-    obEnsureAuthClient();
-    for (ti = 0; ti < types.length; ti++) {
-      if (sb && sb.auth && typeof sb.auth.verifyOtp === "function") {
-        last = await sb.auth.verifyOtp({ email: email, token: token, type: types[ti] });
-        if (!last || !last.error) return last;
-      }
-      last = await obVerifyOtpRaw(email, token, types[ti]);
-      if (!last || !last.error) return last;
+    var primary = preferSignup ? "signup" : "email";
+    var secondary = preferSignup ? "email" : "signup";
+    var res = await obVerifyOtpRaw(email, token, primary);
+    if (!res || !res.error) {
+      window.__obLastOtpError = null;
+      return res;
     }
-    return last;
+    var code = String((res.error && res.error.code) || "").toLowerCase();
+    window.__obLastOtpError = res.error;
+    // Bij 'verlopen/gebruikt' heeft een ander type geen zin: token is server-side weg.
+    if (code.indexOf("expired") >= 0 || code.indexOf("otp_expired") >= 0) {
+      return res;
+    }
+    var res2 = await obVerifyOtpRaw(email, token, secondary);
+    if (!res2 || !res2.error) {
+      window.__obLastOtpError = null;
+      return res2;
+    }
+    window.__obLastOtpError = res2.error;
+    return res2;
   }
   var LP_OB_PROGRESS_KEY = "sense_corner_lp_ob_uid";
   var sb = null;
@@ -3162,21 +3175,26 @@
     obEnsureAuthClient();
     try {
       var curSess = await sb.auth.getSession();
-      var curUser = curSess && curSess.data && curSess.data.session && curSess.data.session.user;
-      if (curUser) {
+      var curSessObj = curSess && curSess.data && curSess.data.session;
+      var curUser = curSessObj && curSessObj.user;
+      var curHasToken = curSessObj && String(curSessObj.access_token || "").trim();
+      if (curUser && curHasToken) {
         var curUid = curUser.id;
         var curMail = String(curUser.email || "")
           .trim()
           .toLowerCase();
-        if (curMail === userEmail && obIsOtpDone(curUid)) {
+        // Al ingelogd met dit e-mailadres (bevestigd): geen code nodig, gewoon door.
+        if (curMail === userEmail && (obIsOtpDone(curUid) || obUserEmailConfirmed(curUser))) {
           emailBtn.disabled = false;
           __obUserId = curUid;
+          obMarkOtpDone(curUid);
           goToStatic("acc5");
           return;
         }
+        // Ingelogd met een ander adres: die sessie eerst opruimen.
+        if (curMail !== userEmail) await obClearAuthSession();
       }
     } catch (_sessCheck) {}
-    await obClearAuthSession();
     var res = await sb.auth.signInWithOtp({
       email: userEmail,
       options: { shouldCreateUser: true }
@@ -3291,14 +3309,28 @@
     if (res && res.error) {
       var rawErr = String((res.error && res.error.message) || "").toLowerCase();
       var errCode = String((res.error && res.error.code) || "").toLowerCase();
+      console.error("[OTP] verify mislukt", {
+        code: res.error.code,
+        message: res.error.message,
+        status: res.status
+      });
       var expired =
         rawErr.indexOf("expir") >= 0 ||
         rawErr.indexOf("invalid") >= 0 ||
         errCode.indexOf("expir") >= 0;
+      var otpDisabled =
+        errCode.indexOf("otp_disabled") >= 0 ||
+        rawErr.indexOf("signups not allowed") >= 0 ||
+        rawErr.indexOf("otp_disabled") >= 0;
       if (errEl) {
-        errEl.textContent = expired
-          ? "Deze code werkt niet meer (verlopen of al gebruikt). Vraag hieronder een nieuwe code aan."
-          : "De code klopt niet. Controleer de 6 cijfers of vraag een nieuwe code aan.";
+        if (otpDisabled) {
+          errEl.textContent =
+            "Aanmelden via code staat uit in de serverinstellingen. Dit moet in Supabase aangezet worden.";
+        } else {
+          errEl.textContent = expired
+            ? "Deze code werkt niet meer (verlopen of al gebruikt). Vraag hieronder een nieuwe code aan."
+            : "De code klopt niet. Controleer de 6 cijfers of vraag een nieuwe code aan.";
+        }
       }
       if (expired) {
         clearInterval(resendInterval);
