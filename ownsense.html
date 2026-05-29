@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="29-05-2026 15:45">
+<meta name="os-build" content="29-05-2026 15:55">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2170,6 +2170,27 @@ async function refreshOwnPhotoSlotPreviews(){
   }
 }
 
+function ownClearSaveInd(targetId){
+  var ids=targetId?[targetId]:['basisSaveInd','saveIndicator'];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    if(el.__ownSaveFbT){try{clearTimeout(el.__ownSaveFbT);}catch(_c){}el.__ownSaveFbT=null;}
+    el.textContent='';
+    el.style.color='';
+  });
+}
+function ownResetBasisSaveUi(btn){
+  ownClearSaveInd('basisSaveInd');
+  var b=btn;
+  try{
+    if(!b||!b.isConnected){
+      var row=document.querySelector('#basisprofiel .save-row .btn-primary');
+      if(row)b=row;
+    }
+    if(b){b.disabled=false;b.textContent='Opslaan';}
+  }catch(_e){}
+}
 function ownShowSaveFeedback(targetId,msg,opts){
   opts=opts||{};
   var dur=opts.durationMs||2200;
@@ -2181,7 +2202,8 @@ function ownShowSaveFeedback(targetId,msg,opts){
     if(!el)return;
     el.textContent=text;
     el.style.color=color;
-    if(el.__ownSaveFbT){try{clearTimeout(el.__ownSaveFbT);}catch(_c){}}
+    if(el.__ownSaveFbT){try{clearTimeout(el.__ownSaveFbT);}catch(_c){}el.__ownSaveFbT=null;}
+    if(opts.noAutoClear)return;
     el.__ownSaveFbT=setTimeout(function(){
       if(el.textContent===text)el.textContent='';
     },dur);
@@ -2442,34 +2464,54 @@ async function saveOwnBasisprofiel(btn){
   if(hubState.gender!=='overig')hubState.gender_custom='';
   hubState.updated_at=new Date().toISOString();
   ownSyncBasisMetaCacheFromHubState();
-  if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
-  ownShowSaveFeedback('basisSaveInd','Synchroniseren…',{durationMs:60000});
+  var uiGuard={done:false,watchdog:null,outcome:null,feedbackShown:false};
+  function finishBasisSaveUi(outcome){
+    if(uiGuard.done)return;
+    uiGuard.done=true;
+    uiGuard.outcome=outcome;
+    if(uiGuard.watchdog){try{clearTimeout(uiGuard.watchdog);}catch(_w){}uiGuard.watchdog=null;}
+    ownResetBasisSaveUi(btn);
+  }
+  function applyBasisSaveOutcomeFeedback(outcome){
+    if(uiGuard.feedbackShown||!outcome)return;
+    uiGuard.feedbackShown=true;
+    if(outcome==='ok'){
+      ownShowSaveFeedback('basisSaveInd','Opgeslagen en gesynchroniseerd',{durationMs:4200});
+      flashOwnsenseMessage('Opgeslagen en gesynchroniseerd',false);
+    }else if(outcome==='sync_fail'||outcome==='timeout'){
+      ownShowSaveFeedback('basisSaveInd','Lokaal opgeslagen, sync mislukt',{isError:true,durationMs:5200});
+      flashOwnsenseMessage('Lokaal opgeslagen, sync mislukt',true,{durationMs:6800});
+    }else if(outcome==='error'){
+      ownShowSaveFeedback('basisSaveInd','Opslaan mislukt',{isError:true,durationMs:5200});
+    }
+  }
+  if(btn){btn.disabled=true;btn.textContent='Synchroniseren…';}
+  ownShowSaveFeedback('basisSaveInd','Synchroniseren…',{noAutoClear:true});
+  uiGuard.watchdog=setTimeout(function(){
+    finishBasisSaveUi('timeout');
+    applyBasisSaveOutcomeFeedback('timeout');
+  },30000);
   try{
-    if(!window.__ownSenseUid){
-      var u=await ownAuthUserFast(initSupabase());
-      if(u)window.__ownSenseUid=String(u.id);
-    }
     ownPersistHubStateLocal();
-    var res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:22000,basisSave:true});
-    if(res&&res.reason==='timeout'){
-      res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:28000,basisSave:true});
-    }
+    var res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:24000,basisSave:true});
+    if(uiGuard.done)return;
     if(res&&res.synced){
       ownPersistHubStateLocal();
-      ownShowSaveFeedback('basisSaveInd','Opgeslagen');
-      flashOwnsenseMessage('Basisprofiel opgeslagen en gesynchroniseerd.',false);
+      finishBasisSaveUi('ok');
     }else{
-      ownShowSaveFeedback('basisSaveInd','Cloud-sync mislukt',{isError:true,durationMs:5200});
-      flashOwnsenseMessage('Lokaal bewaard, maar cloud-sync mislukt. Controleer je verbinding en druk opnieuw op Opslaan.',true,{durationMs:6800});
+      finishBasisSaveUi('sync_fail');
     }
   }catch(e){
-    var msg=String((e&&e.message)||e||'').trim();
-    flashOwnsenseMessage(msg?('Opslaan mislukt: '+msg):'Opslaan mislukt. Probeer opnieuw.',true);
-    ownShowSaveFeedback('basisSaveInd','Opslaan mislukt',{isError:true});
+    if(!uiGuard.done){
+      var msg=String((e&&e.message)||e||'').trim();
+      flashOwnsenseMessage(msg?('Opslaan mislukt: '+msg):'Opslaan mislukt. Probeer opnieuw.',true);
+      finishBasisSaveUi('error');
+    }
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Opslaan';}
+    if(!uiGuard.done)finishBasisSaveUi('sync_fail');
+    renderBasisprofielCard({collapseIfComplete:ownBasisprofielIsComplete()});
+    if(uiGuard.outcome)applyBasisSaveOutcomeFeedback(uiGuard.outcome);
   }
-  renderBasisprofielCard({collapseIfComplete:ownBasisprofielIsComplete()});
 }
 function renderMijTab(){
   var topEl=document.getElementById('mijTopCard');
@@ -4031,103 +4073,126 @@ async function loadOwnTimelineFromSupabase(){
   }catch(e){}
 }
 
-async function saveOwnToSupabase(opts){
+async function saveOwnToSupabaseCore(opts){
   opts=opts||{};
   var throwOnFail=opts.throwOnFail!==false;
-  var timeoutMs=opts.timeoutMs||(opts.basisSave?22000:18000);
+  var upsertMs=Math.max(4000,Math.min(22000,(opts.timeoutMs||(opts.basisSave?24000:18000))-6000));
   var client=initSupabase();
   if(!client){
     var errNoClient=new Error('Supabase niet beschikbaar.');
     if(throwOnFail)throw errNoClient;
     return {ok:false,synced:false,reason:'no_client'};
   }
-  try{
-    var user=await ownAuthUserFast(client);
-    if(!user){
-      var errNoUser=new Error('Je bent niet ingelogd.');
-      if(throwOnFail)throw errNoUser;
-      return {ok:false,synced:false,reason:'no_user'};
-    }
-    var cleanName=String(hubState.display_name||'').trim();
-    var basisMeta=ownBuildBasisMetaForSave({basisSave:!!opts.basisSave});
-    var propsOut={
-      _v:1,
-      roepnaam:cleanName||'',
-      display_name:cleanName||'',
-      full_name:cleanName||'',
-      name:cleanName||'',
-      categories:hubState.categories,
-      foto_urls:hubState.photo_urls,
-      foto_paths:hubState.photo_paths||[],
-      foto_analyse:hubState.foto_analyse
-    };
-    propsOut.meta=Object.assign({},__ownSensePropsMetaCache,{
-      roepnaam:cleanName||'',
-      display_name:cleanName||'',
-      full_name:cleanName||'',
-      birthdate:basisMeta.birthdate||'',
-      age:basisMeta.age||null,
-      city:basisMeta.city||'',
-      country:basisMeta.country||'',
-      gender:basisMeta.gender||'',
-      gender_custom:basisMeta.gender_custom||'',
-      photo_url:String(hubState.photo_url||'').trim()||(hubState.photo_urls&&hubState.photo_urls[0]?String(hubState.photo_urls[0]).trim():''),
-      foto_urls:Array.isArray(hubState.photo_urls)?hubState.photo_urls.slice(0,4):[],
-      foto_paths:Array.isArray(hubState.photo_paths)?hubState.photo_paths.slice(0,4):[]
-    },buildOwnHubMirrorForMeta());
-    PK.forEach(function(k){propsOut[k]=hubState.props[k]||0;});
-    var payload={
-      user_id:user.id,
-      name:'OWN Sense',
-      phone:null,
-      bericht_count:Math.max(hubState.last_insight_count||0,0),
-      last_active:new Date().toISOString(),
-      props:propsOut,
-      foto_urls:hubState.photo_urls,
-      foto_analyse:hubState.foto_analyse,
-      insight_all:hubState.insight_all||null,
-      insight_ds:hubState.insight_ds||null,
-      insight_fs:hubState.insight_fs||null,
-      insight_ss:hubState.insight_ss||null,
-      insight_gen:hubState.insight_gen||null,
-      last_insight_count:parseInt(hubState.last_insight_count,10)||0,
-      last_insight_at:hubState.last_insight_at||null,
-      insight_scores_snap:hubState.insight_scores_snap||{},
-      algemeen_text:hubState.algemeen_text||'',
-      ai_summary_general:hubState.ai_summary_general||'',
-      ai_summary_per_app:hubState.ai_summary_per_app||{},
-      last_summary_at:new Date().toISOString(),
-      foto_patroon_text:hubState.foto_patroon_text||''
-    };
-    var up=await ownPromiseTimeout(
-      client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'}),
-      timeoutMs,
+  var user=await ownPromiseTimeout(ownAuthUserFast(client),8000,null);
+  if(!user){
+    var errNoUser=new Error('Je bent niet ingelogd.');
+    if(throwOnFail)throw errNoUser;
+    return {ok:false,synced:false,reason:'no_user'};
+  }
+  var cleanName=String(hubState.display_name||'').trim();
+  var basisMeta=ownBuildBasisMetaForSave({basisSave:!!opts.basisSave});
+  var propsOut={
+    _v:1,
+    roepnaam:cleanName||'',
+    display_name:cleanName||'',
+    full_name:cleanName||'',
+    name:cleanName||'',
+    categories:hubState.categories,
+    foto_urls:hubState.photo_urls,
+    foto_paths:hubState.photo_paths||[],
+    foto_analyse:hubState.foto_analyse
+  };
+  propsOut.meta=Object.assign({},__ownSensePropsMetaCache,{
+    roepnaam:cleanName||'',
+    display_name:cleanName||'',
+    full_name:cleanName||'',
+    birthdate:basisMeta.birthdate||'',
+    age:basisMeta.age||null,
+    city:basisMeta.city||'',
+    country:basisMeta.country||'',
+    gender:basisMeta.gender||'',
+    gender_custom:basisMeta.gender_custom||'',
+    photo_url:String(hubState.photo_url||'').trim()||(hubState.photo_urls&&hubState.photo_urls[0]?String(hubState.photo_urls[0]).trim():''),
+    foto_urls:Array.isArray(hubState.photo_urls)?hubState.photo_urls.slice(0,4):[],
+    foto_paths:Array.isArray(hubState.photo_paths)?hubState.photo_paths.slice(0,4):[]
+  },buildOwnHubMirrorForMeta());
+  PK.forEach(function(k){propsOut[k]=hubState.props[k]||0;});
+  var payload={
+    user_id:user.id,
+    name:'OWN Sense',
+    phone:null,
+    bericht_count:Math.max(hubState.last_insight_count||0,0),
+    last_active:new Date().toISOString(),
+    props:propsOut,
+    foto_urls:hubState.photo_urls,
+    foto_analyse:hubState.foto_analyse,
+    insight_all:hubState.insight_all||null,
+    insight_ds:hubState.insight_ds||null,
+    insight_fs:hubState.insight_fs||null,
+    insight_ss:hubState.insight_ss||null,
+    insight_gen:hubState.insight_gen||null,
+    last_insight_count:parseInt(hubState.last_insight_count,10)||0,
+    last_insight_at:hubState.last_insight_at||null,
+    insight_scores_snap:hubState.insight_scores_snap||{},
+    algemeen_text:hubState.algemeen_text||'',
+    ai_summary_general:hubState.ai_summary_general||'',
+    ai_summary_per_app:hubState.ai_summary_per_app||{},
+    last_summary_at:new Date().toISOString(),
+    foto_patroon_text:hubState.foto_patroon_text||''
+  };
+  try{JSON.stringify(payload);}catch(jsonErr){
+    var errPayload=new Error('Profielgegevens konden niet worden verzonden.');
+    console.warn('saveOwnToSupabase payload',jsonErr);
+    if(throwOnFail)throw errPayload;
+    return {ok:false,synced:false,reason:'payload_invalid'};
+  }
+  var up=await ownPromiseTimeout(
+    client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'}),
+    upsertMs,
+    null
+  );
+  if(up===null){
+    var errTimeout=new Error('Opslaan duurde te lang. Je gegevens staan lokaal bewaard.');
+    if(throwOnFail)throw errTimeout;
+    return {ok:true,synced:false,reason:'timeout'};
+  }
+  if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
+  __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
+  hubState.birthdate=String(propsOut.meta.birthdate||'').trim();
+  hubState.city=String(propsOut.meta.city||'').trim();
+  hubState.country=String(propsOut.meta.country||'').trim();
+  hubState.gender=String(propsOut.meta.gender||'').trim();
+  hubState.gender_custom=String(propsOut.meta.gender_custom||'').trim();
+  if(cleanName){
+    void ownPromiseTimeout(
+      client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}}),
+      5000,
       null
+    ).catch(function(){});
+  }
+  return {ok:true,synced:true};
+}
+async function saveOwnToSupabase(opts){
+  opts=opts||{};
+  var throwOnFail=opts.throwOnFail!==false;
+  var totalMs=opts.timeoutMs||(opts.basisSave?24000:18000);
+  try{
+    var raced=await ownPromiseTimeout(
+      saveOwnToSupabaseCore(Object.assign({},opts,{throwOnFail:true})),
+      totalMs,
+      {__ownTimedOut:true}
     );
-    if(up===null){
-      var errTimeout=new Error('Opslaan duurde te lang. Je gegevens staan lokaal bewaard.');
-      if(throwOnFail)throw errTimeout;
+    if(raced&&raced.__ownTimedOut){
+      if(throwOnFail)throw new Error('Opslaan duurde te lang. Je gegevens staan lokaal bewaard.');
       return {ok:true,synced:false,reason:'timeout'};
     }
-    if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
-    __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
-    hubState.birthdate=String(propsOut.meta.birthdate||'').trim();
-    hubState.city=String(propsOut.meta.city||'').trim();
-    hubState.country=String(propsOut.meta.country||'').trim();
-    hubState.gender=String(propsOut.meta.gender||'').trim();
-    hubState.gender_custom=String(propsOut.meta.gender_custom||'').trim();
-    if(cleanName){
-      void ownPromiseTimeout(
-        client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}}),
-        5000,
-        null
-      ).catch(function(){});
-    }
-    return {ok:true,synced:true};
+    return raced;
   }catch(e){
     console.warn('saveOwnToSupabase',e);
     if(throwOnFail)throw e;
-    return {ok:false,synced:false,reason:String((e&&e.message)||e||'error')};
+    var reason=String((e&&e.message)||e||'error');
+    if(reason.indexOf('te lang')>=0)return {ok:true,synced:false,reason:'timeout'};
+    return {ok:false,synced:false,reason:reason};
   }
 }
 
