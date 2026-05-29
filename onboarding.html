@@ -1037,11 +1037,64 @@
   var SURL = "https://ghuqjtdrkwssyqvcubcd.supabase.co";
   var SKEY = "sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq";
   var OB_SS_PREFIX = "sense_onb_";
+
+  function obOtpDoneKey(uid) {
+    return OB_SS_PREFIX + (uid || "") + "_otp_done";
+  }
+  function obIsOtpDone(uid) {
+    try {
+      return localStorage.getItem(obOtpDoneKey(uid)) === "1";
+    } catch (_e) {
+      return false;
+    }
+  }
+  function obMarkOtpDone(uid) {
+    if (!uid) return;
+    try {
+      localStorage.setItem(obOtpDoneKey(uid), "1");
+    } catch (_e) {}
+    try {
+      sessionStorage.removeItem(OB_SS_PREFIX + "pending_otp_email");
+    } catch (_e2) {}
+  }
+  function obSaveStaticProgress(step) {
+    if (!step) return;
+    try {
+      sessionStorage.setItem(OB_SS_PREFIX + "static_step", step);
+      if (userName) sessionStorage.setItem(OB_SS_PREFIX + "user_name", userName);
+      if (userEmail) sessionStorage.setItem(OB_SS_PREFIX + "user_email", userEmail);
+    } catch (_e) {}
+  }
+  function obRestoreStaticProgress() {
+    try {
+      userName = sessionStorage.getItem(OB_SS_PREFIX + "user_name") || userName;
+      userEmail = sessionStorage.getItem(OB_SS_PREFIX + "user_email") || userEmail;
+      return sessionStorage.getItem(OB_SS_PREFIX + "static_step") || "";
+    } catch (_e) {
+      return "";
+    }
+  }
+  function obPendingOtpEmail() {
+    try {
+      return String(sessionStorage.getItem(OB_SS_PREFIX + "pending_otp_email") || "")
+        .trim()
+        .toLowerCase();
+    } catch (_e) {
+      return "";
+    }
+  }
+  async function obClearAuthSession() {
+    if (!sb || !sb.auth) return;
+    try {
+      await sb.auth.signOut();
+    } catch (_e) {}
+  }
   var LP_OB_PROGRESS_KEY = "sense_corner_lp_ob_uid";
   var sb = null;
   var __obUserId = "";
   var userName = "";
   var userEmail = "";
+  var obOtpVerifyAsSignup = false;
   var selectedMirrors = new Set(["own", "date", "family", "friend", "self"]);
   var answers = {};
   var photo = "";
@@ -1538,6 +1591,17 @@
     }
     var session = await obGetSessionRobust();
     if (!session || !session.user || !String(session.access_token || "").trim()) {
+      var pendingNoSess = obPendingOtpEmail();
+      var savedNoSess = obRestoreStaticProgress();
+      if (pendingNoSess && (savedNoSess === "acc4" || !savedNoSess)) {
+        userEmail = pendingNoSess;
+        goToStatic("acc4");
+        return;
+      }
+      if (savedNoSess && savedNoSess !== "acc0") {
+        goToStatic(savedNoSess);
+        return;
+      }
       goToStatic("acc0");
       return;
     }
@@ -1551,7 +1615,7 @@
       window.location.href = "sensecorner.html";
       return;
     }
-    userEmail = String(user.email || "").trim();
+    userEmail = String(user.email || "").trim().toLowerCase();
     var meta = (user.user_metadata && typeof user.user_metadata === "object") ? user.user_metadata : {};
     userName =
       String(meta.roepnaam || meta.display_name || meta.full_name || "").trim() ||
@@ -1564,9 +1628,22 @@
       applyMirrorSelectionToDom();
     }
     var slot1 = await hasResumePrimaryPhoto(uid);
+    var otpDone = obIsOtpDone(uid);
+    var pendingOtp = obPendingOtpEmail();
 
     if (factsSub.size === 0 && mirrorsDb.size <= 1) {
-      goToStatic("acc5");
+      if (otpDone) {
+        goToStatic("acc5");
+        return;
+      }
+      if (pendingOtp) {
+        userEmail = pendingOtp;
+        goToStatic("acc4");
+        return;
+      }
+      await obClearAuthSession();
+      var savedStale = obRestoreStaticProgress();
+      goToStatic(savedStale && savedStale !== "acc5" && savedStale !== "acc0" ? savedStale : "acc0");
       return;
     }
 
@@ -2950,6 +3027,7 @@
   function goToStatic(key) {
     showStatic(key);
     animateStaticScreen(key);
+    if (key && String(key).indexOf("acc") === 0) obSaveStaticProgress(key);
   }
 
   document.getElementById("obBtnAcc0").addEventListener("click", function () {
@@ -3008,10 +3086,28 @@
     } catch (_mailCheckErr) {
       // Fail-open: onboarding mag doorgaan als de check tijdelijk niet bereikbaar is.
     }
+    obOtpVerifyAsSignup = !existingActive;
     emailBtn.disabled = true;
+    try {
+      var curSess = await sb.auth.getSession();
+      var curUser = curSess && curSess.data && curSess.data.session && curSess.data.session.user;
+      if (curUser) {
+        var curUid = curUser.id;
+        var curMail = String(curUser.email || "")
+          .trim()
+          .toLowerCase();
+        if (curMail === userEmail && obIsOtpDone(curUid)) {
+          emailBtn.disabled = false;
+          __obUserId = curUid;
+          goToStatic("acc5");
+          return;
+        }
+        if (curMail !== userEmail) await obClearAuthSession();
+      }
+    } catch (_sessCheck) {}
     var res = await sb.auth.signInWithOtp({
       email: userEmail,
-      options: { shouldCreateUser: !existingActive }
+      options: { shouldCreateUser: true }
     });
     emailBtn.disabled = false;
     if (res && res.error) {
@@ -3024,6 +3120,9 @@
       }
       return;
     }
+    try {
+      sessionStorage.setItem(OB_SS_PREFIX + "pending_otp_email", userEmail);
+    } catch (_pend) {}
     goToStatic("acc4");
     startResendTimer();
   }
@@ -3110,16 +3209,30 @@
       if (errEl) errEl.textContent = "Geen verbinding. Vernieuw de pagina.";
       return;
     }
+    var btnLabel = codeBtn.textContent;
     codeBtn.disabled = true;
-    var res = await sb.auth.verifyOtp({ email: verifyEmail, token: token, type: "email" });
-    codeBtn.disabled = false;
+    codeBtn.textContent = "Even geduld…";
+    var res = null;
+    var otpTypes = obOtpVerifyAsSignup
+      ? ["signup", "email", "magiclink"]
+      : ["email", "signup", "magiclink"];
+    for (var oi = 0; oi < otpTypes.length; oi++) {
+      res = await sb.auth.verifyOtp({ email: verifyEmail, token: token, type: otpTypes[oi] });
+      if (!res || !res.error) break;
+    }
+    codeBtn.textContent = btnLabel || "Bevestig";
+    checkCodeComplete();
     if (res && res.error) {
       var rawErr = String((res.error && res.error.message) || "").toLowerCase();
-      var expired = rawErr.indexOf("expir") >= 0 || rawErr.indexOf("invalid") >= 0;
+      var errCode = String((res.error && res.error.code) || "").toLowerCase();
+      var expired =
+        rawErr.indexOf("expir") >= 0 ||
+        rawErr.indexOf("invalid") >= 0 ||
+        errCode.indexOf("expir") >= 0;
       if (errEl) {
         errEl.textContent = expired
           ? "Deze code werkt niet meer (verlopen of al gebruikt). Vraag hieronder een nieuwe code aan."
-          : "De code is onjuist. Controleer de cijfers en probeer opnieuw.";
+          : "De code klopt niet. Controleer de 6 cijfers of vraag een nieuwe code aan.";
       }
       if (expired) {
         clearInterval(resendInterval);
@@ -3141,8 +3254,16 @@
         data: { roepnaam: userName, display_name: userName, full_name: userName }
       });
     } catch (_meta) {}
+    if (res && res.data && res.data.session && sb.auth.setSession) {
+      try {
+        await sb.auth.setSession(res.data.session);
+      } catch (_setSess) {}
+    }
     var u = res && res.data && res.data.user;
-    if (u && u.id) __obUserId = u.id;
+    if (u && u.id) {
+      __obUserId = u.id;
+      obMarkOtpDone(u.id);
+    }
     try {
       var rpcAi = await sb.rpc("apply_auto_ai_access_after_email_verify");
       if (rpcAi && rpcAi.error) console.warn("auto ai access rpc", rpcAi.error);
@@ -3191,7 +3312,10 @@
   });
   document.getElementById("obResendBtn").addEventListener("click", async function () {
     if (!userEmail || !sb) return;
-    var res = await sb.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: true } });
+    var res = await sb.auth.signInWithOtp({
+      email: userEmail,
+      options: { shouldCreateUser: true }
+    });
     if (res && res.error) {
       showToast("Kon geen nieuwe code sturen. Wacht even en probeer opnieuw.");
       return;
