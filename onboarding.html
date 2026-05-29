@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sense-theme.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/sense-auth-client.js"></script>
   <style>
     :root {
       --ob-border: rgba(61, 47, 31, 0.14);
@@ -1083,11 +1084,108 @@
       return "";
     }
   }
+  function obUserEmailConfirmed(user) {
+    if (!user) return false;
+    if (user.email_confirmed_at) return true;
+    if (user.confirmed_at) return true;
+    return false;
+  }
   async function obClearAuthSession() {
+    if (typeof window.senseClearAuthStorage === "function") {
+      window.senseClearAuthStorage();
+    }
     if (!sb || !sb.auth) return;
     try {
-      await sb.auth.signOut();
-    } catch (_e) {}
+      await sb.auth.signOut({ scope: "local" });
+    } catch (_e) {
+      try {
+        await sb.auth.signOut();
+      } catch (_e2) {}
+    }
+  }
+  function obEnsureAuthClient() {
+    if (sb && sb.auth) return sb;
+    if (window.__obSupabase && window.__obSupabase.auth) {
+      sb = window.__obSupabase;
+      return sb;
+    }
+    if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+    try {
+      sb = window.__obSupabase = window.supabase.createClient(SURL, SKEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: "implicit",
+          storageKey: "sensecorner-auth-v1"
+        }
+      });
+      return sb;
+    } catch (_e) {
+      return null;
+    }
+  }
+  async function obVerifyOtpRaw(email, token, type) {
+    try {
+      var r = await fetch(SURL + "/auth/v1/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SKEY,
+          Authorization: "Bearer " + SKEY
+        },
+        body: JSON.stringify({ email: email, token: token, type: type })
+      });
+      var body = {};
+      try {
+        body = await r.json();
+      } catch (_json) {}
+      if (!r.ok) {
+        return {
+          data: { user: null, session: null },
+          error: {
+            message: body.msg || body.error_description || body.message || "Verificatie mislukt",
+            code: body.error_code || body.code || String(r.status)
+          }
+        };
+      }
+      return {
+        data: {
+          user: body.user || null,
+          session: {
+            access_token: body.access_token,
+            refresh_token: body.refresh_token,
+            expires_in: body.expires_in,
+            expires_at: body.expires_at,
+            token_type: body.token_type,
+            user: body.user
+          }
+        },
+        error: null
+      };
+    } catch (_net) {
+      return {
+        data: { user: null, session: null },
+        error: { message: "Netwerkfout bij verifiëren", code: "network_error" }
+      };
+    }
+  }
+  async function obVerifyOtpAllTypes(email, token, preferSignup) {
+    var types = preferSignup
+      ? ["email", "signup", "magiclink"]
+      : ["email", "signup", "magiclink"];
+    var last = null;
+    var ti;
+    obEnsureAuthClient();
+    for (ti = 0; ti < types.length; ti++) {
+      if (sb && sb.auth && typeof sb.auth.verifyOtp === "function") {
+        last = await sb.auth.verifyOtp({ email: email, token: token, type: types[ti] });
+        if (!last || !last.error) return last;
+      }
+      last = await obVerifyOtpRaw(email, token, types[ti]);
+      if (!last || !last.error) return last;
+    }
+    return last;
   }
   var LP_OB_PROGRESS_KEY = "sense_corner_lp_ob_uid";
   var sb = null;
@@ -1141,21 +1239,7 @@
     selfsense: "self"
   };
 
-  if (window.__senseLpSupabase) {
-    sb = window.__senseLpSupabase;
-  } else if (window.supabase && window.supabase.createClient) {
-    try {
-      sb = window.__senseLpSupabase = window.supabase.createClient(SURL, SKEY, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          flowType: "pkce",
-          storageKey: "sensecorner-auth-v1"
-        }
-      });
-    } catch (_eInit) {}
-  }
+  obEnsureAuthClient();
 
   var CORE_QUESTIONS = [
     { key: "core_1", q: "Hoe zouden je beste vrienden jou omschrijven?", hint: "In een paar woorden of een zin is genoeg" },
@@ -1574,21 +1658,7 @@
       goToStatic("acc0");
       return;
     }
-    if (!sb) {
-      if (window.__senseLpSupabase) {
-        sb = window.__senseLpSupabase;
-      } else if (window.supabase && window.supabase.createClient) {
-        sb = window.__senseLpSupabase = window.supabase.createClient(SURL, SKEY, {
-          auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true,
-            flowType: "pkce",
-            storageKey: "sensecorner-auth-v1"
-          }
-        });
-      }
-    }
+    obEnsureAuthClient();
     var session = await obGetSessionRobust();
     if (!session || !session.user || !String(session.access_token || "").trim()) {
       var pendingNoSess = obPendingOtpEmail();
@@ -1632,13 +1702,14 @@
     var pendingOtp = obPendingOtpEmail();
 
     if (factsSub.size === 0 && mirrorsDb.size <= 1) {
-      if (otpDone) {
-        goToStatic("acc5");
-        return;
-      }
       if (pendingOtp) {
         userEmail = pendingOtp;
         goToStatic("acc4");
+        return;
+      }
+      if (otpDone || obUserEmailConfirmed(user)) {
+        if (!otpDone && obUserEmailConfirmed(user)) obMarkOtpDone(uid);
+        goToStatic("acc5");
         return;
       }
       await obClearAuthSession();
@@ -3088,6 +3159,7 @@
     }
     obOtpVerifyAsSignup = !existingActive;
     emailBtn.disabled = true;
+    obEnsureAuthClient();
     try {
       var curSess = await sb.auth.getSession();
       var curUser = curSess && curSess.data && curSess.data.session && curSess.data.session.user;
@@ -3102,9 +3174,9 @@
           goToStatic("acc5");
           return;
         }
-        if (curMail !== userEmail) await obClearAuthSession();
       }
     } catch (_sessCheck) {}
+    await obClearAuthSession();
     var res = await sb.auth.signInWithOtp({
       email: userEmail,
       options: { shouldCreateUser: true }
@@ -3212,14 +3284,8 @@
     var btnLabel = codeBtn.textContent;
     codeBtn.disabled = true;
     codeBtn.textContent = "Even geduld…";
-    var res = null;
-    var otpTypes = obOtpVerifyAsSignup
-      ? ["signup", "email", "magiclink"]
-      : ["email", "signup", "magiclink"];
-    for (var oi = 0; oi < otpTypes.length; oi++) {
-      res = await sb.auth.verifyOtp({ email: verifyEmail, token: token, type: otpTypes[oi] });
-      if (!res || !res.error) break;
-    }
+    obEnsureAuthClient();
+    var res = await obVerifyOtpAllTypes(verifyEmail, token, obOtpVerifyAsSignup);
     codeBtn.textContent = btnLabel || "Bevestig";
     checkCodeComplete();
     if (res && res.error) {
@@ -3254,10 +3320,18 @@
         data: { roepnaam: userName, display_name: userName, full_name: userName }
       });
     } catch (_meta) {}
-    if (res && res.data && res.data.session && sb.auth.setSession) {
-      try {
-        await sb.auth.setSession(res.data.session);
-      } catch (_setSess) {}
+    if (res && res.data && res.data.session) {
+      if (typeof window.sensePersistSignInResult === "function") {
+        await window.sensePersistSignInResult(sb, res);
+      } else if (sb.auth && typeof sb.auth.setSession === "function") {
+        try {
+          await sb.auth.setSession({
+            access_token: res.data.session.access_token,
+            refresh_token: res.data.session.refresh_token
+          });
+        } catch (_setSess) {}
+      }
+      window.__senseLpSupabase = sb;
     }
     var u = res && res.data && res.data.user;
     if (u && u.id) {
