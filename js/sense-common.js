@@ -223,10 +223,10 @@
       '<div class="sc-basis-nudge__actions">' +
       '<a href="' +
       senseEscHtml(nudge.link || 'ownsense.html?tab=mij&focus=basis') +
-      '" class="sc-basis-nudge__primary">' +
+      '" class="sc-basis-nudge__primary" style="display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;padding:8px 14px;border-radius:10px;text-decoration:none;font-family:inherit;background:#3D2F1F;color:#F2E8D5;border:none;box-shadow:0 2px 8px rgba(61,47,31,.12)">' +
       senseEscHtml(nudge.linkLabel || 'Aanvullen') +
       '</a>' +
-      '<button type="button" class="sc-basis-nudge__secondary" onclick="dismissBasisprofielNudge(\'' +
+      '<button type="button" class="sc-basis-nudge__secondary" style="display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:6px 4px;border:none;background:transparent;color:#7A6F66;text-decoration:underline;cursor:pointer;font-family:inherit" onclick="dismissBasisprofielNudge(\'' +
       ak +
       "','" +
       nid +
