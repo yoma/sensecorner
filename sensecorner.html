@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 15:44">
+<meta name="sc-build" content="29-05-2026 16:19">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261210"></script>
+<script src="js/sense-common.js?v=2905261619"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1186,9 +1186,20 @@ a{text-decoration:none;color:inherit}
     }
     return cats;
   }
+  function scCountOwnBasisSlots(meta){
+    meta=meta&&typeof meta==='object'?meta:{};
+    var filled=0;
+    if(typeof senseOwnBasisHasAge==='function'?senseOwnBasisHasAge(meta):String(meta.birthdate||'').trim())filled++;
+    if(typeof senseOwnBasisHasLocation==='function'?senseOwnBasisHasLocation(meta):(String(meta.city||'').trim()||String(meta.country||'').trim()))filled++;
+    if(typeof senseOwnBasisHasGenderAnswer==='function'?senseOwnBasisHasGenderAnswer(meta):String(meta.gender||'').trim())filled++;
+    return{filled:filled,total:3};
+  }
   function calcOwnScopeStats(){
     var cats=scGetMergedStatsCategories();
     var own=scCountSlotsFromCategoryDefs(cats,SC_OWN_CATS);
+    var basis=scCountOwnBasisSlots(scOwnBasisMetaServer);
+    own.filled+=basis.filled;
+    own.total+=basis.total;
     var ds=scCountSlotsFromCategoryDefs(cats,[{id:'datesense_focus',prompts:[0,0,0,0,0]}]);
     var fs=scCountSlotsFromCategoryDefs(cats,[{id:'familysense_focus',prompts:[0,0,0,0,0]}]);
     var fr=scCountSlotsFromCategoryDefs(cats,[{id:'friendsense_focus',prompts:[0,0,0,0,0]}]);
@@ -1264,10 +1275,16 @@ a{text-decoration:none;color:inherit}
       });
     }
     if(ownMiniSub){
-      ownMiniSub.textContent=left>0
-        ?(left+' OWN-vragen (Over jou) nog open in OwnSense. Onboarding-antwoorden tellen al mee; de rest vul je aan onder Vragenlijsten.')
-        :'OWN Over jou is ingevuld. Hoe hoger de andere spiegels, hoe beter Sensei per domein kan adviseren.';
+      var basisOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+      if(left>0){
+        ownMiniSub.textContent=left+' OWN-vragen (Over jou) nog open in OwnSense. Onboarding-antwoorden tellen al mee; de rest vul je aan onder Vragenlijsten.';
+      }else if(!basisOk){
+        ownMiniSub.textContent='OWN-vragen staan ingevuld; vul je basisprofiel aan (leeftijd, adres en geslacht) om OWN compleet te maken.';
+      }else{
+        ownMiniSub.textContent='OWN Over jou is ingevuld. Hoe hoger de andere spiegels, hoe beter Sensei per domein kan adviseren.';
+      }
     }
+    if(userSession)scRenderBasisNudge();
   }
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
@@ -1387,7 +1404,7 @@ a{text-decoration:none;color:inherit}
     }catch(_e){}
     return currentAdminRole;
   }
-  var SC_OWN_PROFILE_SELECT='props,foto_urls';
+  var SC_OWN_PROFILE_SELECT='props,foto_urls,foto_paths';
   var filledAnswers=0;
   var serverOwnPhotoUrl='';
   /* Zelfde categorieën als ownsense.html - voorkomt PC vs mobile mismatch (localStorage ≠ server). */
@@ -1408,9 +1425,18 @@ a{text-decoration:none;color:inherit}
   var SC_ALL_CATS=SC_OWN_CATS.concat(SC_APP_CATS);
   var scServerCategories=null;
   var scOwnBasisMeta={};
+  var scOwnBasisMetaServer={};
   var scOwnProfileProps=null;
   function scApplyOwnBasisMeta(){
     var props=scOwnProfileProps;
+    if(typeof senseExtractOwnBasisMetaServerOnly==='function'){
+      scOwnBasisMetaServer=senseExtractOwnBasisMetaServerOnly(props);
+    }else if(typeof senseExtractOwnBasisMeta==='function'){
+      scOwnBasisMetaServer=senseExtractOwnBasisMeta(props,null);
+    }else{
+      var pmetaS=(props&&props.meta&&typeof props.meta==='object')?props.meta:{};
+      scOwnBasisMetaServer=Object.assign({},pmetaS);
+    }
     if(typeof senseExtractOwnBasisMeta==='function'){
       scOwnBasisMeta=senseExtractOwnBasisMeta(props,hubProfile);
     }else{
@@ -1421,8 +1447,38 @@ a{text-decoration:none;color:inherit}
         if(!scOwnBasisMeta.city)scOwnBasisMeta.city=String(hubProfile.city||'').trim();
         if(!scOwnBasisMeta.country)scOwnBasisMeta.country=String(hubProfile.country||'').trim();
         if(!scOwnBasisMeta.gender)scOwnBasisMeta.gender=String(hubProfile.gender||'').trim();
+        if(!scOwnBasisMeta.address)scOwnBasisMeta.address=String(hubProfile.address||'').trim();
       }
     }
+  }
+  function scSyncOwnHeroBasisUi(){
+    if(!profile||profile.status!=='completed'||filledAnswers<=0)return;
+    var basisOkHero=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+    var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
+    var qPct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
+    var pct=qPct;
+    if(!basisOkHero&&basisSlots.total>0){
+      pct=Math.max(1,Math.min(99,Math.round(((filledAnswers+basisSlots.filled)/(totalQ+basisSlots.total))*100)));
+    }
+    setRingInnerPct(pct);
+    setTimeout(function(){setRingAndBar(pct);},200);
+    if(dot)dot.className=basisOkHero?'own-status-dot done':'own-status-dot active';
+    if(statusText)statusText.textContent=basisOkHero?'Je profiel is actief (ingevuld)':'OWN-vragen ingevuld; vul je basisprofiel aan (leeftijd, adres, geslacht)';
+    if(statusPct)statusPct.textContent=basisOkHero?'':(basisSlots.total-basisSlots.filled)+' basisvelden open';
+  }
+  async function scReloadOwnProfileBasisMeta(){
+    if(userSession&&sb){
+      try{
+        var row=await sb.from('sense_profiles').select(SC_OWN_PROFILE_SELECT).eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
+        if(row&&!row.error&&row.data&&row.data.props&&typeof row.data.props==='object'){
+          scOwnProfileProps=row.data.props;
+        }
+      }catch(_basisReload){}
+    }
+    scApplyOwnBasisMeta();
+    scSyncOwnHeroBasisUi();
+    scRenderBasisNudge();
+    renderOwnCompletionDashboard();
   }
   function countOwnSlotsFromCategories(cats){
     cats=cats||{};
@@ -1513,21 +1569,6 @@ a{text-decoration:none;color:inherit}
     }catch(err){
       console.warn('sensecorner OWN server sync',err&&err.message?err.message:err);
       scApplyOwnBasisMeta();
-    }
-    if(userSession&&typeof senseOwnBasisMetaComplete==='function'&&!senseOwnBasisMetaComplete(scOwnBasisMeta)){
-      try{
-        var hubLate=scOwnBridgeGet('ownsense_hub_profile_v2',userSession.id)||'';
-        if(hubLate){
-          var hpLate=JSON.parse(hubLate);
-          if(hpLate&&typeof hpLate==='object'){
-            var hLateOwn=String(hpLate.__ownsense_uid||hpLate.__uid||'').trim();
-            if(!hLateOwn||hLateOwn===String(userSession.id)){
-              hubProfile=hpLate;
-              scApplyOwnBasisMeta();
-            }
-          }
-        }
-      }catch(_hubLate){}
     }
     try{
       await scRefreshOwnScopeFromFacts(userSession);
@@ -1835,7 +1876,7 @@ a{text-decoration:none;color:inherit}
       mount.innerHTML='';
       return;
     }
-    var html=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded(scOwnBasisMeta||{},'sc'):'';
+    var html=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded(scOwnBasisMetaServer||{},'sc'):'';
     mount.innerHTML=html||'';
   }
   function updateHeroWelcome(user){
@@ -2783,6 +2824,7 @@ a{text-decoration:none;color:inherit}
       void refreshHubOwnPreview(user).catch(function(_ph){});
       void scRefreshOwnHubRing().catch(function(_ring){});
       void scRefreshOwnScopeFromFacts(user).catch(function(_scope){});
+      await scReloadOwnProfileBasisMeta().catch(function(_basisUi){});
       updateHeroWelcome(user);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
@@ -2853,12 +2895,18 @@ a{text-decoration:none;color:inherit}
       renderOwnCompletionDashboard();
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
-      var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
+      var basisOkHero=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+      var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
+      var qPct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
+      var pct=qPct;
+      if(!basisOkHero&&basisSlots.total>0){
+        pct=Math.max(1,Math.min(99,Math.round(((filledAnswers+basisSlots.filled)/(totalQ+basisSlots.total))*100)));
+      }
       setRingInnerPct(pct);
       setTimeout(function(){setRingAndBar(pct);},200);
-      dot.className='own-status-dot done';
-      statusText.textContent='Je profiel is actief (ingevuld)';
-      statusPct.textContent='';
+      dot.className=basisOkHero?'own-status-dot done':'own-status-dot active';
+      statusText.textContent=basisOkHero?'Je profiel is actief (ingevuld)':'OWN-vragen ingevuld; vul je basisprofiel aan (leeftijd, adres, geslacht)';
+      statusPct.textContent=basisOkHero?'':(basisSlots.total-basisSlots.filled)+' basisvelden open';
       ringFg.style.stroke='#1E7E34';
       if(String(ownPhotoUrl||'').trim()){
         void setRingCenterOwnPhoto(ownPhotoUrl,true);
@@ -3266,6 +3314,7 @@ a{text-decoration:none;color:inherit}
     if(document.visibilityState!=='visible'||!userSession)return;
     void scRefreshOwnHubRing().catch(function(){});
     if(userSession)void scRefreshOwnScopeFromFacts(userSession).catch(function(){});
+    if(userSession)void scReloadOwnProfileBasisMeta().catch(function(){});
   });
   if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
     sb.auth.onAuthStateChange(function(event){

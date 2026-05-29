@@ -79,12 +79,41 @@
     return age > 0 && age < 130 ? String(age) : '';
   }
 
-  function senseOwnBasisMetaComplete(meta) {
+  function senseOwnBasisHasAge(meta, calcAgeFn) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    calcAgeFn = calcAgeFn || senseCalcAgeFromBirthdate;
+    if (String(meta.age || '').trim()) return true;
+    var bd = String(meta.birthdate || '').trim();
+    return !!(bd && calcAgeFn(bd));
+  }
+
+  function senseOwnBasisHasLocation(meta) {
     meta = meta && typeof meta === 'object' ? meta : {};
     return !!(
-      String(meta.birthdate || '').trim() &&
-      (String(meta.city || '').trim() || String(meta.country || '').trim())
+      String(meta.city || '').trim() ||
+      String(meta.country || '').trim() ||
+      String(meta.address || '').trim()
     );
+  }
+
+  function senseOwnBasisHasGenderAnswer(meta) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    return !!String(meta.gender || '').trim();
+  }
+
+  /** Basisprofiel = leeftijd, adres (woonplaats/land), geslacht (incl. liever niet). */
+  function senseOwnBasisMetaComplete(meta, calcAgeFn) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    return (
+      senseOwnBasisHasAge(meta, calcAgeFn) &&
+      senseOwnBasisHasLocation(meta) &&
+      senseOwnBasisHasGenderAnswer(meta)
+    );
+  }
+
+  /** Alleen sense_profiles props (+ legacy props-root); geen hub-bridge (nudge / server-truth). */
+  function senseExtractOwnBasisMetaServerOnly(props) {
+    return senseExtractOwnBasisMeta(props, null);
   }
 
   /** props.meta + legacy props-root + optioneel hub-bridge (zelfde velden als OwnSense hubState). */
@@ -92,13 +121,13 @@
     props = props && typeof props === 'object' ? props : {};
     var meta =
       props.meta && typeof props.meta === 'object' ? Object.assign({}, props.meta) : {};
-    ['birthdate', 'city', 'country', 'gender', 'gender_custom', 'age'].forEach(function (k) {
+    ['birthdate', 'city', 'country', 'address', 'gender', 'gender_custom', 'age'].forEach(function (k) {
       if (!String(meta[k] || '').trim() && props[k] != null && String(props[k]).trim()) {
         meta[k] = String(props[k]).trim();
       }
     });
     if (hubFallback && typeof hubFallback === 'object') {
-      ['birthdate', 'city', 'country', 'gender', 'gender_custom'].forEach(function (k) {
+      ['birthdate', 'city', 'country', 'address', 'gender', 'gender_custom'].forEach(function (k) {
         if (!String(meta[k] || '').trim()) meta[k] = String(hubFallback[k] || '').trim();
       });
     }
@@ -131,7 +160,7 @@
     if (!ownCell || typeof ownCell !== 'object') return ownCell;
     var extracted = senseExtractOwnBasisMetaFromOwnCell(ownCell, hubFallback);
     if (!ownCell.meta || typeof ownCell.meta !== 'object') ownCell.meta = {};
-    ['birthdate', 'city', 'country', 'gender', 'gender_custom', 'age'].forEach(function (k) {
+    ['birthdate', 'city', 'country', 'address', 'gender', 'gender_custom', 'age'].forEach(function (k) {
       if (!String(ownCell.meta[k] || '').trim() && String(extracted[k] || '').trim()) {
         ownCell.meta[k] = String(extracted[k]).trim();
       }
@@ -159,9 +188,11 @@
     var age = calcAgeFn(meta.birthdate) || String(meta.age || '').trim();
     if (age) parts.push('leeftijd ' + age);
     var city = String(meta.city || '').trim();
+    var addr = String(meta.address || '').trim();
     if (city) parts.push('woonplaats ' + city);
+    else if (addr) parts.push('adres ' + addr);
     var country = String(meta.country || '').trim();
-    if (country && !city) parts.push('land ' + country);
+    if (country && !city && !addr) parts.push('land ' + country);
     var gender = senseFormatOwnBasisGender(meta);
     if (gender) parts.push('geslacht ' + gender);
     return parts;
@@ -183,7 +214,7 @@
     try {
       return sessionStorage.getItem(key) === '1';
     } catch (_e) {
-      return true;
+      return false;
     }
   }
 
@@ -198,26 +229,27 @@
     meta = meta && typeof meta === 'object' ? meta : {};
     appKey = String(appKey || 'sc').toLowerCase();
     var link = 'ownsense.html?tab=mij&focus=basis';
-    if (senseOwnBasisMetaComplete(meta)) {
-      if (!String(meta.gender || '').trim() && !senseBasisprofielNudgeSeenToday(appKey, 'gender')) {
-        return {
-          id: 'gender',
-          title: 'Optioneel: geslacht',
-          message: 'Als je wilt, vul je geslacht aan in je basisprofiel. Sensei kan advies dan iets beter afstemmen. Je mag dit ook overslaan.',
-          link: link,
-          linkLabel: 'Basisprofiel openen'
-        };
-      }
-      return null;
-    }
+    if (senseOwnBasisMetaComplete(meta)) return null;
     if (senseBasisprofielNudgeSeenToday(appKey, 'basis')) return null;
     var missing = [];
-    if (!String(meta.birthdate || '').trim()) missing.push('geboortedatum');
-    if (!String(meta.city || '').trim() && !String(meta.country || '').trim()) missing.push('woonplaats');
+    if (!senseOwnBasisHasAge(meta)) missing.push('leeftijd');
+    if (!senseOwnBasisHasLocation(meta)) missing.push('adres');
+    if (!senseOwnBasisHasGenderAnswer(meta)) missing.push('geslacht');
     var msg =
-      missing.length === 2
-        ? 'Vul je geboortedatum en gemeente aan in OwnSense. Dat helpt Sensei om advies beter op jouw leeftijd en regio af te stemmen.'
-        : 'Vul je ' + missing.join(' en ') + ' aan in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
+      'Vul je basisprofiel aan in OwnSense (leeftijd, adres en geslacht). Dat helpt Sensei om advies beter op jou af te stemmen.';
+    if (missing.length === 1) {
+      msg =
+        'Vul je ' +
+        missing[0] +
+        ' aan in je basisprofiel in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
+    } else if (missing.length === 2) {
+      msg =
+        'Vul ' +
+        missing[0] +
+        ' en ' +
+        missing[1] +
+        ' aan in je basisprofiel in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
+    }
     return {
       id: 'basis',
       title: 'Basisprofiel aanvullen',
@@ -278,11 +310,13 @@
       '" class="sc-basis-nudge__primary" style="display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;padding:8px 14px;border-radius:10px;text-decoration:none;font-family:inherit;background:#3D2F1F;color:#F2E8D5;border:none;box-shadow:0 2px 8px rgba(61,47,31,.12)">' +
       senseEscHtml(nudge.linkLabel || 'Aanvullen') +
       '</a>' +
-      '<button type="button" class="sc-basis-nudge__secondary" style="display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:6px 4px;border:none;background:transparent;color:#7A6F66;text-decoration:underline;cursor:pointer;font-family:inherit" onclick="dismissBasisprofielNudge(\'' +
-      ak +
-      "','" +
-      nid +
-      '\')">Later vandaag</button>' +
+      (ak === 'sc'
+        ? ''
+        : '<button type="button" class="sc-basis-nudge__secondary" style="display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:6px 4px;border:none;background:transparent;color:#7A6F66;text-decoration:underline;cursor:pointer;font-family:inherit" onclick="dismissBasisprofielNudge(\'' +
+          ak +
+          "','" +
+          nid +
+          '\')">Later vandaag</button>') +
       '</div></div>'
     );
   }
@@ -523,8 +557,12 @@
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
   global.senseCalcAgeFromBirthdate = senseCalcAgeFromBirthdate;
+  global.senseOwnBasisHasAge = senseOwnBasisHasAge;
+  global.senseOwnBasisHasLocation = senseOwnBasisHasLocation;
+  global.senseOwnBasisHasGenderAnswer = senseOwnBasisHasGenderAnswer;
   global.senseOwnBasisMetaComplete = senseOwnBasisMetaComplete;
   global.senseExtractOwnBasisMeta = senseExtractOwnBasisMeta;
+  global.senseExtractOwnBasisMetaServerOnly = senseExtractOwnBasisMetaServerOnly;
   global.senseParseOwnHubBasisFallback = senseParseOwnHubBasisFallback;
   global.senseExtractOwnBasisMetaFromOwnCell = senseExtractOwnBasisMetaFromOwnCell;
   global.senseOwnBasisProfileCompleteFromOwnCell = senseOwnBasisProfileCompleteFromOwnCell;
