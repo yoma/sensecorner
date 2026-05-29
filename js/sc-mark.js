@@ -39,7 +39,12 @@
 
   function pickGeo(mode, size, opts) {
     opts = opts || {};
-    if (mode === 'ripple' || mode === 's-only') return null;
+    if (mode === 's-only') return null;
+    if (mode === 'ripple') {
+      if (opts.full || opts.forceFull) return GEO.full;
+      if (opts.compact === true || size <= 32) return GEO.compact;
+      return GEO.full;
+    }
     if (opts.full || opts.forceFull) return GEO.full;
     if (opts.compact === true) return GEO.compact;
     if (mode === 'ripple-s' && size <= 32) return GEO.compact;
@@ -62,12 +67,13 @@
   }
 
   function svgCore(mode, geo) {
-    if (mode === 'ripple' || !geo) return '';
+    if (!geo) return '';
+    if (mode === 's-only') return '';
     return '<circle class="sc-mark__core" cx="512" cy="512" r="' + geo.rC + '"/>';
   }
 
   function svgS(mode, geo) {
-    if (mode === 'ripple' || !geo) return '';
+    if (mode === 'ripple' || mode === 's-only' || !geo) return '';
     return '<path class="sc-mark__s" transform="' + sTransform(geo.s) + '" d="' + S_PATH + '"/>';
   }
 

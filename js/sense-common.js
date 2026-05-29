@@ -105,6 +105,40 @@
     return meta;
   }
 
+  function senseParseOwnHubBasisFallback(raw) {
+    try {
+      var hub = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!hub || typeof hub !== 'object') return null;
+      return hub;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  /** pdata-cel uit sense_profiles (props + meta) + optioneel hub-bridge. */
+  function senseExtractOwnBasisMetaFromOwnCell(ownCell, hubFallback) {
+    ownCell = ownCell && typeof ownCell === 'object' ? ownCell : {};
+    var props = ownCell.props && typeof ownCell.props === 'object' ? ownCell.props : {};
+    var cellMeta = ownCell.meta && typeof ownCell.meta === 'object' ? ownCell.meta : {};
+    return senseExtractOwnBasisMeta(Object.assign({}, props, { meta: cellMeta }), hubFallback);
+  }
+
+  function senseOwnBasisProfileCompleteFromOwnCell(ownCell, hubFallback) {
+    return senseOwnBasisMetaComplete(senseExtractOwnBasisMetaFromOwnCell(ownCell, hubFallback));
+  }
+
+  function senseEnrichOwnBasisMetaInCell(ownCell, hubFallback) {
+    if (!ownCell || typeof ownCell !== 'object') return ownCell;
+    var extracted = senseExtractOwnBasisMetaFromOwnCell(ownCell, hubFallback);
+    if (!ownCell.meta || typeof ownCell.meta !== 'object') ownCell.meta = {};
+    ['birthdate', 'city', 'country', 'gender', 'gender_custom', 'age'].forEach(function (k) {
+      if (!String(ownCell.meta[k] || '').trim() && String(extracted[k] || '').trim()) {
+        ownCell.meta[k] = String(extracted[k]).trim();
+      }
+    });
+    return ownCell;
+  }
+
   function senseFormatOwnBasisGender(meta) {
     meta = meta && typeof meta === 'object' ? meta : {};
     var g = String(meta.gender || '').trim().toLowerCase();
@@ -269,12 +303,194 @@
     } catch (_e3) {}
   }
 
+  function senseIsDirectlyLoadableImageUrl(u) {
+    return (
+      /^https?:\/\//i.test(String(u || '').trim()) ||
+      /^data:/i.test(String(u || '').trim()) ||
+      /^blob:/i.test(String(u || '').trim())
+    );
+  }
+
+  function senseParseStorageRef(v) {
+    var s = String(v || '').trim();
+    if (!s) return null;
+    if (!/^https?:\/\//i.test(s)) {
+      if (/^data:/i.test(s) || /^blob:/i.test(s)) return null;
+      return { bucket: '', path: s.replace(/^\/+/, '') };
+    }
+    var m = s.match(/\/storage\/v1\/object\/(?:sign|public)\/([^/]+)\/([^?#]+)/i);
+    if (!m) return null;
+    var bucket = decodeURIComponent(String(m[1] || '').trim());
+    var path = decodeURIComponent(String(m[2] || '').trim()).replace(/^\/+/, '');
+    if (!bucket || !path) return null;
+    return { bucket: bucket, path: path };
+  }
+
+  function senseIsLikelyExpiringStorageUrl(v) {
+    return /\/storage\/v1\/object\/sign\//i.test(String(v || '').trim());
+  }
+
+  function senseOwnPhotoBucketHints() {
+    return ['own-photos', 'datesense-photos', 'sense-photos', 'familysense-photos'];
+  }
+
+  async function senseRefreshPhotoRef(v, bucketHints, signFn) {
+    var s = String(v || '').trim();
+    if (!s) return '';
+    signFn = typeof signFn === 'function' ? signFn : null;
+    var ref = senseParseStorageRef(s);
+    if (ref && ref.path && signFn) {
+      if (ref.bucket) {
+        var direct = await signFn(ref.bucket, ref.path);
+        if (direct) return direct;
+      }
+      var buckets = Array.isArray(bucketHints) && bucketHints.length ? bucketHints : senseOwnPhotoBucketHints();
+      for (var i = 0; i < buckets.length; i++) {
+        var fromBucket = await signFn(String(buckets[i] || '').trim(), ref.path);
+        if (fromBucket) return fromBucket;
+      }
+    }
+    if (
+      senseIsDirectlyLoadableImageUrl(s) &&
+      !senseIsLikelyExpiringStorageUrl(s) &&
+      !senseIsUnsafePhotoUrl(s)
+    ) {
+      return s;
+    }
+    return '';
+  }
+
+  function senseCollectOwnCategoryLines(ownCell) {
+    var lines = [];
+    ownCell = ownCell && typeof ownCell === 'object' ? ownCell : {};
+    try {
+      Object.values(ownCell.categories || {}).forEach(function (cat) {
+        Object.values(cat || {}).forEach(function (v) {
+          var t = String(v || '').trim();
+          if (t) lines.push(t);
+        });
+      });
+    } catch (_e) {}
+    return lines;
+  }
+
+  function senseBuildOwnRecoContextPack(ownCell, extra) {
+    ownCell = ownCell && typeof ownCell === 'object' ? ownCell : { meta: {}, categories: {} };
+    extra = extra && typeof extra === 'object' ? extra : {};
+    var meta = senseExtractOwnBasisMetaFromOwnCell(ownCell, extra.hubFallback || null);
+    var catLines = senseCollectOwnCategoryLines(ownCell);
+    var recent = Array.isArray(extra.recentUserLines)
+      ? extra.recentUserLines.map(function (x) { return String(x || '').trim(); }).filter(Boolean).slice(0, 10)
+      : [];
+    var summary = String(extra.summary != null ? extra.summary : ownCell.summary || '').trim();
+    var lines = [];
+    var displayName = String(extra.displayName || '').trim();
+    if (displayName) lines.push('Naam: ' + displayName);
+    appendOwnBasisMetaCoachContext(lines, meta);
+    if (meta.birthdate && lines.join(' ').indexOf('leeftijd') < 0) {
+      var age = senseCalcAgeFromBirthdate(meta.birthdate) || String(meta.age || '').trim();
+      if (age) lines.push('Leeftijd: ' + age);
+    }
+    if (summary) lines.push('Samenvatting: ' + summary);
+    if (catLines.length) lines.push('Profielantwoorden: ' + catLines.slice(0, 12).join(' | '));
+    if (recent.length) lines.push('Recente eigen berichten: ' + recent.slice(0, 6).join(' | '));
+    var sparse = catLines.length === 0 && recent.length === 0 && summary.length < 40;
+    return {
+      lines: lines,
+      text: lines.length ? lines.join('\n') : '',
+      sparse: sparse,
+      catCount: catLines.length,
+      recentCount: recent.length
+    };
+  }
+
+  function senseRecoNoFabricationRules(mode) {
+    mode = mode === 'sparse' ? 'sparse' : 'rich';
+    var rules =
+      'KRITIEK - geen verzonnen context: noem NOOIT wat de gebruiker voelt, meemaakt, last heeft van of moeilijk vindt tenzij dat letterlijk of duidelijk parafraseerbaar in de gebruikerscontext staat. ' +
+      'Gebruik NOOIT "Ik hoor dat...", "Ik merk dat..." of "Ik zie dat..." als openingszin tenzij de context dat expliciet bevestigt. ' +
+      'Verzin geen eenzaamheid, zware vriendschap, spanning thuis, bindingangst of vergelijkbare emoties of situaties. ';
+    if (mode === 'sparse') {
+      rules +=
+        'Context is beperkt (nieuw of weinig ingevuld profiel): start neutraal en warm, bijv. "Een lichte tip voor vandaag:" of "Hier is een algemene suggestie.". Houd de tip licht, haalbaar en algemeen; doe niet alsof je de gebruiker al kent.';
+    } else {
+      rules += 'Sluit alleen aan op wat expliciet in de context staat. Wees warm maar feitelijk; geen therapeutische aannames.';
+    }
+    return rules;
+  }
+
+  async function senseFetchDailyRecoTipText(opts) {
+    opts = opts && typeof opts === 'object' ? opts : {};
+    var cats = Array.isArray(opts.categories) ? opts.categories : [];
+    var catTxt = cats.join(', ');
+    var allowedDomains = Array.isArray(opts.allowedDomains) ? opts.allowedDomains : [];
+    var coachName = String(opts.coachName || 'Sensei').trim();
+    var focus = String(opts.focus || '').trim();
+    var ownCell = opts.ownCell && typeof opts.ownCell === 'object' ? opts.ownCell : { meta: {}, categories: {} };
+    var callAPI = opts.callAPI;
+    if (typeof callAPI !== 'function') {
+      return { text: '', sparse: true };
+    }
+    var recentUserLines = [];
+    if (typeof opts.loadRecentUserLines === 'function') {
+      try {
+        recentUserLines = await opts.loadRecentUserLines();
+      } catch (_lr) {}
+    }
+    var pack = senseBuildOwnRecoContextPack(ownCell, {
+      displayName: opts.displayName,
+      summary: ownCell.summary,
+      recentUserLines: recentUserLines,
+      hubFallback: opts.hubFallback || null
+    });
+    var noFab = senseRecoNoFabricationRules(pack.sparse ? 'sparse' : 'rich');
+    var ctxBlock = pack.text || 'Nog weinig profielcontext beschikbaar.';
+    var usr =
+      'Context gebruiker (alleen dit gebruiken; niets erbij verzinnen):\n' +
+      ctxBlock +
+      '\n\nDoel: 1 korte, concrete dagtip voor vandaag' +
+      (focus ? ' rond ' + focus : '') +
+      '.';
+    var sysSearch =
+      'Je bent ' +
+      coachName +
+      '. Geef precies 1 korte, warme dagtip voor vandaag met 1 haalbaar voorstel en 1 echte link. Alleen categorieen: ' +
+      catTxt +
+      '. Gebruik alleen URL\'s die je met hoge zekerheid correct vindt; bij twijfel link naar een stabiele start- of zoekpagina op hetzelfde domein. ' +
+      noFab +
+      (focus ? ' Focus: ' + focus + '.' : '') +
+      ' Nederlands.';
+    var sysPlain =
+      'Je bent ' +
+      coachName +
+      '. Geef precies 1 korte dagtip (max 5 zinnen). Geen links. ' +
+      noFab +
+      (focus ? ' Focus: ' + focus + '.' : '') +
+      ' Nederlands.';
+    var text = '';
+    try {
+      text = await callAPI(sysSearch, [{ role: 'user', content: usr }], 420, 28000, null, {
+        allowed_domains: allowedDomains
+      });
+    } catch (e1) {
+      console.warn('senseFetchDailyRecoTipText search', e1);
+      text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, 28000, null, {
+        disable_web_search: true
+      });
+    }
+    return { text: String(text || '').trim(), sparse: pack.sparse };
+  }
+
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
   global.senseCalcAgeFromBirthdate = senseCalcAgeFromBirthdate;
   global.senseOwnBasisMetaComplete = senseOwnBasisMetaComplete;
   global.senseExtractOwnBasisMeta = senseExtractOwnBasisMeta;
+  global.senseParseOwnHubBasisFallback = senseParseOwnHubBasisFallback;
+  global.senseExtractOwnBasisMetaFromOwnCell = senseExtractOwnBasisMetaFromOwnCell;
+  global.senseOwnBasisProfileCompleteFromOwnCell = senseOwnBasisProfileCompleteFromOwnCell;
+  global.senseEnrichOwnBasisMetaInCell = senseEnrichOwnBasisMetaInCell;
   global.senseFormatOwnBasisGender = senseFormatOwnBasisGender;
   global.senseOwnBasisContextParts = senseOwnBasisContextParts;
   global.appendOwnBasisMetaCoachContext = appendOwnBasisMetaCoachContext;
@@ -283,4 +499,13 @@
   global.renderBasisprofielNudgeIfNeeded = renderBasisprofielNudgeIfNeeded;
   global.renderBasisprofielNudgeHtml = renderBasisprofielNudgeHtml;
   global.dismissBasisprofielNudge = dismissBasisprofielNudge;
+  global.senseIsDirectlyLoadableImageUrl = senseIsDirectlyLoadableImageUrl;
+  global.senseParseStorageRef = senseParseStorageRef;
+  global.senseIsLikelyExpiringStorageUrl = senseIsLikelyExpiringStorageUrl;
+  global.senseOwnPhotoBucketHints = senseOwnPhotoBucketHints;
+  global.senseRefreshPhotoRef = senseRefreshPhotoRef;
+  global.senseCollectOwnCategoryLines = senseCollectOwnCategoryLines;
+  global.senseBuildOwnRecoContextPack = senseBuildOwnRecoContextPack;
+  global.senseRecoNoFabricationRules = senseRecoNoFabricationRules;
+  global.senseFetchDailyRecoTipText = senseFetchDailyRecoTipText;
 })(typeof window !== 'undefined' ? window : this);

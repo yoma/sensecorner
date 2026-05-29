@@ -1129,9 +1129,9 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
   <div class="logobar" id="logobar">
     <div class="av" id="ownAvatarWrap" onclick="goScreen('home')" style="cursor:pointer"><svg width="42" height="42" viewBox="0 0 42 42"><rect width="42" height="42" fill="#E0E0E0"/><circle cx="21" cy="16" r="8" fill="#BDBDBD"/><ellipse cx="21" cy="36" rx="14" ry="9" fill="#BDBDBD"/></svg></div>
     <div class="logobar-brand-wrap">
-      <a href="index.html" class="brand" aria-label="SenseCorner — landingspagina">
-        <img class="brand-logo" src="assets/logo-familysense.png" alt="FamilySense" onerror="this.style.display='none';var fb=document.getElementById('brandTextFallback');if(fb)fb.style.display='inline'">
-        <span id="brandTextFallback" class="brand-fallback">FamilySense</span>
+      <a href="index.html" class="brand brand--mark" aria-label="SenseCorner — landingspagina">
+        <span data-sc-mark="ripple" data-sc-tone="family" data-sc-size="26" data-sc-compact="1"></span>
+        <span class="brand-name">FamilySense</span>
       </a>
       <div class="tag" id="brandTag"><span class="tag-main">Dichterbij, elke dag.</span><span class="tag-sub">FamilySensei · jouw persoonlijke gezinscoach<span class="tag-sensei-kanji" lang="ja" title="Sensei">先生</span></span></div>
     </div>
@@ -2264,7 +2264,11 @@ function hasAnyContactDossier(){
   return getContactProfileNames().length>0;
 }
 function ownProfileSetupComplete(){
-  var meta=((S.pdata['OWN Sense']||{}).meta)||{};
+  var own=(S.pdata&&S.pdata['OWN Sense'])||{};
+  if(typeof senseOwnBasisProfileCompleteFromOwnCell==='function'){
+    return senseOwnBasisProfileCompleteFromOwnCell(own,readOwnHubBasisFallback());
+  }
+  var meta=own.meta||{};
   return !!(String(meta.birthdate||'').trim()&&(String(meta.city||'').trim()||String(meta.country||'').trim()));
 }
 function getOnboardingChecklist(){
@@ -4753,6 +4757,7 @@ async function loadAll(){
   updateNavTabIndicators();
   try{await ensureSingleModeHolds(true);}catch(e){console.warn('ensureSingleModeHolds',e);}
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
+  try{syncOwnBasisMetaFromHub();}catch(_basisHub){}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
@@ -6024,6 +6029,20 @@ function setOwnBridgeStorage(base,val){
   var scoped=getOwnBridgeStorageKey(base);
   localStorage.setItem(scoped,val);
   if(scoped!==base)localStorage.removeItem(base);
+}
+function readOwnHubBasisFallback(){
+  try{
+    var raw=getOwnBridgeStorage('ownsense_hub_profile_v2');
+    if(typeof senseParseOwnHubBasisFallback==='function')return senseParseOwnHubBasisFallback(raw);
+    if(!raw)return null;
+    var hub=JSON.parse(raw);
+    return hub&&typeof hub==='object'?hub:null;
+  }catch(_e){return null;}
+}
+function syncOwnBasisMetaFromHub(){
+  if(!S||!S.pdata||!S.pdata['OWN Sense'])return;
+  if(typeof senseEnrichOwnBasisMetaInCell!=='function')return;
+  senseEnrichOwnBasisMetaInCell(S.pdata['OWN Sense'],readOwnHubBasisFallback());
 }
 function migrateLegacyUserPrefs(){
   if(!S||!S.user)return;
@@ -7570,16 +7589,6 @@ async function runAdviceHubRecommendationsNow(){
   focusAdviceHubRecoPromptIfFinePointer();
   try{
     var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
-    var ownMeta=own.meta||{};
-    var ownCatLines=[];
-    try{
-      Object.values(own.categories||{}).forEach(function(cat){
-        Object.values(cat||{}).forEach(function(v){
-          var t=String(v||'').trim();
-          if(t)ownCatLines.push(t);
-        });
-      });
-    }catch(_oc){}
     var recentUserLines=[];
     try{
       var names=st.recoPerson?[st.recoPerson]:['OWN Sense'];
@@ -7602,17 +7611,18 @@ async function runAdviceHubRecommendationsNow(){
       :(depthMode==='both')
         ?'Geef 2 kern-aanbevelingen plus 1 extra bonusoptie met korte motivatie.'
         :'Hou de aanbevelingen compact en direct toepasbaar.';
-    var ownCtx=[
-      'Naam: '+(getUserHoofdNaam()||''),
-      'Plaats: '+String(ownMeta.city||'').trim(),
-      'Land: '+String(ownMeta.country||'').trim(),
-      own.summary?('Samenvatting: '+String(own.summary).trim()):'',
-      ownCatLines.length?('Profielcontext: '+ownCatLines.slice(0,10).join(' | ')):'',
-      recentUserLines.length?('Recente user-input: '+recentUserLines.slice(0,6).join(' | ')):''
-    ].filter(function(x){return String(x).trim()&&x.indexOf(': ')!==x.length-2;}).join('\n');
-    var sys='Je bent FamilySensei aanbevelingsassistent. Geef 2 concrete aanbevelingen rond gezin, communicatie thuis, grenzen, verbinding en zorgcontext. Gebruik alleen toegelaten categorieen: '+catTxt+'. Gebruik alleen echte bronnen met links. Geef alleen URL\'s die je met hoge zekerheid correct vindt. Als je over een specifieke pagina twijfelt, link dan naar de stabiele start- of zoekpagina van hetzelfde domein in plaats van naar een diepe subpagina. Schrijf warm en persoonlijk met vaste openerkeuze: start exact met 1 van deze twee openzinnen, aangepast met contextdetails: 1) "Ik hoor dat de druk thuis soms zwaar voelt, dus ik kies iets dat vandaag meteen wat lucht kan geven." 2) "Ik merk dat verbinding thuis soms spanning oproept, daarom kies ik iets kleins dat rust en nabijheid ondersteunt." Als er contextregels zijn meegegeven, zeg dan NIET dat er weinig context is. Blijf bij de essentie van FamilySense: gezin en thuisdynamiek. Vermijd dating- of losse romantische invalshoeken die losstaan van de gezinssituatie. '+depthInstr+' Antwoord in max 8 zinnen en sluit af met een compacte lijst "Links:" met klikbare URL\'s.';
+    var hubFb=typeof readOwnHubBasisFallback==='function'?readOwnHubBasisFallback():null;
+    var pack=typeof senseBuildOwnRecoContextPack==='function'?senseBuildOwnRecoContextPack(own,{
+      displayName:getUserHoofdNaam(),
+      summary:own.summary,
+      recentUserLines:recentUserLines,
+      hubFallback:hubFb
+    }):{text:'',sparse:true};
+    var ownCtx=pack.text||'Nog weinig profielcontext beschikbaar.';
+    var noFab=typeof senseRecoNoFabricationRules==='function'?senseRecoNoFabricationRules(pack.sparse?'sparse':'rich'):'Verzin geen gevoelens of situaties.';
+    var sys='Je bent FamilySensei aanbevelingsassistent. Geef 2 concrete aanbevelingen rond gezin, communicatie thuis, grenzen, verbinding en zorgcontext. Gebruik alleen toegelaten categorieen: '+catTxt+'. Gebruik alleen echte bronnen met links. Geef alleen URL\'s die je met hoge zekerheid correct vindt. Als je over een specifieke pagina twijfelt, link dan naar de stabiele start- of zoekpagina van hetzelfde domein in plaats van naar een diepe subpagina. '+noFab+' Blijf bij de essentie van FamilySense: gezin en thuisdynamiek. Vermijd dating- of losse romantische invalshoeken. '+depthInstr+' Antwoord in max 8 zinnen en sluit af met een compacte lijst "Links:" met klikbare URL\'s.';
     var focusLabel=st.recoPerson?('Doeldossier: '+dn(st.recoPerson)):'Doeldossier: algemeen';
-    var usr='Context gebruiker:\n'+ownCtx+'\n'+focusLabel+'\n\nVraag van gebruiker:\n'+(st.recoPrompt||'Zoek 2 relevante aanbevelingen die vandaag kunnen helpen in mijn familiecontext.')+'\nToon empathie in de eerste zin en maak het direct toepasbaar.';
+    var usr='Context gebruiker (alleen dit gebruiken):\n'+ownCtx+'\n'+focusLabel+'\n\nVraag van gebruiker:\n'+(st.recoPrompt||'Zoek 2 relevante aanbevelingen die vandaag kunnen helpen in mijn familiecontext.')+'\nMaak het direct toepasbaar.';
     var raw=await callAPI(sys,[{role:'user',content:usr}],700,26000,null,{allowed_domains:allowedDomains});
     st.resultHtml=formatAiCard(raw);
     st.resultTs=new Date().toLocaleString('nl-BE');
@@ -7627,16 +7637,36 @@ var _dailyRecoHomeLastError='';
 var _dailyRecoHomeTask=null;
 async function fetchDailyRecoTipText(cats){
   var allowedDomains=buildRecoDomainsFromCategories(cats);
-  var catTxt=cats.join(', ');
-  var usr='Doel: een fijne, concrete suggestie voor vandaag in gezin, verbinding en grenzen.';
-  var sysSearch='Je bent FamilySensei. Geef precies 1 korte, warme dagtip voor vandaag met 1 haalbaar voorstel en 1 echte link. Alleen categorieen: '+catTxt+'. Gebruik alleen URL\'s die je met hoge zekerheid correct vindt; bij twijfel link je naar een stabiele start- of zoekpagina op hetzelfde domein. Start exact met 1 van deze openers: "Ik hoor dat de druk thuis soms zwaar voelt..." of "Ik merk dat verbinding thuis soms spanning oproept...". Houd de tip in de essentie van FamilySense: gezin, communicatie thuis, grenzen en verbinding.';
-  var sysPlain='Je bent FamilySensei. Geef precies 1 korte, warme dagtip voor vandaag (max 5 zinnen). Geen links nodig. Focus op gezin, verbinding en grenzen. Nederlands, warm en concreet.';
-  try{
-    return await callAPI(sysSearch,[{role:'user',content:usr}],420,28000,null,{allowed_domains:allowedDomains});
-  }catch(e1){
-    console.warn('fetchDailyRecoTipText search',e1);
-    return await callAPI(sysPlain,[{role:'user',content:usr}],360,28000,null,{disable_web_search:true});
+  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  if(typeof senseFetchDailyRecoTipText!=='function'){
+    var catTxt=cats.join(', ');
+    var usr='Doel: een fijne, concrete suggestie voor vandaag in gezin, verbinding en grenzen.';
+    var sysPlain='Je bent FamilySensei. Geef precies 1 korte dagtip (max 5 zinnen). Geen links. Verzin geen gevoelens. Focus: gezin, verbinding en grenzen. Nederlands.';
+    var text=await callAPI(sysPlain,[{role:'user',content:usr}],360,28000,null,{disable_web_search:true});
+    return {text:String(text||'').trim(),sparse:true};
   }
+  return await senseFetchDailyRecoTipText({
+    categories:cats,
+    allowedDomains:allowedDomains,
+    coachName:'FamilySensei',
+    focus:'gezin, communicatie thuis, grenzen en verbinding',
+    ownCell:own,
+    displayName:getUserHoofdNaam(),
+    hubFallback:typeof readOwnHubBasisFallback==='function'?readOwnHubBasisFallback():null,
+    loadRecentUserLines:async function(){
+      var lines=[];
+      try{
+        var batch=await loadMsgs('OWN Sense',{limit:12,asc:false});
+        (batch||[]).forEach(function(m){
+          if(!m||m.role!=='user')return;
+          var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+          if(clean)lines.push(clean);
+        });
+      }catch(_e){}
+      return lines.slice(0,10);
+    },
+    callAPI:callAPI
+  });
 }
 async function ensureDailyRecoTipForHome(opts){
   opts=opts||{};
@@ -7661,9 +7691,10 @@ async function ensureDailyRecoTipForHome(opts){
         await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
       }catch(_tok){}
       var raw=await fetchDailyRecoTipText(cats);
-      var text=String(raw||'').trim();
+      var text=typeof raw==='object'?String(raw.text||'').trim():String(raw||'').trim();
+      var sparse=typeof raw==='object'?!!raw.sparse:true;
       if(!text)throw new Error('Leeg antwoord ontvangen.');
-      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats});
+      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse});
       _dailyRecoHomeLastError='';
     }catch(e){
       var msg=(e&&e.message)?String(e.message):'Tip laden lukte niet.';
@@ -7720,8 +7751,9 @@ function renderHomeRecoCard(){
   }else{
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
   }
+  var recoBadge=hasTip?(cache.sparse===false?'Op maat':'Algemeen'):'Algemeen';
   return '<div class="reco-card">'
-    +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">Op maat</div></div>'
+    +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">'+recoBadge+'</div></div>'
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 11:44">
+<meta name="sc-build" content="29-05-2026 12:10">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261205"></script>
+<script src="js/sense-common.js?v=2905261210"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1554,7 +1554,20 @@ a{text-decoration:none;color:inherit}
     }
   }
   function isDirectlyLoadableImageUrl(u){
+    if(typeof senseIsDirectlyLoadableImageUrl==='function')return senseIsDirectlyLoadableImageUrl(u);
     return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
+  }
+  async function scSignStoragePath(bucket,path){
+    if(!sb||!path)return'';
+    try{
+      var sign=await sb.storage.from(String(bucket||'').trim()).createSignedUrl(String(path).replace(/^\/+/,''),60*60*24*30);
+      return sign&&sign.data&&sign.data.signedUrl?String(sign.data.signedUrl):'';
+    }catch(_e){return'';}
+  }
+  function scPushPhotoCandidate(list,ref,prio){
+    var s=String(ref||'').trim();
+    if(!s)return;
+    list.push({ref:s,prio:prio});
   }
   function scPushTrimmed(arr,val){
     var s=String(val==null?'':val).trim();
@@ -1580,40 +1593,52 @@ a{text-decoration:none;color:inherit}
     return out;
   }
   async function scResolveOwnHubPhotoUrl(user){
-    var out={url:'',path:''};
-    if(!user||!user.id||!sb)return out;
+    if(!user||!user.id||!sb)return'';
     var uid=String(user.id);
+    var hints=typeof senseOwnPhotoBucketHints==='function'?senseOwnPhotoBucketHints():['own-photos','datesense-photos','sense-photos','familysense-photos'];
+    var refresh=typeof senseRefreshPhotoRef==='function'?senseRefreshPhotoRef:null;
+    var cands=[];
+    var add=function(ref,prio){scPushPhotoCandidate(cands,ref,prio);};
+    try{
+      var ph=await sb.from('own_photos').select('storage_path').eq('user_id',uid).eq('slot',1).maybeSingle();
+      add(ph&&ph.data&&ph.data.storage_path,0);
+    }catch(_p1){}
+    try{
+      var row=await sb.from('sense_profiles').select('props,foto_urls,foto_paths').eq('user_id',uid).eq('name','OWN Sense').maybeSingle();
+      if(row&&!row.error&&row.data){
+        var fromRow=scExtractOwnPhotoFromProfileRow(row.data);
+        if(fromRow.path)add(fromRow.path,1);
+        if(fromRow.url)add(fromRow.url,3);
+        if(Array.isArray(row.data.foto_paths))row.data.foto_paths.forEach(function(p){add(p,1);});
+        if(Array.isArray(row.data.foto_urls))row.data.foto_urls.forEach(function(u){add(u,3);});
+      }
+    }catch(_p2){}
     try{
       var hubScoped=scOwnBridgeGet('ownsense_hub_profile_v2',uid);
       if(hubScoped){
         var hp=JSON.parse(hubScoped);
         if(hp&&typeof hp==='object'){
-          var hubUrls=[];
-          scPushTrimmed(hubUrls,hp.photo_url);
-          if(Array.isArray(hp.photo_urls))hp.photo_urls.forEach(function(u){scPushTrimmed(hubUrls,u);});
-          if(Array.isArray(hp.photo_paths)&&hp.photo_paths[0]){out.path=String(hp.photo_paths[0]).trim();return out;}
-          if(hubUrls.length){out.url=hubUrls[0];return out;}
+          if(Array.isArray(hp.photo_paths))hp.photo_paths.forEach(function(p){add(p,2);});
+          add(hp.photo_url,4);
+          if(Array.isArray(hp.photo_urls))hp.photo_urls.forEach(function(u){add(u,4);});
         }
       }
-    }catch(_hub){}
-    try{
-      var row=await sb.from('sense_profiles').select('props,foto_urls,foto_paths').eq('user_id',uid).eq('name','OWN Sense').maybeSingle();
-      if(row&&!row.error&&row.data){
-        var fromRow=scExtractOwnPhotoFromProfileRow(row.data);
-        if(fromRow.url||fromRow.path)return fromRow;
-      }
-    }catch(_prof){}
-    try{
-      var ph=await sb.from('own_photos').select('storage_path').eq('user_id',uid).eq('slot',1).maybeSingle();
-      var sp=ph&&ph.data&&String(ph.data.storage_path||'').trim();
-      if(sp){out.path=sp;return out;}
-    }catch(_slot){}
+    }catch(_p3){}
     try{
       var fact=await sb.from('own_facts').select('fact_text').eq('user_id',uid).eq('subcategory','onboarding_primary_photo').order('created_at',{ascending:false}).limit(1).maybeSingle();
-      var fp=fact&&fact.data&&String(fact.data.fact_text||'').trim();
-      if(fp){out.path=fp;return out;}
-    }catch(_fact){}
-    return out;
+      add(fact&&fact.data&&fact.data.fact_text,5);
+    }catch(_p4){}
+    cands.sort(function(a,b){return a.prio-b.prio;});
+    var seen={};
+    for(var ci=0;ci<cands.length;ci++){
+      var key=cands[ci].ref;
+      if(seen[key])continue;
+      seen[key]=1;
+      if(!refresh)continue;
+      var url=await refresh(key,hints,scSignStoragePath);
+      if(url)return url;
+    }
+    return'';
   }
   async function scRefreshOwnHubRing(){
     if(!userSession){
@@ -1625,7 +1650,7 @@ a{text-decoration:none;color:inherit}
       if(hubScoped)hubProfile=JSON.parse(hubScoped);
     }catch(_hp){}
     var resolved=await scResolveOwnHubPhotoUrl(userSession);
-    ownPhotoUrl=String(resolved.url||resolved.path||'').trim();
+    ownPhotoUrl=String(resolved||'').trim();
     var withBadge=!!(profile&&profile.status==='completed'&&filledAnswers>0);
     if(ownPhotoUrl){
       await setRingCenterOwnPhoto(ownPhotoUrl,withBadge);
@@ -1769,15 +1794,14 @@ a{text-decoration:none;color:inherit}
     if(!ringIcon)return;
     url=String(url||'').trim();
     if(!url){setRingCenterInitialFromContext();return;}
-    var finalUrl=url;
-    if(!isDirectlyLoadableImageUrl(url)&&sb){
-      try{
-        var sign=await sb.storage.from('own-photos').createSignedUrl(url.replace(/^\/+/,''),60*60*24*30);
-        var su=sign&&sign.data&&sign.data.signedUrl;
-        if(su)finalUrl=su;
-      }catch(_e){}
+    var hints=typeof senseOwnPhotoBucketHints==='function'?senseOwnPhotoBucketHints():['own-photos','datesense-photos','sense-photos','familysense-photos'];
+    var finalUrl='';
+    if(typeof senseRefreshPhotoRef==='function'&&sb){
+      finalUrl=await senseRefreshPhotoRef(url,hints,scSignStoragePath);
+    }else if(isDirectlyLoadableImageUrl(url)){
+      finalUrl=url;
     }
-    if(!isDirectlyLoadableImageUrl(finalUrl)){setRingCenterInitialFromContext();return;}
+    if(!finalUrl||!isDirectlyLoadableImageUrl(finalUrl)){setRingCenterInitialFromContext();return;}
     ringIcon.innerHTML='';
     var wrap=document.createElement('span');
     wrap.className='ring-avatar-wrap';
@@ -2802,9 +2826,8 @@ a{text-decoration:none;color:inherit}
 
   if(userSession){
     try{
-      var scInitPhoto=await scResolveOwnHubPhotoUrl(userSession);
-      var scInitUrl=String(scInitPhoto.url||scInitPhoto.path||'').trim();
-      if(scInitUrl)ownPhotoUrl=scInitUrl;
+      var scInitUrl=await scResolveOwnHubPhotoUrl(userSession);
+      if(scInitUrl)ownPhotoUrl=String(scInitUrl).trim();
     }catch(_initPh){}
   }
   try{
@@ -2861,6 +2884,9 @@ a{text-decoration:none;color:inherit}
     }
   }catch(e){
     console.warn('sensecorner OWN status',e);
+  }
+  if(userSession){
+    await scRefreshOwnHubRing().catch(function(_ringInit){});
   }
   updateHeroWelcome(userSession);
 
