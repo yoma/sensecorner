@@ -1548,7 +1548,7 @@
     if (!sb || !userId) return false;
     var sp = await sb
       .from("sense_profiles")
-      .select("foto_paths,foto_urls,props")
+      .select("foto_urls,props")
       .eq("user_id", userId)
       .eq("name", "OWN Sense")
       .maybeSingle();
@@ -1843,11 +1843,16 @@
     var signRes = await sb.storage.from("own-photos").createSignedUrl(pathClean, 60 * 60 * 24 * 30);
     var signed = signRes && signRes.data && signRes.data.signedUrl ? String(signRes.data.signedUrl) : "";
     if (!signed) return;
-    var sel = await sb.from("sense_profiles").select("id,props,foto_urls,foto_paths").eq("user_id", userId).eq("name", "OWN Sense").maybeSingle();
+    var sel = await sb.from("sense_profiles").select("id,props,foto_urls").eq("user_id", userId).eq("name", "OWN Sense").maybeSingle();
     if (sel && sel.error) return;
     var iso = new Date().toISOString();
     var topUrls = sel && sel.data && Array.isArray(sel.data.foto_urls) ? sel.data.foto_urls.slice() : [];
-    var topPaths = sel && sel.data && Array.isArray(sel.data.foto_paths) ? sel.data.foto_paths.slice() : [];
+    var topPaths = [];
+    if (sel && sel.data) {
+      var mp0 = sel.data.props && typeof sel.data.props === "object" ? sel.data.props : {};
+      if (Array.isArray(sel.data.foto_paths)) topPaths = sel.data.foto_paths.slice();
+      else if (Array.isArray(mp0.foto_paths)) topPaths = mp0.foto_paths.slice();
+    }
     if (!topUrls.length) topUrls = [signed];
     else {
       topUrls = topUrls.slice();
@@ -1871,7 +1876,7 @@
     if (sel && sel.data) {
       var up = await sb
         .from("sense_profiles")
-        .update({ foto_urls: topUrls, foto_paths: topPaths, props: mergedProps, last_active: iso })
+        .update({ foto_urls: topUrls, props: mergedProps, last_active: iso })
         .eq("user_id", userId)
         .eq("name", "OWN Sense");
       if (up && up.error) console.warn("syncOwnSenseProfilePrimaryPhoto", up.error);
@@ -1880,7 +1885,6 @@
         user_id: userId,
         name: "OWN Sense",
         foto_urls: topUrls,
-        foto_paths: topPaths,
         props: mergedProps,
         last_active: iso
       });
@@ -2465,7 +2469,7 @@
     if (!sb || !userId) return { error: "Geen sessie" };
     var sel = await sb
       .from("sense_profiles")
-      .select("id,props,foto_urls,foto_paths")
+      .select("id,props,foto_urls")
       .eq("user_id", userId)
       .eq("name", "OWN Sense")
       .maybeSingle();

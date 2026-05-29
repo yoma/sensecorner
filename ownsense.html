@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="26-05-2026 12:08">
+<meta name="os-build" content="29-05-2026 14:02">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1605,6 +1605,70 @@ async function senseRecoverSession(authClient){
   if(refreshed&&refreshed.user)return refreshed;
   return persisted;
 }
+function ownPromiseTimeout(promise,ms,fallback){
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise(function(resolve){
+      setTimeout(function(){resolve(fallback);},Math.max(300,ms||5000));
+    })
+  ]);
+}
+/** Snelle user-resolutie: persisted sessie eerst, getUser met timeout, geen minuten wachten op netwerk. */
+async function ownAuthUserFast(client){
+  client=client||initSupabase();
+  if(!client)return null;
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user){
+    _setAuthTokenFromSession(persisted);
+    window.__ownSenseUid=String(persisted.user.id||'');
+  }
+  var auth=await ownPromiseTimeout(client.auth.getUser(),5000,null);
+  var user=auth&&auth.data&&auth.data.user;
+  if(user){
+    window.__ownSenseUid=String(user.id||'');
+    return user;
+  }
+  var recovered=await ownPromiseTimeout(senseRefreshSessionSafe(client),6000,null);
+  if(recovered&&recovered.user){
+    _setAuthTokenFromSession(recovered);
+    window.__ownSenseUid=String(recovered.user.id||'');
+    return recovered.user;
+  }
+  return persisted&&persisted.user?persisted.user:null;
+}
+function ownBootstrapLocalHubState(){
+  try{
+    var persisted=senseSessionFromPersisted();
+    if(!persisted||!persisted.user)return;
+    var user=persisted.user;
+    window.__ownSenseUid=String(user.id||'');
+    purgeCrossUserOwnsenseLocalCaches(user.id);
+    mergeHubStateFromLocalStorage(user);
+    loadHubState(user,{restrictExternalCategorySources:false});
+    var dn=displayNameFromAuthUser(user);
+    if(dn&&!String(hubState.display_name||'').trim())hubState.display_name=dn;
+  }catch(_e){}
+}
+function ownPaintShellFromLocal(){
+  try{
+    renderMijTab();
+    renderBronTab();
+    renderInzichtenV2();
+    renderGroeiTab();
+    renderFotosTab();
+    applyUrlTabBoot();
+  }catch(_e){}
+}
+function ownRepaintAllTabs(){
+  try{
+    renderMijTab();
+    renderInzichtenV2();
+    renderGroeiTab();
+    renderBronTab();
+    renderTimelineTab();
+    renderFotosTab();
+  }catch(_e){}
+}
 function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
@@ -1969,8 +2033,7 @@ async function loadOwnBrainTables(){
   var client=initSupabase();
   if(!client)return;
   try{
-    var auth=await client.auth.getUser();
-    var user=auth&&auth.data&&auth.data.user;
+    var user=await ownAuthUserFast(client);
     if(!user){
       ownFacts=[];
       ownInsights=[];
@@ -2031,6 +2094,35 @@ async function refreshOwnPhotoSlotPreviews(){
   }
 }
 
+function ownShowSaveFeedback(targetId,msg,opts){
+  opts=opts||{};
+  var dur=opts.durationMs||2200;
+  var text=msg||'Opgeslagen';
+  var color=opts.isError?'#8A3B32':'#2E7D32';
+  var ids=targetId?[targetId]:['basisSaveInd','saveIndicator'];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.textContent=text;
+    el.style.color=color;
+    if(el.__ownSaveFbT){try{clearTimeout(el.__ownSaveFbT);}catch(_c){}}
+    el.__ownSaveFbT=setTimeout(function(){
+      if(el.textContent===text)el.textContent='';
+    },dur);
+  });
+}
+var __ownRemoteSaveTimer=null;
+function ownScheduleRemoteSave(){
+  if(__ownRemoteSaveTimer){try{clearTimeout(__ownRemoteSaveTimer);}catch(_c){}}
+  __ownRemoteSaveTimer=setTimeout(function(){
+    __ownRemoteSaveTimer=null;
+    void saveOwnToSupabase({throwOnFail:false}).then(function(res){
+      if(res&&!res.synced&&res.reason==='timeout'){
+        flashOwnsenseMessage('Cloud-sync duurde te lang. Lokaal wel opgeslagen.',false,{durationMs:5200});
+      }
+    });
+  },350);
+}
 function flashOwnsenseMessage(msg,isError,opts){
   var id='osFlashMsg';
   try{
@@ -2276,21 +2368,25 @@ async function saveOwnBasisprofiel(btn){
   if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
   try{
     if(!window.__ownSenseUid){
-      var clientUid=initSupabase();
-      if(clientUid){
-        try{
-          var au=await clientUid.auth.getUser();
-          if(au&&au.data&&au.data.user)window.__ownSenseUid=String(au.data.user.id);
-        }catch(_au){}
-      }
+      var u=await ownAuthUserFast(initSupabase());
+      if(u)window.__ownSenseUid=String(u.id);
     }
     if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
     ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
-    await saveOwnToSupabase();
-    flashOwnsenseMessage('Basisprofiel opgeslagen.',false);
+    ownShowSaveFeedback('basisSaveInd','Opgeslagen');
+    var res=await saveOwnToSupabase({throwOnFail:false,timeoutMs:12000});
+    if(res&&res.synced){
+      flashOwnsenseMessage('Basisprofiel opgeslagen.',false);
+    }else if(res&&res.ok){
+      flashOwnsenseMessage('Lokaal opgeslagen. Cloud-sync volgt zodra de verbinding terug is.',false,{durationMs:5600});
+    }else{
+      ownShowSaveFeedback('basisSaveInd','Lokaal opgeslagen',{isError:true,durationMs:2800});
+      flashOwnsenseMessage('Lokaal opgeslagen. Cloud-sync mislukt, probeer later opnieuw.',true,{durationMs:5600});
+    }
   }catch(e){
     var msg=String((e&&e.message)||e||'').trim();
     flashOwnsenseMessage(msg?('Opslaan mislukt: '+msg):'Opslaan mislukt. Probeer opnieuw.',true);
+    ownShowSaveFeedback('basisSaveInd','Opslaan mislukt',{isError:true});
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Opslaan';}
   }
@@ -3674,8 +3770,7 @@ async function syncDisplayNameFromRegistration(){
   var client=initSupabase();
   if(!client)return;
   try{
-    var auth=await client.auth.getUser();
-    var user=auth&&auth.data&&auth.data.user;
+    var user=await ownAuthUserFast(client);
     if(!user)return;
     var fromReg=displayNameFromAuthUser(user);
     if(!fromReg)return;
@@ -3691,8 +3786,7 @@ async function loadOwnFromSupabase(){
   var client=initSupabase();
   if(!client)return;
   try{
-    var auth=await client.auth.getUser();
-    var user=auth&&auth.data&&auth.data.user;
+    var user=await ownAuthUserFast(client);
     if(!user){
       window.__ownSenseUid='';
       ownTimeline=[];
@@ -3712,12 +3806,16 @@ async function loadOwnFromSupabase(){
     mergeHubStateFromLocalStorage(user);
     var restrictExternalCategorySources=false;
     try{
-      restrictExternalCategorySources=await shouldRestrictExternalCategorySources(client,user.id);
+      restrictExternalCategorySources=await ownPromiseTimeout(shouldRestrictExternalCategorySources(client,user.id),4000,false);
     }catch(_re){restrictExternalCategorySources=false;}
     __restrictExternalCategorySources=!!restrictExternalCategorySources;
     tryConsumeOwnsenseHandoff(user,{skipCategories:restrictExternalCategorySources});
     loadHubState(user,{restrictExternalCategorySources:restrictExternalCategorySources});
-    var res=await client.from('sense_profiles').select('*').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle();
+    var res=await ownPromiseTimeout(
+      client.from('sense_profiles').select('*').eq('user_id',user.id).eq('name','OWN Sense').maybeSingle(),
+      8000,
+      null
+    );
     if(res&&res.data){
       var row=res.data;
       var p=row.props||{};
@@ -3727,8 +3825,12 @@ async function loadOwnFromSupabase(){
       hubState.photo_paths=Array.isArray(p.foto_paths)?p.foto_paths.slice(0,4):Array.isArray(row.foto_paths)?row.foto_paths.slice(0,4):hubState.photo_paths||[];
       hubState.foto_analyse=String(row.foto_analyse||p.foto_analyse||hubState.foto_analyse||'');
       if(!hubState.photo_url&&hubState.photo_urls.length)hubState.photo_url=String(hubState.photo_urls[0]||'');
-      // Vernieuw signed URLs als we paden hebben opgeslagen.
-      if(hubState.photo_paths.length)await refreshSignedPhotoUrls();
+      if(hubState.photo_paths.length){
+        void refreshSignedPhotoUrls().then(function(){
+          renderMijTab();
+          renderFotosTab();
+        }).catch(function(){});
+      }
       if(!hubState.photo_url)hubState.photo_url=String(pm.photo_url||'').trim();
       /* Per categorie alleen wat de server stuurt; ontbrekende keys worden leeg (geen restanten van mirror/ander account). */
       if(p.categories&&typeof p.categories==='object'){
@@ -3773,12 +3875,14 @@ async function loadOwnFromSupabase(){
         }catch(_eSlot){}
       }
     }
-    await hydrateSelfsenseSpiegelFromMirrorSessions(client,user);
+    void hydrateSelfsenseSpiegelFromMirrorSessions(client,user).then(function(){
+      renderBronTab();
+    }).catch(function(){});
     if(!__ownSensePropsMetaCache||typeof __ownSensePropsMetaCache!=='object')__ownSensePropsMetaCache={};
     if(ownBasisprofielIsComplete()){
       var cacheOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(__ownSensePropsMetaCache):true;
       if(!cacheOk){
-        try{await saveOwnToSupabase();}catch(_syncMeta){}
+        void saveOwnToSupabase().catch(function(){});
       }
     }
     applyOwnHubAppDepthV2Migration();
@@ -3849,13 +3953,23 @@ async function loadOwnTimelineFromSupabase(){
   }catch(e){}
 }
 
-async function saveOwnToSupabase(){
+async function saveOwnToSupabase(opts){
+  opts=opts||{};
+  var throwOnFail=opts.throwOnFail!==false;
+  var timeoutMs=opts.timeoutMs||12000;
   var client=initSupabase();
-  if(!client)return;
+  if(!client){
+    var errNoClient=new Error('Supabase niet beschikbaar.');
+    if(throwOnFail)throw errNoClient;
+    return {ok:false,synced:false,reason:'no_client'};
+  }
   try{
-    var auth=await client.auth.getUser();
-    var user=auth&&auth.data&&auth.data.user;
-    if(!user)return;
+    var user=await ownAuthUserFast(client);
+    if(!user){
+      var errNoUser=new Error('Je bent niet ingelogd.');
+      if(throwOnFail)throw errNoUser;
+      return {ok:false,synced:false,reason:'no_user'};
+    }
     var cleanName=String(hubState.display_name||'').trim();
     var propsOut={
       _v:1,
@@ -3907,7 +4021,16 @@ async function saveOwnToSupabase(){
       last_summary_at:new Date().toISOString(),
       foto_patroon_text:hubState.foto_patroon_text||''
     };
-    var up=await client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'});
+    var up=await ownPromiseTimeout(
+      client.from('sense_profiles').upsert(payload,{onConflict:'user_id,name'}),
+      timeoutMs,
+      null
+    );
+    if(up===null){
+      var errTimeout=new Error('Opslaan duurde te lang. Je gegevens staan lokaal bewaard.');
+      if(throwOnFail)throw errTimeout;
+      return {ok:true,synced:false,reason:'timeout'};
+    }
     if(up&&up.error)throw new Error(up.error.message||'Opslaan mislukt');
     __ownSensePropsMetaCache=Object.assign({},propsOut.meta);
     hubState.birthdate=cleanBirthdate;
@@ -3916,13 +4039,17 @@ async function saveOwnToSupabase(){
     hubState.gender=String(propsOut.meta.gender||'').trim();
     hubState.gender_custom=String(propsOut.meta.gender_custom||'').trim();
     if(cleanName){
-      try{
-        await client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}});
-      }catch(_e){}
+      void ownPromiseTimeout(
+        client.auth.updateUser({data:{roepnaam:cleanName,display_name:cleanName,full_name:cleanName}}),
+        5000,
+        null
+      ).catch(function(){});
     }
+    return {ok:true,synced:true};
   }catch(e){
     console.warn('saveOwnToSupabase',e);
-    throw e;
+    if(throwOnFail)throw e;
+    return {ok:false,synced:false,reason:String((e&&e.message)||e||'error')};
   }
 }
 
@@ -4106,12 +4233,7 @@ function saveHubState(){
   if(window.__ownSenseUid)hubState.__ownsense_uid=String(window.__ownSenseUid);
   ownBridgeStorageSet(HUB_KEY,JSON.stringify(hubState),window.__ownSenseUid);
   scheduleSyncAppDepthSubFacts();
-  saveOwnToSupabase();
-  var saved=document.getElementById('saveIndicator');
-  if(saved){
-    saved.textContent='Opgeslagen';
-    setTimeout(function(){saved.textContent='';},1400);
-  }
+  ownScheduleRemoteSave();
 }
 
 function calcPropsFromCategories(){
@@ -5107,8 +5229,9 @@ function saveOwnQuestionsForCategory(catId,opt){
 }
 function saveOwnQuestionsInline(catId){
   if(__questionAutosaveTimers[catId])clearTimeout(__questionAutosaveTimers[catId]);
-  saveOwnQuestionsForCategory(catId,{silent:false,rerender:true});
+  var changed=saveOwnQuestionsForCategory(catId,{silent:false,rerender:true});
   __openQuestionCatId=String(catId||'').trim();
+  if(changed)flashOwnsenseMessage('Opgeslagen.',false);
 }
 
 var __ownQuestionsModalCatId='';
@@ -5185,6 +5308,7 @@ function saveOwnQuestionsModal(){
     hubState.cat_updated[cat.id]=new Date().toISOString();
     saveHubState();
     renderProps();
+    flashOwnsenseMessage('Opgeslagen.',false);
   }
   closeOwnQuestionsModal();
   renderQuestions();
@@ -5498,19 +5622,17 @@ document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'no
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
 initPhotoPreview();
+ownBootstrapLocalHubState();
+ownPaintShellFromLocal();
 function runOwnAutoAcceptStaleInBackground(){
   autoAcceptStalePendingFacts().catch(function(e){console.warn('[OWN auto-accept]',e);});
 }
-loadOwnFromSupabase()
+Promise.all([loadOwnFromSupabase(),loadOwnBrainTables()])
   .then(function(){return syncDisplayNameFromRegistration();})
-  .then(function(){return loadOwnBrainTables();})
   .then(function(){
     hydrateAppDepthSlotsFromOwnFacts();
     if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();
-    renderMijTab();
-    renderInzichtenV2();
-    renderGroeiTab();
-    renderBronTab();
+    ownRepaintAllTabs();
     if(!__didWelcomeObSync&&__restrictExternalCategorySources){
       __didWelcomeObSync=true;
       flashOwnsenseMessage('Je kennismaking staat in je hub: eigen vragen onder Invullen, app-antwoorden in de verdiepingsblokken. Profielfoto: eerste slot onder Foto\'s.');
@@ -5526,19 +5648,13 @@ loadOwnFromSupabase()
   .finally(function(){
     hydrateAppDepthSlotsFromOwnFacts();
     if(__restrictExternalCategorySources)hydrateOwnCatsFromSenseCornerOnboarding();
-    renderMijTab();
-    renderInzichtenV2();
-    renderGroeiTab();
-    renderBronTab();
-    renderTimelineTab();
+    ownRepaintAllTabs();
     return refreshOwnPhotoSlotPreviews();
   })
   .then(function(){renderFotosTab();})
   .catch(function(){
     try{
-      renderMijTab();
-      renderBronTab();
-      renderFotosTab();
+      ownRepaintAllTabs();
       applyUrlTabBoot();
     }catch(_e){}
   });
