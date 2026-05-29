@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 12:10">
+<meta name="sc-build" content="29-05-2026 13:54">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -834,6 +834,7 @@ a{text-decoration:none;color:inherit}
   }
   var SC_AUTH_STORAGE_KEY='sensecorner-auth-v1';
   var _scSignOutDebounceTimer=null;
+  var _scUserSigningOut=false;
   var _scSessionKeepAliveTimer=null;
   var _scApprovalCache={};
   function scCacheApproval(userId,approval){
@@ -960,6 +961,7 @@ a{text-decoration:none;color:inherit}
   }
   async function scHandleAuthStateEvent(event){
     if(event==='SIGNED_OUT'){
+      if(_scUserSigningOut)return;
       if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
       _scSignOutDebounceTimer=setTimeout(async function(){
         _scSignOutDebounceTimer=null;
@@ -2942,27 +2944,50 @@ a{text-decoration:none;color:inherit}
   if(hubLoginBtn)hubLoginBtn.onclick=function(){goToIndexLogin('login','');};
   if(hubRegisterBtn)hubRegisterBtn.onclick=function(){goToIndexLogin('register','');};
   async function scDoSignOut(){
-    try{
-      var uOut=await getCurrentUser();
-      if(uOut){
-        try{
-          localStorage.setItem(SC_QUOTE_PREV_KEY,String(senseCornerQuoteIndex(uOut)));
-        }catch(_e){}
-      }
+    if(_scUserSigningOut)return;
+    _scUserSigningOut=true;
+    if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);_scSignOutDebounceTimer=null;}catch(_t){}}
+    if(_scSessionKeepAliveTimer){try{clearInterval(_scSessionKeepAliveTimer);_scSessionKeepAliveTimer=null;}catch(_c){}}
+    if(hubHeaderLogout){
+      hubHeaderLogout.disabled=true;
+      var _scLogoutLabel=hubHeaderLogout.querySelector('span:last-child');
+      if(_scLogoutLabel)_scLogoutLabel.textContent='Afmelden…';
+    }
+    if(hubLogoutBtn)hubLogoutBtn.disabled=true;
+    var uOut=userSession||null;
+    if(!uOut){
+      try{uOut=await scTimeoutFallback(getCurrentUser(),2500,null);}catch(_gu){}
+    }
+    if(uOut){
       try{
-        var sid=(u&&u.id)?String(u.id):'';
+        localStorage.setItem(SC_QUOTE_PREV_KEY,String(senseCornerQuoteIndex(uOut)));
+      }catch(_e){}
+      try{
+        var sid=String(uOut.id||'');
         scOwnBridgeRemove('ownsense_hub_profile_v2',sid);
         scOwnBridgeRemove('ownsense_profile_v1',sid);
         scOwnBridgeRemove('ownsense_datesense_v1',sid);
       }catch(_ls){}
-      if(sb)await sb.auth.signOut();
-      closeHubDock();
-      await refreshAuthUi();
-      setAuthMsg('Je bent uitgelogd.');
-      try{window.location.replace('index.html');}
-      catch(_e){window.location.href='index.html';}
-    }catch(_e){
-      setAuthMsg('Uitloggen lukt nu even niet.',true);
+    }
+    if(window.senseClearAuthStorage)window.senseClearAuthStorage();
+    userSession=null;
+    closeHubDock();
+    try{window.location.replace('index.html');}
+    catch(_e){window.location.href='index.html';}
+    if(sb){
+      void Promise.race([
+        sb.auth.signOut({scope:'local'}),
+        new Promise(function(r){setTimeout(r,3500);})
+      ]).then(function(){
+        return Promise.race([
+          sb.auth.signOut({scope:'global'}),
+          new Promise(function(r){setTimeout(r,6000);})
+        ]);
+      }).catch(function(err){console.warn('[scDoSignOut]',err);}).finally(function(){
+        setTimeout(function(){_scUserSigningOut=false;},1500);
+      });
+    }else{
+      setTimeout(function(){_scUserSigningOut=false;},1500);
     }
   }
   if(hubLogoutBtn)hubLogoutBtn.onclick=scDoSignOut;
