@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="29-05-2026 17:07">
+<meta name="os-build" content="29-05-2026 17:11">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -4096,6 +4096,16 @@ async function saveOwnToSupabaseCore(opts){
     return {ok:false,synced:false,reason:'no_client'};
   }
   var user=await ownPromiseTimeout(ownAuthUserFast(client),8000,null);
+  if(!user){
+    /* Trage sessie/netwerk: het outer-timeout (8s) kan ownAuthUserFast afkappen vóór diens eigen */
+    /* persisted-fallback. Val terug op de reeds bekende, ingelogde sessie i.p.v. valse "niet ingelogd". */
+    var persistedSess=senseSessionFromPersisted();
+    if(persistedSess&&persistedSess.user){
+      _setAuthTokenFromSession(persistedSess);
+      window.__ownSenseUid=String(persistedSess.user.id||'');
+      user=persistedSess.user;
+    }
+  }
   if(!user){
     var errNoUser=new Error('Je bent niet ingelogd.');
     if(throwOnFail)throw errNoUser;
