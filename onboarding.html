@@ -1178,10 +1178,10 @@
       };
     }
   }
-  async function obVerifyOtpAllTypes(email, token, preferSignup) {
-    var primary = preferSignup ? "signup" : "email";
-    var secondary = preferSignup ? "email" : "signup";
-    var res = await obVerifyOtpRaw(email, token, primary);
+  async function obVerifyOtpAllTypes(email, token) {
+    // 6-cijfer OTP van signInWithOtp wordt altijd geverifieerd met type 'email'.
+    // 'signup' is voor de oude bevestigingslink-flow en geeft 403 bij bestaande accounts.
+    var res = await obVerifyOtpRaw(email, token, "email");
     if (!res || !res.error) {
       window.__obLastOtpError = null;
       return res;
@@ -1192,13 +1192,14 @@
     if (code.indexOf("expired") >= 0 || code.indexOf("otp_expired") >= 0) {
       return res;
     }
-    var res2 = await obVerifyOtpRaw(email, token, secondary);
+    // Laatste redmiddel voor een echt nieuw account: signup-type.
+    var res2 = await obVerifyOtpRaw(email, token, "signup");
     if (!res2 || !res2.error) {
       window.__obLastOtpError = null;
       return res2;
     }
     window.__obLastOtpError = res2.error;
-    return res2;
+    return res;
   }
   var LP_OB_PROGRESS_KEY = "sense_corner_lp_ob_uid";
   var sb = null;
@@ -3303,7 +3304,7 @@
     codeBtn.disabled = true;
     codeBtn.textContent = "Even geduld…";
     obEnsureAuthClient();
-    var res = await obVerifyOtpAllTypes(verifyEmail, token, obOtpVerifyAsSignup);
+    var res = await obVerifyOtpAllTypes(verifyEmail, token);
     codeBtn.textContent = btnLabel || "Bevestig";
     checkCodeComplete();
     if (res && res.error) {
