@@ -262,6 +262,11 @@ a{text-decoration:none;color:inherit}
 .own-scope-item.scope-own .own-scope-ring{--ring-color:var(--sage-donker)}
 .own-scope-item.scope-ds .own-scope-ring{--ring-color:var(--date-donker)}
 .own-scope-item.scope-fs .own-scope-ring{--ring-color:var(--family-donker)}
+.own-scope-item.scope-fr .own-scope-ring{--ring-color:var(--friend-donker)}
+.own-scope-item.scope-ss .own-scope-ring{--ring-color:var(--self-donker)}
+@media (min-width:900px){
+  .own-scope-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+}
 @media (max-width:620px){
   .own-scope-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
@@ -575,6 +580,7 @@ a{text-decoration:none;color:inherit}
         <div class="hero-kicker">OWN Sense · Over jou</div>
         <h1 class="hero-title">Één profiel over jou.<br>Jouw leven. Jouw tempo.</h1>
         <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter Sensei met je meedenkt in elke Sense-app.</p>
+        <div id="scBasisNudgeMount" aria-live="polite"></div>
         <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
         <p class="hero-quote" id="heroQuote" hidden aria-live="polite"></p>
 
@@ -1093,32 +1099,107 @@ a{text-decoration:none;color:inherit}
     });
     return Math.max(1,maxIdx+1);
   }
-  function calcOwnScopeStats(fallbackFilled,fallbackTotal){
-    // OWN ring volgt de primaire OWN voortgang (zelfde basis als linker profielsamenvatting).
-    var ownTotal=Math.max(1,parseInt(fallbackTotal,10)||11);
-    var ownFilled=Math.max(0,Math.min(ownTotal,parseInt(fallbackFilled,10)||0));
-    var dsTotal=5,fsTotal=5;
-    var dsFilled=0,fsFilled=0;
+  /* Zelfde mapping als ownsense.html: onboarding own_facts vullen lege slots voor statistiek. */
+  var SC_ONBOARDING_SUB_TO_SLOT={
+    core_friends_view:{cat:'karakter',idx:0},
+    core_daily_joy:{cat:'interesses',idx:0},
+    core_recharge:{cat:'interesses',idx:2},
+    core_emotion_sharing:{cat:'gevoels',idx:0},
+    core_friction:{cat:'karakter',idx:1},
+    date_safety:{cat:'datesense_focus',idx:0},
+    date_overcommit:{cat:'datesense_focus',idx:1},
+    family_meaning:{cat:'familysense_focus',idx:0},
+    family_friction:{cat:'familysense_focus',idx:1},
+    friend_values:{cat:'friendsense_focus',idx:0},
+    friend_conflict:{cat:'friendsense_focus',idx:1},
+    actuele_situatie:{cat:'selfsense_focus',idx:0},
+    goede_dag:{cat:'selfsense_focus',idx:1},
+    doelen:{cat:'selfsense_focus',idx:2},
+    constraint:{cat:'selfsense_focus',idx:3},
+    self_checkin_mood:{cat:'selfsense_focus',idx:4},
+    steunbronnen:{cat:'selfsense_focus',idx:5}
+  };
+  var scOnboardingCatsOverlay=null;
+  function scCountSlotsFromCategoryDefs(cats,catDefs){
+    var filled=0,total=0;
+    catDefs.forEach(function(cat){
+      var catData=(cats&&cats[cat.id])||{};
+      var n=cat.prompts.length;
+      for(var i=0;i<n;i++){
+        total++;
+        if(String(catData['a'+i]||'').trim())filled++;
+      }
+    });
+    return{filled:filled,total:total};
+  }
+  function scGetMergedStatsCategories(){
     var cats={};
+    function mergeCat(id,src){
+      if(!src||typeof src!=='object')return;
+      if(!cats[id])cats[id]=Object.assign({},src);
+      else cats[id]=Object.assign({},cats[id],src);
+    }
     if(hubProfile&&hubProfile.categories&&typeof hubProfile.categories==='object'){
-      cats=Object.assign({},hubProfile.categories);
+      Object.keys(hubProfile.categories).forEach(function(id){mergeCat(id,hubProfile.categories[id]);});
     }
     if(scServerCategories&&typeof scServerCategories==='object'){
-      cats=Object.assign({},cats,scServerCategories);
+      Object.keys(scServerCategories).forEach(function(id){mergeCat(id,scServerCategories[id]);});
     }
-    dsTotal=countTotalAnswersInCategory(cats.datesense_focus||{},5);
-    fsTotal=countTotalAnswersInCategory(cats.familysense_focus||{},5);
-    dsFilled=countFilledAnswersInCategory(cats.datesense_focus||{});
-    fsFilled=countFilledAnswersInCategory(cats.familysense_focus||{});
-    return [
-      {key:'own',label:'OWN',filled:ownFilled,total:ownTotal},
-      {key:'ds',label:'DateSense',filled:dsFilled,total:dsTotal},
-      {key:'fs',label:'FamilySense',filled:fsFilled,total:fsTotal}
-    ].filter(function(x){return x.total>0;});
+    if(scOnboardingCatsOverlay&&typeof scOnboardingCatsOverlay==='object'){
+      Object.keys(scOnboardingCatsOverlay).forEach(function(id){
+        var ov=scOnboardingCatsOverlay[id];
+        if(!ov||typeof ov!=='object')return;
+        if(!cats[id])cats[id]={};
+        Object.keys(ov).forEach(function(k){
+          if(!/^a\d+$/.test(k))return;
+          if(String(cats[id][k]||'').trim())return;
+          var txt=String(ov[k]||'').trim();
+          if(txt)cats[id][k]=txt;
+        });
+      });
+    }
+    return cats;
   }
-  function renderOwnCompletionDashboard(filled,total){
-    var scopes=calcOwnScopeStats(filled,total);
-    var own=scopes[0];
+  function calcOwnScopeStats(){
+    var cats=scGetMergedStatsCategories();
+    var own=scCountSlotsFromCategoryDefs(cats,SC_OWN_CATS);
+    var ds=scCountSlotsFromCategoryDefs(cats,[{id:'datesense_focus',prompts:[0,0,0,0,0]}]);
+    var fs=scCountSlotsFromCategoryDefs(cats,[{id:'familysense_focus',prompts:[0,0,0,0,0]}]);
+    var fr=scCountSlotsFromCategoryDefs(cats,[{id:'friendsense_focus',prompts:[0,0,0,0,0]}]);
+    var ss=scCountSlotsFromCategoryDefs(cats,[{id:'selfsense_focus',prompts:[0,0,0,0,0,0]}]);
+    return [
+      {key:'own',label:'OWN',filled:own.filled,total:Math.max(1,own.total)},
+      {key:'ds',label:'DateSense',filled:ds.filled,total:Math.max(1,ds.total)},
+      {key:'fs',label:'FamilySense',filled:fs.filled,total:Math.max(1,fs.total)},
+      {key:'fr',label:'FriendSense',filled:fr.filled,total:Math.max(1,fr.total)},
+      {key:'ss',label:'SelfSense',filled:ss.filled,total:Math.max(1,ss.total)}
+    ];
+  }
+  async function scRefreshOwnScopeFromFacts(user){
+    if(!sb||!user||!user.id)return;
+    try{
+      var r=await sb.from('own_facts').select('subcategory,status,source_app,category,fact_text').eq('user_id',user.id).eq('status','accepted').limit(400);
+      if(r&&r.error)return;
+      var rows=Array.isArray(r.data)?r.data:[];
+      var overlay={};
+      rows.forEach(function(f){
+        if(!f||String(f.status||'')!=='accepted')return;
+        if(String(f.source_app||'')!=='onboarding')return;
+        if(String(f.category||'').toLowerCase()!=='onboarding')return;
+        var map=SC_ONBOARDING_SUB_TO_SLOT[String(f.subcategory||'').trim()];
+        if(!map)return;
+        var txt=String(f.fact_text||'').trim();
+        if(!txt)return;
+        if(!overlay[map.cat])overlay[map.cat]={};
+        overlay[map.cat]['a'+map.idx]=txt;
+      });
+      scOnboardingCatsOverlay=overlay;
+      renderOwnCompletionDashboard();
+    }catch(_facts){}
+  }
+  function renderOwnCompletionDashboard(){
+    var scopes=calcOwnScopeStats();
+    var own=scopes[0]||{filled:0,total:16};
     var pct=Math.max(0,Math.min(100,Math.round(((own.total?own.filled/own.total:0)*100))));
     var left=Math.max(0,(own.total||0)-(own.filled||0));
     if(ownMiniDashboard){
@@ -1138,6 +1219,8 @@ a{text-decoration:none;color:inherit}
         var link='ownsense.html?tab=bron';
         if(s.key==='ds')link='ownsense.html?tab=bron&cat=datesense_focus';
         else if(s.key==='fs')link='ownsense.html?tab=bron&cat=familysense_focus';
+        else if(s.key==='fr')link='ownsense.html?tab=bron&cat=friendsense_focus';
+        else if(s.key==='ss')link='ownsense.html?tab=bron&cat=selfsense_focus';
         return '<div class="own-scope-item scope-'+s.key+'" data-app-link="'+link+'"><div class="own-scope-ring" style="--pct:'+p+'"><span class="own-scope-rip own-scope-rip--l" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--m" aria-hidden="true"></span><span class="own-scope-rip own-scope-rip--d" aria-hidden="true"></span><svg class="own-scope-svg" viewBox="0 0 50 50" aria-hidden="true"><circle class="own-scope-track" cx="25" cy="25" r="'+radius+'"></circle><circle class="own-scope-fg" cx="25" cy="25" r="'+radius+'" style="stroke-dasharray:'+c.toFixed(2)+';stroke-dashoffset:'+off.toFixed(2)+'"></circle></svg><div class="own-scope-pct">'+(s.total>0?(p+'%'):'-')+'</div></div><div class="own-scope-label">'+s.label+'</div><div class="own-scope-left">'+leftTxt+'</div></div>';
       }).join('');
       Array.prototype.slice.call(ownScopeGrid.querySelectorAll('[data-app-link]')).forEach(function(el){
@@ -1154,7 +1237,11 @@ a{text-decoration:none;color:inherit}
         };
       });
     }
-    if(ownMiniSub)ownMiniSub.textContent=left+' OWN-vragen nog in te vullen. Hoe hoger het percentage, hoe beter Sensei kan adviseren.';
+    if(ownMiniSub){
+      ownMiniSub.textContent=left>0
+        ?(left+' OWN-vragen (Over jou) nog open in OwnSense. Onboarding-antwoorden tellen al mee; de rest vul je aan onder Vragenlijsten.')
+        :'OWN Over jou is ingevuld. Hoe hoger de andere spiegels, hoe beter Sensei per domein kan adviseren.';
+    }
   }
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
@@ -1289,10 +1376,12 @@ a{text-decoration:none;color:inherit}
     {id:'datesense_focus',prompts:[0,0,0,0,0]},
     {id:'familysense_focus',prompts:[0,0,0,0,0]},
     {id:'friendsense_focus',prompts:[0,0,0,0,0]},
-    {id:'selfsense_focus',prompts:[0,0,0,0,0,0]}
+    {id:'selfsense_focus',prompts:[0,0,0,0,0,0]},
+    {id:'selfsense_spiegel',prompts:[0,0,0,0,0]}
   ];
   var SC_ALL_CATS=SC_OWN_CATS.concat(SC_APP_CATS);
   var scServerCategories=null;
+  var scOwnBasisMeta={};
   function countOwnSlotsFromCategories(cats){
     cats=cats||{};
     var filled=0,total=0;
@@ -1349,15 +1438,20 @@ a{text-decoration:none;color:inherit}
   }
   if(userSession&&sb){
     try{
-      var row=await sb.from('sense_profiles').select('props').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
+      var row=await sb.from('sense_profiles').select('props,foto_urls,foto_paths').eq('user_id',userSession.id).eq('name','OWN Sense').maybeSingle();
       if(row&&!row.error&&row.data&&row.data.props){
-        var scMeta=row.data.props&&row.data.props.meta&&typeof row.data.props.meta==='object'?row.data.props.meta:{};
-        serverOwnPhotoUrl=String(scMeta.photo_url||'').trim();
-        if(!serverOwnPhotoUrl&&Array.isArray(scMeta.foto_urls)&&scMeta.foto_urls.length){
-          serverOwnPhotoUrl=String(scMeta.foto_urls[0]||'').trim();
-        }
+        var scResolved=scExtractOwnPhotoFromProfileRow(row.data);
+        serverOwnPhotoUrl=String(scResolved.url||scResolved.path||'').trim();
         var pcats=(row.data.props&&row.data.props.categories)||{};
         scServerCategories=(pcats&&typeof pcats==='object')?pcats:null;
+        var pmeta=(row.data.props&&row.data.props.meta&&typeof row.data.props.meta==='object')?row.data.props.meta:{};
+        scOwnBasisMeta=Object.assign({},pmeta);
+        if(hubProfile&&typeof hubProfile==='object'){
+          if(!scOwnBasisMeta.birthdate)scOwnBasisMeta.birthdate=String(hubProfile.birthdate||'').trim();
+          if(!scOwnBasisMeta.city)scOwnBasisMeta.city=String(hubProfile.city||'').trim();
+          if(!scOwnBasisMeta.country)scOwnBasisMeta.country=String(hubProfile.country||'').trim();
+          if(!scOwnBasisMeta.gender)scOwnBasisMeta.gender=String(hubProfile.gender||'').trim();
+        }
         var sc=countOwnSlotsFromCategories(pcats);
         if(sc.total>0){
           if(sc.filled>filledAnswers)filledAnswers=sc.filled;
@@ -1377,6 +1471,9 @@ a{text-decoration:none;color:inherit}
     }catch(err){
       console.warn('sensecorner OWN server sync',err&&err.message?err.message:err);
     }
+    try{
+      await scRefreshOwnScopeFromFacts(userSession);
+    }catch(_scopeInit){}
   }
   /* Hub/local parity: zolang er antwoorden zijn en niet bewust overgeslagen, toon "actief" zoals op PC. */
   if(profile&&filledAnswers>0&&profile.status!=='skipped'){
@@ -1405,6 +1502,85 @@ a{text-decoration:none;color:inherit}
   }
   function isDirectlyLoadableImageUrl(u){
     return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
+  }
+  function scPushTrimmed(arr,val){
+    var s=String(val==null?'':val).trim();
+    if(s)arr.push(s);
+  }
+  function scExtractOwnPhotoFromProfileRow(row){
+    var out={url:'',path:''};
+    if(!row||typeof row!=='object')return out;
+    var p=row.props&&typeof row.props==='object'?row.props:{};
+    var pm=p.meta&&typeof p.meta==='object'?p.meta:{};
+    var urls=[];
+    scPushTrimmed(urls,pm.photo_url);
+    scPushTrimmed(urls,p.photo_url);
+    if(Array.isArray(pm.foto_urls))pm.foto_urls.forEach(function(u){scPushTrimmed(urls,u);});
+    if(Array.isArray(p.foto_urls))p.foto_urls.forEach(function(u){scPushTrimmed(urls,u);});
+    if(Array.isArray(row.foto_urls))row.foto_urls.forEach(function(u){scPushTrimmed(urls,u);});
+    var paths=[];
+    if(Array.isArray(pm.foto_paths))pm.foto_paths.forEach(function(pt){scPushTrimmed(paths,pt);});
+    if(Array.isArray(p.foto_paths))p.foto_paths.forEach(function(pt){scPushTrimmed(paths,pt);});
+    if(Array.isArray(row.foto_paths))row.foto_paths.forEach(function(pt){scPushTrimmed(paths,pt);});
+    if(paths.length){out.path=paths[0];return out;}
+    if(urls.length)out.url=urls[0];
+    return out;
+  }
+  async function scResolveOwnHubPhotoUrl(user){
+    var out={url:'',path:''};
+    if(!user||!user.id||!sb)return out;
+    var uid=String(user.id);
+    try{
+      var hubScoped=scOwnBridgeGet('ownsense_hub_profile_v2',uid);
+      if(hubScoped){
+        var hp=JSON.parse(hubScoped);
+        if(hp&&typeof hp==='object'){
+          var hubUrls=[];
+          scPushTrimmed(hubUrls,hp.photo_url);
+          if(Array.isArray(hp.photo_urls))hp.photo_urls.forEach(function(u){scPushTrimmed(hubUrls,u);});
+          if(Array.isArray(hp.photo_paths)&&hp.photo_paths[0]){out.path=String(hp.photo_paths[0]).trim();return out;}
+          if(hubUrls.length){out.url=hubUrls[0];return out;}
+        }
+      }
+    }catch(_hub){}
+    try{
+      var row=await sb.from('sense_profiles').select('props,foto_urls,foto_paths').eq('user_id',uid).eq('name','OWN Sense').maybeSingle();
+      if(row&&!row.error&&row.data){
+        var fromRow=scExtractOwnPhotoFromProfileRow(row.data);
+        if(fromRow.url||fromRow.path)return fromRow;
+      }
+    }catch(_prof){}
+    try{
+      var ph=await sb.from('own_photos').select('storage_path').eq('user_id',uid).eq('slot',1).maybeSingle();
+      var sp=ph&&ph.data&&String(ph.data.storage_path||'').trim();
+      if(sp){out.path=sp;return out;}
+    }catch(_slot){}
+    try{
+      var fact=await sb.from('own_facts').select('fact_text').eq('user_id',uid).eq('subcategory','onboarding_primary_photo').order('created_at',{ascending:false}).limit(1).maybeSingle();
+      var fp=fact&&fact.data&&String(fact.data.fact_text||'').trim();
+      if(fp){out.path=fp;return out;}
+    }catch(_fact){}
+    return out;
+  }
+  async function scRefreshOwnHubRing(){
+    if(!userSession){
+      setRingCenterInitialFromContext();
+      return;
+    }
+    try{
+      var hubScoped=scOwnBridgeGet('ownsense_hub_profile_v2',userSession.id);
+      if(hubScoped)hubProfile=JSON.parse(hubScoped);
+    }catch(_hp){}
+    var resolved=await scResolveOwnHubPhotoUrl(userSession);
+    ownPhotoUrl=String(resolved.url||resolved.path||'').trim();
+    var withBadge=!!(profile&&profile.status==='completed'&&filledAnswers>0);
+    if(ownPhotoUrl){
+      await setRingCenterOwnPhoto(ownPhotoUrl,withBadge);
+    }else if(withBadge){
+      setRingCenterCheck();
+    }else{
+      setRingCenterInitialFromContext();
+    }
   }
 
   var heroWelcome=document.getElementById('heroWelcome');
@@ -1569,6 +1745,16 @@ a{text-decoration:none;color:inherit}
       ringIcon.appendChild(bd);
     }
   }
+  function scRenderBasisNudge(){
+    var mount=document.getElementById('scBasisNudgeMount');
+    if(!mount)return;
+    if(!userSession){
+      mount.innerHTML='';
+      return;
+    }
+    var html=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded(scOwnBasisMeta||{},'sc'):'';
+    mount.innerHTML=html||'';
+  }
   function updateHeroWelcome(user){
     if(!heroWelcome)return;
     if(!user){
@@ -1614,6 +1800,7 @@ a{text-decoration:none;color:inherit}
       heroQuote.textContent='\u201C'+qtxt+'\u201D';
       heroQuote.hidden=false;
     }
+    scRenderBasisNudge();
   }
   function applyGuestOwnHubHeroDom(){
     try{
@@ -1629,6 +1816,8 @@ a{text-decoration:none;color:inherit}
       if(btnMain){
         btnMain.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Start OWN Sense';
       }
+      var scNudge=document.getElementById('scBasisNudgeMount');
+      if(scNudge)scNudge.innerHTML='';
     }catch(_e){}
   }
 
@@ -2508,6 +2697,8 @@ a{text-decoration:none;color:inherit}
       setHubRoepnaamState('',false);
       setHubPhoneState('',false);
       void refreshHubOwnPreview(user).catch(function(_ph){});
+      void scRefreshOwnHubRing().catch(function(_ring){});
+      void scRefreshOwnScopeFromFacts(user).catch(function(_scope){});
       updateHeroWelcome(user);
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
@@ -2556,9 +2747,16 @@ a{text-decoration:none;color:inherit}
     goToIndexLogin('login',t);
   }
 
+  if(userSession){
+    try{
+      var scInitPhoto=await scResolveOwnHubPhotoUrl(userSession);
+      var scInitUrl=String(scInitPhoto.url||scInitPhoto.path||'').trim();
+      if(scInitUrl)ownPhotoUrl=scInitUrl;
+    }catch(_initPh){}
+  }
   try{
     if(!userSession){
-      renderOwnCompletionDashboard(0,totalQ);
+      renderOwnCompletionDashboard();
       applyGuestOwnHubHeroDom();
     }else if(!profile){
       hideOwnHeroBar();
@@ -2568,7 +2766,7 @@ a{text-decoration:none;color:inherit}
       statusPct.textContent='';
       if(ringFg)ringFg.style.stroke='';
       setRingCenterInitialFromContext();
-      renderOwnCompletionDashboard(0,totalQ);
+      renderOwnCompletionDashboard();
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
       var pct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
@@ -2583,7 +2781,7 @@ a{text-decoration:none;color:inherit}
       }else{
         setRingCenterCheck();
       }
-      renderOwnCompletionDashboard(filledAnswers,totalQ);
+      renderOwnCompletionDashboard();
       btnMain.textContent='Open OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
     } else if(profile.status==='skipped'){
@@ -2593,7 +2791,7 @@ a{text-decoration:none;color:inherit}
       statusText.textContent='Overgeslagen, kan later';
       statusPct.textContent='';
       if(String(ownPhotoUrl||'').trim()){void setRingCenterOwnPhoto(ownPhotoUrl,false);}else{setRingCenterInitialFromContext();}
-      renderOwnCompletionDashboard(0,totalQ);
+      renderOwnCompletionDashboard();
       btnMain.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Start OWN Sense';
     } else {
       var filled=filledAnswers;
@@ -2604,7 +2802,7 @@ a{text-decoration:none;color:inherit}
       statusText.textContent='Bezig ('+(filled||0)+'/'+totalQ+' vragen)';
       statusPct.textContent='';
       if(String(ownPhotoUrl||'').trim()){void setRingCenterOwnPhoto(ownPhotoUrl,false);}else{setRingCenterInitialFromContext();}
-      renderOwnCompletionDashboard(filled,totalQ);
+      renderOwnCompletionDashboard();
       btnMain.textContent='Ga verder in OWN Sense';
       btnMain.insertAdjacentHTML('afterbegin','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>');
     }
@@ -2956,6 +3154,11 @@ a{text-decoration:none;color:inherit}
     }catch(_e){setAuthMsg('Reset-link kon niet verstuurd worden.',true);}
   };
   await refreshAuthUi();
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState!=='visible'||!userSession)return;
+    void scRefreshOwnHubRing().catch(function(){});
+    if(userSession)void scRefreshOwnScopeFromFacts(userSession).catch(function(){});
+  });
   if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
     sb.auth.onAuthStateChange(function(event){
       scHandleAuthStateEvent(event);

@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sense-theme.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/sense-common.js"></script>
   <script src="js/sense-auth-client.js"></script>
   <style>
     :root {
@@ -675,6 +676,38 @@
       font-size: 15px;
       cursor: pointer;
     }
+    .ob-basis-field {
+      width: 100%;
+      border: 1px solid var(--ob-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 15px;
+      margin-top: 8px;
+      background: #fff;
+    }
+    .ob-basis-field:focus { outline: none; border-color: var(--warm-bruin); }
+    .ob-basis-readonly {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(61, 47, 31, 0.05);
+      font-size: 14px;
+      color: var(--ob-muted);
+    }
+    .ob-basis-skip {
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ob-muted);
+      text-decoration: underline;
+      cursor: pointer;
+      text-align: center;
+    }
     .ob-opt-btn.is-active {
       background: var(--self-licht);
       border-color: var(--self-donker);
@@ -918,7 +951,7 @@
         <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
         <p class="ob-sensei" data-type="Hey <em>{{name}}</em>. Fijn dat je er bent."></p>
         <p class="ob-sensei smaller" data-type="Ik wil je graag leren kennen. Ik onthoud wat je deelt en groei mee met jou."></p>
-        <p class="ob-sensei smaller" data-type="Maar eerst: laten we je account veilig opzetten. Zo raak je niks kwijt, ook als je even moet pauzeren."></p>
+        <p class="ob-sensei smaller" data-type="Maar eerst: laten we je account veilig opzetten. Zo raak je niets kwijt, ook als je even moet pauzeren."></p>
         <div class="ob-cta-wrap" id="obCtaAcc2">
           <button type="button" class="ob-cta-primary" id="obBtnAcc2">Veilig opzetten</button>
         </div>
@@ -977,8 +1010,8 @@
 
       <section class="ob-screen ob-screen--wide" data-ob="mir0">
         <div class="ob-ripple ob-ripple--sm pulsing"><div class="ob-ripple-inner"></div></div>
-        <p class="ob-sensei" data-type="Voor ik je leer kennen,"></p>
-        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Alle spiegels staan al aan. Heb je geen interesse in een spiegel? Vink die dan gerust uit."></p>
+        <p class="ob-sensei" data-type="Voordat ik je leer kennen,"></p>
+        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Alle spiegels staan standaard aan. Geen interesse in een bepaalde spiegel? Vink die gerust uit."></p>
         <div class="ob-mirror-grid-wrap" id="obGridWrap">
           <div class="ob-mirror-grid" id="obMirrorGrid">
             <div class="ob-mirror-item own active" data-mirror="own">
@@ -1140,10 +1173,6 @@
       try {
         body = await r.json();
       } catch (_json) {}
-      console.log(
-        "[OTP] verify type=" + type + " status=" + r.status,
-        body && (body.error_code || body.msg || body.error_description) ? body : "(ok)"
-      );
       if (!r.ok) {
         return {
           status: r.status,
@@ -1170,7 +1199,6 @@
         error: null
       };
     } catch (_net) {
-      console.warn("[OTP] verify netwerkfout type=" + type, _net);
       return {
         status: 0,
         data: { user: null, session: null },
@@ -1218,6 +1246,7 @@
   var route = [];
   var routeIndex = 0;
   var routeStarted = false;
+  var obOwnBasisMetaCache = {};
 
   var ANSWER_KEY_TO_SUB = {
     core_1: "core_friends_view",
@@ -1256,17 +1285,17 @@
   obEnsureAuthClient();
 
   var CORE_QUESTIONS = [
-    { key: "core_1", q: "Hoe zouden je beste vrienden jou omschrijven?", hint: "In een paar woorden of een zin is genoeg" },
-    { key: "core_2", q: "Waar word je blij van op een doordeweekse dag?", hint: "Een klein of groot ding, alles telt" },
-    { key: "core_3", q: "Na een drukke dag - zoek je mensen op, of wil je even alleen zijn?", hint: "Mag gerust een tussenweg zijn" },
+    { key: "core_1", q: "Hoe zouden je beste vrienden jou omschrijven?", hint: "Een paar woorden of één zin is genoeg." },
+    { key: "core_2", q: "Waar word je blij van op een doordeweekse dag?", hint: "Een klein of groot ding: alles telt." },
+    { key: "core_3", q: "Na een drukke dag - zoek je mensen op, of wil je even alleen zijn?", hint: "Mag gerust een tussenweg zijn." },
     { key: "core_4", q: "Praat je makkelijk over hoe je je voelt, of houd je dat liever voor jezelf?", hint: "Wat voor jou klopt, is genoeg." },
-    { key: "core_5", q: "Waar loop je weleens tegenaan?", hint: "Geen groot probleem hoeft het te zijn." }
+    { key: "core_5", q: "Waar loop je weleens tegenaan?", hint: "Het hoeft geen groot probleem te zijn." }
   ];
 
   var MIRROR_META = {
-    date: { letter: "D", name: "DateSense", intro: "Nu iets over daten.", q1: "Wat heb je nodig om je veilig te voelen bij iemand?", h1: "Denk aan hoe iemand met je praat, kijkt, luistert", q2: "Wanneer voel je je rond dating het snelst onrustig of onzeker?", h2: "Mag heel klein zijn: voor een afspraak, na een app, als het even stil wordt", sum: "Je merkt waar rust of duidelijkheid voor je telt. Je voelt ook momenten waar dating onzeker wordt. Dat neem ik mee." },
-    family: { letter: "F", name: "FamilySense", intro: "Nu iets over familie.", q1: "Wat betekent familie voor jou?", h1: "Je eigen definitie: bloedband of keuze of allebei", q2: "Zijn er problemen thuis waar je vaak op terugbotst?", h2: "Het mag een situatie zijn, niet per se een persoon.", sum: "Wat je over familie en thuis zei, neem ik mee zoals je het zelf formuleerde." },
-    friend: { letter: "V", name: "FriendSense", intro: "Nu iets over vriendschap.", q1: "Wat vind je belangrijk in een vriendschap?", h1: "Denk aan wat je mist als het er niet is.", q2: "Hoe ga je om met meningsverschillen met een vriend?", h2: "Denk aan een recent voorbeeld.", sum: "Je weet wat een vriendschap voor jou écht maakt. En je merkt dat wrijving je iets kost. Dat neem ik mee." },
+    date: { letter: "D", name: "DateSense", intro: "Nu iets over daten.", q1: "Wat heb je nodig om je veilig te voelen bij iemand?", h1: "Denk aan hoe iemand met je praat, kijkt en luistert.", q2: "Wanneer voel je je rond dating het snelst onrustig of onzeker?", h2: "Mag heel klein zijn: voor een afspraak, na een app, als het even stil wordt.", sum: "Je merkt waar rust of duidelijkheid voor je telt. Je voelt ook momenten waar dating onzeker wordt. Dat neem ik mee." },
+    family: { letter: "F", name: "FamilySense", intro: "Nu iets over familie.", q1: "Wat betekent familie voor jou?", h1: "Je eigen definitie: bloedband, keuze of allebei.", q2: "Zijn er problemen thuis waar je vaak op terugbotst?", h2: "Het mag een situatie zijn, niet per se een persoon.", sum: "Wat je over familie en thuis zei, neem ik mee zoals je het zelf formuleerde." },
+    friend: { letter: "V", name: "FriendSense", intro: "Nu iets over vriendschap.", q1: "Wat vind je belangrijk in een vriendschap?", h1: "Denk aan wat je mist als het er niet is.", q2: "Hoe ga je om met meningsverschillen met een vriend?", h2: "Denk aan een recent voorbeeld, hoe klein ook.", sum: "Je weet wat een vriendschap voor jou écht maakt. En je merkt dat wrijving je iets kost. Dat neem ik mee." },
     self: {
       letter: "S",
       name: "SelfSense",
@@ -1275,7 +1304,7 @@
         { q: "Wat houdt je op dit moment het meest bezig? Wat heeft je hierheen gebracht?", h: "Beschrijf wat nu het meest op de voorgrond staat." },
         { q: "Wat zou voor jou nu een goede dag zijn? Of een dag die meevalt?", h: "Een klein teken van ademruimte is ook goed." },
         { q: "Wat wil je graag bereiken? Of voelt bereiken te veel als druk?", h: "Je mag ook zeggen dat je vooral rust zoekt." },
-        { q: "Wat werkt absoluut niet voor jou?", h: "Noem dingen die Sensei nooit moet voorstellen." },
+        { q: "Wat werkt absoluut niet voor jou?", h: "Noem dingen die Sensei beter niet voorstelt." },
         {
           q: "Hoe voel je je op dit moment?",
           options: [
@@ -1285,7 +1314,7 @@
             { id: "heel zwaar", label: "Het is overweldigend" }
           ]
         },
-        { q: "Heb je dingen waar je op kan terugvallen? Mensen, gewoontes, plekken, professionele hulp, wat voor jou werkt.", h: "Alles wat je ondersteunt mag hier staan." }
+        { q: "Heb je dingen waarop je kunt terugvallen? Mensen, gewoontes, plekken, professionele hulp: wat voor jou werkt.", h: "Alles wat je ondersteunt mag hier staan." }
       ],
       sum: "Je bracht helder in kaart wat nu speelt, wat je nodig hebt en wat niet werkt voor jou. Dat is sterke basisinformatie voor SelfSense."
     }
@@ -1306,11 +1335,11 @@
 
   var OVERGANG_POOL = [
     "Top, we gaan door.",
-    "Bedankt, nog eentje.",
+    "Bedankt, we gaan verder.",
     "Mooi gezegd, verder.",
     "Oké, en dan dit.",
     "Goed. Volgende.",
-    "Helder. Door."
+    "Prima. Volgende."
   ];
 
   function showToast(msg) {
@@ -1622,6 +1651,9 @@
     try {
       if (sessionStorage.getItem(stepDoneStorageKey(idx)) === "1") return true;
     } catch (_e) {}
+    if (st.kind === "basis") {
+      return obBasisMetaLooksComplete(obOwnBasisMetaCache);
+    }
     if (st.kind === "q") {
       var sub = ANSWER_KEY_TO_SUB[st.key];
       return !!(sub && factsSub.has(sub));
@@ -1692,6 +1724,18 @@
     var user = session.user;
     var uid = user.id;
     __obUserId = uid;
+    obOwnBasisMetaCache = {};
+    try {
+      var ownBasisRow = await sb
+        .from("sense_profiles")
+        .select("props")
+        .eq("user_id", uid)
+        .eq("name", "OWN Sense")
+        .maybeSingle();
+      if (ownBasisRow && ownBasisRow.data && ownBasisRow.data.props && ownBasisRow.data.props.meta) {
+        obOwnBasisMetaCache = Object.assign({}, ownBasisRow.data.props.meta);
+      }
+    } catch (_obMeta) {}
     if (await hasOnboardingCompleted(uid)) {
       try {
         localStorage.removeItem(LP_OB_PROGRESS_KEY);
@@ -2118,7 +2162,7 @@
     var ctaWrap = document.getElementById("obResCta");
     if (ctaWrap) ctaWrap.classList.remove("shown");
 
-    var welcomeMsg = "Welkom terug. We gaan naar het punt waar je gebleven was.";
+    var welcomeMsg = "Welkom terug. We gaan verder waar je was gebleven.";
     if (welcomeEl) {
       welcomeEl.innerHTML = "";
       await fadeInContent(welcomeEl, escapeHtml(welcomeMsg), controller, 520);
@@ -2375,7 +2419,7 @@
     }
     if (count === 2) {
       if (has("date") && has("family")) return "Daten en familie. Twee spiegels die vaak met elkaar praten.";
-      if (has("date") && has("friend")) return "Daten en vriendschap. Daar zit vaak overlap, ik ben benieuwd.";
+      if (has("date") && has("friend")) return "Daten en vriendschap. Daar zit vaak overlap. Ik ben benieuwd.";
       if (has("date") && has("self")) return "Daten en herstel. Dat vraagt tempo én zachtheid. Goed dat je beide ziet.";
       if (has("family") && has("friend")) return "Familie en vriendschap. Twee plekken waar je mensen mag kiezen, of niet.";
       if (has("family") && has("self")) return "Familie en herstel. Dat zijn vaak twee kanten van hetzelfde.";
@@ -2384,8 +2428,80 @@
     return "Oké. Dan gaan we zo beginnen.";
   }
 
+  function obBasisMetaLooksComplete(meta) {
+    meta = meta && typeof meta === "object" ? meta : {};
+    return !!(
+      String(meta.birthdate || "").trim() &&
+      (String(meta.city || "").trim() || String(meta.country || "").trim())
+    );
+  }
+
+  function obTodayIso() {
+    var d = new Date();
+    return (
+      d.getFullYear() +
+      "-" +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(d.getDate()).padStart(2, "0")
+    );
+  }
+
+  function obBasisAgePreview() {
+    var inp = document.getElementById("obBasisBirthdate");
+    var prev = document.getElementById("obBasisAgePreview");
+    if (!inp || !prev) return;
+    var calc =
+      typeof senseCalcAgeFromBirthdate === "function"
+        ? senseCalcAgeFromBirthdate
+        : function () {
+            return "";
+          };
+    var age = calc(inp.value);
+    prev.textContent = age ? "Leeftijd: " + age + " jaar" : "Leeftijd wordt automatisch berekend";
+  }
+
+  async function saveOnboardingBasisMeta(userId, fields) {
+    if (!sb || !userId) return { error: "Geen sessie" };
+    var sel = await sb
+      .from("sense_profiles")
+      .select("id,props,foto_urls,foto_paths")
+      .eq("user_id", userId)
+      .eq("name", "OWN Sense")
+      .maybeSingle();
+    if (sel && sel.error) return { error: String(sel.error.message || "Opslaan mislukt") };
+    var iso = new Date().toISOString();
+    var mergedProps = Object.assign({}, sel && sel.data && sel.data.props && typeof sel.data.props === "object" ? sel.data.props : {});
+    var meta = Object.assign({}, mergedProps.meta && typeof mergedProps.meta === "object" ? mergedProps.meta : {}, fields || {});
+    var bd = String(meta.birthdate || "").trim();
+    if (bd && typeof senseCalcAgeFromBirthdate === "function") meta.age = senseCalcAgeFromBirthdate(bd);
+    else if (!bd) meta.age = "";
+    if (String(meta.gender || "").trim().toLowerCase() !== "overig") meta.gender_custom = "";
+    mergedProps.meta = meta;
+    if (sel && sel.data) {
+      var up = await sb
+        .from("sense_profiles")
+        .update({ props: mergedProps, last_active: iso })
+        .eq("user_id", userId)
+        .eq("name", "OWN Sense");
+      if (up && up.error) return { error: String(up.error.message || "Opslaan mislukt") };
+    } else {
+      var ins = await sb.from("sense_profiles").insert({
+        user_id: userId,
+        name: "OWN Sense",
+        phone: null,
+        props: mergedProps,
+        last_active: iso
+      });
+      if (ins && ins.error) return { error: String(ins.error.message || "Opslaan mislukt") };
+    }
+    obOwnBasisMetaCache = Object.assign({}, meta);
+    return { error: "" };
+  }
+
   function buildRoute() {
     var r = [];
+    r.push({ kind: "basis" });
     for (var c = 0; c < CORE_QUESTIONS.length; c++) {
       r.push({ kind: "q", mirror: "own", key: CORE_QUESTIONS[c].key, idx: c });
     }
@@ -2408,6 +2524,7 @@
 
   function getRailMirrorFromStep(st) {
     if (!st) return "own";
+    if (st.kind === "basis") return "own";
     if (st.kind === "photo") return "photo";
     if (st.kind === "final") return "final";
     var m = st.mirror || "own";
@@ -2417,6 +2534,7 @@
 
   function railSegmentShortTitle(st) {
     if (!st) return "";
+    if (st.kind === "basis") return "Basisprofiel";
     if (st.kind === "photo") return "Profielfoto";
     if (st.kind === "final") return "Afronden";
     if (st.kind === "sum") {
@@ -2490,6 +2608,165 @@
     return String(s).replace(/"/g, "&quot;");
   }
 
+  function renderBasisStep(host) {
+    var m = obOwnBasisMetaCache && typeof obOwnBasisMetaCache === "object" ? obOwnBasisMetaCache : {};
+    var bd = String(m.birthdate || "").trim();
+    var city = String(m.city || "").trim();
+    var country = String(m.country || "België").trim() || "België";
+    var gender = String(m.gender || "").trim().toLowerCase();
+    var genderCustom = String(m.gender_custom || "").trim();
+    var calc =
+      typeof senseCalcAgeFromBirthdate === "function"
+        ? senseCalcAgeFromBirthdate
+        : function () {
+            return "";
+          };
+    var ageTxt = bd && calc(bd) ? "Leeftijd: " + calc(bd) + " jaar" : "Leeftijd wordt automatisch berekend";
+    function gBtn(val, label) {
+      var cls = gender === val ? " ob-opt-btn is-active" : " ob-opt-btn";
+      return (
+        '<button type="button" class="' +
+        cls.trim() +
+        '" data-gender="' +
+        escapeAttr(val) +
+        '">' +
+        escapeHtml(label) +
+        "</button>"
+      );
+    }
+    host.innerHTML =
+      '<div class="ob-blok-badge">Over jou · basisprofiel</div>' +
+      '<div class="ob-ripple ob-ripple-q own pulsing"><div class="ob-ripple-inner"><div class="ob-ripple-center-letter">O</div></div></div>' +
+      '<p class="ob-sensei lg" data-type="Een paar basisfeiten helpen Sensei om advies beter op jou af te stemmen. Alles mag, niets is verplicht."></p>' +
+      '<div class="ob-answer-wrap shown" id="obBasisWrap">' +
+      '<label class="ob-answer-hint" style="margin-top:0;font-weight:700;color:var(--chocolade)" for="obBasisBirthdate">Geboortedatum</label>' +
+      '<input class="ob-basis-field" type="date" id="obBasisBirthdate" max="' +
+      escapeAttr(obTodayIso()) +
+      '" value="' +
+      escapeAttr(bd) +
+      '">' +
+      '<div class="ob-basis-readonly" id="obBasisAgePreview">' +
+      escapeHtml(ageTxt) +
+      "</div>" +
+      '<label class="ob-answer-hint" style="margin-top:14px;font-weight:700;color:var(--chocolade)" for="obBasisCity">Woonplaats (gemeente)</label>' +
+      '<input class="ob-basis-field" type="text" id="obBasisCity" placeholder="Bv: Leuven" autocomplete="address-level2" value="' +
+      escapeAttr(city) +
+      '">' +
+      '<p class="ob-answer-hint">Enkel je gemeente, geen adres.</p>' +
+      '<label class="ob-answer-hint" style="margin-top:14px;font-weight:700;color:var(--chocolade)">Geslacht</label>' +
+      '<div class="ob-answer-options" id="obBasisGenderOpts">' +
+      gBtn("man", "Man") +
+      gBtn("vrouw", "Vrouw") +
+      gBtn("overig", "Overig") +
+      "</div>" +
+      '<div id="obBasisGenderCustomWrap" style="display:' +
+      (gender === "overig" ? "block" : "none") +
+      '">' +
+      '<input class="ob-basis-field" type="text" id="obBasisGenderCustom" placeholder="Optioneel: hoe wil je het noemen?" maxlength="80" value="' +
+      escapeAttr(genderCustom) +
+      '">' +
+      "</div>" +
+      '<button type="button" class="ob-basis-skip" id="obBasisGenderSkip">Zeg ik liever niet</button>' +
+      '<label class="ob-answer-hint" style="margin-top:14px;font-weight:700;color:var(--chocolade)" for="obBasisCountry">Land (optioneel)</label>' +
+      '<input class="ob-basis-field" type="text" id="obBasisCountry" placeholder="Bv: België" value="' +
+      escapeAttr(country) +
+      '">' +
+      "</div>" +
+      '<div class="ob-cta-wrap shown" id="obBasisCta">' +
+      '<button type="button" class="ob-cta-primary" id="obBasisSaveBtn">Opslaan en verder</button>' +
+      '<button type="button" class="ob-basis-skip" id="obBasisSkipBtn">Overslaan, vul later aan</button>' +
+      "</div>" +
+      (routeIndex > 0
+        ? '<div class="ob-back-wrap"><button type="button" class="ob-cta-back" id="obBasisBack">Vorige stap</button></div>'
+        : "");
+
+    var bdInp = document.getElementById("obBasisBirthdate");
+    if (bdInp) bdInp.addEventListener("input", obBasisAgePreview);
+
+    var selectedGender = gender;
+    var gOpts = host.querySelectorAll("#obBasisGenderOpts .ob-opt-btn");
+    var customWrap = document.getElementById("obBasisGenderCustomWrap");
+    gOpts.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        gOpts.forEach(function (x) {
+          x.classList.remove("is-active");
+        });
+        btn.classList.add("is-active");
+        selectedGender = String(btn.getAttribute("data-gender") || "").trim();
+        if (customWrap) customWrap.style.display = selectedGender === "overig" ? "block" : "none";
+      });
+    });
+
+    var skipGender = document.getElementById("obBasisGenderSkip");
+    if (skipGender) {
+      skipGender.addEventListener("click", function () {
+        selectedGender = "prefer_not";
+        gOpts.forEach(function (x) {
+          x.classList.remove("is-active");
+        });
+        if (customWrap) customWrap.style.display = "none";
+        var gc = document.getElementById("obBasisGenderCustom");
+        if (gc) gc.value = "";
+      });
+    }
+
+    function collectBasisFields() {
+      var bdVal = bdInp ? String(bdInp.value || "").trim() : "";
+      var cityVal = document.getElementById("obBasisCity");
+      cityVal = cityVal ? String(cityVal.value || "").trim() : "";
+      var countryVal = document.getElementById("obBasisCountry");
+      countryVal = countryVal ? String(countryVal.value || "").trim() : "";
+      var customVal = document.getElementById("obBasisGenderCustom");
+      customVal = customVal ? String(customVal.value || "").trim() : "";
+      return {
+        birthdate: bdVal,
+        city: cityVal,
+        country: countryVal,
+        gender: selectedGender,
+        gender_custom: selectedGender === "overig" ? customVal : ""
+      };
+    }
+
+    var saveBtn = document.getElementById("obBasisSaveBtn");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", async function () {
+        var fields = collectBasisFields();
+        if (fields.birthdate && (!/^\d{4}-\d{2}-\d{2}$/.test(fields.birthdate) || !(typeof senseCalcAgeFromBirthdate === "function" && senseCalcAgeFromBirthdate(fields.birthdate)))) {
+          showToast("Controleer de geboortedatum.");
+          return;
+        }
+        saveBtn.disabled = true;
+        try {
+          var gu = await sb.auth.getUser();
+          var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+          if (!uid) throw new Error("Geen sessie");
+          var res = await saveOnboardingBasisMeta(uid, fields);
+          if (res && res.error) throw new Error(res.error);
+          advanceRoute();
+        } catch (_bs) {
+          showToast("Even een haperingetje. Probeer opnieuw.");
+          saveBtn.disabled = false;
+        }
+      });
+    }
+
+    var skipBtn = document.getElementById("obBasisSkipBtn");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", function () {
+        advanceRoute();
+      });
+    }
+
+    var backBtn = document.getElementById("obBasisBack");
+    if (backBtn) {
+      backBtn.addEventListener("click", function () {
+        retreatRoute();
+      });
+    }
+
+    animateQuestion(host);
+  }
+
   async function renderRouteStep() {
     var host = document.getElementById("obDynamic");
     host.innerHTML = "";
@@ -2499,7 +2776,9 @@
     var step = route[routeIndex];
     if (!step) return;
 
-    if (step.kind === "q") {
+    if (step.kind === "basis") {
+      renderBasisStep(host);
+    } else if (step.kind === "q") {
       renderQuestion(host, step);
     } else if (step.kind === "sum") {
       await renderSummary(host, step);
@@ -2551,7 +2830,7 @@
     } else {
       answerInputHtml =
         '<textarea class="ob-answer-input" id="obAns" rows="3" placeholder="' + escapeAttr(hint) + '"></textarea>' +
-        '<div class="ob-answer-hint">Neem je tijd. Één of twee zinnen is genoeg.</div>';
+        '<div class="ob-answer-hint">Neem je tijd. Eén of twee zinnen is genoeg.</div>';
     }
 
     host.innerHTML =
@@ -2779,18 +3058,18 @@
       '<div class="ob-blok-badge">Iets van jou</div>' +
       '<div class="ob-ripple ob-ripple-q own pulsing"><div class="ob-ripple-inner">' +
       '<div class="ob-ripple-center-letter">O</div></div></div>' +
-      '<p class="ob-sensei lg" data-type="Heb je een foto van jezelf, iets typisch voor jou? Liefst een beeld waar we jou in herkennen."></p>' +
+      '<p class="ob-sensei lg" data-type="Heb je een foto van jezelf, iets dat typisch voor jou is? Bij voorkeur een beeld waar we jou duidelijk herkennen."></p>' +
       '<div class="ob-photo-wrap" id="obPhotoWrap">' +
       '<div class="ob-photo-drop" id="obPhotoDrop">' +
       '<div class="ob-photo-placeholder">' +
       '<div class="ob-photo-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/>' +
       '<circle cx="12" cy="12" r="3.5"/><path d="M7 5l1.5-2h7L17 5"/></svg></div>' +
       '<div class="ob-photo-prompt">Tik om een foto te kiezen</div>' +
-      '<div class="ob-photo-sub">of sleep er eentje hierheen</div></div>' +
+      '<div class="ob-photo-sub">of sleep er hier een naartoe</div></div>' +
       '<img class="ob-photo-preview" id="obPhotoPreview" alt="">' +
       '<button type="button" class="ob-photo-remove" id="obPhotoRemove" title="Verwijder foto">×</button></div>' +
       '<input type="file" id="obPhotoInput" accept="image/*" style="display:none">' +
-      '<input type="text" class="ob-photo-caption" id="obPhotoCap" placeholder="Wil je er iets bij schrijven? Optioneel."></div>' +
+      '<input type="text" class="ob-photo-caption" id="obPhotoCap" placeholder="Wil je er iets bijzetten? Optioneel."></div>' +
       '<div class="ob-cta-wrap" id="obPhotoCta">' +
       '<button type="button" class="ob-cta-primary" id="obPhotoNext">Verder</button>' +
       '<button type="button" class="ob-photo-skip" id="obPhotoSkip">Liever niet, later misschien</button></div>' +
@@ -3239,7 +3518,7 @@
       options: { redirectTo: oauthRedirectToOnboarding() }
     });
     if (out && out.error && errEl) {
-      errEl.textContent = "Google aanmelden lukt nu niet. Probeer opnieuw of kies e-mailcode.";
+      errEl.textContent = "Google aanmelden lukt nu niet. Probeer opnieuw of gebruik een e-mailcode.";
     }
     if (googleBtn) googleBtn.disabled = false;
     if (emailBtnLocal) emailBtnLocal.disabled = !emailOk();
@@ -3310,11 +3589,6 @@
     if (res && res.error) {
       var rawErr = String((res.error && res.error.message) || "").toLowerCase();
       var errCode = String((res.error && res.error.code) || "").toLowerCase();
-      console.error("[OTP] verify mislukt", {
-        code: res.error.code,
-        message: res.error.message,
-        status: res.status
-      });
       var expired =
         rawErr.indexOf("expir") >= 0 ||
         rawErr.indexOf("invalid") >= 0 ||

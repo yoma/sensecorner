@@ -64,7 +64,190 @@
     return t;
   }
 
+  function senseCalcAgeFromBirthdate(birthdate) {
+    var raw = String(birthdate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+    var p = raw.split('-');
+    var y = parseInt(p[0], 10);
+    var m = parseInt(p[1], 10);
+    var d = parseInt(p[2], 10);
+    if (!y || !m || !d) return '';
+    var today = new Date();
+    var age = today.getFullYear() - y;
+    var md = today.getMonth() + 1 - m;
+    if (md < 0 || (md === 0 && today.getDate() < d)) age--;
+    return age > 0 && age < 130 ? String(age) : '';
+  }
+
+  function senseOwnBasisMetaComplete(meta) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    return !!(
+      String(meta.birthdate || '').trim() &&
+      (String(meta.city || '').trim() || String(meta.country || '').trim())
+    );
+  }
+
+  function senseFormatOwnBasisGender(meta) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    var g = String(meta.gender || '').trim().toLowerCase();
+    if (!g || g === 'prefer_not' || g === 'liever_niet') return '';
+    if (g === 'man') return 'man';
+    if (g === 'vrouw') return 'vrouw';
+    if (g === 'overig') {
+      var custom = String(meta.gender_custom || '').trim();
+      return custom ? custom : 'overig';
+    }
+    return '';
+  }
+
+  function senseOwnBasisContextParts(meta, calcAgeFn) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    calcAgeFn = calcAgeFn || senseCalcAgeFromBirthdate;
+    var parts = [];
+    var age = calcAgeFn(meta.birthdate) || String(meta.age || '').trim();
+    if (age) parts.push('leeftijd ' + age);
+    var city = String(meta.city || '').trim();
+    if (city) parts.push('woonplaats ' + city);
+    var country = String(meta.country || '').trim();
+    if (country && !city) parts.push('land ' + country);
+    var gender = senseFormatOwnBasisGender(meta);
+    if (gender) parts.push('geslacht ' + gender);
+    return parts;
+  }
+
+  function appendOwnBasisMetaCoachContext(lines, meta, calcAgeFn) {
+    if (!lines || !meta) return;
+    var parts = senseOwnBasisContextParts(meta, calcAgeFn);
+    if (parts.length) lines.push('OWN basisprofiel: ' + parts.join(', '));
+  }
+
+  function senseBasisNudgeDayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function senseBasisprofielNudgeSeenToday(appKey, nudgeId) {
+    var key = 'sc_basis_nudge_' + String(appKey || 'sc').toLowerCase() + '_' + String(nudgeId || 'main') + '_' + senseBasisNudgeDayKey();
+    try {
+      return sessionStorage.getItem(key) === '1';
+    } catch (_e) {
+      return true;
+    }
+  }
+
+  function markBasisprofielNudgeSeen(appKey, nudgeId) {
+    var key = 'sc_basis_nudge_' + String(appKey || 'sc').toLowerCase() + '_' + String(nudgeId || 'main') + '_' + senseBasisNudgeDayKey();
+    try {
+      sessionStorage.setItem(key, '1');
+    } catch (_e2) {}
+  }
+
+  function getBasisprofielNudge(meta, appKey) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    appKey = String(appKey || 'sc').toLowerCase();
+    var link = 'ownsense.html?tab=mij&focus=basis';
+    if (senseOwnBasisMetaComplete(meta)) {
+      if (!String(meta.gender || '').trim() && !senseBasisprofielNudgeSeenToday(appKey, 'gender')) {
+        return {
+          id: 'gender',
+          title: 'Optioneel: geslacht',
+          message: 'Als je wilt, vul je geslacht aan in je basisprofiel. Sensei kan advies dan iets beter afstemmen. Je mag dit ook overslaan.',
+          link: link,
+          linkLabel: 'Basisprofiel openen'
+        };
+      }
+      return null;
+    }
+    if (senseBasisprofielNudgeSeenToday(appKey, 'basis')) return null;
+    var missing = [];
+    if (!String(meta.birthdate || '').trim()) missing.push('geboortedatum');
+    if (!String(meta.city || '').trim() && !String(meta.country || '').trim()) missing.push('woonplaats');
+    var msg =
+      missing.length === 2
+        ? 'Vul je geboortedatum en gemeente aan in OwnSense. Dat helpt Sensei om advies beter op jouw leeftijd en regio af te stemmen.'
+        : 'Vul je ' + missing.join(' en ') + ' aan in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
+    return {
+      id: 'basis',
+      title: 'Basisprofiel aanvullen',
+      message: msg,
+      link: link,
+      linkLabel: 'Nu aanvullen'
+    };
+  }
+
+  function senseEscHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function senseEscJsStr(s) {
+    return String(s || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, '')
+      .replace(/\n/g, '\\n');
+  }
+
+  function renderBasisprofielNudgeHtml(nudge, appKey) {
+    if (!nudge) return '';
+    var id = senseEscHtml(nudge.id || 'basis');
+    var ak = senseEscJsStr(appKey || 'sc');
+    var nid = senseEscJsStr(nudge.id || 'basis');
+    return (
+      '<div class="sc-basis-nudge" data-nudge-id="' +
+      id +
+      '" style="margin:0 0 14px;padding:12px 14px;background:#FFF9F3;border:1px solid #F0DADA;border-radius:12px;text-align:left">' +
+      '<div style="font-size:13px;font-weight:700;color:#5C4033">' +
+      senseEscHtml(nudge.title || 'Profiel aanvullen') +
+      '</div>' +
+      '<p style="font-size:13px;color:#666;line-height:1.5;margin-top:6px">' +
+      senseEscHtml(nudge.message || '') +
+      '</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+      '<a href="' +
+      senseEscHtml(nudge.link || 'ownsense.html?tab=mij&focus=basis') +
+      '" class="coach-save-other" style="font-size:12px;padding:6px 10px;text-decoration:none;display:inline-block">' +
+      senseEscHtml(nudge.linkLabel || 'Aanvullen') +
+      '</a>' +
+      '<button type="button" class="coach-save-other" style="font-size:12px;padding:6px 10px" onclick="dismissBasisprofielNudge(\'' +
+      ak +
+      "','" +
+      nid +
+      '\')">Later vandaag</button>' +
+      '</div></div>'
+    );
+  }
+
+  function renderBasisprofielNudgeIfNeeded(meta, appKey) {
+    var nudge = getBasisprofielNudge(meta, appKey);
+    if (!nudge) return '';
+    return renderBasisprofielNudgeHtml(nudge, appKey);
+  }
+
+  function dismissBasisprofielNudge(appKey, nudgeId) {
+    markBasisprofielNudgeSeen(appKey, nudgeId);
+    var sel = '[data-nudge-id="' + String(nudgeId || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+    try {
+      document.querySelectorAll('.sc-basis-nudge' + sel).forEach(function (el) {
+        el.remove();
+      });
+    } catch (_e3) {}
+  }
+
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
+  global.senseCalcAgeFromBirthdate = senseCalcAgeFromBirthdate;
+  global.senseOwnBasisMetaComplete = senseOwnBasisMetaComplete;
+  global.senseFormatOwnBasisGender = senseFormatOwnBasisGender;
+  global.senseOwnBasisContextParts = senseOwnBasisContextParts;
+  global.appendOwnBasisMetaCoachContext = appendOwnBasisMetaCoachContext;
+  global.getBasisprofielNudge = getBasisprofielNudge;
+  global.markBasisprofielNudgeSeen = markBasisprofielNudgeSeen;
+  global.renderBasisprofielNudgeIfNeeded = renderBasisprofielNudgeIfNeeded;
+  global.renderBasisprofielNudgeHtml = renderBasisprofielNudgeHtml;
+  global.dismissBasisprofielNudge = dismissBasisprofielNudge;
 })(typeof window !== 'undefined' ? window : this);

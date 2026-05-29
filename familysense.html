@@ -2265,12 +2265,12 @@ function hasAnyContactDossier(){
 }
 function ownProfileSetupComplete(){
   var meta=((S.pdata['OWN Sense']||{}).meta)||{};
-  return !!(String(meta.birthdate||'').trim()&&String(meta.intent||'').trim());
+  return !!(String(meta.birthdate||'').trim()&&(String(meta.city||'').trim()||String(meta.country||'').trim()));
 }
 function getOnboardingChecklist(){
   var contacts=getContactProfileNames();
   return [
-    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint()"},
+    {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint({focus:'basis'})"},
     {id:'first-dossier',done:contacts.length>0,label:'Maak je eerste familiedossier aan',action:'newSenseFromDrawer()'},
     {id:'relation-ready',done:contacts.length>0&&contacts.some(function(c){return contactRolMetaComplete((S.pdata[c]||{}).meta);}),label:'Kies per dossier een rol (kind, ouder, nonkel…)',action:contacts.length?("viewDossier('"+escJsStr(contacts[0])+"')"):'newSenseFromDrawer()'},
     {id:'vertel-start',done:((S.pdata['OWN Sense']||{}).count||0)>0||contacts.length>0,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"}
@@ -5417,6 +5417,8 @@ function ownSenseHubUrl(opt){
   var base='ownsense.html?returnTo='+encodeURIComponent('familysense.html');
   if(opt.cat==='familysense_focus'){
     base+='&tab=bron&cat='+encodeURIComponent('familysense_focus');
+  }else if(opt.focus==='basis'){
+    base+='&tab=mij&focus=basis';
   }
   return base;
 }
@@ -7198,6 +7200,7 @@ function rHome(el){
   if(typeof S.homeModeEditorOpen!=='boolean')S.homeModeEditorOpen=!hasExplicitMode;
   var showModeEditor=!!S.homeModeEditorOpen;
   var onboardingHtml=renderOnboardingCard();
+  var basisNudgeHtml=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded((((S.pdata||{})['OWN Sense']||{}).meta)||{},'fs'):'';
   var hasContacts=cs.length>0;
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
@@ -7302,6 +7305,7 @@ function rHome(el){
   </div>
   <div class="home-stack">
   ${onboardingHtml}
+  ${basisNudgeHtml}
   <div id="homeAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
   ${renderAiImportHomeLanding()}
   <div class="mic-wrap">
@@ -9832,6 +9836,7 @@ function appendOwnHubMirrorCoachContext(lines,ownMeta){
       lines.push('- Slot '+(sn||'?')+': '+tx.replace(/\s+/g,' ').substring(0,650));
     });
   }
+  if(typeof appendOwnBasisMetaCoachContext==='function')appendOwnBasisMetaCoachContext(lines,ownMeta,calcAgeFromBirthdate);
 }
 
 function buildAdviceContextPayload(name,d,msgs){
@@ -14295,12 +14300,13 @@ function buildCoachContext(){
   pushOwnLabel(ownRn);
   pushOwnLabel(ownDn);
   var ownNameLine=ownNameBits.length?ownNameBits.join(' / '):'';
-  var ownMetaParts=[ownNameLine,ownAge?('leeftijd '+ownAge):'',ownMeta.intent].filter(Boolean);
+  var ownBasisParts=(typeof senseOwnBasisContextParts==='function')?senseOwnBasisContextParts(ownMeta,calcAgeFromBirthdate):[ownAge?('leeftijd '+ownAge):'',ownMeta.city?('woonplaats '+ownMeta.city):''].filter(Boolean);
+  var ownMetaParts=[ownNameLine].concat(ownBasisParts).concat([ownMeta.intent]).filter(Boolean);
   if(ownMeta.photo_analysis&&ownMeta.photo_analysis.summary){
     ownMetaParts.push('foto: '+String(ownMeta.photo_analysis.summary).substring(0,80));
   }
   lines.push('JOUW PROFIEL (OWN Sense):');
-  if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,120));
+  if(ownMetaParts.length)lines.push('Profiel: '+ownMetaParts.join(', ').substring(0,180));
   var dm=getOwnDailyMoodMeta(ownMeta);
   if(dm&&dm.label)lines.push('Stemming vandaag: '+dm.label+' (gekozen door gebruiker)');
   if(ownProps.length)lines.push('Eigenschappen: '+ownProps.join(', '));
