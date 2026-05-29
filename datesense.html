@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="29-05-2026 13:47">
+<meta name="ds-build" content="29-05-2026 14:28">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -101,6 +101,7 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 }
 .tag .tag-main{display:block;font-weight:700;color:var(--sage-donker)}
 .tag .tag-sub{display:block;margin-top:2px;font-size:12px;font-weight:600;font-style:italic;color:var(--app-medium)}
+.tag .tag-note{display:block;margin-top:2px;font-size:11px;font-weight:600;font-style:normal;color:var(--app-medium);opacity:.92}
 .tag-sensei-kanji{
   display:inline-block;margin-left:5px;font-size:10px;font-weight:700;font-style:normal;letter-spacing:.08em;
   color:var(--app-medium);opacity:.92;vertical-align:super;line-height:1;
@@ -109,6 +110,7 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 @media (max-width:380px){
   .tag{font-size:12px}
   .tag .tag-sub{font-size:11px}
+  .tag .tag-note{font-size:10px}
 }
 
 /* Build label + account (rechts in logobar, geen overlap met titel) */
@@ -1215,7 +1217,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
         <span data-sc-mark="ripple" data-sc-tone="date" data-sc-size="26" data-sc-compact="1"></span>
         <span class="brand-name">DateSense</span>
       </a>
-      <div class="tag" id="brandTag"><span class="tag-main">Twijfel minder, voel meer.</span><span class="tag-sub">DateSensei · jouw persoonlijke dating coach<span class="tag-sensei-kanji" lang="ja" title="Sensei">先生</span></span></div>
+      <div class="tag" id="brandTag"><span class="tag-main">Twijfel minder, voel meer.</span><span class="tag-sub">DateSensei · jouw persoonlijke dating coach<span class="tag-sensei-kanji" lang="ja" title="Sensei">先生</span></span><span class="tag-note">(Partnermodus mogelijk)</span></div>
     </div>
     <div class="logobar-meta" id="logobarMeta">
       <a href="sensecorner.html" class="logobar-hub-mark" aria-label="Terug naar SenseCorner" title="SenseCorner hub">
@@ -1588,7 +1590,7 @@ async function safeSignOut(){
 function renderBrandTag(){
   var el=document.getElementById('brandTag');
   if(!el)return;
-  el.innerHTML='<span class="tag-main">Twijfel minder, voel meer.</span><span class="tag-sub">DateSensei · jouw persoonlijke dating coach<span class="tag-sensei-kanji" lang="ja" title="Sensei">先生</span></span>';
+  el.innerHTML='<span class="tag-main">Twijfel minder, voel meer.</span><span class="tag-sub">DateSensei · jouw persoonlijke dating coach<span class="tag-sensei-kanji" lang="ja" title="Sensei">先生</span></span><span class="tag-note">(Partnermodus mogelijk)</span>';
   setBuildTag();
 }
 
@@ -3009,6 +3011,7 @@ var _authBootstrappedUserId='';
 function resetAuthenticatedBootState(){
   _authBootstrappedUserId='';
   _authBootstrapInFlight=null;
+  _dsFullBootstrapPromise=null;
 }
 function getPostAuthTargetScreen(){
   return shouldBootScreenVertelForCrossAppSeed()?'vertel':'home';
@@ -3024,6 +3027,11 @@ async function resolveSession(opts){
   opts=opts||{};
   var client=opts.authClient||sb;
   if(!client||!client.auth)return null;
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    _setAuthTokenFromSession(persisted);
+    return persisted;
+  }
   var attempts=opts.attempts!=null?opts.attempts:2;
   var delayMs=opts.delayMs!=null?opts.delayMs:450;
   var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
@@ -3035,8 +3043,11 @@ async function resolveSession(opts){
     }catch(_e){}
     if(i<attempts-1)await new Promise(function(r){setTimeout(r,delayMs);});
   }
-  var persisted=senseSessionFromPersisted();
-  if(persisted&&persisted.user&&String(persisted.access_token||'').trim())return persisted;
+  persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    _setAuthTokenFromSession(persisted);
+    return persisted;
+  }
   return null;
 }
 async function persistLoginSessionFromSignIn(signRes){
@@ -3064,19 +3075,118 @@ async function confirmSessionAfterSignIn(signRes,opts){
   if(signRes)void persistLoginSessionFromSignIn(signRes);
   return resolveSession({attempts:opts.attempts||14,delayMs:400,getTimeout:4000});
 }
-async function bootstrapAuthenticated(session,opts){
+var DS_PROFILES_CACHE_BASE='ds_profiles_cache_v1';
+var _dsFullBootstrapPromise=null;
+function dsProfilesCacheKey(uid){
+  return DS_PROFILES_CACHE_BASE+'::'+String(uid||'').trim();
+}
+function dsLoadProfilesCache(uid){
+  try{
+    var raw=localStorage.getItem(dsProfilesCacheKey(uid));
+    if(!raw)return null;
+    var o=JSON.parse(raw);
+    if(!o||String(o.uid||'')!==String(uid||'')||!Array.isArray(o.profiles))return null;
+    return o;
+  }catch(_e){return null;}
+}
+function dsHasProfilesCache(uid){
+  return !!dsLoadProfilesCache(uid);
+}
+function dsApplyProfilesCacheIfAvailable(uid){
+  var snap=dsLoadProfilesCache(uid);
+  if(!snap)return false;
+  S.profiles=snap.profiles.slice();
+  S.pdata=Object.assign({},snap.pdata||{});
+  return true;
+}
+function dsSaveProfilesCache(){
+  if(!S.user||!Array.isArray(S.profiles)||!S.pdata)return;
+  try{
+    var uid=String(S.user.id||'');
+    if(!uid)return;
+    localStorage.setItem(dsProfilesCacheKey(uid),JSON.stringify({
+      v:1,
+      uid:uid,
+      savedAt:Date.now(),
+      profiles:S.profiles.slice(),
+      pdata:S.pdata
+    }));
+  }catch(_e){}
+}
+async function dsSyncAuthClientFromSession(session){
+  if(!sb||!session||!session.access_token||!sb.auth||typeof sb.auth.setSession!=='function')return;
+  try{
+    await withTimeout(sb.auth.setSession({
+      access_token:session.access_token,
+      refresh_token:session.refresh_token
+    }),8000,null);
+  }catch(_e){}
+}
+function dsRefreshUiAfterBackgroundSync(){
+  try{
+    updateNavTabIndicators();
+    if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'){
+      goScreen(S.screen,{skipFlush:true});
+    }
+    ensureRenderHealthy('bg-sync');
+  }catch(_e){}
+}
+async function dsRunFullBootstrap(session,opts){
   opts=opts||{};
-  if(!applyAuthSessionToState(session))return false;
-  if(opts.fullSync!==false){
+  if(_dsFullBootstrapPromise)return _dsFullBootstrapPromise;
+  _dsFullBootstrapPromise=(async function(){
     try{
+      await dsSyncAuthClientFromSession(session);
+      if(opts.fullSync===false)return;
       await refreshAdminRoleFromSupabase();
       await applySenseiCoreToAdviceCore(DATESENSE_ADVICE_CORE_OPTS);
-      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       try{initSessie();}catch(_e2){}
       try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+      dsSaveProfilesCache();
+      dsRefreshUiAfterBackgroundSync();
+    }catch(authErr){
+      console.error('dsRunFullBootstrap:',authErr);
+    }finally{
+      _dsFullBootstrapPromise=null;
+    }
+  })();
+  return _dsFullBootstrapPromise;
+}
+async function dsLoadAllDeferredWork(){
+  try{await cleanupSystemMirrorDossiers();}catch(e){console.warn('cleanupSystemMirrorDossiers',e);}
+  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+}
+async function bootstrapAuthenticated(session,opts){
+  opts=opts||{};
+  if(!applyAuthSessionToState(session))return false;
+  if(opts.fastPaint){
+    try{
+      migrateLegacyUserPrefs();
+      if(dsApplyProfilesCacheIfAvailable(String(session.user.id||''))){
+        try{reconcileSessAssignMapsAtLogin();}catch(_e){}
+        try{scrubCrossAccountRuntimeState();}catch(_e2){}
+        try{updateNavTabIndicators();}catch(_e3){}
+      }
+    }catch(_e4){}
+    void dsRunFullBootstrap(session,opts);
+    _authBootstrappedUserId=String(session.user.id||'');
+    return true;
+  }
+  if(opts.fullSync!==false){
+    try{
+      await refreshAdminRoleFromSupabase();
+      await applySenseiCoreToAdviceCore(DATESENSE_ADVICE_CORE_OPTS);
+      try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
+      try{await refreshOwnFactsCoachContext();}catch(_e){}
+      try{initSessie();}catch(_e2){}
+      try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
+      try{applySenseDeepLinkFromUrl();}catch(_e4){}
+      try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+      dsSaveProfilesCache();
     }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
   }
   _authBootstrappedUserId=String(session.user.id||'');
@@ -3099,7 +3209,7 @@ async function enterAuthenticatedApp(session,opts){
   _authBootstrapInFlight=(async function(){
     try{
       applyAuthSessionToState(session);
-      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen;
+      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
       if(navEarly)showAuthenticatedShell(opts.screen);
       await bootstrapAuthenticated(session,opts);
       if(!navEarly)showAuthenticatedShell(opts.screen);
@@ -4599,9 +4709,16 @@ async function init(){
   registerAuthStateListener();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var session=await resolveSession({attempts:3,delayMs:500,getTimeout:10000});
+    var session=await resolveSession({attempts:2,delayMs:400,getTimeout:6000});
     if(session){
-      await enterAuthenticatedApp(session,{screen:getPostAuthTargetScreen(),forceResync:true,fullSync:true});
+      var uid=String(session.user.id||'');
+      var hasProfilesCache=dsHasProfilesCache(uid);
+      void enterAuthenticatedApp(session,{
+        screen:getPostAuthTargetScreen(),
+        forceResync:!hasProfilesCache,
+        fullSync:true,
+        fastPaint:true
+      });
     }else{
       resetAuthenticatedBootState();
       goScreen('login');
@@ -4807,7 +4924,8 @@ async function doSignOut(){
 }
 
 // ══ Data ═════════════════════════════════════════════════════════
-async function loadAll(){
+async function loadAll(opts){
+  opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
   var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
@@ -4869,9 +4987,13 @@ async function loadAll(){
   try{syncOwnBasisMetaFromHub();}catch(_basisHub){}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
-  try{await cleanupSystemMirrorDossiers();}catch(e){console.warn('cleanupSystemMirrorDossiers',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
-  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+  dsSaveProfilesCache();
+  if(opts.deferHeavy===false){
+    await dsLoadAllDeferredWork();
+  }else{
+    void dsLoadAllDeferredWork();
+  }
 }
 
 /** Herstelt oude gemixte scope-data: family-dossiers horen geen ds-scope te houden. */

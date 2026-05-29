@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="19-05-2026 08:42">
+<meta name="fr-build" content="29-05-2026 14:29">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -3049,6 +3049,11 @@ async function resolveSession(opts){
   opts=opts||{};
   var client=opts.authClient||sb;
   if(!client||!client.auth)return null;
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    _setAuthTokenFromSession(persisted);
+    return persisted;
+  }
   var attempts=opts.attempts!=null?opts.attempts:2;
   var delayMs=opts.delayMs!=null?opts.delayMs:450;
   var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
@@ -3060,8 +3065,11 @@ async function resolveSession(opts){
     }catch(_e){}
     if(i<attempts-1)await new Promise(function(r){setTimeout(r,delayMs);});
   }
-  var persisted=senseSessionFromPersisted();
-  if(persisted&&persisted.user&&String(persisted.access_token||'').trim())return persisted;
+  persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    _setAuthTokenFromSession(persisted);
+    return persisted;
+  }
   return null;
 }
 async function persistLoginSessionFromSignIn(signRes){
@@ -3089,19 +3097,117 @@ async function confirmSessionAfterSignIn(signRes,opts){
   if(signRes)void persistLoginSessionFromSignIn(signRes);
   return resolveSession({attempts:opts.attempts||14,delayMs:400,getTimeout:4000});
 }
-async function bootstrapAuthenticated(session,opts){
+var FR_PROFILES_CACHE_BASE='fr_profiles_cache_v1';
+var _frFullBootstrapPromise=null;
+function frProfilesCacheKey(uid){
+  return FR_PROFILES_CACHE_BASE+'::'+String(uid||'').trim();
+}
+function frLoadProfilesCache(uid){
+  try{
+    var raw=localStorage.getItem(frProfilesCacheKey(uid));
+    if(!raw)return null;
+    var o=JSON.parse(raw);
+    if(!o||String(o.uid||'')!==String(uid||'')||!Array.isArray(o.profiles))return null;
+    return o;
+  }catch(_e){return null;}
+}
+function frHasProfilesCache(uid){
+  return !!frLoadProfilesCache(uid);
+}
+function frApplyProfilesCacheIfAvailable(uid){
+  var snap=frLoadProfilesCache(uid);
+  if(!snap)return false;
+  S.profiles=snap.profiles.slice();
+  S.pdata=Object.assign({},snap.pdata||{});
+  return true;
+}
+function frSaveProfilesCache(){
+  if(!S.user||!Array.isArray(S.profiles)||!S.pdata)return;
+  try{
+    var uid=String(S.user.id||'');
+    if(!uid)return;
+    localStorage.setItem(frProfilesCacheKey(uid),JSON.stringify({
+      v:1,
+      uid:uid,
+      savedAt:Date.now(),
+      profiles:S.profiles.slice(),
+      pdata:S.pdata
+    }));
+  }catch(_e){}
+}
+async function frSyncAuthClientFromSession(session){
+  if(!sb||!session||!session.access_token||!sb.auth||typeof sb.auth.setSession!=='function')return;
+  try{
+    await withTimeout(sb.auth.setSession({
+      access_token:session.access_token,
+      refresh_token:session.refresh_token
+    }),8000,null);
+  }catch(_e){}
+}
+function frRefreshUiAfterBackgroundSync(){
+  try{
+    updateNavTabIndicators();
+    if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'||S.screen==='vertel'){
+      goScreen(S.screen,{skipFlush:true});
+    }
+    ensureRenderHealthy('bg-sync');
+  }catch(_e){}
+}
+async function frRunFullBootstrap(session,opts){
   opts=opts||{};
-  if(!applyAuthSessionToState(session))return false;
-  if(opts.fullSync!==false){
+  if(_frFullBootstrapPromise)return _frFullBootstrapPromise;
+  _frFullBootstrapPromise=(async function(){
     try{
+      await frSyncAuthClientFromSession(session);
+      if(opts.fullSync===false)return;
       await refreshAdminRoleFromSupabase();
       await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
-      try{await loadAll();}catch(e){console.error('loadAll error:',e);}
+      try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
       try{initSessie();}catch(_e2){}
       try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+      frSaveProfilesCache();
+      frRefreshUiAfterBackgroundSync();
+    }catch(authErr){
+      console.error('frRunFullBootstrap:',authErr);
+    }finally{
+      _frFullBootstrapPromise=null;
+    }
+  })();
+  return _frFullBootstrapPromise;
+}
+async function frLoadAllDeferredWork(){
+  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+}
+async function bootstrapAuthenticated(session,opts){
+  opts=opts||{};
+  if(!applyAuthSessionToState(session))return false;
+  if(opts.fastPaint){
+    try{
+      migrateLegacyUserPrefs();
+      if(frApplyProfilesCacheIfAvailable(String(session.user.id||''))){
+        try{reconcileSessAssignMapsAtLogin();}catch(_e){}
+        try{scrubCrossAccountRuntimeState();}catch(_e2){}
+        try{updateNavTabIndicators();}catch(_e3){}
+      }
+    }catch(_e4){}
+    void frRunFullBootstrap(session,opts);
+    _authBootstrappedUserId=String(session.user.id||'');
+    return true;
+  }
+  if(opts.fullSync!==false){
+    try{
+      await refreshAdminRoleFromSupabase();
+      await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
+      try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
+      try{await refreshOwnFactsCoachContext();}catch(_e){}
+      try{initSessie();}catch(_e2){}
+      try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
+      try{applySenseDeepLinkFromUrl();}catch(_e4){}
+      try{scheduleDailyRecoTipRefresh();}catch(_e5){}
+      frSaveProfilesCache();
     }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
   }
   _authBootstrappedUserId=String(session.user.id||'');
@@ -3124,7 +3230,7 @@ async function enterAuthenticatedApp(session,opts){
   _authBootstrapInFlight=(async function(){
     try{
       applyAuthSessionToState(session);
-      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen;
+      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
       if(navEarly)showAuthenticatedShell(opts.screen);
       await bootstrapAuthenticated(session,opts);
       if(!navEarly)showAuthenticatedShell(opts.screen);
@@ -4519,9 +4625,16 @@ async function init(){
   registerAuthStateListener();
   try{await handlePendingAuthFromUrl();}catch(_e){}
   try{
-    var session=await resolveSession({attempts:3,delayMs:500,getTimeout:10000});
+    var session=await resolveSession({attempts:2,delayMs:400,getTimeout:6000});
     if(session){
-      await enterAuthenticatedApp(session,{screen:getPostAuthTargetScreen(),forceResync:true,fullSync:true});
+      var uid=String(session.user.id||'');
+      var hasProfilesCache=frHasProfilesCache(uid);
+      void enterAuthenticatedApp(session,{
+        screen:getPostAuthTargetScreen(),
+        forceResync:!hasProfilesCache,
+        fullSync:true,
+        fastPaint:true
+      });
     }else{
       resetAuthenticatedBootState();
       goScreen('login');
@@ -4719,7 +4832,8 @@ async function doSignOut(){
 }
 
 // ══ Data ═════════════════════════════════════════════════════════
-async function loadAll(){
+async function loadAll(opts){
+  opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
   var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
@@ -4782,7 +4896,12 @@ async function loadAll(){
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{await normalizeLegacyFriendScopes();}catch(e){console.warn('normalizeLegacyFriendScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
-  try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+  frSaveProfilesCache();
+  if(opts.deferHeavy===false){
+    await frLoadAllDeferredWork();
+  }else{
+    void frLoadAllDeferredWork();
+  }
 }
 
 /** Herstelt gemixte scope-data voor friend-dossiers (fr verplicht; fs/ds eruit). */
