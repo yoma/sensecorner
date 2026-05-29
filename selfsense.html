@@ -9324,6 +9324,11 @@ async function ensureDailyRecoTipForHome(opts){
   var cache=getDailyRecoCache();
   var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
   if(hasValidCache&&!forceManual)return;
+  if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
+    if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';
+    paintHomeRecoCard();
+    return;
+  }
   if(_dailyRecoHomeTask&&!forceManual)return _dailyRecoHomeTask;
   var run=async function(){
     _dailyRecoHomeFetching=true;
@@ -9344,7 +9349,8 @@ async function ensureDailyRecoTipForHome(opts){
       _dailyRecoHomeLastError=msg;
       if(forceManual)toast('Tip laden lukte niet. '+msg);
       console.warn('ensureDailyRecoTipForHome',e);
-      if(retryCount<1&&!forceManual){
+      var rateLimited=/overbevraagd|\b429\b|rate.?limit|too many requests/i.test(msg);
+      if(retryCount<1&&!forceManual&&!rateLimited){
         await new Promise(function(r){setTimeout(r,2500);});
         return ensureDailyRecoTipForHome({retryCount:retryCount+1});
       }
@@ -9458,7 +9464,9 @@ function renderHomeRecoCard(){
   }else if(hasTip){
     body=formatAiCard(String(cache.text||''));
   }else if(_dailyRecoHomeLastError){
-    body='<div style="font-size:13px;color:#b91c1c;line-height:1.5">'+escHTML(_dailyRecoHomeLastError)+'</div>';
+    body=(typeof senseRecoStatusNoticeHtml==='function')
+      ?senseRecoStatusNoticeHtml(_dailyRecoHomeLastError)
+      :'<div style="font-size:13px;color:#9a6a1f;line-height:1.5">'+escHTML(_dailyRecoHomeLastError)+'</div>';
   }else if(!prefs.auto_enabled){
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Automatisch laden staat uit. Tik op <strong>Vernieuw tip</strong> of zet auto dagtip aan onder Advies.</div>';
   }else{

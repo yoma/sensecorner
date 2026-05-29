@@ -404,6 +404,37 @@
     };
   }
 
+  function senseIsRateLimitMessage(msg) {
+    return /overbevraagd|\b429\b|rate.?limit|too many requests/i.test(String(msg || ''));
+  }
+
+  function senseRecoStatusNoticeHtml(msg) {
+    var esc = function (s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    };
+    if (senseIsRateLimitMessage(msg)) {
+      return (
+        '<div style="display:flex;gap:10px;align-items:flex-start;background:rgba(245,158,11,.08);' +
+        'border:1px solid rgba(245,158,11,.28);border-radius:12px;padding:11px 12px">' +
+        '<span aria-hidden="true" style="font-size:16px;line-height:1.3">\u23F3</span>' +
+        '<div style="font-size:13px;color:#7c5b16;line-height:1.5">' +
+        '<strong>Even rustig aan.</strong> Sensei krijgt nu veel vragen tegelijk, dus je dagtip lukt zo meteen niet. ' +
+        'Probeer over een minuutje opnieuw met "Vernieuw tip".' +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div style="font-size:13px;color:#9a6a1f;line-height:1.5">' +
+      'Je dagtip lukte even niet. Tik op "Vernieuw tip" om het opnieuw te proberen.' +
+      '<div style="font-size:11px;color:#9aa0a8;margin-top:4px">' + esc(msg) + '</div>' +
+      '</div>'
+    );
+  }
+
   function senseRecoNoFabricationRules(mode) {
     mode = mode === 'sparse' ? 'sparse' : 'rich';
     var rules =
@@ -474,6 +505,13 @@
       });
     } catch (e1) {
       console.warn('senseFetchDailyRecoTipText search', e1);
+      // Bij een rate limit (429 / "overbevraagd") geen tweede call doen: dat
+      // verergert de overbelasting alleen. Geef de fout door zodat de UI de
+      // rustige "probeer straks opnieuw"-melding kan tonen.
+      var msg1 = (e1 && e1.message) ? String(e1.message) : '';
+      if (/overbevraagd|\b429\b|rate.?limit|too many requests/i.test(msg1)) {
+        throw e1;
+      }
       text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, 28000, null, {
         disable_web_search: true
       });
@@ -507,5 +545,7 @@
   global.senseCollectOwnCategoryLines = senseCollectOwnCategoryLines;
   global.senseBuildOwnRecoContextPack = senseBuildOwnRecoContextPack;
   global.senseRecoNoFabricationRules = senseRecoNoFabricationRules;
+  global.senseIsRateLimitMessage = senseIsRateLimitMessage;
+  global.senseRecoStatusNoticeHtml = senseRecoStatusNoticeHtml;
   global.senseFetchDailyRecoTipText = senseFetchDailyRecoTipText;
 })(typeof window !== 'undefined' ? window : this);
