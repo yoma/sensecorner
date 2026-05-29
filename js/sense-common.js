@@ -191,8 +191,22 @@
       .replace(/\n/g, '\\n');
   }
 
+  function ensureBasisNudgeStyles() {
+    if (typeof document === 'undefined' || document.getElementById('sc-basis-nudge-styles')) return;
+    var st = document.createElement('style');
+    st.id = 'sc-basis-nudge-styles';
+    st.textContent =
+      '.sc-basis-nudge__actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center}' +
+      '.sc-basis-nudge__primary{display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;padding:8px 14px;border-radius:10px;text-decoration:none;font-family:inherit;cursor:pointer;border:none;background:var(--chocolade,#5C4033);color:var(--cream,#FFF9F3);box-shadow:0 2px 8px rgba(61,47,31,.12)}' +
+      '.sc-basis-nudge__primary:hover{background:var(--chocolade-diep,#4A3328);color:var(--cream,#FFF9F3)}' +
+      '.sc-basis-nudge__secondary{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:6px 4px;border-radius:8px;font-family:inherit;cursor:pointer;border:none;background:transparent;color:#7A6F66;text-decoration:underline;text-underline-offset:2px}' +
+      '.sc-basis-nudge__secondary:hover{color:var(--chocolade,#5C4033)}';
+    document.head.appendChild(st);
+  }
+
   function renderBasisprofielNudgeHtml(nudge, appKey) {
     if (!nudge) return '';
+    ensureBasisNudgeStyles();
     var id = senseEscHtml(nudge.id || 'basis');
     var ak = senseEscJsStr(appKey || 'sc');
     var nid = senseEscJsStr(nudge.id || 'basis');
@@ -206,13 +220,13 @@
       '<p style="font-size:13px;color:#666;line-height:1.5;margin-top:6px">' +
       senseEscHtml(nudge.message || '') +
       '</p>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+      '<div class="sc-basis-nudge__actions">' +
       '<a href="' +
       senseEscHtml(nudge.link || 'ownsense.html?tab=mij&focus=basis') +
-      '" class="coach-save-other" style="font-size:12px;padding:6px 10px;text-decoration:none;display:inline-block">' +
+      '" class="sc-basis-nudge__primary">' +
       senseEscHtml(nudge.linkLabel || 'Aanvullen') +
       '</a>' +
-      '<button type="button" class="coach-save-other" style="font-size:12px;padding:6px 10px" onclick="dismissBasisprofielNudge(\'' +
+      '<button type="button" class="sc-basis-nudge__secondary" onclick="dismissBasisprofielNudge(\'' +
       ak +
       "','" +
       nid +
