@@ -115,6 +115,15 @@
     );
   }
 
+  function senseCountOwnBasisSlots(meta, calcAgeFn) {
+    meta = meta && typeof meta === 'object' ? meta : {};
+    var filled = 0;
+    if (senseOwnBasisHasAge(meta, calcAgeFn)) filled++;
+    if (senseOwnBasisHasLocation(meta)) filled++;
+    if (senseOwnBasisHasGenderAnswer(meta)) filled++;
+    return { filled: filled, total: 3 };
+  }
+
   /** Alleen sense_profiles props.meta; geen props-root of hub-bridge (zelfde bron als OwnSense UI). */
   function senseExtractOwnBasisMetaServerOnly(props) {
     props = props && typeof props === 'object' ? props : {};
@@ -573,6 +582,7 @@
   global.senseOwnBasisHasLocation = senseOwnBasisHasLocation;
   global.senseOwnBasisHasGenderAnswer = senseOwnBasisHasGenderAnswer;
   global.senseOwnBasisMetaComplete = senseOwnBasisMetaComplete;
+  global.senseCountOwnBasisSlots = senseCountOwnBasisSlots;
   global.senseExtractOwnBasisMeta = senseExtractOwnBasisMeta;
   global.senseExtractOwnBasisMetaServerOnly = senseExtractOwnBasisMetaServerOnly;
   global.senseParseOwnHubBasisFallback = senseParseOwnHubBasisFallback;

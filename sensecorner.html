@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 16:49">
+<meta name="sc-build" content="29-05-2026 16:53">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261649"></script>
+<script src="js/sense-common.js?v=2905261653"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1187,60 +1187,10 @@ a{text-decoration:none;color:inherit}
     }
     return cats;
   }
-  function scCalcAgeInline(birthdate){
-    if(typeof senseCalcAgeFromBirthdate==='function')return senseCalcAgeFromBirthdate(birthdate);
-    var raw=String(birthdate||'').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return'';
-    var p=raw.split('-');
-    var y=parseInt(p[0],10),m=parseInt(p[1],10),d=parseInt(p[2],10);
-    if(!y||!m||!d)return'';
-    var today=new Date();
-    var age=today.getFullYear()-y;
-    var md=today.getMonth()+1-m;
-    if(md<0||(md===0&&today.getDate()<d))age--;
-    return age>0&&age<130?String(age):'';
-  }
-  function scBasisHasAgeInline(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    var ageRaw=String(meta.age||'').trim();
-    if(ageRaw){var ageNum=parseInt(ageRaw,10);if(ageNum>0&&ageNum<130)return true;}
-    var bd=String(meta.birthdate||'').trim();
-    return !!(bd&&scCalcAgeInline(bd));
-  }
-  function scBasisHasLocationInline(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    return !!(String(meta.city||'').trim()||String(meta.country||'').trim()||String(meta.address||'').trim());
-  }
-  function scBasisHasGenderInline(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    return !!String(meta.gender||'').trim();
-  }
-  /** Alleen server props.meta; leeg {} of alleen geslacht = incompleet (geen hub-bridge). */
-  function scIsBasisMetaIncomplete(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    return !(scBasisHasAgeInline(meta)&&scBasisHasLocationInline(meta)&&scBasisHasGenderInline(meta));
-  }
-  function scIsBasisMetaComplete(meta){
-    return !scIsBasisMetaIncomplete(meta);
-  }
-  function scReadServerBasisMeta(props){
-    props=props&&typeof props==='object'?props:{};
-    if(typeof senseExtractOwnBasisMetaServerOnly==='function')return senseExtractOwnBasisMetaServerOnly(props);
-    if(props.meta&&typeof props.meta==='object')return Object.assign({},props.meta);
-    return{};
-  }
-  function scCountOwnBasisSlots(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    var filled=0;
-    if(scBasisHasAgeInline(meta))filled++;
-    if(scBasisHasLocationInline(meta))filled++;
-    if(scBasisHasGenderInline(meta))filled++;
-    return{filled:filled,total:3};
-  }
   function calcOwnScopeStats(){
     var cats=scGetMergedStatsCategories();
     var own=scCountSlotsFromCategoryDefs(cats,SC_OWN_CATS);
-    var basis=scCountOwnBasisSlots(scOwnBasisMetaServer);
+    var basis=typeof senseCountOwnBasisSlots==='function'?senseCountOwnBasisSlots(scOwnBasisMetaServer):{filled:0,total:3};
     own.filled+=basis.filled;
     own.total+=basis.total;
     var ds=scCountSlotsFromCategoryDefs(cats,[{id:'datesense_focus',prompts:[0,0,0,0,0]}]);
@@ -1280,8 +1230,8 @@ a{text-decoration:none;color:inherit}
   function renderOwnCompletionDashboard(){
     var scopes=calcOwnScopeStats();
     var own=scopes[0]||{filled:0,total:16};
-    var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
-    var basisOk=scIsBasisMetaComplete(scOwnBasisMetaServer);
+    var basisSlots=typeof senseCountOwnBasisSlots==='function'?senseCountOwnBasisSlots(scOwnBasisMetaServer):{filled:0,total:3};
+    var basisOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
     var qTotal=Math.max(0,(own.total||0)-basisSlots.total);
     var qFilled=Math.max(0,(own.filled||0)-basisSlots.filled);
     var qLeft=Math.max(0,qTotal-qFilled);
@@ -1334,7 +1284,7 @@ a{text-decoration:none;color:inherit}
         ownMiniSub.textContent='OWN Over jou is ingevuld. Hoe hoger de andere spiegels, hoe beter Sensei per domein kan adviseren.';
       }
     }
-    if(userSession)scPaintBasisNudge();
+    if(userSession)scRenderBasisNudge();
   }
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
@@ -1479,7 +1429,11 @@ a{text-decoration:none;color:inherit}
   var scOwnProfileProps=null;
   function scApplyOwnBasisMeta(){
     var props=scOwnProfileProps;
-    scOwnBasisMetaServer=scReadServerBasisMeta(props);
+    if(typeof senseExtractOwnBasisMetaServerOnly==='function'){
+      scOwnBasisMetaServer=senseExtractOwnBasisMetaServerOnly(props);
+    }else{
+      scOwnBasisMetaServer=(props&&props.meta&&typeof props.meta==='object')?Object.assign({},props.meta):{};
+    }
     if(typeof senseExtractOwnBasisMeta==='function'){
       scOwnBasisMeta=senseExtractOwnBasisMeta(props,hubProfile);
     }else{
@@ -1493,12 +1447,12 @@ a{text-decoration:none;color:inherit}
         if(!scOwnBasisMeta.address)scOwnBasisMeta.address=String(hubProfile.address||'').trim();
       }
     }
-    scPaintBasisNudge();
+    scRenderBasisNudge();
   }
   function scSyncOwnHeroBasisUi(){
     if(!profile||profile.status!=='completed'||filledAnswers<=0)return;
-    var basisOkHero=scIsBasisMetaComplete(scOwnBasisMetaServer);
-    var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
+    var basisOkHero=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+    var basisSlots=typeof senseCountOwnBasisSlots==='function'?senseCountOwnBasisSlots(scOwnBasisMetaServer):{filled:0,total:3};
     var qPct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
     var pct=qPct;
     if(!basisOkHero&&basisSlots.total>0){
@@ -1912,43 +1866,6 @@ a{text-decoration:none;color:inherit}
       ringIcon.appendChild(bd);
     }
   }
-  function scBasisNudgeEsc(s){
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function scBasisNudgeFallbackHtml(meta){
-    meta=meta&&typeof meta==='object'?meta:{};
-    var missing=[];
-    if(!scBasisHasAgeInline(meta))missing.push('leeftijd');
-    if(!scBasisHasLocationInline(meta))missing.push('adres');
-    if(!scBasisHasGenderInline(meta))missing.push('geslacht');
-    var msg='Vul je basisprofiel aan in OwnSense (leeftijd, adres en geslacht). Dat helpt Sensei om advies beter op jou af te stemmen.';
-    if(missing.length===1){
-      msg='Vul je '+missing[0]+' aan in je basisprofiel in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
-    }else if(missing.length===2){
-      msg='Vul '+missing[0]+' en '+missing[1]+' aan in je basisprofiel in OwnSense. Dat helpt Sensei om advies beter op jou af te stemmen.';
-    }
-    return '<div class="sc-basis-nudge sc-basis-nudge--force" role="alert" data-nudge-id="basis" data-sc-basis-nudge="1" style="display:block;visibility:visible;margin:0 0 16px;padding:14px 16px;background:#FFF3E8;border:2px solid #C45C26;border-radius:14px;text-align:left;box-shadow:0 4px 14px rgba(196,92,38,.15)">'
-      +'<div style="font-size:15px;font-weight:800;color:#5C2E12">'+scBasisNudgeEsc('Basisprofiel invullen')+'</div>'
-      +'<p style="font-size:13px;color:#5C4033;line-height:1.55;margin-top:8px">'+scBasisNudgeEsc(msg)+'</p>'
-      +'<div class="sc-basis-nudge__actions">'
-      +'<a href="ownsense.html?tab=mij&focus=basis" class="sc-basis-nudge__primary" data-app-link="ownsense.html?tab=mij&focus=basis" style="display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;padding:10px 16px;border-radius:10px;text-decoration:none;font-family:inherit;background:#3D2F1F;color:#F2E8D5;border:none;box-shadow:0 2px 8px rgba(61,47,31,.18)">'
-      +scBasisNudgeEsc('Nu basisprofiel invullen')+'</a></div></div>';
-  }
-  var _scBasisNudgePaintGen=0;
-  function scPaintBasisNudge(){
-    scRenderBasisNudge();
-    var gen=++_scBasisNudgePaintGen;
-    if(typeof requestAnimationFrame==='function'){
-      requestAnimationFrame(function(){
-        if(gen!==_scBasisNudgePaintGen)return;
-        scRenderBasisNudge();
-      });
-    }
-    setTimeout(function(){
-      if(gen!==_scBasisNudgePaintGen)return;
-      scRenderBasisNudge();
-    },400);
-  }
   function scRenderBasisNudge(){
     var mount=document.getElementById('scBasisNudgeMount');
     var dbg=document.getElementById('scBasisNudgeDebug');
@@ -1960,20 +1877,27 @@ a{text-decoration:none;color:inherit}
       return;
     }
     var meta=scOwnBasisMetaServer&&typeof scOwnBasisMetaServer==='object'?scOwnBasisMetaServer:{};
-    if(!scIsBasisMetaIncomplete(meta)){
-      mount.innerHTML='';
-      mount.removeAttribute('data-sc-basis-incomplete');
-      if(dbg){dbg.textContent='';dbg.hidden=true;dbg.style.display='none';}
-      return;
+    var html='';
+    if(typeof renderBasisprofielNudgeIfNeeded==='function'){
+      html=renderBasisprofielNudgeIfNeeded(meta,'sc')||'';
+    }else{
+      html='<p role="alert" style="margin:0 0 14px;padding:12px 14px;font-size:13px;color:#5C4033">Basisprofiel-nudge kon niet laden (sense-common.js ontbreekt).</p>';
     }
-    mount.setAttribute('data-sc-basis-incomplete','1');
-    mount.style.display='block';
-    mount.style.visibility='visible';
-    mount.innerHTML=scBasisNudgeFallbackHtml(meta);
+    mount.innerHTML=html;
+    var basisComplete=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(meta):false;
+    if(basisComplete){
+      mount.removeAttribute('data-sc-basis-incomplete');
+    }else if(html){
+      mount.setAttribute('data-sc-basis-incomplete','1');
+      mount.style.display='block';
+      mount.style.visibility='visible';
+    }else{
+      mount.removeAttribute('data-sc-basis-incomplete');
+    }
     try{
       var qp=new URLSearchParams(window.location.search||'');
       if(dbg){
-        if(String(qp.get('debug')||'')==='1'){
+        if(String(qp.get('debug')||'')==='1'&&!basisComplete){
           dbg.hidden=false;
           dbg.style.display='block';
           dbg.textContent='basis debug: server meta keys='+Object.keys(meta).join(',')+'; incomplete=1';
@@ -2030,7 +1954,7 @@ a{text-decoration:none;color:inherit}
       heroQuote.textContent='\u201C'+qtxt+'\u201D';
       heroQuote.hidden=false;
     }
-    scPaintBasisNudge();
+    scRenderBasisNudge();
   }
   function applyGuestOwnHubHeroDom(){
     try{
@@ -2932,7 +2856,7 @@ a{text-decoration:none;color:inherit}
       void scRefreshOwnScopeFromFacts(user).catch(function(_scope){});
       await scReloadOwnProfileBasisMeta().catch(function(_basisUi){});
       updateHeroWelcome(user);
-      scPaintBasisNudge();
+      scRenderBasisNudge();
     }else{
       if(hubAuthState)hubAuthState.textContent='Niet ingelogd. Log hier in om apps te openen.';
       if(hubLoginBtn)hubLoginBtn.style.display='inline-flex';
@@ -3002,8 +2926,8 @@ a{text-decoration:none;color:inherit}
       renderOwnCompletionDashboard();
     } else if(profile.status==='completed'&&filledAnswers>0){
       // Niet vertrouwen op oude completionPct in storage; afleiden uit echte antwoorden.
-      var basisOkHero=scIsBasisMetaComplete(scOwnBasisMetaServer);
-      var basisSlots=scCountOwnBasisSlots(scOwnBasisMetaServer);
+      var basisOkHero=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(scOwnBasisMetaServer):false;
+      var basisSlots=typeof senseCountOwnBasisSlots==='function'?senseCountOwnBasisSlots(scOwnBasisMetaServer):{filled:0,total:3};
       var qPct=Math.max(1,Math.min(100,Math.round((filledAnswers/totalQ)*100)));
       var pct=qPct;
       if(!basisOkHero&&basisSlots.total>0){
@@ -3050,7 +2974,7 @@ a{text-decoration:none;color:inherit}
   }
   if(userSession){
     await scRefreshOwnHubRing().catch(function(_ringInit){});
-    scPaintBasisNudge();
+    scRenderBasisNudge();
   }
   updateHeroWelcome(userSession);
 
@@ -3423,10 +3347,10 @@ a{text-decoration:none;color:inherit}
     void scRefreshOwnHubRing().catch(function(){});
     if(userSession)void scRefreshOwnScopeFromFacts(userSession).catch(function(){});
     if(userSession)void scReloadOwnProfileBasisMeta().catch(function(){});
-    scPaintBasisNudge();
+    scRenderBasisNudge();
   });
   window.addEventListener('load',function(){
-    if(userSession)scPaintBasisNudge();
+    if(userSession)scRenderBasisNudge();
   });
   if(sb&&sb.auth&&typeof sb.auth.onAuthStateChange==='function'){
     sb.auth.onAuthStateChange(function(event){
