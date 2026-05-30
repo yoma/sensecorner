@@ -1450,7 +1450,26 @@ var ownInsights=[];
 var ownPhotos=[];
 /** Laatst bekende props.meta van sense_profiles (OWN Sense); voor merge bij save zonder veld te verliezen. */
 var __ownSensePropsMetaCache={};
+var __ownSenseProfileHydrated=false;
+var __ownSenseProfileHydratedUserId='';
+var __ownRemoteSaveQueuedUntilHydrated=false;
 var OWN_BASIS_FIELDS=['birthdate','city','country','gender','gender_custom'];
+function ownMarkProfileNeedsHydration(userId){
+  __ownSenseProfileHydrated=false;
+  __ownSenseProfileHydratedUserId=String(userId||'');
+}
+function ownProfileHydratedForUser(user){
+  var uid=String((user&&user.id)||window.__ownSenseUid||'');
+  return !!(__ownSenseProfileHydrated&&uid&&__ownSenseProfileHydratedUserId===uid);
+}
+function ownMarkProfileHydrated(userId){
+  __ownSenseProfileHydrated=true;
+  __ownSenseProfileHydratedUserId=String(userId||'');
+  if(__ownRemoteSaveQueuedUntilHydrated){
+    __ownRemoteSaveQueuedUntilHydrated=false;
+    ownScheduleRemoteSave();
+  }
+}
 function ownFillString(localVal,serverVal){
   var l=String(localVal||'').trim();
   var s=String(serverVal||'').trim();
@@ -2211,6 +2230,10 @@ function ownShowSaveFeedback(targetId,msg,opts){
 }
 var __ownRemoteSaveTimer=null;
 function ownScheduleRemoteSave(){
+  if(!__ownSenseProfileHydrated){
+    __ownRemoteSaveQueuedUntilHydrated=true;
+    return;
+  }
   if(__ownRemoteSaveTimer){try{clearTimeout(__ownRemoteSaveTimer);}catch(_c){}}
   __ownRemoteSaveTimer=setTimeout(function(){
     __ownRemoteSaveTimer=null;
@@ -3921,6 +3944,7 @@ async function loadOwnFromSupabase(){
   try{
     var user=await ownAuthUserFast(client);
     if(!user){
+      ownMarkProfileNeedsHydration('');
       window.__ownSenseUid='';
       ownTimeline=[];
       ownFacts=[];
@@ -3930,6 +3954,7 @@ async function loadOwnFromSupabase(){
       __restrictExternalCategorySources=false;
       return;
     }
+    ownMarkProfileNeedsHydration(user.id);
     ownTimeline=[];
     ownFacts=[];
     ownInsights=[];
@@ -3949,6 +3974,7 @@ async function loadOwnFromSupabase(){
       8000,
       null
     );
+    var profileFetchOk=!!(res&&!res.error);
     if(res&&res.data){
       var row=res.data;
       var p=row.props||{};
@@ -4003,14 +4029,15 @@ async function loadOwnFromSupabase(){
           }
         }catch(_eSlot){}
       }
-    }else{
+    }else if(profileFetchOk){
       ownApplyLocalBasisFallback(user);
     }
+    if(profileFetchOk)ownMarkProfileHydrated(user.id);
     void hydrateSelfsenseSpiegelFromMirrorSessions(client,user).then(function(){
       renderBronTab();
     }).catch(function(){});
     ownSyncBasisMetaCacheFromHubState();
-    if(ownBasisprofielIsComplete()){
+    if(profileFetchOk&&ownBasisprofielIsComplete()){
       var cacheOk=typeof senseOwnBasisMetaComplete==='function'?senseOwnBasisMetaComplete(__ownSensePropsMetaCache):true;
       if(!cacheOk){
         void saveOwnToSupabase({throwOnFail:false,basisSave:true,timeoutMs:22000}).catch(function(){});
@@ -4110,6 +4137,10 @@ async function saveOwnToSupabaseCore(opts){
     var errNoUser=new Error('Je bent niet ingelogd.');
     if(throwOnFail)throw errNoUser;
     return {ok:false,synced:false,reason:'no_user'};
+  }
+  if(!ownProfileHydratedForUser(user)){
+    __ownRemoteSaveQueuedUntilHydrated=true;
+    return {ok:true,synced:false,reason:'profile_not_loaded'};
   }
   var cleanName=String(hubState.display_name||'').trim();
   var basisMeta=ownBuildBasisMetaForSave({basisSave:!!opts.basisSave});
