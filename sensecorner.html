@@ -473,6 +473,29 @@ a{text-decoration:none;color:inherit}
 .badge-soon{background:color-mix(in srgb,var(--friend-licht) 45%,white);color:var(--friend-donker);border:1px solid color-mix(in srgb,var(--friend-medium) 35%,transparent)}
 .app-arrow{color:var(--card-d);opacity:.55;transition:transform .2s,opacity .2s}
 .app-card.clickable:hover .app-arrow{transform:translateX(4px);opacity:.9}
+/* Directe klik-feedback: kaart toont meteen een laad-status (spinner i.p.v. pijl). */
+.app-card.clickable:active{transform:translateY(0)}
+.app-card.loading{cursor:progress;border-color:rgba(61,47,31,.18);box-shadow:0 14px 32px rgba(61,47,31,.1),0 0 0 1px rgba(255,255,255,.6) inset}
+.app-card.loading .app-desc,.app-card.loading .app-coach-hint{opacity:.55}
+.app-card.loading .app-arrow{display:none}
+.app-card.loading .app-footer::after{
+  content:'Openen…';
+  margin-left:auto;
+  display:inline-flex;align-items:center;
+  font-size:12px;font-weight:700;color:var(--card-d);
+  white-space:nowrap;
+}
+.app-card.loading .app-footer{position:relative;padding-right:26px}
+.app-card.loading .app-footer::before{
+  content:'';
+  position:absolute;right:0;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;
+  border-radius:50%;
+  border:2.5px solid color-mix(in srgb,var(--card-d) 28%,transparent);
+  border-top-color:var(--card-d);
+  animation:scSpin .6s linear infinite;
+}
+@keyframes scSpin{to{transform:translateY(-50%) rotate(360deg)}}
 
 /* Footer */
 .footer{margin-top:38px;text-align:center;font-size:12px;color:var(--s);line-height:1.8}
@@ -2908,7 +2931,7 @@ a{text-decoration:none;color:inherit}
     if(!t)return;
     var user=userSession;
     if(!user){
-      user=await scTimeoutFallback(getCurrentUser(),5000,null);
+      user=await scTimeoutFallback(getCurrentUser(),2500,null);
       if(user)userSession=user;
     }
     if(user){
@@ -3000,17 +3023,24 @@ a{text-decoration:none;color:inherit}
   cards.forEach(function(c,i){
     setTimeout(function(){c.classList.add('enter');}, 80 + i*60);
   });
+  function scTriggerAppCard(el,target){
+    if(!el||!target)return;
+    if(el.classList.contains('loading'))return;
+    el.classList.add('loading');
+    el.setAttribute('aria-busy','true');
+    openAppWithAuth(target);
+  }
   Array.prototype.slice.call(document.querySelectorAll('[data-app-link]')).forEach(function(el){
     var target=el.getAttribute('data-app-link');
     if(!target)return;
     el.addEventListener('click',function(e){
       e.preventDefault();
-      openAppWithAuth(target);
+      scTriggerAppCard(el,target);
     });
     el.addEventListener('keydown',function(e){
       if(e.key==='Enter'||e.key===' '){
         e.preventDefault();
-        openAppWithAuth(target);
+        scTriggerAppCard(el,target);
       }
     });
   });

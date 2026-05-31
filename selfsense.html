@@ -3696,7 +3696,7 @@ function ssRefreshUiAfterBackgroundSync(){
   try{
     updateNavTabIndicators();
     if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'||S.screen==='vertel'){
-      goScreen(S.screen,{skipFlush:true});
+      goScreen(S.screen,{skipFlush:true,preserveScroll:true});
     }
     ensureRenderHealthy('bg-sync');
   }catch(_e){}
@@ -3774,7 +3774,8 @@ async function enterAuthenticatedApp(session,opts){
   var uid=String(session.user.id||'');
   if(_authBootstrapInFlight)return _authBootstrapInFlight;
   if(!opts.forceResync&&_authBootstrappedUserId&&uid&&_authBootstrappedUserId===uid&&S.user){
-    showAuthenticatedShell(opts.screen);
+    var _alreadyInApp=!(S.screen==='login'||S.screen==='register'||!S.screen);
+    if(opts.screen||!_alreadyInApp)showAuthenticatedShell(opts.screen);
     return true;
   }
   _authBootstrapInFlight=(async function(){
@@ -5924,7 +5925,7 @@ function goScreen(sc,opts){
   var reqId=++_goScreenReqId;
   var runGoScreen=function(){
     if(reqId!==_goScreenReqId)return;
-    _goScreenBody(sc);
+    _goScreenBody(sc,opts);
   };
   var skipFlush=opts&&opts.skipFlush;
   if(S.user&&!skipFlush){
@@ -5944,11 +5945,15 @@ function goScreen(sc,opts){
   }
 }
 
-function _goScreenBody(sc){
+function _goScreenBody(sc,opts){
   try{
     if(_spiegelAdemTimer&&sc!=='spiegel')stopSpiegelAdemSession(true);
   }catch(_e){}
   var prevScreen=S.screen;
+  opts=opts||{};
+  var _preserveScroll=!!opts.preserveScroll&&sc===prevScreen;
+  var _scEl0=document.getElementById('appScroll');
+  var _savedAppTop=(_preserveScroll&&_scEl0)?_scEl0.scrollTop:0;
   var shadeEl=document.getElementById('helpTourShade');
   var cardEl=document.getElementById('helpTourCard');
   if(shadeEl)shadeEl.style.display='none';
@@ -6016,9 +6021,14 @@ function _goScreenBody(sc){
         +'</div>';
     }
   }
-  mc.scrollTop=0;
   var appScroll=document.getElementById('appScroll');
-  if(appScroll)appScroll.scrollTop=0;
+  if(_preserveScroll){
+    if(appScroll)appScroll.scrollTop=_savedAppTop;
+    requestAnimationFrame(function(){if(appScroll)appScroll.scrollTop=_savedAppTop;});
+  }else{
+    mc.scrollTop=0;
+    if(appScroll)appScroll.scrollTop=0;
+  }
   renderOwnAvatar();
   renderBrandTag();
   if(S.user){
@@ -9961,7 +9971,7 @@ function schedulePlannerIdeaRefresh(){
     if(meta.settingOptions.indexOf(answers.setting)===-1){
       S.planner.answers.setting='';
     }
-    if(S.screen==='planner')goScreen('planner');
+    if(S.screen==='planner')goScreen('planner',{preserveScroll:true});
   },180);
 }
 function refreshPlannerForIdea(){

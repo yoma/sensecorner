@@ -3133,7 +3133,7 @@ function fsRefreshUiAfterBackgroundSync(){
   try{
     updateNavTabIndicators();
     if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'||S.screen==='vertel'){
-      goScreen(S.screen,{skipFlush:true});
+      goScreen(S.screen,{skipFlush:true,preserveScroll:true});
     }
     ensureRenderHealthy('bg-sync');
   }catch(_e){}
@@ -3209,7 +3209,8 @@ async function enterAuthenticatedApp(session,opts){
   var uid=String(session.user.id||'');
   if(_authBootstrapInFlight)return _authBootstrapInFlight;
   if(!opts.forceResync&&_authBootstrappedUserId&&uid&&_authBootstrappedUserId===uid&&S.user){
-    showAuthenticatedShell(opts.screen);
+    var _alreadyInApp=!(S.screen==='login'||S.screen==='register'||!S.screen);
+    if(opts.screen||!_alreadyInApp)showAuthenticatedShell(opts.screen);
     return true;
   }
   _authBootstrapInFlight=(async function(){
@@ -5293,7 +5294,7 @@ function goScreen(sc,opts){
   var reqId=++_goScreenReqId;
   var runGoScreen=function(){
     if(reqId!==_goScreenReqId)return;
-    _goScreenBody(sc);
+    _goScreenBody(sc,opts);
   };
   var skipFlush=opts&&opts.skipFlush;
   if(S.user&&!skipFlush){
@@ -5388,8 +5389,12 @@ function shouldBootScreenVertelForCrossAppSeed(){
   }catch(_e2){return false;}
 }
 
-function _goScreenBody(sc){
+function _goScreenBody(sc,opts){
   var prevScreen=S.screen;
+  opts=opts||{};
+  var _preserveScroll=!!opts.preserveScroll&&sc===prevScreen;
+  var _scEl0=document.getElementById('appScroll');
+  var _savedAppTop=(_preserveScroll&&_scEl0)?_scEl0.scrollTop:0;
   var shadeEl=document.getElementById('helpTourShade');
   var cardEl=document.getElementById('helpTourCard');
   if(shadeEl)shadeEl.style.display='none';
@@ -5454,9 +5459,14 @@ function _goScreenBody(sc){
         +'</div>';
     }
   }
-  mc.scrollTop=0;
   var appScroll=document.getElementById('appScroll');
-  if(appScroll)appScroll.scrollTop=0;
+  if(_preserveScroll){
+    if(appScroll)appScroll.scrollTop=_savedAppTop;
+    requestAnimationFrame(function(){if(appScroll)appScroll.scrollTop=_savedAppTop;});
+  }else{
+    mc.scrollTop=0;
+    if(appScroll)appScroll.scrollTop=0;
+  }
   renderOwnAvatar();
   renderBrandTag();
   if(S.user){
@@ -8247,7 +8257,7 @@ function schedulePlannerIdeaRefresh(){
     if(meta.settingOptions.indexOf(answers.setting)===-1){
       S.planner.answers.setting='';
     }
-    if(S.screen==='planner')goScreen('planner');
+    if(S.screen==='planner')goScreen('planner',{preserveScroll:true});
   },180);
 }
 function refreshPlannerForIdea(){
@@ -9894,19 +9904,28 @@ async function loadTab(name,tab,d){
     }else{
       advHtml+='<p style="font-size:12px;color:#4b5563;line-height:1.5;margin:0 0 14px;padding:10px 12px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px"><strong>Waar hoort dit?</strong> Dit <strong>Advies</strong>-tabblad hoort bij <strong>'+escHTML(dn(name))+'</strong>: je vaste rapport op basis van <em>dit</em> dossier. <strong>Vertel</strong> is vrij praten (alle context); je kunt daar ook opnieuw om advies vragen — daarna kies je bij welk dossier je opslaat.</p>';
     }
-    if(cache||hasAdviceInput){
-      advHtml+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;align-items:stretch">'
-        +(cache?'<button id="advRefreshBtnTop" style="flex:1;min-width:160px;padding:11px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(125,106,171,.22)">Standaard vernieuwen</button>':'')
-        +'<button id="advGroundBtnTop" type="button" style="flex:1;min-width:160px;padding:11px 14px;font-size:13px;font-weight:800;border:2px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;border-radius:11px;cursor:pointer;font-family:inherit">Expertise toevoegen</button>'
-        +'</div>'
-        +'<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:0 0 10px">Standaard = je vaste rapport. Expertise = onderbouwde inzichten uit erkende bronnen (geen boekentips; optionele bronverwijzing).</div>';
-      advHtml+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 12px">'
-        +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionCore\')">💡 Naar advies</button>'
-        +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advExtraWrap\')">✨ Naar extra expertise</button>'
-        +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionActions\')">✅ Naar acties</button>'
-        +'</div>';
-      advHtml+=renderAdviceMessageBlock(name);
-    }
+    // Genereer-sectie: altijd bovenaan en toegankelijk
+    advHtml+='<div style="border:1px solid var(--b);border-radius:14px;padding:14px;margin:0 0 16px;background:#FCFCFD">';
+    advHtml+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<div style="font-size:15px;font-weight:800;color:#333">Genereer nieuw advies</div>'
+      +'<span id="advLastTop" style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;'+(cache?'background:#FFF0EF;color:#9A2F2F;border:1px solid #F0C4C4':'background:#F3F4F6;color:#6b7280;border:1px solid #E5E7EB')+'">'+(cache?('Laatste advies: '+escHTML(cache.ts||'onbekend')):'Nog geen advies')+'</span>'
+      +'</div>';
+    advHtml+='<div role="radiogroup" aria-label="Kies adviestype" style="display:inline-flex;border:1px solid #F0C4C4;border-radius:999px;overflow:hidden;margin-bottom:12px">'
+      +'<label style="display:flex;align-items:center;gap:7px;padding:8px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;background:#FFF6F6"><input type="radio" name="advGenMode" value="core" checked onclick="var a=document.getElementById(\'advRefreshBtnTop\'),b=document.getElementById(\'advGroundBtnTop\');if(a)a.style.display=\'\';if(b)b.style.display=\'none\';">Standaard</label>'
+      +'<label style="display:flex;align-items:center;gap:7px;padding:8px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;border-left:1px solid #F0C4C4"><input type="radio" name="advGenMode" value="expert" onclick="var a=document.getElementById(\'advRefreshBtnTop\'),b=document.getElementById(\'advGroundBtnTop\');if(a)a.style.display=\'none\';if(b)b.style.display=\'\';">Expertise</label>'
+      +'</div>';
+    advHtml+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">'
+      +'<button id="advRefreshBtnTop" type="button" style="flex:1;min-width:160px;padding:12px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(125,106,171,.22)">'+(cache?'Standaard vernieuwen':'Standaard genereren')+'</button>'
+      +'<button id="advGroundBtnTop" type="button" style="display:none;flex:1;min-width:160px;padding:12px 14px;font-size:14px;font-weight:800;border:2px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;border-radius:11px;cursor:pointer;font-family:inherit">Expertise toevoegen</button>'
+      +'</div>';
+    advHtml+='<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:8px 0 0">Standaard = je vaste rapport. Expertise = onderbouwde inzichten uit erkende bronnen (geen boekentips; optionele bronverwijzing).</div>';
+    advHtml+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0">'
+      +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionCore\')">💡 Naar advies</button>'
+      +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advExtraWrap\')">✨ Naar extra expertise</button>'
+      +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionActions\')">✅ Naar acties</button>'
+      +'</div>';
+    advHtml+=renderAdviceMessageBlock(name);
+    advHtml+='</div>';
     // Herstel ook acties uit cache
     var cachedActies=cache&&cache.acties||'';
     advHtml+='<div id="advSectionCore"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0 0 6px">Standaard</div><div id="advTxt" style="font-size:15px;color:#333;line-height:1.8">';
@@ -10222,6 +10241,9 @@ async function genAdvies(name,forced){
         bodyDiv.appendChild(f);
       }
     }
+    // Werk ook de prominente timestamp bovenaan bij
+    var lastTop=document.getElementById('advLastTop');
+    if(lastTop){lastTop.textContent='Laatste advies: '+ts;lastTop.style.background='#FFF0EF';lastTop.style.color='#9A2F2F';lastTop.style.border='1px solid #F0C4C4';}
     updateDossierTabBadges();
   }catch(x){
     if(_adviesReqByName[name]!==reqId)return;
