@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="31-05-2026 21:35">
+<meta name="ds-build" content="31-05-2026 21:49">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -7368,16 +7368,18 @@ function getAdviceMessageHistory(name){
 function renderAdviceMessageBlock(name){
   var arr=getAdviceMessageHistory(name);
   if(!arr.length)return'';
-  var rows=arr.slice(-4).reverse().map(function(it){
+  var rows=arr.slice(-5).reverse().map(function(it){
     var when=String(it.ts||'').trim();
-    var text=escHTML(String(it.text||'').trim());
-    return '<div style="padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;margin-top:8px">'
+    var raw=String(it.text||'').replace(/\s+/g,' ').trim();
+    var snippet=escHTML(raw.length>90?raw.slice(0,90)+'…':raw);
+    return '<div role="button" tabindex="0" onclick="scrollToAdviceSection(\'advSectionCore\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();scrollToAdviceSection(\'advSectionCore\');}" style="padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;margin-top:8px;cursor:pointer">'
       +'<div style="font-size:11px;color:#6b7280;font-weight:700">'+escHTML(when||'Onbekend moment')+'</div>'
-      +'<div style="font-size:12px;color:#374151;line-height:1.5;margin-top:4px">'+text+'</div>'
+      +'<div style="font-size:12px;color:#374151;line-height:1.45;margin-top:4px">'+snippet+'</div>'
       +'</div>';
   }).join('');
   return '<div id="advMsgBlock" style="margin-top:12px;padding:10px 12px;border:1px solid #DCE7DF;border-radius:12px;background:#F7FBF8">'
-    +'<div style="font-size:12px;font-weight:800;color:#2f6f42;letter-spacing:.02em">💬 Recente adviezen</div>'
+    +'<div style="font-size:12px;font-weight:800;color:#2f6f42;letter-spacing:.02em">💬 Vorige adviezen</div>'
+    +'<div style="font-size:11px;color:#6b7280;margin-top:2px">Tik een item aan om naar het volledige advies te springen.</div>'
     +rows
     +'</div>';
 }
@@ -10618,15 +10620,15 @@ async function loadTab(name,tab,d){
       +'<div style="font-size:15px;font-weight:800;color:#333">Genereer nieuw advies</div>'
       +'<span id="advLastTop" style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;'+(cache?'background:#FFF0EF;color:#9A2F2F;border:1px solid #F0C4C4':'background:#F3F4F6;color:#6b7280;border:1px solid #E5E7EB')+'">'+(cache?('Laatste advies: '+escHTML(cache.ts||'onbekend')):'Nog geen advies')+'</span>'
       +'</div>';
-    advHtml+='<div role="radiogroup" aria-label="Kies adviestype" style="display:inline-flex;border:1px solid #F0C4C4;border-radius:999px;overflow:hidden;margin-bottom:12px">'
-      +'<label style="display:flex;align-items:center;gap:7px;padding:8px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;background:#FFF6F6"><input type="radio" name="advGenMode" value="core" checked onclick="var a=document.getElementById(\'advRefreshBtnTop\'),b=document.getElementById(\'advGroundBtnTop\');if(a)a.style.display=\'\';if(b)b.style.display=\'none\';">Standaard</label>'
-      +'<label style="display:flex;align-items:center;gap:7px;padding:8px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;border-left:1px solid #F0C4C4"><input type="radio" name="advGenMode" value="expert" onclick="var a=document.getElementById(\'advRefreshBtnTop\'),b=document.getElementById(\'advGroundBtnTop\');if(a)a.style.display=\'none\';if(b)b.style.display=\'\';">Expertise</label>'
+    advHtml+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<label style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;border:1px solid #F0C4C4;border-radius:11px;background:#FFF6F6"><input type="checkbox" id="advChkCore" checked>Standaard</label>'
+      +'<label style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;font-weight:800;color:#9A2F2F;cursor:pointer;border:1px solid #F0C4C4;border-radius:11px;background:#FFF6F6"><input type="checkbox" id="advChkExpert">Expertise</label>'
       +'</div>';
     advHtml+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">'
-      +'<button id="advRefreshBtnTop" type="button" style="flex:1;min-width:160px;padding:12px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(186,86,84,.22)">'+(cache?'Standaard vernieuwen':'Standaard genereren')+'</button>'
-      +'<button id="advGroundBtnTop" type="button" style="display:none;flex:1;min-width:160px;padding:12px 14px;font-size:14px;font-weight:800;border:2px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;border-radius:11px;cursor:pointer;font-family:inherit">Expertise toevoegen</button>'
+      +'<button id="advRefreshBtnTop" type="button" style="flex:1;min-width:160px;padding:12px 14px;background:var(--r);color:#fff;border:1px solid var(--r);border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 16px rgba(186,86,84,.22)">Genereer advies</button>'
+      +'<button id="advGroundBtnTop" type="button" style="display:none">Expertise toevoegen</button>'
       +'</div>';
-    advHtml+='<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:8px 0 0">Standaard = je vaste rapport. Expertise = onderbouwde inzichten uit erkende bronnen (geen boekentips; optionele bronverwijzing).</div>';
+    advHtml+='<div style="font-size:11px;color:#8a8f97;line-height:1.4;margin:8px 0 0">Vink aan wat je wilt. Standaard = je vaste rapport. Expertise = onderbouwde inzichten uit erkende bronnen (geen boekentips; optionele bronverwijzing). Beide kan samen; Expertise komt na Standaard.</div>';
     advHtml+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0">'
       +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advSectionCore\')">💡 Naar advies</button>'
       +'<button type="button" style="font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid #F0C4C4;background:#FFF6F6;color:#9A2F2F;font-weight:800;cursor:pointer;font-family:inherit" onclick="scrollToAdviceSection(\'advExtraWrap\')">✨ Naar expertise</button>'
@@ -10682,7 +10684,14 @@ async function loadTab(name,tab,d){
 
     // Koppel vernieuwen knop (bovenaan in advies-box)
     var rb=document.getElementById('advRefreshBtnTop');
-    if(rb){(function(n){rb.onclick=function(){genAdvies(n,true);};})(name);}
+    if(rb){(function(n){rb.onclick=function(){
+      var c=document.getElementById('advChkCore'),e=document.getElementById('advChkExpert');
+      var wantCore=c&&c.checked,wantExpert=e&&e.checked;
+      if(!wantCore&&!wantExpert){toast('Kies minstens Standaard of Expertise.');return;}
+      if(wantCore&&wantExpert){Promise.resolve(genAdvies(n,true)).then(function(){return genAdviesOnderbouwd(n);});}
+      else if(wantCore){genAdvies(n,true);}
+      else{genAdviesOnderbouwd(n);}
+    };})(name);}
     var gb=document.getElementById('advGroundBtnTop');
     if(gb){(function(n){gb.onclick=function(){genAdviesOnderbouwd(n);};})(name);}
     var suggestBtn=document.getElementById('advSuggestUpdateBtn');
