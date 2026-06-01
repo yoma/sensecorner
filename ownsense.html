@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 15:21">
+<meta name="os-build" content="01-06-2026 15:26">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -3065,11 +3065,15 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     // .update(...).select('*').maybeSingle() kan onder bepaalde RLS-configuraties blijven
     // hangen (de UPDATE mag, maar de representation-SELECT lost nooit op), wat exact lijkt
     // op een "trage" schrijf die de timeout raakt. We lezen daarom apart terug.
+    // Harde literal i.p.v. de globale OWN_REVIEW_FACT_WRITE_MS: een top-level var is ook
+    // window.OWN_REVIEW_FACT_WRITE_MS en kan elders (of door een oude build) op 2000 staan.
+    // We loggen beide zodat de console hard bewijst welke waarde echt wordt toegepast.
+    var writeMs=20000;
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus});}catch(_e){}
+    try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
     var r=await withTimeout(
       client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid),
-      OWN_REVIEW_FACT_WRITE_MS,
+      writeMs,
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
     );
@@ -3121,11 +3125,13 @@ async function updateOwnFactPendingText(factId,newText){
   try{
     // DIAGNOSE + fix: schrijf KAAL (zonder .select()-chain). Zie updateOwnFactStatus:
     // een gechainde representation-SELECT kan onder RLS blijven hangen. We lezen apart terug.
+    // Harde literal i.p.v. globale OWN_REVIEW_FACT_WRITE_MS (zie updateOwnFactStatus).
+    var writeMs=20000;
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] text:update-start',{factId:factId});}catch(_e){}
+    try{console.warn('[os-review-timing] text:update-start',{factId:factId,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
     var r=await withTimeout(
       client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid),
-      OWN_REVIEW_FACT_WRITE_MS,
+      writeMs,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
     );
