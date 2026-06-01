@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 12:00">
+<meta name="os-build" content="01-06-2026 13:37">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2788,6 +2788,9 @@ async function submitOwnVertel(){
 function openReviewFactsModal(){
   var m=document.getElementById('reviewFactsModal');
   if(!m)return;
+  window.__ownsenseReviewFactBusy=null;
+  window.__ownsenseReviewBulkBusy=false;
+  initReviewFactsListDelegation();
   m.classList.add('show');
   m.setAttribute('aria-hidden','false');
   renderReviewFacts();
@@ -2802,10 +2805,43 @@ function closeReviewFactsModal(){
 function escJsSingleQuoted(s){
   return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r/g,'').replace(/\n/g,'');
 }
+function ownFactIdStr(id){
+  return String(id==null?'':id).trim();
+}
+function findOwnFactById(factId){
+  var want=ownFactIdStr(factId);
+  if(!want)return null;
+  return ownFacts.find(function(f){return f&&ownFactIdStr(f.id)===want;})||null;
+}
+function initReviewFactsListDelegation(){
+  var list=document.getElementById('reviewFactsList');
+  if(!list||list.getAttribute('data-review-bound')==='1')return;
+  list.setAttribute('data-review-bound','1');
+  list.addEventListener('click',function(e){
+    var btn=e.target&&e.target.closest?e.target.closest('button[data-review-action]'):null;
+    if(!btn||btn.disabled)return;
+    var card=btn.closest('[data-review-fact-id]');
+    var factId=card&&card.getAttribute('data-review-fact-id');
+    if(!factId)return;
+    var act=btn.getAttribute('data-review-action');
+    if(act==='accept')void acceptOwnFact(factId);
+    else if(act==='reject')void rejectOwnFact(factId);
+    else if(act==='edit')editOwnFact(factId);
+    else if(act==='edit-save')void saveEditOwnFact(factId);
+    else if(act==='edit-cancel')cancelEditOwnFact(factId);
+  });
+}
+function reviewFactCardQuery(factId){
+  var id=String(factId==null?'':factId);
+  if(typeof CSS!=='undefined'&&typeof CSS.escape==='function'){
+    return '[data-review-fact-id="'+CSS.escape(id)+'"]';
+  }
+  return '[data-review-fact-id="'+id.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]';
+}
 function setReviewFactButtonsBusy(factId,busy,activeAction){
   var list=document.getElementById('reviewFactsList');
   if(!list||!factId)return;
-  var card=list.querySelector('[data-review-fact-id="'+String(factId).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]');
+  var card=list.querySelector(reviewFactCardQuery(factId));
   if(!card)return;
   var labels={accept:'Accepteer',reject:'Weiger',edit:'Wijzig','edit-save':'OK','edit-cancel':'Annuleren'};
   card.querySelectorAll('button[data-review-action]').forEach(function(btn){
@@ -2853,15 +2889,14 @@ function renderReviewFacts(){
     return;
   }
   el.innerHTML=pending.map(function(f){
-    var fid=escJsSingleQuoted(f.id);
     return '<div class="insight-item" data-review-fact-id="'+escHTML(f.id)+'">'
       +'<div class="insight-item-head"><span class="insight-level">'+escHTML(f.category)+(f.subcategory?(' > '+escHTML(f.subcategory)):'')+'</span><span class="subtle">'+fmtDate(f.created_at)+'</span></div>'
       +'<div class="review-fact-text" data-review-fact-text style="font-family:\'Lora\',serif;font-size:15px;line-height:1.6;margin-top:8px">'+escHTML(f.fact_text||'')+'</div>'
       +'<div class="subtle" style="margin-top:6px">uit '+escHTML(f.source_app||'onbekend')+(f.source_dossier?(' · '+escHTML(f.source_dossier)):'')+'</div>'
       +'<div data-review-fact-actions style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-      +'<button class="btn btn-primary btn-small" type="button" data-review-action="accept" onclick="acceptOwnFact(\''+fid+'\')">Accepteer</button>'
-      +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit" onclick="editOwnFact(\''+fid+'\')">Wijzig</button>'
-      +'<button class="btn btn-muted btn-small" type="button" data-review-action="reject" onclick="rejectOwnFact(\''+fid+'\')">Weiger</button>'
+      +'<button class="btn btn-primary btn-small" type="button" data-review-action="accept">Accepteer</button>'
+      +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit">Wijzig</button>'
+      +'<button class="btn btn-muted btn-small" type="button" data-review-action="reject">Weiger</button>'
       +'</div></div>';
   }).join('');
 }
@@ -2881,7 +2916,12 @@ async function acceptAllPendingFacts(){
     });
     var accepted=[];
     for(var i=0;i<pending.length;i++){
-      var updated=await updateOwnFactStatus(pending[i].id,'accepted');
+      var updated=null;
+      try{
+        updated=await updateOwnFactStatus(pending[i].id,'accepted');
+      }catch(e){
+        console.warn('[acceptAllPendingFacts]',pending[i]&&pending[i].id,e);
+      }
       if(updated){
         accepted.push(updated);
         await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
@@ -2925,7 +2965,11 @@ async function acceptAllPendingFacts(){
 async function updateOwnFactStatus(factId,newStatus,newText,opts){
   var client=initSupabase();
   if(!client)return null;
+  factId=ownFactIdStr(factId);
   opts=opts||{};
+  var user=await ownAuthUserFast(client);
+  var uid=user&&user.id?String(user.id):'';
+  if(!uid)return null;
   try{
     var payload={status:newStatus,updated_at:new Date().toISOString()};
     if(typeof newText==='string')payload.fact_text=newText;
@@ -2933,19 +2977,25 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
       payload.accepted_at=opts.accepted_at||new Date().toISOString();
       if(opts.auto_accepted)payload.auto_accepted=true;
     }
-    var r=await client.from('own_facts').update(payload).eq('id',factId).select('*').maybeSingle();
+    var r=await withTimeout(
+      client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
+      15000,
+      'Actie duurde te lang. Probeer opnieuw.',
+      {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
+    );
     if(r&&r.error){
       console.warn('[updateOwnFactStatus]',factId,r.error);
       return null;
     }
     if(r&&r.data){
-      var idx=ownFacts.findIndex(function(x){return x.id===factId;});
+      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===factId;});
       if(idx>=0)ownFacts[idx]=r.data;
       else ownFacts.unshift(r.data);
       return r.data;
     }
   }catch(e){
     console.warn('[updateOwnFactStatus]',factId,e);
+    throw e;
   }
   return null;
 }
@@ -2953,7 +3003,7 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
 function getReviewFactCard(factId){
   var list=document.getElementById('reviewFactsList');
   if(!list||!factId)return null;
-  return list.querySelector('[data-review-fact-id="'+String(factId).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]');
+  return list.querySelector(reviewFactCardQuery(factId));
 }
 
 async function updateOwnFactPendingText(factId,newText){
@@ -2961,11 +3011,19 @@ async function updateOwnFactPendingText(factId,newText){
   if(!client)return null;
   var txt=String(newText||'').trim();
   if(!txt)return null;
+  var user=await ownAuthUserFast(client);
+  var uid=user&&user.id?String(user.id):'';
+  if(!uid)return null;
   try{
-    var r=await client.from('own_facts').update({
-      fact_text:txt,
-      updated_at:new Date().toISOString()
-    }).eq('id',factId).select('*').maybeSingle();
+    var r=await withTimeout(
+      client.from('own_facts').update({
+        fact_text:txt,
+        updated_at:new Date().toISOString()
+      }).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
+      15000,
+      'Opslaan duurde te lang. Probeer opnieuw.',
+      {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
+    );
     if(r&&r.error){
       console.warn('[updateOwnFactPendingText]',factId,r.error);
       return null;
@@ -2974,33 +3032,49 @@ async function updateOwnFactPendingText(factId,newText){
       if(r.data.status!=='pending'){
         console.warn('[updateOwnFactPendingText] unexpected status',factId,r.data.status);
       }
-      var idx=ownFacts.findIndex(function(x){return x.id===factId;});
+      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===ownFactIdStr(factId);});
       if(idx>=0)ownFacts[idx]=r.data;
       else ownFacts.unshift(r.data);
       return r.data;
     }
   }catch(e){
     console.warn('[updateOwnFactPendingText]',factId,e);
+    throw e;
   }
   return null;
 }
 
 async function acceptOwnFact(factId){
+  factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
-  var fact=ownFacts.find(function(f){return f.id===factId;});
-  if(!fact)return;
+  if(!findOwnFactById(factId)){
+    flashOwnsenseMessage('Gegeven niet gevonden. Sluit het venster en open het opnieuw.',true);
+    return;
+  }
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'accept');
+  var updated=null;
   try{
-    var updated=await updateOwnFactStatus(factId,'accepted');
+    updated=await updateOwnFactStatus(factId,'accepted');
     if(!updated){
       flashOwnsenseMessage('Kon gegeven niet accepteren. Probeer opnieuw.',true);
       return;
     }
-    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
     renderReviewFacts();
     updateOwnPendingNavBadge();
     renderMijTab();
+  }catch(e){
+    console.warn('[acceptOwnFact]',factId,e);
+    var errMsg=String((e&&e.message)||e||'');
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon gegeven niet accepteren. Probeer opnieuw.',true);
+    return;
+  }finally{
+    window.__ownsenseReviewFactBusy=null;
+    setReviewFactButtonsBusy(factId,false);
+  }
+  if(!updated)return;
+  try{
+    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
     var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
     if(!mergeRes||!mergeRes.ok){
       flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
@@ -3009,26 +3083,25 @@ async function acceptOwnFact(factId){
     renderReviewFacts();
     renderMijTab();
     updateOwnPendingNavBadge();
-  }finally{
-    window.__ownsenseReviewFactBusy=null;
-    setReviewFactButtonsBusy(factId,false);
+  }catch(e){
+    console.warn('[acceptOwnFact follow-up]',factId,e);
   }
 }
 
 function editOwnFact(factId){
+  factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
-  var fact=ownFacts.find(function(f){return f.id===factId;});
+  var fact=findOwnFactById(factId);
   if(!fact||fact.status!=='pending')return;
   var card=getReviewFactCard(factId);
   if(!card||card.getAttribute('data-review-editing')==='1')return;
   var textWrap=card.querySelector('[data-review-fact-text]');
   var actions=card.querySelector('[data-review-fact-actions]');
   if(!textWrap||!actions)return;
-  var fid=escJsSingleQuoted(factId);
   card.setAttribute('data-review-editing','1');
   textWrap.innerHTML='<textarea class="import-review-ta review-fact-edit-ta" data-review-edit-input rows="3" aria-label="Gegeven bewerken">'+escHTML(fact.fact_text||'')+'</textarea>';
-  actions.innerHTML='<button class="btn btn-primary btn-small" type="button" data-review-action="edit-save" onclick="saveEditOwnFact(\''+fid+'\')">OK</button>'
-    +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit-cancel" onclick="cancelEditOwnFact(\''+fid+'\')">Annuleren</button>';
+  actions.innerHTML='<button class="btn btn-primary btn-small" type="button" data-review-action="edit-save">OK</button>'
+    +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit-cancel">Annuleren</button>';
   var ta=card.querySelector('[data-review-edit-input]');
   if(ta){try{ta.focus();var len=ta.value.length;ta.setSelectionRange(len,len);}catch(_e){}}
 }
@@ -3039,8 +3112,9 @@ function cancelEditOwnFact(factId){
 }
 
 async function saveEditOwnFact(factId){
+  factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
-  var fact=ownFacts.find(function(f){return f.id===factId;});
+  var fact=findOwnFactById(factId);
   if(!fact||fact.status!=='pending')return;
   var card=getReviewFactCard(factId);
   var ta=card&&card.querySelector('[data-review-edit-input]');
@@ -3055,27 +3129,42 @@ async function saveEditOwnFact(factId){
   }
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'edit-save');
+  var saved=false;
   try{
     var updated=await updateOwnFactPendingText(factId,txt);
     if(!updated){
       flashOwnsenseMessage('Kon wijziging niet opslaan. Probeer opnieuw.',true);
       return;
     }
+    saved=true;
     renderReviewFacts();
     updateOwnPendingNavBadge();
     flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
+  }catch(e){
+    console.warn('[saveEditOwnFact]',factId,e);
+    var errMsg=String((e&&e.message)||e||'');
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon wijziging niet opslaan. Probeer opnieuw.',true);
   }finally{
     window.__ownsenseReviewFactBusy=null;
-    if(getReviewFactCard(factId))setReviewFactButtonsBusy(factId,false);
+    if(!saved){
+      var editCard=getReviewFactCard(factId);
+      if(editCard&&editCard.getAttribute('data-review-editing')==='1'){
+        setReviewFactButtonsBusy(factId,false);
+      }else{
+        renderReviewFacts();
+      }
+    }
   }
 }
 
 async function rejectOwnFact(factId){
+  factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'reject');
+  var updated=null;
   try{
-    var updated=await updateOwnFactStatus(factId,'rejected');
+    updated=await updateOwnFactStatus(factId,'rejected');
     if(!updated){
       flashOwnsenseMessage('Kon gegeven niet weigeren. Probeer opnieuw.',true);
       return;
@@ -3083,13 +3172,23 @@ async function rejectOwnFact(factId){
     renderReviewFacts();
     updateOwnPendingNavBadge();
     renderMijTab();
+  }catch(e){
+    console.warn('[rejectOwnFact]',factId,e);
+    var errMsg=String((e&&e.message)||e||'');
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon gegeven niet weigeren. Probeer opnieuw.',true);
+    return;
+  }finally{
+    window.__ownsenseReviewFactBusy=null;
+    setReviewFactButtonsBusy(factId,false);
+  }
+  if(!updated)return;
+  try{
     await loadOwnBrainTables();
     renderReviewFacts();
     renderMijTab();
     updateOwnPendingNavBadge();
-  }finally{
-    window.__ownsenseReviewFactBusy=null;
-    setReviewFactButtonsBusy(factId,false);
+  }catch(e){
+    console.warn('[rejectOwnFact reload]',factId,e);
   }
 }
 
@@ -6019,6 +6118,7 @@ document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'no
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
 initPhotoPreview();
+initReviewFactsListDelegation();
 ownBootstrapLocalHubState();
 ownPaintShellFromLocal();
 function runOwnAutoAcceptStaleInBackground(){
