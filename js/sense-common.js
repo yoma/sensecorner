@@ -574,6 +574,60 @@
     return { text: String(text || '').trim(), sparse: pack.sparse };
   }
 
+  var __senseFieldSaveClearTimers = {};
+
+  function senseResolveFieldSaveEl(elOrId) {
+    if (!elOrId) return null;
+    if (typeof elOrId === 'object' && elOrId.nodeType === 1) return elOrId;
+    return document.getElementById(String(elOrId || ''));
+  }
+
+  /** In-field save feedback: idle | saving | saved | error */
+  function senseSetFieldSaveStatus(elOrId, state, opts) {
+    opts = opts || {};
+    var el = senseResolveFieldSaveEl(elOrId);
+    if (!el) return;
+    var timerKey = el.id || String(elOrId);
+    if (__senseFieldSaveClearTimers[timerKey]) {
+      clearTimeout(__senseFieldSaveClearTimers[timerKey]);
+      __senseFieldSaveClearTimers[timerKey] = null;
+    }
+    var labels = {
+      idle: '',
+      saving: 'Bezig met opslaan…',
+      saved: '✓ Opgeslagen',
+      error: 'Opslaan mislukt'
+    };
+    var stateNorm =
+      state === 'saving' || state === 'saved' || state === 'error' ? state : 'idle';
+    el.textContent =
+      stateNorm === 'idle' ? '' : String(opts.message || labels[stateNorm] || '');
+    el.className = 'field-save-status' + (stateNorm !== 'idle' ? ' ' + stateNorm : '');
+    el.setAttribute('aria-live', 'polite');
+    if (stateNorm === 'idle') return;
+    var durationMs =
+      typeof opts.durationMs === 'number'
+        ? opts.durationMs
+        : stateNorm === 'saving'
+          ? 0
+          : stateNorm === 'error'
+            ? 4200
+            : 2600;
+    if (durationMs > 0) {
+      __senseFieldSaveClearTimers[timerKey] = setTimeout(function () {
+        senseSetFieldSaveStatus(el, 'idle');
+      }, durationMs);
+    }
+  }
+
+  function senseFieldSaveIdFromTextareaId(taId) {
+    var id = String(taId || '');
+    var m = id.match(/^(?:oc|cc|qi|qm)-(.+)$/);
+    if (!m) return 'fs-' + id;
+    if (/^qi-/.test(id) || /^qm-/.test(id)) return 'qi-save-' + m[1];
+    return 'oc-field-' + m[1];
+  }
+
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
@@ -608,4 +662,6 @@
   global.senseIsRateLimitMessage = senseIsRateLimitMessage;
   global.senseRecoStatusNoticeHtml = senseRecoStatusNoticeHtml;
   global.senseFetchDailyRecoTipText = senseFetchDailyRecoTipText;
+  global.senseSetFieldSaveStatus = senseSetFieldSaveStatus;
+  global.senseFieldSaveIdFromTextareaId = senseFieldSaveIdFromTextareaId;
 })(typeof window !== 'undefined' ? window : this);

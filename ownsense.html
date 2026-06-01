@@ -5271,6 +5271,38 @@ function renderPhotoSection(){
 
 var __openQuestionCatId='';
 var __questionAutosaveTimers={};
+var __lastQuestionFieldKey='';
+function ownQuestionFieldSaveId(catId,key){return 'qi-save-'+catId+'-'+key;}
+function ownModalFieldSaveId(catId,key){return 'qm-save-'+catId+'-'+key;}
+function ownSetQuestionFieldSave(catId,key,state,opts){
+  if(typeof senseSetFieldSaveStatus==='function')senseSetFieldSaveStatus(ownQuestionFieldSaveId(catId,key),state,opts);
+}
+function ownSetModalFieldSave(catId,key,state,opts){
+  if(typeof senseSetFieldSaveStatus==='function')senseSetFieldSaveStatus(ownModalFieldSaveId(catId,key),state,opts);
+}
+function updateQuestionCardMeta(catId){
+  var cat=ALL_CATS.find(function(x){return x.id===catId;});
+  if(!cat)return;
+  var card=document.getElementById('cat-'+catId);
+  if(!card)return;
+  var c=hubState.categories[catId]||{};
+  var keys=catAnswerKeys(cat);
+  var filled=keys.filter(function(k){return String(c[k]||'').trim().length>0;}).length;
+  var totalQ=cat.prompts.length;
+  var pct=Math.round((filled*100)/Math.max(1,totalQ));
+  var fillEl=card.querySelector('.qrow-bar-fill');
+  if(fillEl)fillEl.style.width=pct+'%';
+  var progEl=card.querySelector('.qrow-progress');
+  if(progEl){
+    var progressTxt;
+    if(catId==='selfsense_spiegel'&&filled===0){
+      progressTxt='nog leeg · vult aan na Adem in SelfSense';
+    }else{
+      progressTxt=filled+'/'+totalQ+' vragen · '+fmtDate(hubState.cat_updated[catId]||hubState.updated_at);
+    }
+    progEl.innerHTML='<div class="qrow-bar"><div class="qrow-bar-fill" style="width:'+pct+'%"></div></div>'+progressTxt;
+  }
+}
 function renderQuestions(){
   function hasAnswersInCatId(catId){
     var catDef=ALL_CATS.find(function(x){return x.id===catId;});
@@ -5335,7 +5367,10 @@ function renderQuestions(){
       var phUse=(phtext&&phtext.trim())?phtext.trim():'Tip: een paar zinnen uit je eigen ervaring zijn genoeg.';
       var badge=(p&&p.fromOnboarding)?'<span class="own-onb-badge" title="Antwoord uit SenseCorner-onboarding">uit onboarding</span>':'';
       html+='<div class="qprompt">'+escHTML(qtext)+badge+'</div>'
-        +'<textarea class="qta" id="qi-'+cat.id+'-'+key+'" placeholder="'+escHTML(phUse)+'">'+escHTML(c[key]||'')+'</textarea>';
+        +'<div class="field-input-wrap">'
+        +'<textarea class="qta" id="qi-'+cat.id+'-'+key+'" placeholder="'+escHTML(phUse)+'">'+escHTML(c[key]||'')+'</textarea>'
+        +'<span class="field-save-status" id="'+ownQuestionFieldSaveId(cat.id,key)+'" aria-live="polite"></span>'
+        +'</div>';
     });
     html+='<div style="margin-top:10px"><button type="button" class="btn btn-primary btn-small" onclick="saveOwnQuestionsInline(\''+String(cat.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">Opslaan</button></div>'
       +'</div></details>';
@@ -5358,9 +5393,12 @@ function renderQuestions(){
   var areas=el.querySelectorAll('textarea.qta[id^="qi-"]');
   areas.forEach(function(ta){
     ta.addEventListener('input',function(){
-      var m=String(ta.id||'').match(/^qi-([^-]+)-a\d+$/);
+      var m=String(ta.id||'').match(/^qi-(.+)-(a\d+)$/);
       if(!m||!m[1])return;
       var catId=m[1];
+      var key=m[2];
+      __lastQuestionFieldKey=catId+':'+key;
+      ownSetQuestionFieldSave(catId,key,'saving',{durationMs:0});
       if(__questionAutosaveTimers[catId])clearTimeout(__questionAutosaveTimers[catId]);
       __questionAutosaveTimers[catId]=setTimeout(function(){
         saveOwnQuestionsForCategory(catId,{silent:true,rerender:false});
@@ -5399,6 +5437,14 @@ function saveOwnQuestionsForCategory(catId,opt){
     hubState.cat_updated[cat.id]=new Date().toISOString();
     saveHubState();
     renderProps();
+    updateQuestionCardMeta(cat.id);
+  }
+  if(__lastQuestionFieldKey&&__lastQuestionFieldKey.indexOf(catId+':')===0){
+    var fk=__lastQuestionFieldKey.split(':');
+    if(fk.length>=2){
+      if(changed)ownSetQuestionFieldSave(catId,fk[1],'saved');
+      else if(!opt.silent)ownSetQuestionFieldSave(catId,fk[1],'idle');
+    }
   }
   if(opt.rerender!==false){
     __openQuestionCatId=cat.id;
@@ -5408,9 +5454,12 @@ function saveOwnQuestionsForCategory(catId,opt){
 }
 function saveOwnQuestionsInline(catId){
   if(__questionAutosaveTimers[catId])clearTimeout(__questionAutosaveTimers[catId]);
-  var changed=saveOwnQuestionsForCategory(catId,{silent:false,rerender:true});
+  var changed=saveOwnQuestionsForCategory(catId,{silent:false,rerender:false});
   __openQuestionCatId=String(catId||'').trim();
-  if(changed)flashOwnsenseMessage('Opgeslagen.',false);
+  if(changed){
+    updateQuestionCardMeta(catId);
+    flashOwnsenseMessage('Opgeslagen.',false);
+  }
 }
 
 var __ownQuestionsModalCatId='';
@@ -5439,9 +5488,19 @@ function openOwnQuestionsModal(catId){
     var phUse=(phtext&&phtext.trim())?phtext.trim():'Tip: een paar zinnen uit je eigen ervaring zijn genoeg.';
     var badge=(p&&p.fromOnboarding)?'<span class="own-onb-badge" title="Antwoord uit SenseCorner-onboarding">uit onboarding</span>':'';
     html+='<div class="qprompt">'+escHTML(qtext)+badge+'</div>'
-      +'<textarea class="qta" id="qm-'+cat.id+'-'+key+'" placeholder="'+escHTML(phUse)+'">'+escHTML(c[key]||'')+'</textarea>';
+      +'<div class="field-input-wrap">'
+      +'<textarea class="qta" id="qm-'+cat.id+'-'+key+'" placeholder="'+escHTML(phUse)+'">'+escHTML(c[key]||'')+'</textarea>'
+      +'<span class="field-save-status" id="'+ownModalFieldSaveId(cat.id,key)+'" aria-live="polite"></span>'
+      +'</div>';
   });
   b.innerHTML=html;
+  b.querySelectorAll('textarea.qta[id^="qm-"]').forEach(function(ta){
+    ta.addEventListener('input',function(){
+      var m=String(ta.id||'').match(/^qm-(.+)-(a\d+)$/);
+      if(!m||!m[1])return;
+      ownSetModalFieldSave(m[1],m[2],'saving',{durationMs:0});
+    });
+  });
   var m=document.getElementById('ownQuestionsModal');
   if(m){
     m.classList.add('show');
@@ -5487,6 +5546,9 @@ function saveOwnQuestionsModal(){
     hubState.cat_updated[cat.id]=new Date().toISOString();
     saveHubState();
     renderProps();
+    cat.prompts.forEach(function(_,idx){
+      ownSetModalFieldSave(cat.id,'a'+idx,'saved');
+    });
     flashOwnsenseMessage('Opgeslagen.',false);
   }
   closeOwnQuestionsModal();

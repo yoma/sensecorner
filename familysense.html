@@ -2700,8 +2700,12 @@ function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
   return '<input class="profile-field'+(isFull?' full':'')+'" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'" '+(extraAttrs||'')+'>';
 }
 function renderTextareaVoiceRow(id,placeholder,value,oninput){
+  var fsId=(typeof senseFieldSaveIdFromTextareaId==='function')?senseFieldSaveIdFromTextareaId(id):('fs-'+id);
   return '<div class="own-ta-voice-row">'
+    +'<div class="field-input-wrap">'
     +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="3" oninput="'+oninput+'">'+value+'</textarea>'
+    +'<span class="field-save-status" id="'+fsId+'" aria-live="polite"></span>'
+    +'</div>'
     +'<button type="button" class="coach-save-other ptt-dictation-btn" style="font-size:12px;padding:8px 10px;white-space:nowrap;max-width:100%" title="Houd ingedrukt: spraak komt in dit ene veld. Loslaten = stoppen. (Niet hetzelfde als «Vrij vertellen» onderaan.)" onpointerdown="pttMicPointerDown(event,\''+id+'\')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)">Dikteer dit vak</button>'
     +'</div>';
 }
@@ -10420,6 +10424,7 @@ async function resetOwnProps(){
 
 // ══ Auto-save ════════════════════════════════════════════════════
 var _autoSaveTimers={};
+var __autoSaveActiveFieldIdx;
 
 function parseAutoSaveKey(key){
   var i=String(key||'').indexOf(':');
@@ -10449,11 +10454,11 @@ function flushPendingAutosaves(){
 function scheduleAutoSave(type,dosName,catId,fieldIdx){
   var key=type+':'+dosName+':'+catId;
   clearTimeout(_autoSaveTimers[key]);
-  // Toon "..." op het actieve veld
-  var fInd=fieldIdx!==undefined?document.getElementById('oc-field-'+catId+'-a'+fieldIdx):null;
-  var catInd=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
-  if(fInd){fInd.textContent='…';fInd.className='autosave-indicator saving';}
-  if(catInd){catInd.textContent='…';catInd.className='autosave-indicator saving';}
+  if(fieldIdx!==undefined)__autoSaveActiveFieldIdx=fieldIdx;
+  var fId='oc-field-'+catId+'-a'+fieldIdx;
+  if(fieldIdx!==undefined&&typeof senseSetFieldSaveStatus==='function'){
+    senseSetFieldSaveStatus(fId,'saving',{durationMs:0});
+  }
   _autoSaveTimers[key]=setTimeout(function(){
     if(type==='own')saveOwnCat(catId,true);
     else saveContactCat(dosName,catId,true);
@@ -10461,21 +10466,13 @@ function scheduleAutoSave(type,dosName,catId,fieldIdx){
 }
 
 function showAutoSaveIndicator(catId,ok,fieldIdx){
-  // Per-field indicator (OWN)
-  if(fieldIdx!==undefined){
-    var fInd=document.getElementById('oc-field-'+catId+'-a'+fieldIdx);
-    if(fInd){
-      fInd.textContent=ok?'✓':'✗';
-      fInd.className='autosave-indicator '+(ok?'saved':'');
-      setTimeout(function(){if(fInd){fInd.textContent='';fInd.className='autosave-indicator';}},2000);
+  var idx=fieldIdx!==undefined?fieldIdx:__autoSaveActiveFieldIdx;
+  if(idx!==undefined){
+    var fId='oc-field-'+catId+'-a'+idx;
+    if(typeof senseSetFieldSaveStatus==='function'){
+      senseSetFieldSaveStatus(fId,ok?'saved':'error');
     }
   }
-  // Categorie-level indicator
-  var ind=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
-  if(!ind)return;
-  ind.textContent=ok?'✓ Opgeslagen':'Fout bij opslaan';
-  ind.className='autosave-indicator '+(ok?'saved':'');
-  if(ok)setTimeout(function(){if(ind){ind.textContent='';ind.className='autosave-indicator';}},2500);
 }
 
 // ══ Contact categorieën helpers ══════════════════════════════════
@@ -12476,9 +12473,7 @@ function buildProfielOwnHtml(d){
         saved,
         'autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')'
       );
-      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
     });
-    html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
     html+='<div id="own-voorstel-'+cat.id+'"></div>';
     html+='</div></div>';
   });
@@ -12545,9 +12540,7 @@ function buildProfielContactHtml(name,d){
         saved,
         'autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')'
       );
-      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
     });
-    html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
     html+='</div></div>';
   });
   return html;

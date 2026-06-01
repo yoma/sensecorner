@@ -372,6 +372,7 @@ a{text-decoration:none;color:inherit}
   --card-d:var(--family-donker);--card-m:var(--family-medium);--card-l:var(--family-licht);
   --app-donker:var(--family-donker);--app-medium:var(--family-medium);--app-licht:var(--family-licht);
 }
+a.app-card{color:inherit;text-decoration:none}
 .app-card{
   position:relative;
   background:linear-gradient(165deg,var(--ivoor) 0%,rgba(255,255,255,.88) 48%,rgba(255,255,255,.72) 100%);
@@ -710,7 +711,7 @@ a{text-decoration:none;color:inherit}
   <p class="section-label">Sense Apps</p>
   <section class="grid" aria-label="Beschikbare apps" role="list">
 
-    <article class="app-card date-card clickable" role="listitem" tabindex="0" data-app-key="ds" data-app-link="datesense.html">
+    <a class="app-card date-card clickable" role="listitem" href="datesense.html" data-app-key="ds" data-app-link="datesense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -728,9 +729,9 @@ a{text-decoration:none;color:inherit}
         <span class="badge badge-live">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
-    </article>
+    </a>
 
-    <article class="app-card people-card clickable" role="listitem" tabindex="0" aria-label="FriendSense" data-app-key="fr" data-app-link="friendsense.html">
+    <a class="app-card people-card clickable" role="listitem" href="friendsense.html" aria-label="FriendSense" data-app-key="fr" data-app-link="friendsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -748,9 +749,9 @@ a{text-decoration:none;color:inherit}
         <span class="badge badge-live-fr">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
-    </article>
+    </a>
 
-    <article class="app-card career-card clickable" role="listitem" tabindex="0" aria-label="FamilySense" data-app-key="fs" data-app-link="familysense.html">
+    <a class="app-card career-card clickable" role="listitem" href="familysense.html" aria-label="FamilySense" data-app-key="fs" data-app-link="familysense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -768,9 +769,9 @@ a{text-decoration:none;color:inherit}
         <span class="badge badge-live-fs">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
-    </article>
+    </a>
 
-    <article class="app-card self-card clickable" role="listitem" tabindex="0" aria-label="SelfSense" data-app-key="ss" data-app-link="selfsense.html">
+    <a class="app-card self-card clickable" role="listitem" href="selfsense.html" aria-label="SelfSense" data-app-key="ss" data-app-link="selfsense.html">
       <div class="app-head">
         <div class="app-icon-wrap" aria-hidden="true">
           <span class="app-rip app-rip--l"></span>
@@ -787,7 +788,7 @@ a{text-decoration:none;color:inherit}
         <span class="badge badge-live-self">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
-    </article>
+    </a>
 
   </section>
 
@@ -3038,17 +3039,42 @@ a{text-decoration:none;color:inherit}
       c.removeAttribute('data-sc-nav');
     });
   }
+  var scAppGrid=document.querySelector('section.grid[aria-label="Beschikbare apps"]');
+  function scOnAppGridClick(e){
+    var card=e.target&&e.target.closest?e.target.closest('.app-card[data-app-link]'):null;
+    if(!card||!scAppGrid||!scAppGrid.contains(card))return;
+    var target=String(card.getAttribute('data-app-link')||'').trim();
+    if(!target)return;
+    if(card.getAttribute('data-sc-nav')==='1'){
+      e.preventDefault();
+      return;
+    }
+    if(userSession){
+      card.setAttribute('data-sc-nav','1');
+      card.classList.add('loading');
+      card.setAttribute('aria-busy','true');
+      var appKey=scAppKeyFromHref(target);
+      if(appKey){try{scBumpAppVisit(userSession,appKey);}catch(_visit){}}
+      return;
+    }
+    e.preventDefault();
+    scTriggerAppCard(card,target);
+  }
+  if(scAppGrid)scAppGrid.addEventListener('click',scOnAppGridClick);
   Array.prototype.slice.call(document.querySelectorAll('[data-app-link]')).forEach(function(el){
+    if(scAppGrid&&scAppGrid.contains(el))return;
     var target=el.getAttribute('data-app-link');
     if(!target)return;
     el.addEventListener('click',function(e){
+      if(userSession&&el.tagName==='A')return;
       e.preventDefault();
-      scTriggerAppCard(el,target);
+      openAppWithAuth(target);
     });
     el.addEventListener('keydown',function(e){
       if(e.key==='Enter'||e.key===' '){
+        if(userSession&&el.tagName==='A')return;
         e.preventDefault();
-        scTriggerAppCard(el,target);
+        openAppWithAuth(target);
       }
     });
   });

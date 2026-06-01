@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="01-06-2026 08:15">
+<meta name="ds-build" content="01-06-2026 12:01">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -2617,8 +2617,12 @@ function renderProfileField(id,placeholder,value,isFull,type,extraAttrs){
   return '<input class="profile-field'+(isFull?' full':'')+'" id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+value+'" '+(extraAttrs||'')+'>';
 }
 function renderTextareaVoiceRow(id,placeholder,value,oninput){
+  var fsId=(typeof senseFieldSaveIdFromTextareaId==='function')?senseFieldSaveIdFromTextareaId(id):('fs-'+id);
   return '<div class="own-ta-voice-row">'
+    +'<div class="field-input-wrap">'
     +'<textarea class="own-ta" id="'+id+'" placeholder="'+placeholder+'" rows="3" oninput="'+oninput+'">'+value+'</textarea>'
+    +'<span class="field-save-status" id="'+fsId+'" aria-live="polite"></span>'
+    +'</div>'
     +'<button type="button" class="coach-save-other ptt-dictation-btn" style="font-size:12px;padding:8px 10px;white-space:nowrap;max-width:100%" title="Houd ingedrukt: spraak komt in dit ene veld. Loslaten = stoppen. (Niet hetzelfde als «Vrij vertellen» onderaan.)" onpointerdown="pttMicPointerDown(event,\''+id+'\')" onpointerup="pttMicPointerUp(event)" onpointercancel="pttMicPointerUp(event)" onlostpointercapture="pttMicPointerUp(event)">Dikteer dit vak</button>'
     +'</div>';
 }
@@ -4980,6 +4984,7 @@ async function loadAll(opts){
     });
     if(!S.pdata['OWN Sense'])await ensureP('OWN Sense');
   }
+  try{hydrateFocusStateFromOwnSense();}catch(_e){console.warn('hydrateFocusStateFromOwnSense',_e);}
   reconcileSessAssignMapsAtLogin();
   scrubCrossAccountRuntimeState();
   updateNavTabIndicators();
@@ -6308,6 +6313,75 @@ function migrateLegacyUserPrefs(){
   });
 }
 
+// ── Relatie-focus / gebruiksmode: server-side persistentie ──
+// ds_usage_mode en de focus-instellingen werden tot nu toe alleen in
+// device-lokale localStorage bewaard. Daardoor viel relatie-focus terug op
+// de 'multi'-default zodra een nieuwe sessie die localStorage niet had
+// (ander apparaat, PWA opnieuw geinstalleerd, site-opslag opgeruimd). We
+// spiegelen de keuze nu naar de gedeelde OWN Sense meta (sense_profiles),
+// net als de andere blijvende instellingen, zodat de keuze blijft staan.
+var _focusStateHydrating=false;
+var _focusPersistTimer=null;
+function persistFocusStateToOwnSense(){
+  if(_focusStateHydrating)return;
+  if(!S||!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
+  if(_focusPersistTimer){try{clearTimeout(_focusPersistTimer);}catch(_t){}}
+  _focusPersistTimer=setTimeout(function(){
+    _focusPersistTimer=null;
+    try{
+      var own=S.pdata['OWN Sense'];
+      if(!own)return;
+      own.meta=Object.assign({},own.meta||{});
+      own.meta.ds_usage_mode=getUsageMode();
+      own.meta.ds_focus_dossier=getFocusDossier();
+      own.meta.ds_focus_relation_type=getFocusRelationType();
+      own.meta.ds_focus_boost_prefs=getBoostPrefs();
+      S.pdata['OWN Sense']=own;
+      void saveP('OWN Sense',own.props,own.count,own.categories,own.summary,own.meta);
+    }catch(_e){}
+  },400);
+}
+function hydrateFocusStateFromOwnSense(){
+  if(!S||!S.user||!S.pdata||!S.pdata['OWN Sense'])return;
+  var meta=S.pdata['OWN Sense'].meta||{};
+  _focusStateHydrating=true;
+  try{
+    if(meta.ds_usage_mode==='single'||meta.ds_usage_mode==='multi'){
+      setScopedStorage('ds_usage_mode',meta.ds_usage_mode);
+      S.usageMode=meta.ds_usage_mode;
+    }
+    if(typeof meta.ds_focus_dossier==='string'){
+      if(meta.ds_focus_dossier){
+        setScopedStorage('ds_focus_dossier',meta.ds_focus_dossier);
+        S.focusDossier=meta.ds_focus_dossier;
+      }else{
+        removeScopedStorage('ds_focus_dossier');
+        S.focusDossier='';
+      }
+    }
+    if(typeof meta.ds_focus_relation_type==='string'){
+      if(meta.ds_focus_relation_type){
+        setScopedStorage('ds_focus_relation_type',meta.ds_focus_relation_type);
+        S.focusRelationType=meta.ds_focus_relation_type;
+      }else{
+        removeScopedStorage('ds_focus_relation_type');
+        S.focusRelationType='';
+      }
+    }
+    if(meta.ds_focus_boost_prefs&&typeof meta.ds_focus_boost_prefs==='object'){
+      var bp={
+        region:String(meta.ds_focus_boost_prefs.region||'').trim(),
+        budget:String(meta.ds_focus_boost_prefs.budget||'').trim(),
+        style:String(meta.ds_focus_boost_prefs.style||'').trim(),
+        time:String(meta.ds_focus_boost_prefs.time||'').trim()
+      };
+      setScopedStorage('ds_focus_boost_prefs',JSON.stringify(bp));
+      S.boostPrefs=bp;
+    }
+  }catch(_e){}
+  _focusStateHydrating=false;
+}
+
 function getDossierLifecycle(name){
   if(!name||name==='OWN Sense')return'active';
   var d=S.pdata[name]||{};
@@ -6324,6 +6398,7 @@ function setUsageMode(mode){
   var m=mode==='single'?'single':'multi';
   setScopedStorage('ds_usage_mode',m);
   S.usageMode=m;
+  persistFocusStateToOwnSense();
 }
 function getFocusDossier(){
   return getScopedStorage('ds_focus_dossier','')||'';
@@ -6338,10 +6413,12 @@ function setFocusRelationType(v){
   if(!val){
     removeScopedStorage('ds_focus_relation_type');
     S.focusRelationType='';
+    persistFocusStateToOwnSense();
     return;
   }
   setScopedStorage('ds_focus_relation_type',val);
   S.focusRelationType=val;
+  persistFocusStateToOwnSense();
 }
 function getBoostPrefs(){
   var raw=getScopedStorage('ds_focus_boost_prefs','')||'';
@@ -6367,6 +6444,7 @@ function setBoostPrefs(prefs){
   };
   setScopedStorage('ds_focus_boost_prefs',JSON.stringify(next));
   S.boostPrefs=next;
+  persistFocusStateToOwnSense();
 }
 function scrubCrossAccountRuntimeState(){
   var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
@@ -6456,10 +6534,12 @@ function setFocusDossier(name){
   if(!name){
     removeScopedStorage('ds_focus_dossier');
     S.focusDossier='';
+    persistFocusStateToOwnSense();
     return;
   }
   setScopedStorage('ds_focus_dossier',name);
   S.focusDossier=name;
+  persistFocusStateToOwnSense();
 }
 function quickSetUsageMode(mode){
   setUsageMode(mode);
@@ -11065,6 +11145,7 @@ async function resetOwnProps(){
 
 // ══ Auto-save ════════════════════════════════════════════════════
 var _autoSaveTimers={};
+var __autoSaveActiveFieldIdx;
 
 function parseAutoSaveKey(key){
   var i=String(key||'').indexOf(':');
@@ -11094,11 +11175,11 @@ function flushPendingAutosaves(){
 function scheduleAutoSave(type,dosName,catId,fieldIdx){
   var key=type+':'+dosName+':'+catId;
   clearTimeout(_autoSaveTimers[key]);
-  // Toon "..." op het actieve veld
-  var fInd=fieldIdx!==undefined?document.getElementById('oc-field-'+catId+'-a'+fieldIdx):null;
-  var catInd=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
-  if(fInd){fInd.textContent='…';fInd.className='autosave-indicator saving';}
-  if(catInd){catInd.textContent='…';catInd.className='autosave-indicator saving';}
+  if(fieldIdx!==undefined)__autoSaveActiveFieldIdx=fieldIdx;
+  var fId='oc-field-'+catId+'-a'+fieldIdx;
+  if(fieldIdx!==undefined&&typeof senseSetFieldSaveStatus==='function'){
+    senseSetFieldSaveStatus(fId,'saving',{durationMs:0});
+  }
   _autoSaveTimers[key]=setTimeout(function(){
     if(type==='own')saveOwnCat(catId,true);
     else saveContactCat(dosName,catId,true);
@@ -11106,21 +11187,13 @@ function scheduleAutoSave(type,dosName,catId,fieldIdx){
 }
 
 function showAutoSaveIndicator(catId,ok,fieldIdx){
-  // Per-field indicator (OWN)
-  if(fieldIdx!==undefined){
-    var fInd=document.getElementById('oc-field-'+catId+'-a'+fieldIdx);
-    if(fInd){
-      fInd.textContent=ok?'✓':'✗';
-      fInd.className='autosave-indicator '+(ok?'saved':'');
-      setTimeout(function(){if(fInd){fInd.textContent='';fInd.className='autosave-indicator';}},2000);
+  var idx=fieldIdx!==undefined?fieldIdx:__autoSaveActiveFieldIdx;
+  if(idx!==undefined){
+    var fId='oc-field-'+catId+'-a'+idx;
+    if(typeof senseSetFieldSaveStatus==='function'){
+      senseSetFieldSaveStatus(fId,ok?'saved':'error');
     }
   }
-  // Categorie-level indicator
-  var ind=document.getElementById('oc-saved-'+catId)||document.getElementById('asi-'+catId);
-  if(!ind)return;
-  ind.textContent=ok?'✓ Opgeslagen':'Fout bij opslaan';
-  ind.className='autosave-indicator '+(ok?'saved':'');
-  if(ok)setTimeout(function(){if(ind){ind.textContent='';ind.className='autosave-indicator';}},2500);
 }
 
 // ══ Contact categorieën helpers ══════════════════════════════════
@@ -13320,9 +13393,7 @@ function buildProfielOwnHtml(d){
         saved,
         'autoResize(this);scheduleAutoSave(\'own\',\'OWN Sense\',\''+cat.id+'\','+i+');if('+i+'==='+(cat.prompts.length-1)+')scheduleOwnVoorstel(this.value,\''+cat.id+'\')'
       );
-      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
     });
-    html+='<div class="autosave-indicator" id="oc-saved-'+cat.id+'"></div>';
     html+='<div id="own-voorstel-'+cat.id+'"></div>';
     html+='</div></div>';
   });
@@ -13382,9 +13453,7 @@ function buildProfielContactHtml(name,d){
         saved,
         'autoResize(this);scheduleAutoSave(\'contact\',\''+name+'\',\''+cat.id+'\','+i+')'
       );
-      html+='<div class="autosave-indicator" id="oc-field-'+cat.id+'-a'+i+'"></div>';
     });
-    html+='<div class="autosave-indicator" id="asi-'+cat.id+'"></div>';
     html+='</div></div>';
   });
   return html;
