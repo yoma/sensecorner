@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 14:43">
+<meta name="os-build" content="01-06-2026 15:21">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -3047,7 +3047,9 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
   if(!client)return null;
   factId=ownFactIdStr(factId);
   opts=opts||{};
+  var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   var uid=await ownReviewUidAsync(client);
+  try{console.warn('[os-review-timing] status:uid-done',{factId:factId,ms:Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-__osUid0),hasUid:!!uid});}catch(_e){}
   if(!uid){
     console.error('[updateOwnFactStatus] geen uid, kan niet schrijven',{factId:factId,status:newStatus});
     return null;
@@ -3059,25 +3061,29 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
       payload.accepted_at=opts.accepted_at||new Date().toISOString();
       if(opts.auto_accepted)payload.auto_accepted=true;
     }
+    // DIAGNOSE + fix: schrijf KAAL (zonder .select()-chain). Een
+    // .update(...).select('*').maybeSingle() kan onder bepaalde RLS-configuraties blijven
+    // hangen (de UPDATE mag, maar de representation-SELECT lost nooit op), wat exact lijkt
+    // op een "trage" schrijf die de timeout raakt. We lezen daarom apart terug.
+    var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus});}catch(_e){}
     var r=await withTimeout(
-      client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
+      client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid),
       OWN_REVIEW_FACT_WRITE_MS,
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
     );
+    var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] status:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
     if(r&&r.error){
       console.error('[updateOwnFactStatus] db-error',{factId:factId,uid:uid,status:newStatus,error:r.error});
       return null;
     }
-    if(r&&r.data){
-      return applyUpdatedOwnFact(factId,r.data);
-    }
-    // Geen rij teruggekregen is GEEN bewijs van succes: ofwel matchte de update 0 rijen
-    // (verkeerde uid / ontbrekend RLS-updatebeleid), ofwel slaagde de update maar verbergt
-    // RLS de representation. Lees terug om persistentie hard te bevestigen.
+    // Plain update geeft geen rij terug: lees altijd terug om persistentie hard te bevestigen.
     var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-status-verify');
+    var __osT2=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] status:readback-done',{factId:factId,ms:Math.round(__osT2-__osT1),ok:!!(vr&&vr.ok),hasRow:!!(vr&&vr.row)});}catch(_e){}
     if(vr.ok&&vr.row&&vr.row.status===newStatus){
-      console.warn('[updateOwnFactStatus] update gaf geen representation, maar persistentie bevestigd via read-back',{factId:factId,status:newStatus});
       return applyUpdatedOwnFact(factId,vr.row);
     }
     console.error('[updateOwnFactStatus] 0 rijen gewijzigd / niet gepersisteerd',{
@@ -3103,7 +3109,9 @@ async function updateOwnFactPendingText(factId,newText){
   factId=ownFactIdStr(factId);
   var txt=String(newText||'').trim();
   if(!txt)return null;
+  var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   var uid=await ownReviewUidAsync(client);
+  try{console.warn('[os-review-timing] text:uid-done',{factId:factId,ms:Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-__osUid0),hasUid:!!uid});}catch(_e){}
   if(!uid){
     console.error('[updateOwnFactPendingText] geen uid, kan niet schrijven',{factId:factId});
     return null;
@@ -3111,27 +3119,27 @@ async function updateOwnFactPendingText(factId,newText){
   var nowIso=new Date().toISOString();
   var patch={fact_text:txt,updated_at:nowIso};
   try{
+    // DIAGNOSE + fix: schrijf KAAL (zonder .select()-chain). Zie updateOwnFactStatus:
+    // een gechainde representation-SELECT kan onder RLS blijven hangen. We lezen apart terug.
+    var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] text:update-start',{factId:factId});}catch(_e){}
     var r=await withTimeout(
-      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
+      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid),
       OWN_REVIEW_FACT_WRITE_MS,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
     );
+    var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] text:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
     if(r&&r.error){
       console.error('[updateOwnFactPendingText] db-error',{factId:factId,uid:uid,error:r.error});
       return null;
     }
-    if(r&&r.data){
-      if(r.data.status!=='pending'){
-        console.warn('[updateOwnFactPendingText] onverwachte status',factId,r.data.status);
-      }
-      return applyUpdatedOwnFact(factId,r.data);
-    }
-    // Geen representation terug: niet als succes behandelen. Lees terug en bevestig dat de
-    // tekst echt is opgeslagen (vangt RLS-update-zonder-select af, maar geen valse "gelukt").
+    // Plain update geeft geen rij terug: lees altijd terug en bevestig dat de tekst echt is opgeslagen.
     var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-pending-text-verify');
+    var __osT2=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    try{console.warn('[os-review-timing] text:readback-done',{factId:factId,ms:Math.round(__osT2-__osT1),ok:!!(vr&&vr.ok),hasRow:!!(vr&&vr.row)});}catch(_e){}
     if(vr.ok&&vr.row&&String(vr.row.fact_text||'').trim()===txt){
-      console.warn('[updateOwnFactPendingText] update gaf geen representation, maar persistentie bevestigd via read-back',{factId:factId});
       return applyUpdatedOwnFact(factId,vr.row);
     }
     console.error('[updateOwnFactPendingText] 0 rijen gewijzigd / niet gepersisteerd',{
@@ -3264,17 +3272,17 @@ async function saveEditOwnFact(factId){
     // Bij mislukken blijft de bewerk-kaart staan zodat de gebruiker opnieuw kan proberen.
     updated=await updateOwnFactPendingText(factId,txt);
     if(!updated){
-      flashOwnsenseMessage('Kon wijziging niet opslaan in de cloud. Probeer opnieuw.',true);
+      flashOwnsenseMessage('Opslaan mislukt. Probeer opnieuw.',true);
       return;
     }
     patchOwnFactLocal(factId,updated);
     renderReviewFacts();
     updateOwnPendingNavBadge();
-    flashOwnsenseMessage('Gegeven bijgewerkt en opgeslagen. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
+    flashOwnsenseMessage('Wijziging opgeslagen.',false,{durationMs:5200});
   }catch(e){
     console.error('[saveEditOwnFact]',factId,e);
     var errMsg=String((e&&e.message)||e||'');
-    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon wijziging niet opslaan. Probeer opnieuw.',true);
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Opslaan mislukt. Probeer opnieuw.',true);
     return;
   }finally{
     clearReviewFactBusy(factId);
@@ -3301,15 +3309,16 @@ async function rejectOwnFact(factId){
   try{
     updated=await updateOwnFactStatus(factId,'rejected');
     if(!updated){
-      flashOwnsenseMessage('Kon gegeven niet weigeren. Probeer opnieuw.',true);
+      flashOwnsenseMessage('Weigeren mislukt. Probeer opnieuw.',true);
       return;
     }
     renderReviewFacts();
     updateOwnPendingNavBadge();
+    flashOwnsenseMessage('Gegeven geweigerd.',false);
   }catch(e){
     console.warn('[rejectOwnFact]',factId,e);
     var errMsg=String((e&&e.message)||e||'');
-    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon gegeven niet weigeren. Probeer opnieuw.',true);
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Weigeren mislukt. Probeer opnieuw.',true);
     return;
   }finally{
     clearReviewFactBusy(factId);
