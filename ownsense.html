@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 16:21">
+<meta name="os-build" content="01-06-2026 16:30">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -1718,6 +1718,7 @@ async function ownAuthUserFast(client){
 }
 function ownBootstrapLocalHubState(){
   try{
+    if(senseAuthStorageBlocked())ownWarnAuthStorageBlockedOnce();
     var persisted=senseSessionFromPersisted();
     if(!persisted||!persisted.user)return;
     var user=persisted.user;
@@ -1753,6 +1754,50 @@ function _setAuthTokenFromSession(session){
   if(!session||!session.access_token){_authTokenCache={token:null,expiresAt:0};return;}
   var exp=(session.expires_at?session.expires_at*1000:0)||0;
   _authTokenCache={token:String(session.access_token),expiresAt:exp?exp-60000:0};
+}
+var __ownAuthStorageWarned=false;
+function senseAuthStorageBlocked(){
+  try{
+    var probe='__sc_storage_probe';
+    localStorage.setItem(probe,'1');
+    localStorage.removeItem(probe);
+    return false;
+  }catch(_e){
+    return true;
+  }
+}
+function ownWarnAuthStorageBlockedOnce(){
+  if(__ownAuthStorageWarned)return;
+  __ownAuthStorageWarned=true;
+  flashOwnsenseMessage('Opslaan mislukt: deze browser blokkeert loginopslag (Tracking Prevention). Schakel dat uit voor sensecorner.com, of gebruik een incognitovenster met alleen dit tabblad open.',true,{durationMs:9000});
+}
+/** Token + uid voor schrijfacties zonder getSession/refresh (om auth-lock-deadlocks te vermijden). */
+function senseGetWriteAuth(){
+  if(senseAuthStorageBlocked()){
+    return {ok:false,blocked:true,token:'',uid:'',source:'storage-blocked',stale:false};
+  }
+  var uid=String(window.__ownSenseUid||'').trim();
+  var sess=senseSessionFromPersisted();
+  if(sess&&sess.user){
+    if(!uid)uid=String(sess.user.id||'');
+    window.__ownSenseUid=uid;
+    _setAuthTokenFromSession(sess);
+    if(sess.access_token){
+      var expMs=(sess.expires_at?sess.expires_at*1000:0)||0;
+      var stale=!!(expMs&&expMs<Date.now()+120000);
+      return {ok:true,blocked:false,token:String(sess.access_token),uid:uid,source:'localStorage',stale:stale};
+    }
+  }
+  if(_authTokenCache.token){
+    return {ok:true,blocked:false,token:String(_authTokenCache.token),uid:uid,source:'memory-cache',stale:false};
+  }
+  return {ok:false,blocked:false,token:'',uid:uid,source:'none',stale:false};
+}
+function senseSupabaseRestBase(){
+  return String(window.SUPABASE_URL||SURL||'').replace(/\/$/,'');
+}
+function senseSupabaseAnonKey(){
+  return String(window.SUPABASE_ANON_KEY||SKEY||'');
 }
 async function getAccessTokenFresh(forceRefresh){
   var client=initSupabase();
@@ -2830,6 +2875,9 @@ function clearReviewFactBusy(factId){
   if(factId)setReviewFactButtonsBusy(factId,false);
 }
 async function ownReviewUidAsync(client){
+  var fast=senseGetWriteAuth();
+  if(fast.blocked)return '';
+  if(fast.uid)return fast.uid;
   var uid=String(window.__ownSenseUid||'').trim();
   if(uid)return uid;
   var user=await ownAuthUserFast(client);
@@ -2989,7 +3037,7 @@ var OWN_REVIEW_FACT_DB_MS=8000;
 // Aparte (ruimere) timeout voor de echte DB-schrijfacties van accept/weiger/wijzig.
 // Een trage maar geslaagde schrijfactie mag niet voortijdig worden afgebroken; we
 // wachten liever op bevestigde opslag dan op een snelle, maar valse "gelukt".
-var OWN_REVIEW_FACT_WRITE_MS=20000;
+var OWN_REVIEW_FACT_WRITE_MS=8000;
 
 // Geeft een AbortSignal dat na ms afbreekt, zodat een vastgelopen PostgREST-schrijf de
 // onderliggende fetch echt annuleert (geen zombie-verbinding) i.p.v. eindeloos te blijven
@@ -3001,6 +3049,70 @@ function senseAbortAfter(ms){
     var t=setTimeout(function(){try{ac.abort();}catch(_e){}},Math.max(1,ms||20000));
     return {signal:ac.signal,clear:function(){try{clearTimeout(t);}catch(_e){}}};
   }catch(_e){return {signal:null,clear:function(){}};}
+}
+
+// PostgREST direct (fetch + Bearer), zonder supabase-js auth-pad dat getSession/refresh kan blokkeren.
+async function sensePostgrestPatchOwnFact(opts){
+  var base=senseSupabaseRestBase();
+  var anon=senseSupabaseAnonKey();
+  var token=String(opts.token||'');
+  var factId=String(opts.factId||'');
+  var uid=String(opts.uid||'');
+  if(!base||!anon||!token||!factId||!uid)throw new Error('PostgREST schrijf niet geconfigureerd.');
+  var url=base+'/rest/v1/own_facts?id=eq.'+encodeURIComponent(factId)+'&user_id=eq.'+encodeURIComponent(uid);
+  var ab=senseAbortAfter(opts.timeoutMs||OWN_REVIEW_FACT_WRITE_MS);
+  try{
+    var res=await fetch(url,{
+      method:'PATCH',
+      headers:{
+        apikey:anon,
+        Authorization:'Bearer '+token,
+        'Content-Type':'application/json',
+        Prefer:'return=minimal'
+      },
+      body:JSON.stringify(opts.body||{}),
+      signal:ab.signal||undefined
+    });
+    ab.clear();
+    if(!res.ok){
+      var errBody='';
+      try{errBody=await res.text();}catch(_e){}
+      return {ok:false,status:res.status,error:errBody||('HTTP '+res.status)};
+    }
+    return {ok:true,status:res.status};
+  }catch(e){
+    ab.clear();
+    throw e;
+  }
+}
+async function sensePostgrestSelectOwnFact(opts){
+  var base=senseSupabaseRestBase();
+  var anon=senseSupabaseAnonKey();
+  var token=String(opts.token||'');
+  var factId=String(opts.factId||'');
+  var uid=String(opts.uid||'');
+  if(!base||!anon||!token||!factId||!uid)throw new Error('PostgREST lees niet geconfigureerd.');
+  var url=base+'/rest/v1/own_facts?select=*&id=eq.'+encodeURIComponent(factId)+'&user_id=eq.'+encodeURIComponent(uid)+'&limit=1';
+  var ab=senseAbortAfter(opts.timeoutMs||OWN_REVIEW_FACT_WRITE_MS);
+  try{
+    var res=await fetch(url,{
+      method:'GET',
+      headers:{apikey:anon,Authorization:'Bearer '+token,Accept:'application/json'},
+      signal:ab.signal||undefined
+    });
+    ab.clear();
+    if(!res.ok){
+      var errBody='';
+      try{errBody=await res.text();}catch(_e){}
+      return {ok:false,row:null,error:errBody||('HTTP '+res.status)};
+    }
+    var rows=await res.json();
+    var row=(Array.isArray(rows)&&rows.length)?rows[0]:null;
+    return {ok:true,row:row,error:null};
+  }catch(e){
+    ab.clear();
+    throw e;
+  }
 }
 
 // Zet de meest recente DB-rij in de lokale ownFacts-cache zodat de review-UI in sync blijft.
@@ -3016,19 +3128,33 @@ function applyUpdatedOwnFact(factId,row){
 // Leest de actuele rij terug zodat we kunnen bevestigen dat een schrijfactie echt is
 // gepersisteerd, ook wanneer RLS de update-representation verbergt (update slaagt, maar
 // .select() geeft geen rij terug). Geeft {ok,row,error} terug; ok=false bij echte fout.
-async function ownFactReadBack(client,factId,uid,label){
+async function ownFactReadBack(client,factId,uid,label,writeAuth){
+  writeAuth=writeAuth||senseGetWriteAuth();
   try{
-    var rb=await withTimeout(
+    if(writeAuth.ok&&writeAuth.token&&uid){
+      var rb=await withTimeout(
+        sensePostgrestSelectOwnFact({factId:factId,uid:uid,token:writeAuth.token,timeoutMs:OWN_REVIEW_FACT_WRITE_MS}),
+        OWN_REVIEW_FACT_WRITE_MS,
+        null,
+        {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId,transport:'postgrest-direct'}}
+      );
+      if(rb&&!rb.ok){
+        console.error('[ownFactReadBack] postgrest-error',{factId:factId,uid:uid,error:rb.error});
+        return {ok:false,row:null,error:rb.error};
+      }
+      return {ok:true,row:(rb&&rb.row)||null,error:null};
+    }
+    var rb2=await withTimeout(
       client.from('own_facts').select('*').eq('id',factId).eq('user_id',uid).maybeSingle(),
       OWN_REVIEW_FACT_WRITE_MS,
       null,
-      {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId}}
+      {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId,transport:'supabase-js'}}
     );
-    if(rb&&rb.error){
-      console.error('[ownFactReadBack] db-error',{factId:factId,uid:uid,error:rb.error});
-      return {ok:false,row:null,error:rb.error};
+    if(rb2&&rb2.error){
+      console.error('[ownFactReadBack] db-error',{factId:factId,uid:uid,error:rb2.error});
+      return {ok:false,row:null,error:rb2.error};
     }
-    return {ok:true,row:(rb&&rb.data)||null,error:null};
+    return {ok:true,row:(rb2&&rb2.data)||null,error:null};
   }catch(e){
     console.error('[ownFactReadBack] exception',{factId:factId,uid:uid,ex:String((e&&e.message)||e)});
     return {ok:false,row:null,error:e};
@@ -3059,11 +3185,18 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
   if(!client)return null;
   factId=ownFactIdStr(factId);
   opts=opts||{};
+  var writeAuth=senseGetWriteAuth();
+  try{console.warn('[os-review-timing] status:token-source',{factId:factId,source:writeAuth.source,hasToken:!!writeAuth.token,blocked:!!writeAuth.blocked,stale:!!writeAuth.stale});}catch(_e){}
+  if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
   var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-  var uid=await ownReviewUidAsync(client);
+  var uid=writeAuth.uid||await ownReviewUidAsync(client);
   try{console.warn('[os-review-timing] status:uid-done',{factId:factId,ms:Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-__osUid0),hasUid:!!uid});}catch(_e){}
   if(!uid){
     console.error('[updateOwnFactStatus] geen uid, kan niet schrijven',{factId:factId,status:newStatus});
+    return null;
+  }
+  if(!writeAuth.token){
+    flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
     return null;
   }
   try{
@@ -3073,36 +3206,23 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
       payload.accepted_at=opts.accepted_at||new Date().toISOString();
       if(opts.auto_accepted)payload.auto_accepted=true;
     }
-    // DIAGNOSE + fix: schrijf KAAL (zonder .select()-chain). Een
-    // .update(...).select('*').maybeSingle() kan onder bepaalde RLS-configuraties blijven
-    // hangen (de UPDATE mag, maar de representation-SELECT lost nooit op), wat exact lijkt
-    // op een "trage" schrijf die de timeout raakt. We lezen daarom apart terug.
-    // Harde literal i.p.v. de globale OWN_REVIEW_FACT_WRITE_MS: een top-level var is ook
-    // window.OWN_REVIEW_FACT_WRITE_MS en kan elders (of door een oude build) op 2000 staan.
-    // We loggen beide zodat de console hard bewijst welke waarde echt wordt toegepast.
-    var writeMs=20000;
-    // abortSignal: annuleert de onderliggende fetch echt als de schrijf vastloopt, zodat er
-    // geen zombie-request blijft hangen en de bestaande foutmelding netjes verschijnt.
-    var __osAb=senseAbortAfter(writeMs);
+    var writeMs=OWN_REVIEW_FACT_WRITE_MS;
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
-    var __osQ=client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid);
-    if(__osAb.signal&&typeof __osQ.abortSignal==='function')__osQ=__osQ.abortSignal(__osAb.signal);
+    try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus,writeMs:writeMs,transport:'postgrest-direct'});}catch(_e){}
     var r=await withTimeout(
-      __osQ,
+      sensePostgrestPatchOwnFact({factId:factId,uid:uid,token:writeAuth.token,body:payload,timeoutMs:writeMs}),
       writeMs,
       'Actie duurde te lang. Probeer opnieuw.',
-      {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
+      {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus,transport:'postgrest-direct'}}
     );
-    __osAb.clear();
     var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] status:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
-    if(r&&r.error){
-      console.error('[updateOwnFactStatus] db-error',{factId:factId,uid:uid,status:newStatus,error:r.error});
+    try{console.warn('[os-review-timing] status:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),ok:!!(r&&r.ok),status:(r&&r.status)||null});}catch(_e){}
+    if(!r||!r.ok){
+      console.error('[updateOwnFactStatus] postgrest-error',{factId:factId,uid:uid,status:newStatus,error:(r&&r.error)||'unknown'});
+      if(r&&r.status===401)flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
       return null;
     }
-    // Plain update geeft geen rij terug: lees altijd terug om persistentie hard te bevestigen.
-    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-status-verify');
+    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-status-verify',writeAuth);
     var __osT2=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] status:readback-done',{factId:factId,ms:Math.round(__osT2-__osT1),ok:!!(vr&&vr.ok),hasRow:!!(vr&&vr.row)});}catch(_e){}
     if(vr.ok&&vr.row&&vr.row.status===newStatus){
@@ -3114,7 +3234,6 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     });
     return null;
   }catch(e){
-    try{if(typeof __osAb!=='undefined'&&__osAb)__osAb.clear();}catch(_c){}
     console.error('[updateOwnFactStatus] exception',{factId:factId,uid:uid,status:newStatus,ex:String((e&&e.message)||e)});
     throw e;
   }
@@ -3132,40 +3251,40 @@ async function updateOwnFactPendingText(factId,newText){
   factId=ownFactIdStr(factId);
   var txt=String(newText||'').trim();
   if(!txt)return null;
+  var writeAuth=senseGetWriteAuth();
+  try{console.warn('[os-review-timing] text:token-source',{factId:factId,source:writeAuth.source,hasToken:!!writeAuth.token,blocked:!!writeAuth.blocked,stale:!!writeAuth.stale});}catch(_e){}
+  if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
   var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-  var uid=await ownReviewUidAsync(client);
+  var uid=writeAuth.uid||await ownReviewUidAsync(client);
   try{console.warn('[os-review-timing] text:uid-done',{factId:factId,ms:Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-__osUid0),hasUid:!!uid});}catch(_e){}
   if(!uid){
     console.error('[updateOwnFactPendingText] geen uid, kan niet schrijven',{factId:factId});
     return null;
   }
+  if(!writeAuth.token){
+    flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
+    return null;
+  }
   var nowIso=new Date().toISOString();
   var patch={fact_text:txt,updated_at:nowIso};
   try{
-    // DIAGNOSE + fix: schrijf KAAL (zonder .select()-chain). Zie updateOwnFactStatus:
-    // een gechainde representation-SELECT kan onder RLS blijven hangen. We lezen apart terug.
-    // Harde literal i.p.v. globale OWN_REVIEW_FACT_WRITE_MS (zie updateOwnFactStatus).
-    var writeMs=20000;
-    var __osAb=senseAbortAfter(writeMs);
+    var writeMs=OWN_REVIEW_FACT_WRITE_MS;
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] text:update-start',{factId:factId,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
-    var __osQ=client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid);
-    if(__osAb.signal&&typeof __osQ.abortSignal==='function')__osQ=__osQ.abortSignal(__osAb.signal);
+    try{console.warn('[os-review-timing] text:update-start',{factId:factId,writeMs:writeMs,transport:'postgrest-direct'});}catch(_e){}
     var r=await withTimeout(
-      __osQ,
+      sensePostgrestPatchOwnFact({factId:factId,uid:uid,token:writeAuth.token,body:patch,timeoutMs:writeMs}),
       writeMs,
       'Opslaan duurde te lang. Probeer opnieuw.',
-      {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
+      {label:'ownsense-review-fact-pending-text',meta:{factId:factId,transport:'postgrest-direct'}}
     );
-    __osAb.clear();
     var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-    try{console.warn('[os-review-timing] text:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
-    if(r&&r.error){
-      console.error('[updateOwnFactPendingText] db-error',{factId:factId,uid:uid,error:r.error});
+    try{console.warn('[os-review-timing] text:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),ok:!!(r&&r.ok),status:(r&&r.status)||null});}catch(_e){}
+    if(!r||!r.ok){
+      console.error('[updateOwnFactPendingText] postgrest-error',{factId:factId,uid:uid,error:(r&&r.error)||'unknown'});
+      if(r&&r.status===401)flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
       return null;
     }
-    // Plain update geeft geen rij terug: lees altijd terug en bevestig dat de tekst echt is opgeslagen.
-    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-pending-text-verify');
+    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-pending-text-verify',writeAuth);
     var __osT2=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] text:readback-done',{factId:factId,ms:Math.round(__osT2-__osT1),ok:!!(vr&&vr.ok),hasRow:!!(vr&&vr.row)});}catch(_e){}
     if(vr.ok&&vr.row&&String(vr.row.fact_text||'').trim()===txt){
@@ -3176,7 +3295,6 @@ async function updateOwnFactPendingText(factId,newText){
     });
     return null;
   }catch(e){
-    try{if(typeof __osAb!=='undefined'&&__osAb)__osAb.clear();}catch(_c){}
     console.error('[updateOwnFactPendingText] exception',{factId:factId,uid:uid,ex:String((e&&e.message)||e)});
     throw e;
   }
@@ -4153,7 +4271,7 @@ function initSupabase(){
       sb=window.__senseLpSupabase=window.supabase.createClient(SB_URL,SB_ANON,{
         auth:{
           persistSession:true,
-          autoRefreshToken:true,
+          autoRefreshToken:false,
           detectSessionInUrl:true,
           flowType:'pkce',
           storageKey:'sensecorner-auth-v1',
@@ -4192,8 +4310,10 @@ if(_authClientForEvents&&_authClientForEvents.auth&&_authClientForEvents.auth.on
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'){
     (async function(){
-      try{await senseRecoverSession(initSupabase());}catch(_e){}
-      try{await getAccessTokenFresh(false);}catch(_e2){}
+      var wa=senseGetWriteAuth();
+      if(wa.stale){
+        try{await ownPromiseTimeout(senseRefreshSessionSafe(initSupabase()),8000,null);}catch(_e){}
+      }
     })();
   }
 });
