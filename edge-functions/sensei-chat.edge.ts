@@ -53,6 +53,31 @@ function normStr(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+type AiRateLimitReservation =
+  | { ok: true }
+  | { ok: false; status: number; message: string; code: string };
+
+function aiRateLimitUnavailable(message: string): AiRateLimitReservation {
+  return {
+    ok: false,
+    status: 503,
+    message,
+    code: "AI_RATE_LIMIT_UNAVAILABLE",
+  };
+}
+
+function aiRateLimitReached(maxAllowed: number, isOwnsenseHub: boolean): AiRateLimitReservation {
+  const label = isOwnsenseHub
+    ? "OWN Sense profiel-ai (inzichten en foto's)"
+    : "Sensei-berichten in DateSense, FamilySense en SelfSense";
+  return {
+    ok: false,
+    status: 429,
+    message: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+    code: "AI_RATE_LIMIT",
+  };
+}
+
 function emailLocalFromAddress(email: string): string {
   const e = normStr(email).toLowerCase();
   const at = e.indexOf("@");
@@ -93,12 +118,14 @@ async function countAiRateLog(
   userId: string,
   windowStart: string,
   mode: "all" | "general" | "hub",
+  untilCreatedAt?: string,
 ): Promise<{ count: number | null; purposeSupported: boolean }> {
   let query = sb
     .from("ai_rate_log")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
     .gte("created_at", windowStart);
+  if (untilCreatedAt) query = query.lte("created_at", untilCreatedAt);
   if (mode === "hub") {
     query = query.in("purpose", [...OWNSENSE_HUB_PURPOSES]);
   } else if (mode === "general") {
@@ -109,11 +136,13 @@ async function countAiRateLog(
   const { count, error } = await query;
   if (!error) return { count: count ?? 0, purposeSupported: mode !== "all" };
   if (mode !== "all" && /purpose/i.test(String(error.message || ""))) {
-    const fallback = await sb
+    let fallbackQuery = sb
       .from("ai_rate_log")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("created_at", windowStart);
+    if (untilCreatedAt) fallbackQuery = fallbackQuery.lte("created_at", untilCreatedAt);
+    const fallback = await fallbackQuery;
     if (fallback.error) {
       console.warn("ai_rate_log fout:", fallback.error.message);
       return { count: null, purposeSupported: false };
@@ -122,6 +151,67 @@ async function countAiRateLog(
   }
   console.warn("ai_rate_log fout:", error.message);
   return { count: null, purposeSupported: false };
+}
+
+async function insertAiRateLogReservation(
+  userId: string,
+  purpose: string | null,
+): Promise<{ createdAt: string; error?: string }> {
+  const logRow: Record<string, unknown> = { user_id: userId };
+  if (purpose) logRow.purpose = purpose;
+
+  let inserted = await sb
+    .from("ai_rate_log")
+    .insert(logRow)
+    .select("created_at")
+    .single();
+
+  if (inserted.error && purpose && /purpose/i.test(String(inserted.error.message || ""))) {
+    inserted = await sb
+      .from("ai_rate_log")
+      .insert({ user_id: userId })
+      .select("created_at")
+      .single();
+  }
+
+  if (inserted.error) return { createdAt: "", error: inserted.error.message };
+  return { createdAt: normStr(inserted.data?.created_at) };
+}
+
+async function reserveAiRateLimitSlot(
+  userId: string,
+  isOwnsenseHub: boolean,
+): Promise<AiRateLimitReservation> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const mode = isOwnsenseHub ? "hub" : "general";
+  const counted = await countAiRateLog(userId, windowStart, mode);
+  if (counted.count == null) {
+    return aiRateLimitUnavailable("AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.");
+  }
+
+  const maxAllowed = counted.purposeSupported
+    ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+    : RATE_LIMIT_MAX;
+  if (counted.count >= maxAllowed) return aiRateLimitReached(maxAllowed, isOwnsenseHub);
+
+  const purpose = counted.purposeSupported && isOwnsenseHub ? "ownsense_hub" : null;
+  const inserted = await insertAiRateLogReservation(userId, purpose);
+  if (inserted.error) {
+    console.warn("ai_rate_log reserve failed:", inserted.error);
+    return aiRateLimitUnavailable("AI-limiet kon niet gereserveerd worden. Probeer het later opnieuw.");
+  }
+  if (!inserted.createdAt) {
+    console.warn("ai_rate_log reserve returned no created_at");
+    return aiRateLimitUnavailable("AI-limiet kon niet gecontroleerd worden. Probeer het later opnieuw.");
+  }
+
+  const after = await countAiRateLog(userId, windowStart, counted.purposeSupported ? mode : "all", inserted.createdAt);
+  if (after.count == null) {
+    return aiRateLimitUnavailable("AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.");
+  }
+  if (after.count > maxAllowed) return aiRateLimitReached(maxAllowed, isOwnsenseHub);
+
+  return { ok: true };
 }
 
 async function resolveRoepnaam(userId: string): Promise<string> {
@@ -315,25 +405,6 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as Record<string, unknown>;
     const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
 
-    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isOwnsenseHub ? "hub" : "general";
-      const counted = await countAiRateLog(userId, windowStart, mode);
-      const maxAllowed = counted.purposeSupported
-        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
-        : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
-        const label = isOwnsenseHub
-          ? "OWN Sense profiel-ai (inzichten en foto's)"
-          : "Sensei-berichten in DateSense, FamilySense en SelfSense";
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
-    }
-
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
     let system = String(body?.system || "").trim();
@@ -400,6 +471,12 @@ Deno.serve(async (req: Request) => {
       anthropicPayload.tools = anthropicTools;
     }
 
+    // ── Rate limiting (reserveer vóór Anthropic; faal dicht bij log/storagefouten) ──
+    if (!isAdmin) {
+      const reservation = await reserveAiRateLimitSlot(userId, isOwnsenseHub);
+      if (!reservation.ok) return json({ error: reservation.message, code: reservation.code }, reservation.status);
+    }
+
     // ── Anthropic aanroepen ───────────────────────────────────────────────
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -411,21 +488,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const logRow: Record<string, unknown> = { user_id: userId };
-      if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
-      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && isOwnsenseHub && /purpose/i.test(String(logError.message || ""))) {
-          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-            if (logError2) console.warn("Loggen mislukt:", logError2.message);
-          });
-        } else if (logError) {
-          console.warn("Loggen mislukt:", logError.message);
-        }
-      });
     }
 
     return json(claudeData, 200);
