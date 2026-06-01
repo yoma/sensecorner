@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 13:51">
+<meta name="os-build" content="01-06-2026 14:10">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2924,7 +2924,7 @@ function renderReviewFacts(){
 }
 
 async function acceptAllPendingFacts(){
-  if(window.__ownsenseReviewBulkBusy)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
   var pending=getPendingFacts().slice();
   if(!pending.length)return;
   if(!window.confirm('Alle '+pending.length+' gegevens accepteren en aan je profiel toevoegen?'))return;
@@ -2940,6 +2940,7 @@ async function acceptAllPendingFacts(){
     for(var i=0;i<pending.length;i++){
       var updated=null;
       try{
+        await awaitOwnFactTextSync(pending[i].id,OWN_REVIEW_FACT_DB_MS);
         updated=await updateOwnFactStatus(pending[i].id,'accepted');
       }catch(e){
         console.warn('[acceptAllPendingFacts]',pending[i]&&pending[i].id,e);
@@ -2985,6 +2986,25 @@ async function acceptAllPendingFacts(){
 }
 
 var OWN_REVIEW_FACT_DB_MS=8000;
+
+// Houdt lopende achtergrond-tekstsyncs bij per fact-id, zodat accept de DB-schrijf
+// kan afwachten en niet met verouderde tekst naar het profiel mergt.
+var __ownFactTextSyncMap=(window.__ownFactTextSyncMap=window.__ownFactTextSyncMap||{});
+function registerOwnFactTextSync(factId,promise){
+  factId=ownFactIdStr(factId);
+  if(!factId||!promise)return promise;
+  __ownFactTextSyncMap[factId]=promise;
+  var done=function(){if(__ownFactTextSyncMap[factId]===promise)delete __ownFactTextSyncMap[factId];};
+  promise.then(done,done);
+  return promise;
+}
+function awaitOwnFactTextSync(factId,timeoutMs){
+  factId=ownFactIdStr(factId);
+  var p=__ownFactTextSyncMap[factId];
+  if(!p)return Promise.resolve();
+  var guard=new Promise(function(resolve){setTimeout(resolve,timeoutMs||OWN_REVIEW_FACT_DB_MS);});
+  return Promise.race([Promise.resolve(p).then(function(){},function(){}),guard]);
+}
 
 async function updateOwnFactStatus(factId,newStatus,newText,opts){
   var client=initSupabase();
@@ -3079,8 +3099,12 @@ async function updateOwnFactPendingText(factId,newText){
 async function runAcceptOwnFactFollowUp(updated,factId){
   factId=ownFactIdStr(factId);
   try{
-    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
-    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
+    // Gebruik de meest recente lokale tekst (na een eventuele edit) zodat profiel-merge
+    // en groei-event consistent zijn met wat in de DB staat.
+    var local=findOwnFactById(factId);
+    var mergeText=local&&typeof local.fact_text==='string'?local.fact_text:updated.fact_text;
+    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(mergeText||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    var mergeRes=await mergeFactsIntoProfile(updated.category,[mergeText]);
     if(!mergeRes||!mergeRes.ok){
       flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
     }
@@ -3103,6 +3127,9 @@ async function acceptOwnFact(factId){
   setReviewFactButtonsBusy(factId,true,'accept');
   var updated=null;
   try{
+    // Alleen wachten als er nog een tekst-sync van een net-bewerkte fact loopt;
+    // anders blijft de normale accept-flow even snel als voorheen.
+    await awaitOwnFactTextSync(factId,OWN_REVIEW_FACT_DB_MS);
     updated=await updateOwnFactStatus(factId,'accepted');
     if(!updated){
       flashOwnsenseMessage('Kon gegeven niet accepteren. Probeer opnieuw.',true);
@@ -3189,7 +3216,7 @@ async function saveEditOwnFact(factId){
   renderReviewFacts();
   updateOwnPendingNavBadge();
   flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
-  void syncOwnFactPendingTextToDb(factId,txt,prevText);
+  void registerOwnFactTextSync(factId,syncOwnFactPendingTextToDb(factId,txt,prevText));
 }
 
 async function runRejectOwnFactFollowUp(factId){
