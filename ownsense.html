@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 16:30">
+<meta name="os-build" content="01-06-2026 17:05">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -274,6 +274,12 @@ a.top-title-wrap{text-decoration:none;color:inherit}
 .cat-mini summary{cursor:pointer;font-weight:700}
 .own-basis-details summary{font-family:var(--font-serif);font-size:17px;color:var(--chocolade)}
 .own-basis-details .own-basis-summary-hint{font-weight:500;font-size:12px;color:#7A6F66;font-family:var(--font-sans)}
+.own-basis-loading{padding:12px 0}
+.own-basis-loading .own-basis-loading-line{height:12px;border-radius:6px;background:linear-gradient(90deg,rgba(200,212,181,.35) 0%,rgba(200,212,181,.55) 50%,rgba(200,212,181,.35) 100%);background-size:200% 100%;animation:ownBasisShimmer 1.2s ease-in-out infinite;margin-top:10px}
+.own-basis-loading .own-basis-loading-line:first-child{margin-top:0;width:72%}
+.own-basis-loading .own-basis-loading-line:nth-child(2){width:88%}
+.own-basis-loading .own-basis-loading-line:nth-child(3){width:64%}
+@keyframes ownBasisShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .cat-mini-body{margin-top:8px}
 .cat-mini-list{display:grid;gap:6px}
 .cat-mini-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:0.5px solid var(--border);border-radius:10px;background:#fff}
@@ -1454,7 +1460,18 @@ var ownInsights=[];
 var ownPhotos=[];
 /** Laatst bekende props.meta van sense_profiles (OWN Sense); voor merge bij save zonder veld te verliezen. */
 var __ownSensePropsMetaCache={};
+var __ownBasisRemotePending=true;
 var OWN_BASIS_FIELDS=['birthdate','city','country','gender','gender_custom'];
+function ownBasisHasAnyCachedData(){
+  return OWN_BASIS_FIELDS.some(function(k){
+    return !!String(hubState[k]||'').trim();
+  });
+}
+function ownSeedBasisFromLocalStorage(user){
+  if(!user||!user.id)return;
+  ownApplyLocalBasisFallback(user);
+  ownSyncBasisMetaCacheFromHubState();
+}
 function ownFillString(localVal,serverVal){
   var l=String(localVal||'').trim();
   var s=String(serverVal||'').trim();
@@ -1725,6 +1742,7 @@ function ownBootstrapLocalHubState(){
     window.__ownSenseUid=String(user.id||'');
     purgeCrossUserOwnsenseLocalCaches(user.id);
     mergeHubStateFromLocalStorage(user);
+    ownSeedBasisFromLocalStorage(user);
     loadHubState(user,{restrictExternalCategorySources:false});
     var dn=displayNameFromAuthUser(user);
     if(dn&&!String(hubState.display_name||'').trim())hubState.display_name=dn;
@@ -2451,10 +2469,27 @@ function ownBasisprofielSummaryHint(){
   }
   return parts.length?parts.join(' · '):'ingevuld';
 }
+function renderBasisprofielLoadingCard(){
+  var el=document.getElementById('basisprofiel');
+  if(!el)return;
+  el.innerHTML=''
+    +'<details id="ownBasisDetails" class="cat-mini own-basis-details" open>'
+    +'<summary>Basisprofiel</summary>'
+    +'<div class="cat-mini-body own-basis-loading" aria-busy="true" aria-live="polite">'
+    +'<p class="placeholder" style="margin:0">Profiel laden…</p>'
+    +'<div class="own-basis-loading-line" aria-hidden="true"></div>'
+    +'<div class="own-basis-loading-line" aria-hidden="true"></div>'
+    +'<div class="own-basis-loading-line" aria-hidden="true"></div>'
+    +'</div></details>';
+}
 function renderBasisprofielCard(opt){
   opt=opt||{};
   var el=document.getElementById('basisprofiel');
   if(!el)return;
+  if(__ownBasisRemotePending&&!ownBasisHasAnyCachedData()){
+    renderBasisprofielLoadingCard();
+    return;
+  }
   /* Niet uit het DOM teruglezen bij elke render: dat overschreef server-geladen
      basisvelden met lege inputs (repaint na load). hubState blijft live via oninput
      en de gender-knoppen, dus we renderen rechtstreeks uit hubState. */
@@ -4516,6 +4551,8 @@ async function loadOwnFromSupabase(){
     ownGrowthEvents=[];
     purgeCrossUserOwnsenseLocalCaches(user.id);
     mergeHubStateFromLocalStorage(user);
+    ownSeedBasisFromLocalStorage(user);
+    try{renderMijTab();}catch(_earlyMij){}
     var restrictExternalCategorySources=false;
     try{
       restrictExternalCategorySources=await ownPromiseTimeout(shouldRestrictExternalCategorySources(client,user.id),4000,false);
@@ -4598,6 +4635,9 @@ async function loadOwnFromSupabase(){
     applyOwnHubAppDepthV2Migration();
     ownPersistHubStateLocal();
   }catch(e){}
+  finally{
+    __ownBasisRemotePending=false;
+  }
 }
 
 function buildOwnHubMirrorForMeta(){
