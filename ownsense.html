@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="29-05-2026 17:11">
+<meta name="os-build" content="01-06-2026 12:00">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -714,6 +714,10 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 }
 .insight-item{border:1px solid #E9DEDA;border-radius:12px;padding:11px;background:#fff;margin-top:9px}
 .insight-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+@keyframes osReviewSpin{to{transform:rotate(360deg)}}
+.os-review-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(61,47,31,.2);border-top-color:var(--accent);border-radius:50%;animation:osReviewSpin .85s linear infinite;vertical-align:middle;flex-shrink:0}
+.os-review-btn-busy{opacity:.85;pointer-events:none}
+.os-review-bulk-busy{display:inline-flex;align-items:center;gap:8px}
 .insight-level{display:inline-flex;padding:4px 8px;border-radius:999px;background:rgba(200,212,181,.35);border:1px solid rgba(107,142,111,.35);color:var(--chocolade);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .insights-intro{border-radius:16px;border:1px solid rgba(107,142,111,.2);background:linear-gradient(140deg,var(--ivoor) 0%,rgba(200,212,181,.2) 55%,var(--ivoor) 100%);padding:14px 16px;margin-bottom:2px;box-shadow:0 4px 20px rgba(74,58,42,.06)}
 .insights-intro h3{margin-bottom:6px}
@@ -2361,15 +2365,17 @@ function readBasisprofielFromDom(){
 }
 function onOwnGenderPick(val){
   readBasisprofielFromDom();
+  var keepOpen=ownBasisprofielIsComplete();
   hubState.gender=String(val||'').trim();
   if(hubState.gender!=='overig')hubState.gender_custom='';
-  renderBasisprofielCard();
+  renderBasisprofielCard({keepOpen:keepOpen});
 }
 function onOwnGenderPreferNot(){
   readBasisprofielFromDom();
+  var keepOpen=ownBasisprofielIsComplete();
   hubState.gender='prefer_not';
   hubState.gender_custom='';
-  renderBasisprofielCard();
+  renderBasisprofielCard({keepOpen:keepOpen});
 }
 function ownBasisprofielIsComplete(){
   var meta={
@@ -2426,7 +2432,7 @@ function renderBasisprofielCard(opt){
   var openAttr='';
   if(forceOpen)openAttr=' open';
   else if(!complete)openAttr=' open';
-  else if(wasOpen&&!(opt&&opt.collapseIfComplete))openAttr=' open';
+  else if(wasOpen&&opt&&opt.keepOpen)openAttr=' open';
   function genderBtn(val,label){
     var on=gender===val?' ob-gender-btn--on':'';
     return '<button type="button" class="ob-gender-btn'+on+'" onclick="onOwnGenderPick(\''+val+'\')">'+escHTML(label)+'</button>';
@@ -2521,7 +2527,7 @@ async function saveOwnBasisprofiel(btn){
     }
   }finally{
     if(!uiGuard.done)finishBasisSaveUi('sync_fail');
-    renderBasisprofielCard({collapseIfComplete:ownBasisprofielIsComplete()});
+    renderBasisprofielCard();
     if(uiGuard.outcome)applyBasisSaveOutcomeFeedback(uiGuard.outcome);
   }
 }
@@ -2793,6 +2799,41 @@ function closeReviewFactsModal(){
   m.setAttribute('aria-hidden','true');
 }
 
+function escJsSingleQuoted(s){
+  return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r/g,'').replace(/\n/g,'');
+}
+function setReviewFactButtonsBusy(factId,busy,activeAction){
+  var list=document.getElementById('reviewFactsList');
+  if(!list||!factId)return;
+  var card=list.querySelector('[data-review-fact-id="'+String(factId).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]');
+  if(!card)return;
+  var labels={accept:'Accepteer',reject:'Weiger',edit:'Wijzig','edit-save':'OK','edit-cancel':'Annuleren'};
+  card.querySelectorAll('button[data-review-action]').forEach(function(btn){
+    var act=btn.getAttribute('data-review-action');
+    if(busy){
+      btn.disabled=true;
+      if(act===activeAction){
+        btn.classList.add('os-review-btn-busy');
+        btn.setAttribute('aria-busy','true');
+        btn.innerHTML='<span class="os-review-spinner" aria-hidden="true"></span> '
+          +(activeAction==='accept'?'Accepteren…':activeAction==='reject'?'Weigeren…':activeAction==='edit-save'?'Opslaan…':'Bezig…');
+      }
+    }else{
+      btn.disabled=false;
+      btn.classList.remove('os-review-btn-busy');
+      btn.removeAttribute('aria-busy');
+      if(labels[act])btn.textContent=labels[act];
+    }
+  });
+}
+function setReviewBulkBarBusy(busy,label){
+  var bulk=document.getElementById('reviewFactsBulkBar');
+  if(!bulk)return;
+  if(busy){
+    bulk.innerHTML='<span class="subtle os-review-bulk-busy"><span class="os-review-spinner" aria-hidden="true"></span> '+escHTML(label||'Bezig…')+'</span>';
+  }
+}
+
 function renderReviewFacts(){
   var el=document.getElementById('reviewFactsList');
   var bulk=document.getElementById('reviewFactsBulkBar');
@@ -2812,62 +2853,72 @@ function renderReviewFacts(){
     return;
   }
   el.innerHTML=pending.map(function(f){
-    return '<div class="insight-item">'
+    var fid=escJsSingleQuoted(f.id);
+    return '<div class="insight-item" data-review-fact-id="'+escHTML(f.id)+'">'
       +'<div class="insight-item-head"><span class="insight-level">'+escHTML(f.category)+(f.subcategory?(' > '+escHTML(f.subcategory)):'')+'</span><span class="subtle">'+fmtDate(f.created_at)+'</span></div>'
-      +'<div style="font-family:\'Lora\',serif;font-size:15px;line-height:1.6;margin-top:8px">'+escHTML(f.fact_text||'')+'</div>'
+      +'<div class="review-fact-text" data-review-fact-text style="font-family:\'Lora\',serif;font-size:15px;line-height:1.6;margin-top:8px">'+escHTML(f.fact_text||'')+'</div>'
       +'<div class="subtle" style="margin-top:6px">uit '+escHTML(f.source_app||'onbekend')+(f.source_dossier?(' · '+escHTML(f.source_dossier)):'')+'</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-      +'<button class="btn btn-primary btn-small" type="button" onclick="acceptOwnFact(\''+escHTML(f.id)+'\')">Accepteer</button>'
-      +'<button class="btn btn-muted btn-small" type="button" onclick="editOwnFact(\''+escHTML(f.id)+'\')">Wijzig</button>'
-      +'<button class="btn btn-muted btn-small" type="button" onclick="rejectOwnFact(\''+escHTML(f.id)+'\')">Weiger</button>'
+      +'<div data-review-fact-actions style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-primary btn-small" type="button" data-review-action="accept" onclick="acceptOwnFact(\''+fid+'\')">Accepteer</button>'
+      +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit" onclick="editOwnFact(\''+fid+'\')">Wijzig</button>'
+      +'<button class="btn btn-muted btn-small" type="button" data-review-action="reject" onclick="rejectOwnFact(\''+fid+'\')">Weiger</button>'
       +'</div></div>';
   }).join('');
 }
 
 async function acceptAllPendingFacts(){
+  if(window.__ownsenseReviewBulkBusy)return;
   var pending=getPendingFacts().slice();
   if(!pending.length)return;
   if(!window.confirm('Alle '+pending.length+' gegevens accepteren en aan je profiel toevoegen?'))return;
-  var bulk=document.getElementById('reviewFactsBulkBar');
-  if(bulk)bulk.innerHTML='<span class="subtle">Bezig met accepteren...</span>';
-  pending.sort(function(a,b){
-    var ta=new Date(a&&a.created_at||0).getTime();
-    var tb=new Date(b&&b.created_at||0).getTime();
-    return ta-tb;
-  });
-  var accepted=[];
-  for(var i=0;i<pending.length;i++){
-    var updated=await updateOwnFactStatus(pending[i].id,'accepted');
-    if(updated){
-      accepted.push(updated);
-      await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+  window.__ownsenseReviewBulkBusy=true;
+  setReviewBulkBarBusy(true,'Bezig met accepteren…');
+  try{
+    pending.sort(function(a,b){
+      var ta=new Date(a&&a.created_at||0).getTime();
+      var tb=new Date(b&&b.created_at||0).getTime();
+      return ta-tb;
+    });
+    var accepted=[];
+    for(var i=0;i<pending.length;i++){
+      var updated=await updateOwnFactStatus(pending[i].id,'accepted');
+      if(updated){
+        accepted.push(updated);
+        await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+      }
     }
-  }
-  var byCat={};
-  accepted.forEach(function(f){
-    var cat=normalizeOwnFactCategory(f.category);
-    if(!byCat[cat])byCat[cat]=[];
-    var txt=String(f.fact_text||'').trim();
-    if(txt)byCat[cat].push(txt);
-  });
-  var mergeFailLabels=[];
-  for(var catKey in byCat){
-    if(!Object.prototype.hasOwnProperty.call(byCat,catKey))continue;
-    var res=await mergeFactsIntoProfile(catKey,byCat[catKey]);
-    if(!res||!res.ok)mergeFailLabels.push(ownCategoryDisplayLabel(catKey));
-  }
-  await loadOwnBrainTables();
-  renderReviewFacts();
-  renderMijTab();
-  var n=accepted.length;
-  if(!n){
-    flashOwnsenseMessage('Geen gegevens konden worden opgeslagen.',true);
-    return;
-  }
-  if(mergeFailLabels.length){
-    flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd. Profieltekst kon niet automatisch worden bijgewerkt voor: '+mergeFailLabels.join(', ')+'.',true,{durationMs:8200});
-  }else{
-    flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd en verwerkt in je profiel.',false);
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    renderMijTab();
+    var byCat={};
+    accepted.forEach(function(f){
+      var cat=normalizeOwnFactCategory(f.category);
+      if(!byCat[cat])byCat[cat]=[];
+      var txt=String(f.fact_text||'').trim();
+      if(txt)byCat[cat].push(txt);
+    });
+    var mergeFailLabels=[];
+    for(var catKey in byCat){
+      if(!Object.prototype.hasOwnProperty.call(byCat,catKey))continue;
+      var res=await mergeFactsIntoProfile(catKey,byCat[catKey]);
+      if(!res||!res.ok)mergeFailLabels.push(ownCategoryDisplayLabel(catKey));
+    }
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+    updateOwnPendingNavBadge();
+    var n=accepted.length;
+    if(!n){
+      flashOwnsenseMessage('Geen gegevens konden worden opgeslagen.',true);
+      return;
+    }
+    if(mergeFailLabels.length){
+      flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd. Profieltekst kon niet automatisch worden bijgewerkt voor: '+mergeFailLabels.join(', ')+'.',true,{durationMs:8200});
+    }else{
+      flashOwnsenseMessage(n+' gegeven'+(n===1?'':'s')+' geaccepteerd en verwerkt in je profiel.',false);
+    }
+  }finally{
+    window.__ownsenseReviewBulkBusy=false;
   }
 }
 
@@ -2883,21 +2934,73 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
       if(opts.auto_accepted)payload.auto_accepted=true;
     }
     var r=await client.from('own_facts').update(payload).eq('id',factId).select('*').maybeSingle();
+    if(r&&r.error){
+      console.warn('[updateOwnFactStatus]',factId,r.error);
+      return null;
+    }
     if(r&&r.data){
       var idx=ownFacts.findIndex(function(x){return x.id===factId;});
       if(idx>=0)ownFacts[idx]=r.data;
+      else ownFacts.unshift(r.data);
       return r.data;
     }
-  }catch(_e){}
+  }catch(e){
+    console.warn('[updateOwnFactStatus]',factId,e);
+  }
+  return null;
+}
+
+function getReviewFactCard(factId){
+  var list=document.getElementById('reviewFactsList');
+  if(!list||!factId)return null;
+  return list.querySelector('[data-review-fact-id="'+String(factId).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"]');
+}
+
+async function updateOwnFactPendingText(factId,newText){
+  var client=initSupabase();
+  if(!client)return null;
+  var txt=String(newText||'').trim();
+  if(!txt)return null;
+  try{
+    var r=await client.from('own_facts').update({
+      fact_text:txt,
+      updated_at:new Date().toISOString()
+    }).eq('id',factId).select('*').maybeSingle();
+    if(r&&r.error){
+      console.warn('[updateOwnFactPendingText]',factId,r.error);
+      return null;
+    }
+    if(r&&r.data){
+      if(r.data.status!=='pending'){
+        console.warn('[updateOwnFactPendingText] unexpected status',factId,r.data.status);
+      }
+      var idx=ownFacts.findIndex(function(x){return x.id===factId;});
+      if(idx>=0)ownFacts[idx]=r.data;
+      else ownFacts.unshift(r.data);
+      return r.data;
+    }
+  }catch(e){
+    console.warn('[updateOwnFactPendingText]',factId,e);
+  }
   return null;
 }
 
 async function acceptOwnFact(factId){
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
   var fact=ownFacts.find(function(f){return f.id===factId;});
   if(!fact)return;
-  var updated=await updateOwnFactStatus(factId,'accepted');
-  if(updated){
+  window.__ownsenseReviewFactBusy=factId;
+  setReviewFactButtonsBusy(factId,true,'accept');
+  try{
+    var updated=await updateOwnFactStatus(factId,'accepted');
+    if(!updated){
+      flashOwnsenseMessage('Kon gegeven niet accepteren. Probeer opnieuw.',true);
+      return;
+    }
     await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    renderMijTab();
     var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
     if(!mergeRes||!mergeRes.ok){
       flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
@@ -2905,35 +3008,88 @@ async function acceptOwnFact(factId){
     await loadOwnBrainTables();
     renderReviewFacts();
     renderMijTab();
+    updateOwnPendingNavBadge();
+  }finally{
+    window.__ownsenseReviewFactBusy=null;
+    setReviewFactButtonsBusy(factId,false);
   }
 }
 
-async function editOwnFact(factId){
+function editOwnFact(factId){
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
   var fact=ownFacts.find(function(f){return f.id===factId;});
-  if(!fact)return;
-  var edited=window.prompt('Pas de fact-zin aan:',fact.fact_text||'');
-  if(edited==null)return;
-  var txt=String(edited||'').trim();
-  if(!txt)return;
-  var updated=await updateOwnFactStatus(factId,'accepted',txt);
-  if(updated){
-    await addGrowthEvent('fact_accepted','Fact aangepast en geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
-    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
-    if(!mergeRes||!mergeRes.ok){
-      flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
+  if(!fact||fact.status!=='pending')return;
+  var card=getReviewFactCard(factId);
+  if(!card||card.getAttribute('data-review-editing')==='1')return;
+  var textWrap=card.querySelector('[data-review-fact-text]');
+  var actions=card.querySelector('[data-review-fact-actions]');
+  if(!textWrap||!actions)return;
+  var fid=escJsSingleQuoted(factId);
+  card.setAttribute('data-review-editing','1');
+  textWrap.innerHTML='<textarea class="import-review-ta review-fact-edit-ta" data-review-edit-input rows="3" aria-label="Gegeven bewerken">'+escHTML(fact.fact_text||'')+'</textarea>';
+  actions.innerHTML='<button class="btn btn-primary btn-small" type="button" data-review-action="edit-save" onclick="saveEditOwnFact(\''+fid+'\')">OK</button>'
+    +'<button class="btn btn-muted btn-small" type="button" data-review-action="edit-cancel" onclick="cancelEditOwnFact(\''+fid+'\')">Annuleren</button>';
+  var ta=card.querySelector('[data-review-edit-input]');
+  if(ta){try{ta.focus();var len=ta.value.length;ta.setSelectionRange(len,len);}catch(_e){}}
+}
+
+function cancelEditOwnFact(factId){
+  if(window.__ownsenseReviewFactBusy)return;
+  renderReviewFacts();
+}
+
+async function saveEditOwnFact(factId){
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
+  var fact=ownFacts.find(function(f){return f.id===factId;});
+  if(!fact||fact.status!=='pending')return;
+  var card=getReviewFactCard(factId);
+  var ta=card&&card.querySelector('[data-review-edit-input]');
+  var txt=String(ta&&ta.value||'').trim();
+  if(!txt){
+    flashOwnsenseMessage('Vul een korte zin in om op te slaan.',true);
+    return;
+  }
+  if(txt===String(fact.fact_text||'').trim()){
+    cancelEditOwnFact(factId);
+    return;
+  }
+  window.__ownsenseReviewFactBusy=factId;
+  setReviewFactButtonsBusy(factId,true,'edit-save');
+  try{
+    var updated=await updateOwnFactPendingText(factId,txt);
+    if(!updated){
+      flashOwnsenseMessage('Kon wijziging niet opslaan. Probeer opnieuw.',true);
+      return;
     }
-    await loadOwnBrainTables();
     renderReviewFacts();
-    renderMijTab();
+    updateOwnPendingNavBadge();
+    flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
+  }finally{
+    window.__ownsenseReviewFactBusy=null;
+    if(getReviewFactCard(factId))setReviewFactButtonsBusy(factId,false);
   }
 }
 
 async function rejectOwnFact(factId){
-  var updated=await updateOwnFactStatus(factId,'rejected');
-  if(updated){
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
+  window.__ownsenseReviewFactBusy=factId;
+  setReviewFactButtonsBusy(factId,true,'reject');
+  try{
+    var updated=await updateOwnFactStatus(factId,'rejected');
+    if(!updated){
+      flashOwnsenseMessage('Kon gegeven niet weigeren. Probeer opnieuw.',true);
+      return;
+    }
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    renderMijTab();
     await loadOwnBrainTables();
     renderReviewFacts();
     renderMijTab();
+    updateOwnPendingNavBadge();
+  }finally{
+    window.__ownsenseReviewFactBusy=null;
+    setReviewFactButtonsBusy(factId,false);
   }
 }
 
