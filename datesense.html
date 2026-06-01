@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="31-05-2026 21:49">
+<meta name="ds-build" content="01-06-2026 08:15">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -6556,8 +6556,9 @@ async function applyFocusFromHome(){
 }
 async function activateRelationshipFocus(name){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
-  var targets=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
+  // Alleen DateSense-eigen dossiers op on hold zetten; nooit dossiers van andere apps (familie/vriend/self) raken.
+  var targets=getActiveContactNames().filter(function(p){
+    return p!==name;
   });
   setUsageMode('single');
   setFocusDossier(name);
@@ -7110,8 +7111,9 @@ async function ensureSingleModeHolds(silent){
   if(!S.user||getUsageMode()!=='single')return;
   var focus=String(getFocusDossier()||'').trim();
   if(!focus||focus==='OWN Sense')return;
-  var others=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==focus&&getDossierLifecycle(p)==='active';
+  // Alleen DateSense-eigen dossiers op on hold zetten; nooit dossiers van andere apps (familie/vriend/self) raken.
+  var others=getActiveContactNames().filter(function(p){
+    return p!==focus;
   });
   if(!others.length)return;
   for(var i=0;i<others.length;i++){
@@ -13212,7 +13214,7 @@ function getContactCatsDef(personName){
     {id:'achtergrond_contact',title:'Verleden & context',icon:'📖',prompts:[
       {q:'Wat weet jij over het verleden van '+personName+' dat ertoe doet?',ph:'Bv: moeilijke jeugd, hechte familie, een ex die het zwaar maakte, veel tegenslagen gehad...'},
       {q:'Wat vindt '+personName+' belangrijk in het leven, voor zover je kan inschatten?',ph:'Bv: carrière, familie, vrijheid, stabiliteit, avontuur, zelfstandigheid, rust...'},
-      {q:'Is er iets uit zijn/haar verleden dat helpt begrijpen waarom '+personName+' zo is?',ph:'Bv: ouders gescheiden, vorige relatie deed pijn, altijd voor anderen gezorgd, nooit geleerd om nee te zeggen...'}
+      {q:'Waar is '+personName+' gevoelig voor of voorzichtig mee?',ph:'Bv: jaloezie, te snel gaan, opnieuw gekwetst worden, vertrouwen, geld, kinderen...'}
     ]}
   ];
 }
