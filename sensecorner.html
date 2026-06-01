@@ -3025,7 +3025,8 @@ a{text-decoration:none;color:inherit}
   });
   function scTriggerAppCard(el,target){
     if(!el||!target)return;
-    if(el.classList.contains('loading'))return;
+    if(el.getAttribute('data-sc-nav')==='1')return;
+    el.setAttribute('data-sc-nav','1');
     el.classList.add('loading');
     el.setAttribute('aria-busy','true');
     openAppWithAuth(target);
@@ -3034,6 +3035,7 @@ a{text-decoration:none;color:inherit}
     Array.prototype.slice.call(document.querySelectorAll('.app-card')).forEach(function(c){
       c.classList.remove('loading');
       c.removeAttribute('aria-busy');
+      c.removeAttribute('data-sc-nav');
     });
   }
   Array.prototype.slice.call(document.querySelectorAll('[data-app-link]')).forEach(function(el){
@@ -3060,7 +3062,6 @@ a{text-decoration:none;color:inherit}
     }
   });
   function scOnPageVisibleAgain(){
-    scResetAppCardLoading();
     (async function(){
       try{await scRefreshSessionSafe();}catch(_e){}
       try{await refreshAuthUi();}catch(_e2){}
@@ -3071,7 +3072,11 @@ a{text-decoration:none;color:inherit}
     if(document.visibilityState!=='visible')return;
     scOnPageVisibleAgain();
   });
+  window.addEventListener('pagehide',function(){
+    scResetAppCardLoading();
+  });
   window.addEventListener('pageshow',function(ev){
+    if(ev.persisted)scResetAppCardLoading();
     if(ev.persisted||document.visibilityState==='visible')scOnPageVisibleAgain();
   });
   if(hubLoginBtn)hubLoginBtn.onclick=function(){goToIndexLogin('login','');};
