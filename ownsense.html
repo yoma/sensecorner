@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 13:37">
+<meta name="os-build" content="01-06-2026 13:51">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2813,6 +2813,28 @@ function findOwnFactById(factId){
   if(!want)return null;
   return ownFacts.find(function(f){return f&&ownFactIdStr(f.id)===want;})||null;
 }
+function patchOwnFactLocal(factId,patch){
+  factId=ownFactIdStr(factId);
+  if(!factId||!patch)return null;
+  var idx=ownFacts.findIndex(function(x){return x&&ownFactIdStr(x.id)===factId;});
+  if(idx<0)return null;
+  var cur=ownFacts[idx];
+  var next={};
+  for(var k in cur){if(Object.prototype.hasOwnProperty.call(cur,k))next[k]=cur[k];}
+  for(var p in patch){if(Object.prototype.hasOwnProperty.call(patch,p))next[p]=patch[p];}
+  ownFacts[idx]=next;
+  return next;
+}
+function clearReviewFactBusy(factId){
+  window.__ownsenseReviewFactBusy=null;
+  if(factId)setReviewFactButtonsBusy(factId,false);
+}
+async function ownReviewUidAsync(client){
+  var uid=String(window.__ownSenseUid||'').trim();
+  if(uid)return uid;
+  var user=await ownAuthUserFast(client);
+  return user&&user.id?String(user.id):'';
+}
 function initReviewFactsListDelegation(){
   var list=document.getElementById('reviewFactsList');
   if(!list||list.getAttribute('data-review-bound')==='1')return;
@@ -2962,13 +2984,14 @@ async function acceptAllPendingFacts(){
   }
 }
 
+var OWN_REVIEW_FACT_DB_MS=8000;
+
 async function updateOwnFactStatus(factId,newStatus,newText,opts){
   var client=initSupabase();
   if(!client)return null;
   factId=ownFactIdStr(factId);
   opts=opts||{};
-  var user=await ownAuthUserFast(client);
-  var uid=user&&user.id?String(user.id):'';
+  var uid=await ownReviewUidAsync(client);
   if(!uid)return null;
   try{
     var payload={status:newStatus,updated_at:new Date().toISOString()};
@@ -2979,7 +3002,7 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     }
     var r=await withTimeout(
       client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
-      15000,
+      OWN_REVIEW_FACT_DB_MS,
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
     );
@@ -3009,18 +3032,17 @@ function getReviewFactCard(factId){
 async function updateOwnFactPendingText(factId,newText){
   var client=initSupabase();
   if(!client)return null;
+  factId=ownFactIdStr(factId);
   var txt=String(newText||'').trim();
   if(!txt)return null;
-  var user=await ownAuthUserFast(client);
-  var uid=user&&user.id?String(user.id):'';
+  var uid=await ownReviewUidAsync(client);
   if(!uid)return null;
+  var nowIso=new Date().toISOString();
+  var patch={fact_text:txt,updated_at:nowIso};
   try{
     var r=await withTimeout(
-      client.from('own_facts').update({
-        fact_text:txt,
-        updated_at:new Date().toISOString()
-      }).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
-      15000,
+      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
+      OWN_REVIEW_FACT_DB_MS,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
     );
@@ -3032,18 +3054,44 @@ async function updateOwnFactPendingText(factId,newText){
       if(r.data.status!=='pending'){
         console.warn('[updateOwnFactPendingText] unexpected status',factId,r.data.status);
       }
-      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===ownFactIdStr(factId);});
+      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===factId;});
       if(idx>=0)ownFacts[idx]=r.data;
       else ownFacts.unshift(r.data);
       return r.data;
     }
+    var r2=await withTimeout(
+      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid),
+      OWN_REVIEW_FACT_DB_MS,
+      'Opslaan duurde te lang. Probeer opnieuw.',
+      {label:'ownsense-review-fact-pending-text-nosel',meta:{factId:factId}}
+    );
+    if(r2&&r2.error){
+      console.warn('[updateOwnFactPendingText nosel]',factId,r2.error);
+      return null;
+    }
+    return patchOwnFactLocal(factId,patch);
   }catch(e){
     console.warn('[updateOwnFactPendingText]',factId,e);
     throw e;
   }
-  return null;
 }
 
+async function runAcceptOwnFactFollowUp(updated,factId){
+  factId=ownFactIdStr(factId);
+  try{
+    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
+    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
+    if(!mergeRes||!mergeRes.ok){
+      flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
+    }
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+    updateOwnPendingNavBadge();
+  }catch(e){
+    console.warn('[acceptOwnFact follow-up]',factId,e);
+  }
+}
 async function acceptOwnFact(factId){
   factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
@@ -3062,30 +3110,17 @@ async function acceptOwnFact(factId){
     }
     renderReviewFacts();
     updateOwnPendingNavBadge();
-    renderMijTab();
+    flashOwnsenseMessage('Geaccepteerd. Je profiel wordt op de achtergrond bijgewerkt.',false,{durationMs:6200});
   }catch(e){
     console.warn('[acceptOwnFact]',factId,e);
     var errMsg=String((e&&e.message)||e||'');
     flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon gegeven niet accepteren. Probeer opnieuw.',true);
     return;
   }finally{
-    window.__ownsenseReviewFactBusy=null;
-    setReviewFactButtonsBusy(factId,false);
+    clearReviewFactBusy(factId);
   }
   if(!updated)return;
-  try{
-    await addGrowthEvent('fact_accepted','Fact geaccepteerd: '+String(updated.fact_text||'').substring(0,120),updated.source_app,updated.source_dossier,updated.id);
-    var mergeRes=await mergeFactsIntoProfile(updated.category,[updated.fact_text]);
-    if(!mergeRes||!mergeRes.ok){
-      flashOwnsenseMessage('Gegeven geaccepteerd. Profieltekst voor '+ownCategoryDisplayLabel(updated.category)+' kon niet automatisch worden bijgewerkt.',true,{durationMs:7200});
-    }
-    await loadOwnBrainTables();
-    renderReviewFacts();
-    renderMijTab();
-    updateOwnPendingNavBadge();
-  }catch(e){
-    console.warn('[acceptOwnFact follow-up]',factId,e);
-  }
+  void runAcceptOwnFactFollowUp(updated,factId);
 }
 
 function editOwnFact(factId){
@@ -3111,6 +3146,25 @@ function cancelEditOwnFact(factId){
   renderReviewFacts();
 }
 
+async function syncOwnFactPendingTextToDb(factId,txt,prevText){
+  factId=ownFactIdStr(factId);
+  try{
+    var updated=await updateOwnFactPendingText(factId,txt);
+    if(updated){
+      patchOwnFactLocal(factId,updated);
+      return;
+    }
+    patchOwnFactLocal(factId,{fact_text:prevText});
+    renderReviewFacts();
+    flashOwnsenseMessage('Kon wijziging niet opslaan in de cloud. Probeer opnieuw.',true);
+  }catch(e){
+    console.warn('[syncOwnFactPendingTextToDb]',factId,e);
+    patchOwnFactLocal(factId,{fact_text:prevText});
+    renderReviewFacts();
+    var errMsg=String((e&&e.message)||e||'');
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon wijziging niet opslaan. Probeer opnieuw.',true);
+  }
+}
 async function saveEditOwnFact(factId){
   factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
@@ -3127,36 +3181,28 @@ async function saveEditOwnFact(factId){
     cancelEditOwnFact(factId);
     return;
   }
+  var prevText=String(fact.fact_text||'').trim();
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'edit-save');
-  var saved=false;
-  try{
-    var updated=await updateOwnFactPendingText(factId,txt);
-    if(!updated){
-      flashOwnsenseMessage('Kon wijziging niet opslaan. Probeer opnieuw.',true);
-      return;
-    }
-    saved=true;
-    renderReviewFacts();
-    updateOwnPendingNavBadge();
-    flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
-  }catch(e){
-    console.warn('[saveEditOwnFact]',factId,e);
-    var errMsg=String((e&&e.message)||e||'');
-    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon wijziging niet opslaan. Probeer opnieuw.',true);
-  }finally{
-    window.__ownsenseReviewFactBusy=null;
-    if(!saved){
-      var editCard=getReviewFactCard(factId);
-      if(editCard&&editCard.getAttribute('data-review-editing')==='1'){
-        setReviewFactButtonsBusy(factId,false);
-      }else{
-        renderReviewFacts();
-      }
-    }
-  }
+  patchOwnFactLocal(factId,{fact_text:txt,updated_at:new Date().toISOString()});
+  clearReviewFactBusy(factId);
+  renderReviewFacts();
+  updateOwnPendingNavBadge();
+  flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
+  void syncOwnFactPendingTextToDb(factId,txt,prevText);
 }
 
+async function runRejectOwnFactFollowUp(factId){
+  factId=ownFactIdStr(factId);
+  try{
+    await loadOwnBrainTables();
+    renderReviewFacts();
+    renderMijTab();
+    updateOwnPendingNavBadge();
+  }catch(e){
+    console.warn('[rejectOwnFact reload]',factId,e);
+  }
+}
 async function rejectOwnFact(factId){
   factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy)return;
@@ -3171,25 +3217,16 @@ async function rejectOwnFact(factId){
     }
     renderReviewFacts();
     updateOwnPendingNavBadge();
-    renderMijTab();
   }catch(e){
     console.warn('[rejectOwnFact]',factId,e);
     var errMsg=String((e&&e.message)||e||'');
     flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon gegeven niet weigeren. Probeer opnieuw.',true);
     return;
   }finally{
-    window.__ownsenseReviewFactBusy=null;
-    setReviewFactButtonsBusy(factId,false);
+    clearReviewFactBusy(factId);
   }
   if(!updated)return;
-  try{
-    await loadOwnBrainTables();
-    renderReviewFacts();
-    renderMijTab();
-    updateOwnPendingNavBadge();
-  }catch(e){
-    console.warn('[rejectOwnFact reload]',factId,e);
-  }
+  void runRejectOwnFactFollowUp(factId);
 }
 
 function ownCategoryDisplayLabel(cat){
