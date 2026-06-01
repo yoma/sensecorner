@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 14:10">
+<meta name="os-build" content="01-06-2026 14:43">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2986,6 +2986,42 @@ async function acceptAllPendingFacts(){
 }
 
 var OWN_REVIEW_FACT_DB_MS=8000;
+// Aparte (ruimere) timeout voor de echte DB-schrijfacties van accept/weiger/wijzig.
+// Een trage maar geslaagde schrijfactie mag niet voortijdig worden afgebroken; we
+// wachten liever op bevestigde opslag dan op een snelle, maar valse "gelukt".
+var OWN_REVIEW_FACT_WRITE_MS=20000;
+
+// Zet de meest recente DB-rij in de lokale ownFacts-cache zodat de review-UI in sync blijft.
+function applyUpdatedOwnFact(factId,row){
+  factId=ownFactIdStr(factId);
+  if(!row)return null;
+  var idx=ownFacts.findIndex(function(x){return x&&ownFactIdStr(x.id)===factId;});
+  if(idx>=0)ownFacts[idx]=row;
+  else ownFacts.unshift(row);
+  return row;
+}
+
+// Leest de actuele rij terug zodat we kunnen bevestigen dat een schrijfactie echt is
+// gepersisteerd, ook wanneer RLS de update-representation verbergt (update slaagt, maar
+// .select() geeft geen rij terug). Geeft {ok,row,error} terug; ok=false bij echte fout.
+async function ownFactReadBack(client,factId,uid,label){
+  try{
+    var rb=await withTimeout(
+      client.from('own_facts').select('*').eq('id',factId).eq('user_id',uid).maybeSingle(),
+      OWN_REVIEW_FACT_WRITE_MS,
+      null,
+      {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId}}
+    );
+    if(rb&&rb.error){
+      console.error('[ownFactReadBack] db-error',{factId:factId,uid:uid,error:rb.error});
+      return {ok:false,row:null,error:rb.error};
+    }
+    return {ok:true,row:(rb&&rb.data)||null,error:null};
+  }catch(e){
+    console.error('[ownFactReadBack] exception',{factId:factId,uid:uid,ex:String((e&&e.message)||e)});
+    return {ok:false,row:null,error:e};
+  }
+}
 
 // Houdt lopende achtergrond-tekstsyncs bij per fact-id, zodat accept de DB-schrijf
 // kan afwachten en niet met verouderde tekst naar het profiel mergt.
@@ -3012,7 +3048,10 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
   factId=ownFactIdStr(factId);
   opts=opts||{};
   var uid=await ownReviewUidAsync(client);
-  if(!uid)return null;
+  if(!uid){
+    console.error('[updateOwnFactStatus] geen uid, kan niet schrijven',{factId:factId,status:newStatus});
+    return null;
+  }
   try{
     var payload={status:newStatus,updated_at:new Date().toISOString()};
     if(typeof newText==='string')payload.fact_text=newText;
@@ -3022,25 +3061,34 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     }
     var r=await withTimeout(
       client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
-      OWN_REVIEW_FACT_DB_MS,
+      OWN_REVIEW_FACT_WRITE_MS,
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
     );
     if(r&&r.error){
-      console.warn('[updateOwnFactStatus]',factId,r.error);
+      console.error('[updateOwnFactStatus] db-error',{factId:factId,uid:uid,status:newStatus,error:r.error});
       return null;
     }
     if(r&&r.data){
-      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===factId;});
-      if(idx>=0)ownFacts[idx]=r.data;
-      else ownFacts.unshift(r.data);
-      return r.data;
+      return applyUpdatedOwnFact(factId,r.data);
     }
+    // Geen rij teruggekregen is GEEN bewijs van succes: ofwel matchte de update 0 rijen
+    // (verkeerde uid / ontbrekend RLS-updatebeleid), ofwel slaagde de update maar verbergt
+    // RLS de representation. Lees terug om persistentie hard te bevestigen.
+    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-status-verify');
+    if(vr.ok&&vr.row&&vr.row.status===newStatus){
+      console.warn('[updateOwnFactStatus] update gaf geen representation, maar persistentie bevestigd via read-back',{factId:factId,status:newStatus});
+      return applyUpdatedOwnFact(factId,vr.row);
+    }
+    console.error('[updateOwnFactStatus] 0 rijen gewijzigd / niet gepersisteerd',{
+      factId:factId,uid:uid,wantedStatus:newStatus,
+      rowExists:!!(vr.row),rowUserId:(vr.row&&vr.row.user_id)||null,rowStatus:(vr.row&&vr.row.status)||null
+    });
+    return null;
   }catch(e){
-    console.warn('[updateOwnFactStatus]',factId,e);
+    console.error('[updateOwnFactStatus] exception',{factId:factId,uid:uid,status:newStatus,ex:String((e&&e.message)||e)});
     throw e;
   }
-  return null;
 }
 
 function getReviewFactCard(factId){
@@ -3056,42 +3104,42 @@ async function updateOwnFactPendingText(factId,newText){
   var txt=String(newText||'').trim();
   if(!txt)return null;
   var uid=await ownReviewUidAsync(client);
-  if(!uid)return null;
+  if(!uid){
+    console.error('[updateOwnFactPendingText] geen uid, kan niet schrijven',{factId:factId});
+    return null;
+  }
   var nowIso=new Date().toISOString();
   var patch={fact_text:txt,updated_at:nowIso};
   try{
     var r=await withTimeout(
       client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid).select('*').maybeSingle(),
-      OWN_REVIEW_FACT_DB_MS,
+      OWN_REVIEW_FACT_WRITE_MS,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
     );
     if(r&&r.error){
-      console.warn('[updateOwnFactPendingText]',factId,r.error);
+      console.error('[updateOwnFactPendingText] db-error',{factId:factId,uid:uid,error:r.error});
       return null;
     }
     if(r&&r.data){
       if(r.data.status!=='pending'){
-        console.warn('[updateOwnFactPendingText] unexpected status',factId,r.data.status);
+        console.warn('[updateOwnFactPendingText] onverwachte status',factId,r.data.status);
       }
-      var idx=ownFacts.findIndex(function(x){return ownFactIdStr(x.id)===factId;});
-      if(idx>=0)ownFacts[idx]=r.data;
-      else ownFacts.unshift(r.data);
-      return r.data;
+      return applyUpdatedOwnFact(factId,r.data);
     }
-    var r2=await withTimeout(
-      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid),
-      OWN_REVIEW_FACT_DB_MS,
-      'Opslaan duurde te lang. Probeer opnieuw.',
-      {label:'ownsense-review-fact-pending-text-nosel',meta:{factId:factId}}
-    );
-    if(r2&&r2.error){
-      console.warn('[updateOwnFactPendingText nosel]',factId,r2.error);
-      return null;
+    // Geen representation terug: niet als succes behandelen. Lees terug en bevestig dat de
+    // tekst echt is opgeslagen (vangt RLS-update-zonder-select af, maar geen valse "gelukt").
+    var vr=await ownFactReadBack(client,factId,uid,'ownsense-review-fact-pending-text-verify');
+    if(vr.ok&&vr.row&&String(vr.row.fact_text||'').trim()===txt){
+      console.warn('[updateOwnFactPendingText] update gaf geen representation, maar persistentie bevestigd via read-back',{factId:factId});
+      return applyUpdatedOwnFact(factId,vr.row);
     }
-    return patchOwnFactLocal(factId,patch);
+    console.error('[updateOwnFactPendingText] 0 rijen gewijzigd / niet gepersisteerd',{
+      factId:factId,uid:uid,rowExists:!!(vr.row),rowUserId:(vr.row&&vr.row.user_id)||null
+    });
+    return null;
   }catch(e){
-    console.warn('[updateOwnFactPendingText]',factId,e);
+    console.error('[updateOwnFactPendingText] exception',{factId:factId,uid:uid,ex:String((e&&e.message)||e)});
     throw e;
   }
 }
@@ -3208,15 +3256,29 @@ async function saveEditOwnFact(factId){
     cancelEditOwnFact(factId);
     return;
   }
-  var prevText=String(fact.fact_text||'').trim();
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'edit-save');
-  patchOwnFactLocal(factId,{fact_text:txt,updated_at:new Date().toISOString()});
-  clearReviewFactBusy(factId);
-  renderReviewFacts();
-  updateOwnPendingNavBadge();
-  flashOwnsenseMessage('Gegeven bijgewerkt. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
-  void registerOwnFactTextSync(factId,syncOwnFactPendingTextToDb(factId,txt,prevText));
+  var updated=null;
+  try{
+    // Bevestigde opslag: pas de UI alleen aan nadat de DB-schrijfactie echt is gelukt.
+    // Bij mislukken blijft de bewerk-kaart staan zodat de gebruiker opnieuw kan proberen.
+    updated=await updateOwnFactPendingText(factId,txt);
+    if(!updated){
+      flashOwnsenseMessage('Kon wijziging niet opslaan in de cloud. Probeer opnieuw.',true);
+      return;
+    }
+    patchOwnFactLocal(factId,updated);
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    flashOwnsenseMessage('Gegeven bijgewerkt en opgeslagen. Je kunt het nog accepteren of weigeren.',false,{durationMs:5200});
+  }catch(e){
+    console.error('[saveEditOwnFact]',factId,e);
+    var errMsg=String((e&&e.message)||e||'');
+    flashOwnsenseMessage(errMsg.indexOf('te lang')>=0?errMsg:'Kon wijziging niet opslaan. Probeer opnieuw.',true);
+    return;
+  }finally{
+    clearReviewFactBusy(factId);
+  }
 }
 
 async function runRejectOwnFactFollowUp(factId){
