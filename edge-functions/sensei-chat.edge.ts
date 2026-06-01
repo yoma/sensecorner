@@ -166,7 +166,12 @@ async function insertAiRateLogReservation(
     .select("created_at")
     .single();
 
-  if (inserted.error && purpose && /purpose/i.test(String(inserted.error.message || ""))) {
+  if (
+    inserted.error &&
+    purpose &&
+    /purpose/i.test(String(inserted.error.message || "")) &&
+    /column|does not exist|schema cache/i.test(String(inserted.error.message || ""))
+  ) {
     inserted = await sb
       .from("ai_rate_log")
       .insert({ user_id: userId })
