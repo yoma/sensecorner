@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="01-06-2026 15:26">
+<meta name="os-build" content="01-06-2026 16:21">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -2991,6 +2991,18 @@ var OWN_REVIEW_FACT_DB_MS=8000;
 // wachten liever op bevestigde opslag dan op een snelle, maar valse "gelukt".
 var OWN_REVIEW_FACT_WRITE_MS=20000;
 
+// Geeft een AbortSignal dat na ms afbreekt, zodat een vastgelopen PostgREST-schrijf de
+// onderliggende fetch echt annuleert (geen zombie-verbinding) i.p.v. eindeloos te blijven
+// hangen. clear() ruimt de timer op zodra de schrijf gewoon klaar is.
+function senseAbortAfter(ms){
+  try{
+    if(typeof AbortController==='undefined')return {signal:null,clear:function(){}};
+    var ac=new AbortController();
+    var t=setTimeout(function(){try{ac.abort();}catch(_e){}},Math.max(1,ms||20000));
+    return {signal:ac.signal,clear:function(){try{clearTimeout(t);}catch(_e){}}};
+  }catch(_e){return {signal:null,clear:function(){}};}
+}
+
 // Zet de meest recente DB-rij in de lokale ownFacts-cache zodat de review-UI in sync blijft.
 function applyUpdatedOwnFact(factId,row){
   factId=ownFactIdStr(factId);
@@ -3069,14 +3081,20 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     // window.OWN_REVIEW_FACT_WRITE_MS en kan elders (of door een oude build) op 2000 staan.
     // We loggen beide zodat de console hard bewijst welke waarde echt wordt toegepast.
     var writeMs=20000;
+    // abortSignal: annuleert de onderliggende fetch echt als de schrijf vastloopt, zodat er
+    // geen zombie-request blijft hangen en de bestaande foutmelding netjes verschijnt.
+    var __osAb=senseAbortAfter(writeMs);
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] status:update-start',{factId:factId,status:newStatus,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
+    var __osQ=client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid);
+    if(__osAb.signal&&typeof __osQ.abortSignal==='function')__osQ=__osQ.abortSignal(__osAb.signal);
     var r=await withTimeout(
-      client.from('own_facts').update(payload).eq('id',factId).eq('user_id',uid),
+      __osQ,
       writeMs,
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus}}
     );
+    __osAb.clear();
     var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] status:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
     if(r&&r.error){
@@ -3096,6 +3114,7 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
     });
     return null;
   }catch(e){
+    try{if(typeof __osAb!=='undefined'&&__osAb)__osAb.clear();}catch(_c){}
     console.error('[updateOwnFactStatus] exception',{factId:factId,uid:uid,status:newStatus,ex:String((e&&e.message)||e)});
     throw e;
   }
@@ -3127,14 +3146,18 @@ async function updateOwnFactPendingText(factId,newText){
     // een gechainde representation-SELECT kan onder RLS blijven hangen. We lezen apart terug.
     // Harde literal i.p.v. globale OWN_REVIEW_FACT_WRITE_MS (zie updateOwnFactStatus).
     var writeMs=20000;
+    var __osAb=senseAbortAfter(writeMs);
     var __osT0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] text:update-start',{factId:factId,writeMs:writeMs,globalCfg:(typeof OWN_REVIEW_FACT_WRITE_MS!=='undefined'?OWN_REVIEW_FACT_WRITE_MS:null)});}catch(_e){}
+    var __osQ=client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid);
+    if(__osAb.signal&&typeof __osQ.abortSignal==='function')__osQ=__osQ.abortSignal(__osAb.signal);
     var r=await withTimeout(
-      client.from('own_facts').update(patch).eq('id',factId).eq('user_id',uid),
+      __osQ,
       writeMs,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-pending-text',meta:{factId:factId}}
     );
+    __osAb.clear();
     var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] text:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),hadError:!!(r&&r.error)});}catch(_e){}
     if(r&&r.error){
@@ -3153,6 +3176,7 @@ async function updateOwnFactPendingText(factId,newText){
     });
     return null;
   }catch(e){
+    try{if(typeof __osAb!=='undefined'&&__osAb)__osAb.clear();}catch(_c){}
     console.error('[updateOwnFactPendingText] exception',{factId:factId,uid:uid,ex:String((e&&e.message)||e)});
     throw e;
   }
@@ -4080,6 +4104,44 @@ function focusBootQuestionCategory(){
   }catch(_e){}
 }
 
+// Begrensde variant van het Web Lock-slot dat supabase-js standaard voor de auth-token
+// gebruikt. Het standaardslot (navigator.locks, sleutel lock:sb-<ref>-auth-token) kan
+// oneindig blijven wachten wanneer een ANDERE tab van dezelfde site (alle Sense-apps delen
+// storageKey 'sensecorner-auth-v1') of een vastgelopen vorige token-refresh het slot
+// vasthoudt. Dat blokkeert getSession/refreshSession en daarmee elke token-afhankelijke
+// actie tot de timeout. We begrenzen de wachttijd: lukt het slot niet op tijd, dan draaien
+// we de functie alsnog (liever een zeldzame cross-tab race dan een UI die 20s hangt).
+function senseAuthLock(name,acquireTimeout,fn){
+  var hasLocks=false;
+  try{hasLocks=(typeof navigator!=='undefined'&&navigator.locks&&typeof navigator.locks.request==='function');}catch(_e){hasLocks=false;}
+  if(!hasLocks)return Promise.resolve().then(fn);
+  if(acquireTimeout===0){
+    return navigator.locks.request(name,{ifAvailable:true},function(lock){
+      if(!lock){try{console.warn('[senseAuthLock] slot bezet (ifAvailable), draait zonder slot',{lock:name});}catch(_e){}}
+      return fn();
+    });
+  }
+  var maxWait=(typeof acquireTimeout==='number'&&acquireTimeout>0)?acquireTimeout:10000;
+  var ac=null,timer=null;
+  try{
+    if(typeof AbortController!=='undefined'){
+      ac=new AbortController();
+      timer=setTimeout(function(){try{ac.abort();}catch(_e){}},maxWait);
+    }
+  }catch(_e){ac=null;}
+  return navigator.locks.request(name,ac?{signal:ac.signal}:{},function(){
+    if(timer){clearTimeout(timer);timer=null;}
+    return fn();
+  }).catch(function(err){
+    if(timer){clearTimeout(timer);timer=null;}
+    var nm=(err&&err.name)?String(err.name):'';
+    if(nm==='AbortError'){
+      try{console.warn('[senseAuthLock] slot niet verkregen binnen '+maxWait+'ms, draait zonder slot',{lock:name});}catch(_e){}
+      return fn();
+    }
+    throw err;
+  });
+}
 function initSupabase(){
   try{
     if(sb)return sb;
@@ -4094,7 +4156,8 @@ function initSupabase(){
           autoRefreshToken:true,
           detectSessionInUrl:true,
           flowType:'pkce',
-          storageKey:'sensecorner-auth-v1'
+          storageKey:'sensecorner-auth-v1',
+          lock:senseAuthLock
         }
       });
     }
