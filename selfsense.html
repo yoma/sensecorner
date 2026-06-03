@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="29-05-2026 14:29">
+<meta name="fs-build" content="03-06-2026 13:56">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1794,6 +1794,8 @@ const SEG_DOT_COLORS=['#BBDEFB','#FFE0B2','#C8E6C9','#E1BEE7','#FFE082'];
 const ADMIN_EMAILS=['youri77@gmail.com'];
 // Productkeuze: in SelfSense tonen we voorlopig geen aparte Senses-laag.
 const SELFSENSE_DISABLE_SENSES=true;
+/** Geen contactdossiers in SelfSense (alleen OWN Sense + cross-app lezen voor AI). */
+const SELFSENSE_NO_CONTACT_DOSSIERS=true;
 // Sensei aanbevelingen - whitelist voor web_search
 const SENSEI_WHITELIST={
   boeken:['standaardboekhandel.be','bol.com','hebban.nl','iedereenleest.be'],
@@ -2797,8 +2799,16 @@ function isDateSenseTaggedMeta(meta){
   if(rt==='exclusief daten'||rt==='prille relatie'||rt==='vaste relatie')return true;
   return false;
 }
-/** Dossier in SelfSense: niet DateSense; wel expliciet ss. Geen app_scope meer tonen (voorkomt oude mirror/test-dossiers zonder tag). */
+/** Alleen-ss contactdossier (legacy): niet in UI of cross-app-cache van SelfSense. */
+function isSsOnlyContactProfileMeta(meta){
+  var scopes=normalizeAppScopeList(meta||{});
+  if(scopes.indexOf('ds')>=0||scopes.indexOf('fs')>=0||scopes.indexOf('fr')>=0)return false;
+  if(isDateSenseTaggedMeta(meta))return false;
+  return scopes.indexOf('ss')>=0;
+}
+/** Dossier in SelfSense UI: geen contactdossiers (alleen OWN Sense via apart pad). */
 function selfSenseShouldLoadProfileMeta(meta){
+  if(SELFSENSE_NO_CONTACT_DOSSIERS)return false;
   var scopes=normalizeAppScopeList(meta||{});
   if(scopes.indexOf('ds')>=0)return false;
   if(isDateSenseTaggedMeta(meta))return false;
@@ -2807,11 +2817,13 @@ function selfSenseShouldLoadProfileMeta(meta){
   return false;
 }
 function isSelfSenseVisibleContact(name){
+  if(SELFSENSE_NO_CONTACT_DOSSIERS)return false;
   if(!name||name==='OWN Sense')return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
   return selfSenseShouldLoadProfileMeta(m);
 }
 function getSelfSenseContactNames(){
+  if(SELFSENSE_NO_CONTACT_DOSSIERS)return [];
   return (S.profiles||[]).filter(function(p){return isSelfSenseVisibleContact(p);});
 }
 function hasAnyContactDossier(){
@@ -4620,7 +4632,7 @@ function verplaatsEntry(msgId, huidigDossier){
   // Bouw keuze modal
   window._verplaatsMsgId=msgId;
   window._verplaatsVan=huidigDossier;
-  var allDossiers=sortDossiersByVertelPriority(getSelfSenseContactNames());
+  var allDossiers=['OWN Sense'].concat(getProfilesForVertelNameMatch());
   var optsHtml='<div class="seg-modal-grid">';
   window._modalDossiers=allDossiers;
   allDossiers.forEach(function(p,i){
@@ -5397,6 +5409,11 @@ function ingestCrossAppCacheRow(p){
   if(S.pdata&&S.pdata[p.name])return;
   var savedProps=p.props||{};
   var loadedMeta=Object.assign({},savedProps.meta||{});
+  if(SELFSENSE_NO_CONTACT_DOSSIERS){
+    if(isSsOnlyContactProfileMeta(loadedMeta))return;
+    var _scOnly=normalizeAppScopeList(loadedMeta);
+    if(!_scOnly.length&&!isFamilyTaggedMeta(loadedMeta)&&!isDateSenseTaggedMeta(loadedMeta))return;
+  }
   var lc=normalizeLifecycleForCrossAppRow(loadedMeta);
   if(lc!=='active'&&lc!=='on_hold')return;
   S.crossAppCache[p.name]={
@@ -5463,8 +5480,15 @@ async function loadAll(opts){
 
 async function ensureP(name){
   if(!S.user)return;
+  if(name!=='OWN Sense'&&SELFSENSE_NO_CONTACT_DOSSIERS){
+    try{
+      var selX=await sb.from('sense_profiles').select('name').eq('user_id',S.user.id).eq('name',name).maybeSingle();
+      if(selX&&selX.data&&selX.data.name)return;
+    }catch(e){console.warn('ensureP cross-app lookup',e);}
+    throw new Error('In SelfSense zijn er geen contactdossiers. Gebruik OWN Sense, of maak het dossier aan in FamilySense, DateSense of FriendSense.');
+  }
   if(S.pdata[name]){
-    if(name!=='OWN Sense'){
+    if(name!=='OWN Sense'&&!SELFSENSE_NO_CONTACT_DOSSIERS){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
       var exScopes=normalizeAppScopeList(existing.meta);
@@ -5483,9 +5507,10 @@ async function ensureP(name){
     var rowExisting=selExisting&&selExisting.data?selExisting.data:null;
     if(rowExisting){
       if(!ingestSelfSenseProfileRow(rowExisting)){
+        if(SELFSENSE_NO_CONTACT_DOSSIERS)return;
         throw new Error('Deze naam hoort al bij een dossier in FamilySense of DateSense. Kies een andere naam, of bewerk dat dossier in die app.');
       }
-      if(S.pdata[name]){
+      if(S.pdata[name]&&!SELFSENSE_NO_CONTACT_DOSSIERS){
         var ex2=normalizeAppScopeList((S.pdata[name].meta)||{});
         if(ex2.indexOf('ss')<0){
           var d2=S.pdata[name];
@@ -5499,8 +5524,11 @@ async function ensureP(name){
       return;
     }
   }catch(e){
-    if(e&&e.message&&String(e.message).indexOf('Deze naam hoort al')>=0)throw e;
+    if(e&&e.message&&(String(e.message).indexOf('Deze naam hoort al')>=0||String(e.message).indexOf('geen contactdossiers')>=0))throw e;
     console.warn('ensureP lookup sense_profiles',e);
+  }
+  if(name!=='OWN Sense'&&SELFSENSE_NO_CONTACT_DOSSIERS){
+    throw new Error('In SelfSense zijn er geen contactdossiers. Gebruik OWN Sense, of maak het dossier aan in FamilySense, DateSense of FriendSense.');
   }
   var seedProps={...DP};
   if(name!=='OWN Sense')seedProps.meta={app_scope:['ss']};
@@ -5516,6 +5544,16 @@ async function ensureP(name){
 
 async function saveP(name,props,count,categories,summary,meta){
   if(!S.user)return;
+  if(name!=='OWN Sense'&&SELFSENSE_NO_CONTACT_DOSSIERS){
+    if(S.pdata&&S.pdata[name]){
+      console.warn('[SelfSense][saveP] skip contact pdata write for',name);
+      return;
+    }
+    var _resX=await sb.from('sense_profiles').update({bericht_count:count||0,last_active:new Date().toISOString()}).eq('user_id',S.user.id).eq('name',name);
+    if(_resX&&_resX.error)throw new Error(_resX.error.message||'Profiel bijwerken mislukt');
+    sync('ok');
+    return;
+  }
   sync('s');
   var startedAt=Date.now();
   function parseSavePObjectLike(v){
@@ -5871,6 +5909,7 @@ async function delP(name){
  *   seedSelfSenseTestDossiers()
  */
 async function seedSelfSenseTestDossiers(){
+  if(SELFSENSE_NO_CONTACT_DOSSIERS){toast('SelfSense heeft geen contactdossiers meer (seed uitgeschakeld).');return;}
   if(!S.user||!sb){toast('Log eerst in.');return;}
   if(!confirm('Alle contactdossiers en hun berichten wissen en vervangen door testdossiers?\n\nOWN Sense blijft behouden. Dit kan niet ongedaan worden.'))return;
   try{
@@ -6059,26 +6098,16 @@ function _goScreenBody(sc,opts){
 
 // ══ Drawer ═══════════════════════════════════════════════════════
 function rDrawer(){
-  var cs=getSelfSenseContactNames();
   var own=S.pdata['OWN Sense']||{count:0};
-  var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Mijn Senses</div>
-<div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">Bekijk een dossier of ga naar Vertel om iets toe te voegen.</div>
+  var h=`<div style="font-size:20px;font-weight:800;color:var(--t);margin-bottom:4px">Menu</div>
+<div style="font-size:13px;color:var(--m);margin-bottom:20px;line-height:1.5">SelfSense werkt met je OWN Sense-profiel en Vertel. Contactdossiers maak je in FamilySense, DateSense of FriendSense.</div>
 <div class="dlbl">Persoonlijk</div>
 <div class="drow" onclick="openOwnSenseEntryPoint()">
   ${(own.meta&&own.meta.photo_url)?'<img src="'+escHTML(own.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+SEG_DOT_COLORS[0]+'"></div>'}
   <div style="flex:1;font-size:15px;font-weight:600">OWN Sense Hub</div>
   <div class="dbadge" onclick="event.stopPropagation();openOwnSenseEntryPoint()">Open</div>
-</div>`;
-  if(cs.length){
-    h+='<div class="dlbl">Contextdossiers</div>';
-    cs.forEach((p,i)=>{
-      var d=S.pdata[p]||{count:0};
-      var col=SEG_DOT_COLORS[(i+1)%SEG_DOT_COLORS.length];
-      h+=`<div class="drow" onclick="viewDossier('${escJsStr(p)}')">${(d.meta&&d.meta.photo_url)?'<img src="'+escHTML(d.meta.photo_url)+'" alt="" style="width:22px;height:22px;border-radius:11px;object-fit:cover;border:1px solid var(--b)"/>':'<div style="width:10px;height:10px;border-radius:5px;background:'+col+'"></div>'}<div style="flex:1;font-size:15px;font-weight:600">${escHTML(p)}</div><div class="dbadge" onclick="event.stopPropagation();viewDossierTijdlijn('${escJsStr(p)}')">${d.count}</div></div>`;
-    });
-  }
-  h+=`<div class="dlbl">Acties</div>
-<div class="drow" onclick="newSenseFromDrawer()"><div style="width:10px;height:10px;border-radius:5px;border:2px solid var(--r)"></div><div style="font-size:15px;color:var(--r);font-weight:600">+ Nieuw Sense aanmaken</div></div>`;
+</div>
+<div class="drow" onclick="closeDrawer();goScreen('vertel')"><div style="width:10px;height:10px;border-radius:5px;background:var(--app-medium)"></div><div style="flex:1;font-size:15px;font-weight:600">Vertel</div></div>`;
   if(S.user)h+=`<div style="margin-top:28px;padding-top:18px;border-top:1px solid var(--b)"><div style="font-size:12px;color:var(--m);margin-bottom:6px">Ingelogd als</div><div style="font-size:14px;font-weight:600;color:var(--t);margin-bottom:14px;word-break:break-all">${S.user.email}</div><button type="button" onclick="safeSignOut()" style="width:100%;padding:12px;background:#FFF0F0;color:var(--r);border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Uitloggen</button></div>`;
   document.getElementById('drIn').innerHTML=h;
 }
@@ -6086,9 +6115,17 @@ function openDrawer(){rDrawer();document.getElementById('drawer').classList.add(
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('ovl').classList.remove('show');}
 function viewDossier(name){
   if((name||'')==='OWN Sense'){openOwnSenseEntryPoint();return;}
+  if(SELFSENSE_NO_CONTACT_DOSSIERS){
+    toast('Contactdossiers horen niet in SelfSense. Gebruik FamilySense, DateSense of FriendSense.');
+    return;
+  }
   S.viewDossier=name;S.viewTab='overzicht';S.timelineLimitByDossier[name]=3;closeDrawer();goScreen('dossier');
 }
 function openDossierProfiel(name){
+  if((name||'')!=='OWN Sense'&&SELFSENSE_NO_CONTACT_DOSSIERS){
+    toast('Contactdossiers horen niet in SelfSense.');
+    return;
+  }
   S.viewDossier=name;
   S.viewTab='profiel';
   closeDrawer();
@@ -6680,17 +6717,7 @@ async function saveProfileMetaForm(){
 
 async function newSenseFromDrawer(){
   closeDrawer();
-  var n=prompt('Naam van de contextpersoon (bv. "Emma"):');
-  if(!n||!n.trim())return;
-  var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
-  try{
-    await ensureP(nm);
-    toast('✅ '+nm+' aangemaakt!');
-    viewDossier(nm);
-  }catch(e){
-    console.error('newSenseFromDrawer',e);
-    toast('Dossier kon niet opgeslagen worden: '+(e&&e.message?e.message:'onbekende fout'));
-  }
+  toast('In SelfSense maak je geen contactdossiers. Gebruik FamilySense, DateSense of FriendSense, of werk verder in OWN Sense.');
 }
 
 // ══ Login / Register ══════════════════════════════════════════════
@@ -9128,7 +9155,7 @@ function adviceHubSafeId(raw){
   return out||'item';
 }
 function rAdviceHub(el){
-  var contacts=sortDossiersByVertelPriority(getSelfSenseContactNames().filter(function(n){return n&&n!=='OWN Sense';}));
+  var contacts=sortDossiersByVertelPriority(getProfilesForVertelNameMatch().filter(function(n){return n&&n!=='OWN Sense';}));
   var st=getAdviceHubState();
   function renderDepthCompact(help){
     return renderAdviceHubDepthCompact(help);
@@ -10930,7 +10957,7 @@ function rSenses(el){
   }
   if(cs.length){
     h+='<div class="sh">Jouw context</div>';
-    h+='<p style="font-size:12px;color:#8a8f97;line-height:1.45;margin:0 0 10px">Alleen dossiers die je <strong>in SelfSense</strong> gebruikt (niet je DateSense- of FamilySense-lijsten). Zet iets op <strong>on hold</strong>, <strong>sluit af</strong> of wis het in het archief als je het hier niet meer wilt zien.</p>';
+    h+='<p style="font-size:12px;color:#8a8f97;line-height:1.45;margin:0 0 10px">Dossiers uit FamilySense, DateSense of FriendSense (alleen-lezen in SelfSense). Zet iets op <strong>on hold</strong> of <strong>sluit af</strong> in de app waar het dossier hoort.</p>';
     h+='<div class="senses-sort-bar"><span class="senses-sort-lbl">Sorteer</span>'
       +'<select class="senses-sort-select" title="Sorteer dossiers" aria-label="Sorteer dossiers" onchange="setSensesSortFromUi(this.value)">'
       
@@ -10969,8 +10996,7 @@ function rSenses(el){
       </div>`;
     });
   } else {
-    h+=`<div class="sh">Contextpersonen</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">Nog geen contextpersonen.
-Invoerhulp: typ een naam in Vertel en SelfSensei maakt automatisch een dossier aan.</p></div>`;
+    h+=`<div class="sh">Contextpersonen</div><div style="text-align:center;padding:40px 20px;color:var(--m)"><div style="font-size:44px;margin-bottom:14px">👥</div><p style="font-size:15px;line-height:1.6">SelfSense gebruikt geen contactdossiers. Gebruik FamilySense, DateSense of FriendSense voor personen; in Vertel kun je wel naar bestaande dossiers uit die apps verwijzen.</p></div>`;
   }
   if(archived.length){
     h+='<div class="sh">On hold / Afgesloten</div>';
@@ -11001,10 +11027,6 @@ Invoerhulp: typ een naam in Vertel en SelfSensei maakt automatisch een dossier a
     });
   }
 
-  h+=`<div class="srow" style="justify-content:center;border:none" onclick="newSenseFromDrawer()">
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  <span style="font-size:15px;font-weight:700;color:var(--r);margin-left:8px">Nieuw Sense aanmaken</span>
-</div></div>`;
   el.innerHTML=h;
   refreshOwnAppDepthHintMounts();
 }
@@ -12817,7 +12839,7 @@ async function activateRelationshipFocusFromSettings(){
 
 // ══ Compare ══════════════════════════════════════════════════════
 function getCompareSelection(){
-  var cs=getSelfSenseContactNames();
+  var cs=getProfilesForVertelNameMatch();
   var saved=(S.compareSelection||[]).filter(function(n){return cs.indexOf(n)>=0;});
   var unique=[];
   saved.forEach(function(n){if(unique.indexOf(n)===-1)unique.push(n);});
@@ -13965,7 +13987,7 @@ function getContactCatsDef(personName){
       prompts:[
         {q:'Wat weet jij over de jeugd of grote gebeurtenissen die '+personName+' gevormd hebben?',ph:'Bv: scheiding, verlies, verhuizing, zorg voor iemand thuis, pesten op school...'},
         {q:'Zie je iets uit het verleden van '+personName+' terugkomen in hoe hij/zij nu is?',ph:'Bv: niemand mocht boos zijn thuis, alles moest perfect, humor gebruiken in plaats van praten...'},
-        {q:'Is er iets dat helpt begrijpen waarom jullie band nu is zoals hij is, zonder te oordelen?',ph:'Bv: weinig slaap met jonge kinderen, stress op werk, onuitgesproken verwachtingen, jaloezie tussen kinderen...'}
+        {q:'Wat speelt er voor jou nu het meest in jullie contact?',ph:'Bv: je mist rust, spanning rond feestdagen, iets waar je blij mee bent, je wilt vaker samen zijn...'}
       ]
     }
   ];
@@ -14188,12 +14210,12 @@ function hydrateContactProfileFields(cont,name,d){
 
 // Kleur per dossier (consistent)
 function dossierColor(dosName){
-  var all=['OWN Sense',...getSelfSenseContactNames()];
+  var all=['OWN Sense'].concat(getProfilesForVertelNameMatch());
   var i=all.indexOf(dosName);
   return SEG_DOT_COLORS[i>=0?i%SEG_DOT_COLORS.length:0];
 }
 function dossierSegClass(dosName){
-  var all=['OWN Sense',...getSelfSenseContactNames()];
+  var all=['OWN Sense'].concat(getProfilesForVertelNameMatch());
   var i=all.indexOf(dosName);
   return SEG_COLORS[i>=0?i%SEG_COLORS.length:0];
 }
@@ -14205,7 +14227,7 @@ function dossierSegInitial(dosName){
 }
 
 function normalizeSegmentDossier(suggested){
-  var all=['OWN Sense'].concat(getSelfSenseContactNames());
+  var all=['OWN Sense'].concat(getProfilesForVertelNameMatch());
   var t=String(suggested||'').trim();
   if(!t)return'OWN Sense';
   var i;
@@ -14228,8 +14250,8 @@ function normalizeSegmentDossier(suggested){
 
 async function fetchVertelSegmentation(userText){
   if(!S.apiKey)return null;
-  var dossiers=['OWN Sense'].concat(getSelfSenseContactNames());
-  var sys='Je bent een classificatie-assistent voor SelfSense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; andere dossiers = contextpersonen in de lijst). '
+  var dossiers=['OWN Sense'].concat(getProfilesForVertelNameMatch());
+  var sys='Je bent een classificatie-assistent voor SelfSense. Splits het bericht van de gebruiker in fragmenten per dossier (OWN Sense = over de gebruiker zelf; andere dossiers = bestaande dossiers uit FamilySense/DateSense/FriendSense indien in de lijst). '
     +'Regels: (1) elk fragment is letterlijke tekst uit het bericht (geen parafrase). (2) Alle fragmenten samen dekken het volledige bericht zonder overlap. '
     +'(3) Minimaal 2 fragmenten als er inhoud voor meerdere onderdelen is; anders 1 fragment. '
     +'(4) dossier moet exact één van deze waarden zijn: '+JSON.stringify(dossiers)+'. '
@@ -14298,7 +14320,7 @@ function openSegModal(idx){
 
   document.getElementById('segModalQuote').textContent='"'+seg.tekst+'"';
 
-  var allDossiers=['OWN Sense',...getSelfSenseContactNames()];
+  var allDossiers=['OWN Sense'].concat(getProfilesForVertelNameMatch());
   var optsHtml='<div class="seg-modal-grid">';
 
   // Dossier opties - grid met gekleurde linker borders
@@ -15142,8 +15164,7 @@ async function bevestigAlles(){
       await updateEigenschappenAI(dossier,samengevat);
     } else {
       await saveP(dossier,pd.props,pd.count,pd.categories);
-      // Auto-vul invulvakjes + herbereken op achtergrond
-      updateContactCategories(dossier,samengevat);
+      if(!SELFSENSE_NO_CONTACT_DOSSIERS)updateContactCategories(dossier,samengevat);
     }
   }
 
@@ -15265,8 +15286,8 @@ function clearChat(){
 function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
 
-  // Bouw opties
-  var contacts=getActiveContactNames();
+  // Bouw opties (bestaande dossiers uit andere apps, geen nieuwe SelfSense-contacten)
+  var contacts=getProfilesForVertelNameMatch();
   var optionsHtml='';
   contacts.forEach(function(p){
     var selected=matchedDossier===p?'style="border-color:var(--r);background:var(--rl)"':'';
@@ -15291,9 +15312,7 @@ function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
     +'<div style="font-size:14px;color:#333;margin-bottom:14px">'+lines.length+' berichten geladen. Over wie gaat dit gesprek? Alles gaat naar dat dossier.</div>'
     +(suggestion?'<div style="font-size:13px;color:var(--m);margin-bottom:10px">🔍 Herkend: <strong>'+suggestion+'</strong></div>':'')
     +'<div style="margin-bottom:12px">'+optionsHtml+'</div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button class="aa g" style="flex:1" onclick="askNewPersonWA()">+ Nieuwe persoon</button>'
-    +'</div>'
+    +(contacts.length?'':'<p style="font-size:13px;color:var(--m);line-height:1.5">Geen bestaand dossier gevonden. Maak eerst een dossier aan in FamilySense, DateSense of FriendSense.</p>')
     +'</div>';
 
   addMsg('ai',html);
@@ -15314,14 +15333,7 @@ function askNewPersonWA(){
 }
 
 function confirmNewPersonWA(){
-  var inp=document.getElementById('waNewName');
-  if(!inp||!inp.value.trim())return;
-  var naam=inp.value.trim();
-  var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
-  ensureP(dosName).then(function(){
-    toast('✅ '+naam+' aangemaakt!');
-    startWhatsAppImport(dosName,window._waCleaned);
-  });
+  toast('In SelfSense maak je geen nieuw contactdossier. Kies een bestaand dossier of maak het aan in een andere Sense-app.');
 }
 
 function startWhatsAppImport(dosName,cleaned){
@@ -17152,7 +17164,7 @@ async function _doOpslaan(sid,tekst,dossier,sessionUserMsgId){
         try{await updateOwnSenseCategoriesFromVertel(tekst);}catch(_eEx1){}
         try{if(!ownSenseVertelRichEnoughForCategoryAI(_ownT))await updateEigenschappenAI(dossier,tekst);}catch(_eEx2){}
       })();
-    }else{
+    }else if(!SELFSENSE_NO_CONTACT_DOSSIERS){
       updateContactCategories(dossier,tekst);
       herbereken(dossier);
       void scheduleDossierSummaryIfNeeded(dossier,pd.count);
