@@ -17,6 +17,7 @@
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sense-common.js?v=2905261707"></script>
+<script src="js/sense-mirror-hub.js"></script>
 <script src="js/sense-auth-client.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -472,6 +473,15 @@ a.app-card{color:inherit;text-decoration:none}
 .badge-live-self{background:color-mix(in srgb,var(--self-licht) 52%,white);color:var(--self-donker);border:1px solid color-mix(in srgb,var(--self-medium) 42%,transparent)}
 .badge-proto{background:color-mix(in srgb,var(--family-licht) 50%,white);color:var(--family-donker);border:1px solid color-mix(in srgb,var(--family-medium) 35%,transparent)}
 .badge-soon{background:color-mix(in srgb,var(--friend-licht) 45%,white);color:var(--friend-donker);border:1px solid color-mix(in srgb,var(--friend-medium) 35%,transparent)}
+.badge-mirror-muted{background:rgba(61,47,31,.06);color:rgba(61,47,31,.55);border:1px solid rgba(61,47,31,.1)}
+.badge-mirror-paused{background:color-mix(in srgb,var(--zand-medium) 40%,white);color:#6B5344;border:1px solid rgba(107,83,68,.25)}
+.badge-mirror-setup{background:color-mix(in srgb,var(--sage-licht) 50%,white);color:var(--sage-donker);border:1px solid color-mix(in srgb,var(--sage-medium) 35%,transparent)}
+.hub-mirror-manage{margin-top:14px;padding-top:12px;border-top:1px dashed var(--hub-dash)}
+.hub-mirror-manage-title{font-size:13px;font-weight:700;color:var(--chocolade);margin-bottom:6px}
+.hub-mirror-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(61,47,31,.06)}
+.hub-mirror-row:last-child{border-bottom:none}
+.hub-mirror-pause-btn{font-size:12px;font-weight:600;padding:6px 10px;border-radius:10px;border:1px solid rgba(61,47,31,.16);background:var(--ivoor);color:var(--chocolade);cursor:pointer;font-family:inherit}
+.hub-mirror-pause-btn:disabled{opacity:.45;cursor:default}
 .app-arrow{color:var(--card-d);opacity:.55;transition:transform .2s,opacity .2s}
 .app-card.clickable:hover .app-arrow{transform:translateX(4px);opacity:.9}
 /* Directe klik-feedback: kaart toont meteen een laad-status (spinner i.p.v. pijl). */
@@ -684,6 +694,11 @@ a.app-card{color:inherit;text-decoration:none}
                 <button id="hubRoepnaamSave" class="hub-save" type="button">Opslaan</button>
               </div>
               <div id="hubRoepnaamState" class="hub-state" style="margin-top:6px"></div>
+            </div>
+            <div id="hubMirrorManageWrap" class="hub-mirror-manage" style="display:none" aria-label="Spiegels beheren">
+              <div class="hub-mirror-manage-title">Spiegels beheren</div>
+              <div class="hub-settings-sub" style="margin-bottom:8px">Zet een actieve spiegel op hold. Je gegevens blijven bewaard; Sensei is daar inactief tot je heractiveert.</div>
+              <div id="hubMirrorManageList"></div>
             </div>
             <div id="hubAccountWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--hub-dash)">
               <div class="hub-settings-sub" style="margin-bottom:8px;font-weight:700;color:var(--chocolade)">WhatsApp (optioneel)</div>
@@ -1085,6 +1100,8 @@ a.app-card{color:inherit;text-decoration:none}
   var hubRoepnaamField=document.getElementById('hubRoepnaamField');
   var hubRoepnaamSave=document.getElementById('hubRoepnaamSave');
   var hubRoepnaamState=document.getElementById('hubRoepnaamState');
+  var hubMirrorManageWrap=document.getElementById('hubMirrorManageWrap');
+  var hubMirrorManageList=document.getElementById('hubMirrorManageList');
   var hubAccountWrap=document.getElementById('hubAccountWrap');
   var hubPhoneField=document.getElementById('hubPhoneField');
   var hubPhoneSave=document.getElementById('hubPhoneSave');
@@ -2227,6 +2244,149 @@ a.app-card{color:inherit;text-decoration:none}
     return scopes.indexOf('ss')>=0;
   }
   var SC_APP_LINK_KEY={'datesense.html':'ds','friendsense.html':'fr','familysense.html':'fs','selfsense.html':'ss'};
+  var SMH=window.SenseMirrorHub||null;
+  var _scMirrorStatuses={ds:'never_opened',fr:'never_opened',fs:'never_opened',ss:'never_opened'};
+  function scMirrorHubReady(){
+    return !!(SMH&&sb&&typeof SMH.getMirrorStatuses==='function');
+  }
+  function scApplyMirrorStatusesToGrid(statuses){
+    statuses=statuses||_scMirrorStatuses;
+    _scMirrorStatuses=statuses;
+    if(SMH&&typeof SMH.injectMirrorOverlayStyles==='function')SMH.injectMirrorOverlayStyles();
+    document.querySelectorAll('.app-card[data-app-key]').forEach(function(card){
+      var key=scAppKeyFromCard(card);
+      if(!key||!SMH||typeof SMH.applyStatusToHubCard!=='function')return;
+      SMH.applyStatusToHubCard(card,key,statuses[key]||'never_opened');
+    });
+    try{scReorderAppGrid(userSession,_scLastCoachPack);}catch(_sort){}
+    scRenderHubMirrorManage(statuses);
+  }
+  async function scRefreshMirrorStatuses(user){
+    if(!scMirrorHubReady()||!user||!user.id){
+      scApplyMirrorStatusesToGrid({ds:'never_opened',fr:'never_opened',fs:'never_opened',ss:'never_opened'});
+      return;
+    }
+    try{
+      var st=await SMH.getMirrorStatuses(sb,user.id);
+      scApplyMirrorStatusesToGrid(st);
+    }catch(e){
+      console.warn('mirror statuses',e);
+    }
+  }
+  function scRenderHubMirrorManage(statuses){
+    if(!hubMirrorManageWrap||!hubMirrorManageList||!SMH)return;
+    var user=userSession;
+    if(!user||!user.id){
+      hubMirrorManageWrap.style.display='none';
+      return;
+    }
+    hubMirrorManageWrap.style.display='block';
+    var rows=[
+      {key:'ds',label:'DateSense'},
+      {key:'fr',label:'FriendSense'},
+      {key:'fs',label:'FamilySense'},
+      {key:'ss',label:'SelfSense'}
+    ];
+    hubMirrorManageList.innerHTML=rows.map(function(r){
+      var st=statuses[r.key]||'never_opened';
+      var btn='';
+      if(st==='active'){
+        btn='<button type="button" class="hub-mirror-pause-btn" data-pause-key="'+r.key+'">Zet on hold</button>';
+      }else if(st==='paused'){
+        btn='<button type="button" class="hub-mirror-pause-btn" data-resume-key="'+r.key+'">Heractiveren</button>';
+      }else{
+        btn='<span style="font-size:12px;color:rgba(61,47,31,.5)">'+String(SMH.STATUS_LABELS[st]||'')+'</span>';
+      }
+      return '<div class="hub-mirror-row"><span>'+r.label+'</span>'+btn+'</div>';
+    }).join('');
+    hubMirrorManageList.querySelectorAll('[data-pause-key]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var k=btn.getAttribute('data-pause-key');
+        if(!k||!confirm('Zet '+btn.closest('.hub-mirror-row').querySelector('span').textContent+' op hold? Je gegevens blijven bewaard.'))return;
+        void scPauseMirrorFromHub(k);
+      });
+    });
+    hubMirrorManageList.querySelectorAll('[data-resume-key]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var k=btn.getAttribute('data-resume-key');
+        if(k)void scResumeMirrorFromHub(k,false);
+      });
+    });
+  }
+  async function scPauseMirrorFromHub(appKey){
+    if(!scMirrorHubReady()||!userSession||!userSession.id)return;
+    var res=await SMH.pauseMirror(sb,userSession.id,appKey);
+    if(res&&res.error){alert(String(res.error.message||'Pauzeren mislukt'));return;}
+    await scRefreshMirrorStatuses(userSession);
+  }
+  async function scResumeMirrorFromHub(appKey,navigate){
+    if(!scMirrorHubReady()||!userSession||!userSession.id)return;
+    var res=await SMH.resumeMirror(sb,userSession.id,appKey);
+    if(res&&res.error){alert(String(res.error.message||'Heractiveren mislukt'));return;}
+    await scRefreshMirrorStatuses(userSession);
+    if(navigate&&SMH.appHrefForKey){
+      var href=SMH.appHrefForKey(appKey);
+      if(href)window.location.href=href+(href.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
+    }
+  }
+  async function scHandleMirrorAppCardClick(card,target,e){
+    if(!scMirrorHubReady()||!userSession||!userSession.id)return false;
+    var appKey=scAppKeyFromCard(card)||scAppKeyFromHref(target);
+    if(!appKey)return false;
+    var status=_scMirrorStatuses[appKey]||'never_opened';
+    if(status==='active'||status==='setting_up')return false;
+    if(e){e.preventDefault();e.stopPropagation();}
+    try{scResetAppCardLoading();}catch(_rst){}
+    if(status==='paused'){
+      if(confirm('Heractiveren? Je gegevens blijven bewaard; Sensei wordt weer actief in deze app.')){
+        await scResumeMirrorFromHub(appKey,true);
+      }
+      return true;
+    }
+    if(status==='never_opened'){
+      var mirrorId=SMH.APP_MIRROR_IDS[appKey];
+      var hasFacts=await SMH.mirrorHasOnboardingFacts(sb,userSession.id,mirrorId);
+      if(hasFacts){
+        await SMH.activateMirror(sb,userSession.id,mirrorId,'onboarding_facts');
+        await scRefreshMirrorStatuses(userSession);
+        window.location.href=target+(target.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
+        return true;
+      }
+      SMH.showMirrorIntakeModal({
+        sb:sb,
+        userId:userSession.id,
+        appKey:appKey,
+        navigateTo:target,
+        via:'hub_card',
+        onError:function(err){alert(String((err&&err.message)||'Opslaan mislukt'));}
+      });
+      return true;
+    }
+    return false;
+  }
+  function scBindMirrorCardLongPress(){
+    if(!scMirrorHubReady())return;
+    document.querySelectorAll('.app-card[data-app-key]').forEach(function(card){
+      if(card.getAttribute('data-mirror-lp')==='1')return;
+      card.setAttribute('data-mirror-lp','1');
+      var timer=null;
+      card.addEventListener('pointerdown',function(){
+        if(!userSession)return;
+        var key=scAppKeyFromCard(card);
+        if(!key||_scMirrorStatuses[key]!=='active')return;
+        timer=setTimeout(function(){
+          timer=null;
+          if(confirm('Zet deze spiegel op hold? Je gegevens blijven bewaard; Sensei is hier inactief tot je heractiveert.')){
+            void scPauseMirrorFromHub(key);
+          }
+        },650);
+      });
+      function clearLp(){if(timer){clearTimeout(timer);timer=null;}}
+      card.addEventListener('pointerup',clearLp);
+      card.addEventListener('pointerleave',clearLp);
+      card.addEventListener('pointercancel',clearLp);
+    });
+  }
   var SC_APP_DEFAULT_RANK={ds:0,fr:1,fs:2,ss:3};
   function scAppKeyFromCard(card){
     if(!card)return'';
@@ -2769,9 +2929,11 @@ a.app-card{color:inherit;text-decoration:none}
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
       scReorderAppGrid(user,pack);
+      void scRefreshMirrorStatuses(user);
     }catch(e){
       console.warn('sensecorner coach hints',e);
       updateAppCardCoachHints(user);
+      void scRefreshMirrorStatuses(user);
     }
   }
   function setHubRoepnaamState(msg,isErr){
@@ -2885,6 +3047,7 @@ a.app-card{color:inherit;text-decoration:none}
       if(hubLogoutBtn)hubLogoutBtn.style.display='inline-flex';
       if(hubHeaderLogout)hubHeaderLogout.style.display='inline-flex';
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='block';
+      if(hubMirrorManageWrap)hubMirrorManageWrap.style.display='block';
       if(hubAccountWrap)hubAccountWrap.style.display='block';
       if(hubRoepnaamField){
         var m=user.user_metadata&&typeof user.user_metadata==='object'?user.user_metadata:{};
@@ -2905,6 +3068,7 @@ a.app-card{color:inherit;text-decoration:none}
       if(hubLogoutBtn)hubLogoutBtn.style.display='none';
       if(hubHeaderLogout)hubHeaderLogout.style.display='none';
       if(hubRoepnaamWrap)hubRoepnaamWrap.style.display='none';
+      if(hubMirrorManageWrap)hubMirrorManageWrap.style.display='none';
       if(hubAccountWrap)hubAccountWrap.style.display='none';
       if(hubRoepnaamField)hubRoepnaamField.value='';
       if(hubPhoneField)hubPhoneField.value='';
@@ -3020,6 +3184,8 @@ a.app-card{color:inherit;text-decoration:none}
   updateHeroWelcome(userSession);
 
   try{scReorderAppGrid(userSession,null);}catch(_sortInit){}
+  void scRefreshMirrorStatuses(userSession);
+  scBindMirrorCardLongPress();
   var cards=Array.prototype.slice.call(document.querySelectorAll('.app-card'));
   cards.forEach(function(c,i){
     setTimeout(function(){c.classList.add('enter');}, 80 + i*60);
@@ -3040,7 +3206,7 @@ a.app-card{color:inherit;text-decoration:none}
     });
   }
   var scAppGrid=document.querySelector('section.grid[aria-label="Beschikbare apps"]');
-  function scOnAppGridClick(e){
+  async function scOnAppGridClick(e){
     var card=e.target&&e.target.closest?e.target.closest('.app-card[data-app-link]'):null;
     if(!card||!scAppGrid||!scAppGrid.contains(card))return;
     var target=String(card.getAttribute('data-app-link')||'').trim();
@@ -3050,6 +3216,8 @@ a.app-card{color:inherit;text-decoration:none}
       return;
     }
     if(userSession){
+      var handled=await scHandleMirrorAppCardClick(card,target,e);
+      if(handled)return;
       card.setAttribute('data-sc-nav','1');
       card.classList.add('loading');
       card.setAttribute('aria-busy','true');

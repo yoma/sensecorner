@@ -10,10 +10,11 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="01-06-2026 12:01">
+<meta name="ds-build" content="04-06-2026 21:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
+<script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -3201,12 +3202,35 @@ function showAuthenticatedShell(targetScreen){
   try{setBuildTag();}catch(_e){}
   try{goScreen(sc,{skipFlush:true});}catch(_e2){console.error('showAuthenticatedShell:',_e2);}
 }
+async function dsMirrorLifecycleGate(session){
+  var hub=window.SenseMirrorHub;
+  if(!hub||!sb||!session||!session.user)return true;
+  return hub.gateAppAfterAuth({
+    sb:sb,
+    userId:session.user.id,
+    appKey:'ds',
+    appHref:'datesense.html',
+    onPaused:function(){
+      try{goScreen('home',{skipFlush:true});}catch(_gs){}
+      var mc=document.getElementById('mainContent');
+      if(mc&&typeof hub.renderPausedBannerHtml==='function'){
+        mc.innerHTML=hub.renderPausedBannerHtml('ds');
+        var btn=document.getElementById('scMirrorPausedReactivate');
+        if(btn)btn.addEventListener('click',function(){
+          hub.showResumeConfirmModal({sb:sb,userId:session.user.id,appKey:'ds',navigateTo:'datesense.html'});
+        });
+      }
+    }
+  });
+}
 async function enterAuthenticatedApp(session,opts){
   opts=opts||{};
   if(!session||!session.user)return false;
   var uid=String(session.user.id||'');
   if(_authBootstrapInFlight)return _authBootstrapInFlight;
   if(!opts.forceResync&&_authBootstrappedUserId&&uid&&_authBootstrappedUserId===uid&&S.user){
+    var gated=await dsMirrorLifecycleGate(session);
+    if(!gated)return false;
     var _alreadyInApp=!(S.screen==='login'||S.screen==='register'||!S.screen);
     if(opts.screen||!_alreadyInApp)showAuthenticatedShell(opts.screen);
     return true;
@@ -3214,6 +3238,8 @@ async function enterAuthenticatedApp(session,opts){
   _authBootstrapInFlight=(async function(){
     try{
       applyAuthSessionToState(session);
+      var gated=await dsMirrorLifecycleGate(session);
+      if(!gated)return false;
       var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
       if(navEarly)showAuthenticatedShell(opts.screen);
       await bootstrapAuthenticated(session,opts);

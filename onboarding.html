@@ -11,7 +11,9 @@
   <link rel="stylesheet" href="css/sense-theme.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/sense-common.js"></script>
+  <script src="js/sense-mirror-hub.js"></script>
   <script src="js/sense-auth-client.js"></script>
+  <script src="js/selfsense-aandachtspunten-detect.js"></script>
   <style>
     :root {
       --ob-border: rgba(61, 47, 31, 0.14);
@@ -517,9 +519,10 @@
       user-select: none;
       position: relative;
     }
-    .ob-mirror-item.own { cursor: default; }
-    .ob-mirror-item:not(.own):not(.active) { opacity: 0.38; }
-    .ob-mirror-item:not(.own):not(.active):hover { opacity: 0.6; transform: translateY(-2px); }
+    .ob-mirror-item.own,
+    .ob-mirror-item.self { cursor: default; }
+    .ob-mirror-item:not(.own):not(.self):not(.active) { opacity: 0.38; }
+    .ob-mirror-item:not(.own):not(.self):not(.active):hover { opacity: 0.6; transform: translateY(-2px); }
     .ob-mirror-item.active { opacity: 1; transform: translateY(-2px); }
     .ob-mirror-ripple {
       width: 72px;
@@ -597,7 +600,8 @@
     }
     .ob-mirror-item.active .ob-mirror-check { opacity: 1; transform: scale(1); }
     .ob-mirror-check svg { width: 11px; height: 11px; stroke: var(--cream); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-    .ob-mirror-item.own .ob-mirror-check { opacity: 1; transform: scale(1); background: var(--ob-own-donker); }
+    .ob-mirror-item.own .ob-mirror-check,
+    .ob-mirror-item.self .ob-mirror-check { opacity: 1; transform: scale(1); background: var(--ob-own-donker); }
     .ob-reassure {
       margin: 16px 0 20px;
       text-align: center;
@@ -1057,7 +1061,7 @@
       <section class="ob-screen ob-screen--wide" data-ob="mir0">
         <div class="ob-ripple ob-ripple--sm pulsing"><div class="ob-ripple-inner"></div></div>
         <p class="ob-sensei" data-type="Voordat ik je leer kennen,"></p>
-        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. Alle spiegels staan standaard aan. Geen interesse in een bepaalde spiegel? Vink die gerust uit."></p>
+        <p class="ob-sensei smaller" data-type="wil ik weten waar je vooral interesse in hebt. OwnSense en SelfSense zijn je basis en staan altijd aan. DateSense, FamilySense en FriendSense kun je aan- of uitvinken, maar kies minstens één daarvan."></p>
         <div class="ob-mirror-grid-wrap" id="obGridWrap">
           <div class="ob-mirror-grid" id="obMirrorGrid">
             <div class="ob-mirror-item own active" data-mirror="own">
@@ -1084,17 +1088,17 @@
               <h3>FriendSense</h3>
               <p>Vriendschappen met balans en verbinding.</p>
             </div>
-            <div class="ob-mirror-item active" data-mirror="self" role="button" tabindex="0">
+            <div class="ob-mirror-item self active" data-mirror="self">
               <div class="ob-mirror-check"><svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="2,6 5,9 10,3"/></svg></div>
               <div class="ob-mirror-ripple"><div class="ob-mirror-ripple-center">S</div></div>
               <h3>SelfSense</h3>
-              <p>Herstel in je eigen tempo.</p>
+              <p>Herstel in je eigen tempo. Altijd aan.</p>
             </div>
           </div>
         </div>
-        <p class="ob-reassure" id="obReassure">Spiegels toevoegen of weghalen kan altijd, ook later.</p>
+        <p class="ob-reassure" id="obReassure">Alle apps werken het best als je ze gebruikt. Je mag DateSense, FamilySense of FriendSense overslaan, maar kies minstens één. Later kun je spiegels starten of op hold zetten via SenseCorner.</p>
         <div class="ob-cta-wrap" id="obCtaMir0">
-          <button type="button" class="ob-cta-primary" id="obBtnMir0" disabled>Kies minstens één extra spiegel</button>
+          <button type="button" class="ob-cta-primary" id="obBtnMir0" disabled>Kies minstens DateSense, FamilySense of FriendSense</button>
         </div>
       </section>
 
@@ -1404,7 +1408,7 @@
   var userName = "";
   var userEmail = "";
   var obOtpVerifyAsSignup = false;
-  var selectedMirrors = new Set(["own", "date", "family", "friend", "self"]);
+  var selectedMirrors = new Set(["own", "self", "date", "family", "friend"]);
   var answers = {};
   var photo = "";
   var photoCaption = "";
@@ -1417,39 +1421,10 @@
   var routeStarted = false;
   var obOwnBasisMetaCache = {};
 
-  var ANSWER_KEY_TO_SUB = {
-    core_1: "core_friends_view",
-    core_2: "core_daily_joy",
-    core_3: "core_recharge",
-    core_4: "core_emotion_sharing",
-    core_5: "core_friction",
-    date_1: "date_safety",
-    date_2: "date_overcommit",
-    family_1: "family_meaning",
-    family_2: "family_friction",
-    friend_1: "friend_values",
-    friend_2: "friend_conflict",
-    self_1: "actuele_situatie",
-    self_2: "goede_dag",
-    self_3: "doelen",
-    self_4: "constraint",
-    self_5: "self_checkin_mood",
-    self_6: "steunbronnen"
-  };
-
-  var PROFILE_NAME_BY_MIRROR = {
-    date: "DateSense",
-    family: "FamilySense",
-    friend: "FriendSense",
-    self: "SelfSense"
-  };
-
-  var PROFILE_MIRROR_BY_NAME = {
-    datesense: "date",
-    familysense: "family",
-    friendsense: "friend",
-    selfsense: "self"
-  };
+  var SMH = window.SenseMirrorHub || {};
+  var ANSWER_KEY_TO_SUB = SMH.ANSWER_KEY_TO_SUB || {};
+  var PROFILE_NAME_BY_MIRROR = SMH.PROFILE_NAME_BY_MIRROR || {};
+  var PROFILE_MIRROR_BY_NAME = SMH.PROFILE_MIRROR_BY_NAME || {};
 
   obEnsureAuthClient();
 
@@ -1461,40 +1436,30 @@
     { key: "core_5", q: "Waar loop je weleens tegenaan?", hint: "Het hoeft geen groot probleem te zijn." }
   ];
 
-  var MIRROR_META = {
-    date: { letter: "D", name: "DateSense", intro: "Nu iets over daten of je relatie.", q1: "Wat heb je nodig om je veilig te voelen bij iemand?", h1: "Denk aan hoe iemand met je praat, kijkt en luistert.", q2: "Wanneer voel je je het snelst onrustig of onzeker bij iemand.", h2: "Mag heel klein zijn: voor een afspraak, na een bericht, als het stil wordt.", sum: "Je merkt waar rust of duidelijkheid voor je telt. Je voelt ook momenten waar contact met iemand onzeker voelt. Dat neem ik mee." },
-    family: { letter: "F", name: "FamilySense", intro: "Nu iets over familie.", q1: "Wat betekent familie voor jou?", h1: "Je eigen definitie: bloedband, keuze of allebei.", q2: "Zijn er problemen thuis waar je vaak op terugbotst?", h2: "Het mag een situatie zijn, niet per se een persoon.", sum: "Wat je over familie en thuis zei, neem ik mee zoals je het zelf formuleerde." },
-    friend: { letter: "V", name: "FriendSense", intro: "Nu iets over vriendschap.", q1: "Wat vind je belangrijk in een vriendschap?", h1: "Denk aan wat je mist als het er niet is.", q2: "Hoe ga je om met meningsverschillen met een vriend?", h2: "Denk aan een recent voorbeeld, hoe klein ook.", sum: "Je weet wat een vriendschap voor jou écht maakt. En je merkt dat wrijving je iets kost. Dat neem ik mee." },
-    self: {
-      letter: "S",
-      name: "SelfSense",
-      intro: "Nu iets over jezelf. Dit is de intake van SelfSense.",
-      questions: [
-        { q: "Wat houdt je op dit moment het meest bezig? Wat heeft je hierheen gebracht?", h: "Beschrijf wat nu het meest op de voorgrond staat." },
-        { q: "Wat zou voor jou nu een goede dag zijn? Of een dag die meevalt?", h: "Een klein teken van ademruimte is ook goed." },
-        { q: "Wat wil je graag bereiken? Of voelt bereiken te veel als druk?", h: "Je mag ook zeggen dat je vooral rust zoekt." },
-        { q: "Wat werkt absoluut niet voor jou?", h: "Noem dingen die Sensei beter niet voorstelt." },
-        {
-          q: "Hoe voel je je op dit moment?",
-          options: [
-            { id: "hetzelfde", label: "Ik voel me oké" },
-            { id: "minder goed", label: "Het weegt soms" },
-            { id: "heel zwaar", label: "Het is zwaar" },
-            { id: "heel zwaar", label: "Het is overweldigend" }
-          ]
-        },
-        { q: "Heb je dingen waarop je kunt terugvallen? Mensen, gewoontes, plekken, professionele hulp: wat voor jou werkt.", h: "Alles wat je ondersteunt mag hier staan." }
-      ],
-      sum: "Je bracht helder in kaart wat nu speelt, wat je nodig hebt en wat niet werkt voor jou. Dat is sterke basisinformatie voor SelfSense."
-    }
-  };
+  var MIRROR_META = SMH.MIRROR_META || {};
   function getMirrorQuestions(mirrorId, meta) {
+    if (typeof SMH.getMirrorQuestions === "function") return SMH.getMirrorQuestions(mirrorId, meta);
     if (!meta) return [];
     if (Array.isArray(meta.questions) && meta.questions.length) return meta.questions;
     return [
       { q: meta.q1, h: meta.h1 },
       { q: meta.q2, h: meta.h2 }
     ];
+  }
+  function normalizeSelectedMirrors() {
+    if (typeof SMH.normalizeOnboardingMirrors === "function") {
+      selectedMirrors = SMH.normalizeOnboardingMirrors(selectedMirrors);
+    } else {
+      selectedMirrors.add("own");
+      selectedMirrors.add("self");
+      if (!["date", "family", "friend"].some(function (m) { return selectedMirrors.has(m); })) {
+        selectedMirrors.add("date");
+      }
+    }
+  }
+  function countOptionalMirrorsSelected() {
+    if (typeof SMH.countOptionalMirrors === "function") return SMH.countOptionalMirrors(selectedMirrors);
+    return ["date", "family", "friend"].filter(function (m) { return selectedMirrors.has(m); }).length;
   }
 
 
@@ -1732,23 +1697,39 @@
   }
 
   async function loadMirrorSelectionFromProfiles(userId) {
-    var out = new Set(["own"]);
-    if (!sb || !userId) return out;
+    var out = new Set(["own", "self"]);
+    if (!sb || !userId) {
+      if (typeof SMH.normalizeOnboardingMirrors === "function") return SMH.normalizeOnboardingMirrors(out);
+      out.add("date");
+      return out;
+    }
     var res = await sb.from("sense_profiles").select("name").eq("user_id", userId);
-    if (res && res.error) return out;
+    if (res && res.error) {
+      if (typeof SMH.normalizeOnboardingMirrors === "function") return SMH.normalizeOnboardingMirrors(out);
+      out.add("date");
+      return out;
+    }
     var rows = Array.isArray(res.data) ? res.data : [];
     rows.forEach(function (r) {
       var nm = String((r && r.name) || "").trim().toLowerCase();
       var mid = PROFILE_MIRROR_BY_NAME[nm.replace(/\s+/g, "")];
       if (mid) out.add(mid);
     });
+    if (typeof SMH.normalizeOnboardingMirrors === "function") return SMH.normalizeOnboardingMirrors(out);
+    out.add("self");
+    if (!["date", "family", "friend"].some(function (m) { return out.has(m); })) out.add("date");
     return out;
   }
 
   function applyMirrorSelectionToDom() {
+    normalizeSelectedMirrors();
     document.querySelectorAll("#obMirrorGrid .ob-mirror-item").forEach(function (el) {
       var m = el.getAttribute("data-mirror");
-      if (!m || m === "own") return;
+      if (!m) return;
+      if (m === "own" || m === "self") {
+        el.classList.add("active");
+        return;
+      }
       if (selectedMirrors.has(m)) el.classList.add("active");
       else el.classList.remove("active");
     });
@@ -1757,36 +1738,9 @@
 
   async function saveMirrorProfilesForUser(userId) {
     if (!sb || !userId) return "";
-    var iso = new Date().toISOString();
-    var extras = Array.from(selectedMirrors).filter(function (m) {
-      return m !== "own";
-    });
-    for (var i = 0; i < extras.length; i++) {
-      var id = extras[i];
-      var name = PROFILE_NAME_BY_MIRROR[id];
-      if (!name) continue;
-      var payload = {
-        user_id: userId,
-        name: name,
-        phone: null,
-        props: { activated_at: iso, via: "onboarding" },
-        last_active: iso
-      };
-      var up = await withRetries(function () {
-        return sb.from("sense_profiles").upsert(payload, { onConflict: "user_id,name" });
-      }, 3);
-      if (up && up.error) {
-        var rawMsg = String(up.error.message || "");
-        // Sinds naam-guardrails in DB kunnen systeemspiegels geblokkeerd worden.
-        // Blokkeer onboarding niet, maar geef duidelijke melding zodat de flow verder kan.
-        if (
-          rawMsg.toLowerCase().indexOf("gereserveerd voor systeemgebruik") >= 0 ||
-          rawMsg.toLowerCase().indexOf("validate_sense_profile_name") >= 0
-        ) {
-          return "db_reserved_name_guard";
-        }
-        return "Even een haperingetje. Ik probeer het opnieuw.";
-      }
+    normalizeSelectedMirrors();
+    if (typeof SMH.saveSelectedMirrors === "function") {
+      return SMH.saveSelectedMirrors(sb, userId, selectedMirrors);
     }
     return "";
   }
@@ -1922,6 +1876,7 @@
     var mirrorsDb = await loadMirrorSelectionFromProfiles(uid);
     if (mirrorsDb.size > 1) {
       selectedMirrors = mirrorsDb;
+      normalizeSelectedMirrors();
       applyMirrorSelectionToDom();
     }
     var slot1 = await hasResumePrimaryPhoto(uid);
@@ -2410,6 +2365,9 @@
       note: String(rawText || "").trim().slice(0, 240) || null
     });
     if (ins && ins.error) throw ins.error;
+    if (typeof detectSelfsenseAandachtspuntenFireAndForget === "function") {
+      void detectSelfsenseAandachtspuntenFireAndForget();
+    }
     return { saved: true, answer: answer };
   }
 
@@ -2595,7 +2553,9 @@
 
   function mirrorReactionText() {
     function has(m) { return selectedMirrors.has(m); }
-    var extras = Array.from(selectedMirrors).filter(function (m) { return m !== "own"; });
+    var extras = Array.from(selectedMirrors).filter(function (m) {
+      return m !== "own" && m !== "self";
+    });
     var count = extras.length;
     if (count >= 3) return "Meerdere spiegels tegelijk. Dat zegt iets over hoe breed je kijkt.";
     if (count === 1) {
@@ -3113,6 +3073,9 @@
             note: text.slice(0, 240) || null
           });
           if (ins5 && ins5.error) throw ins5.error;
+          if (typeof detectSelfsenseAandachtspuntenFireAndForget === "function") {
+            void detectSelfsenseAandachtspuntenFireAndForget();
+          }
           var moodLine = selectedOpt
             ? String(selectedOpt.label || text || "").trim()
             : String(text || "").trim();
@@ -4010,13 +3973,14 @@
   if (pwBtn) pwBtn.addEventListener("click", savePasswordAndContinue);
 
   document.getElementById("obBtnAcc6").addEventListener("click", function () {
+    normalizeSelectedMirrors();
     goToStatic("mir0");
-    updateMirrorCTA();
+    applyMirrorSelectionToDom();
   });
 
   function toggleMirrorCard(card) {
     var mirror = card.getAttribute("data-mirror");
-    if (mirror === "own") return;
+    if (mirror === "own" || mirror === "self") return;
     if (card.classList.contains("active")) {
       card.classList.remove("active");
       selectedMirrors.delete(mirror);
@@ -4027,7 +3991,7 @@
     updateMirrorCTA();
   }
 
-  document.querySelectorAll("#obMirrorGrid .ob-mirror-item:not(.own)").forEach(function (card) {
+  document.querySelectorAll("#obMirrorGrid .ob-mirror-item:not(.own):not(.self)").forEach(function (card) {
     card.addEventListener("click", function () {
       toggleMirrorCard(card);
     });
@@ -4041,23 +4005,22 @@
 
   function updateMirrorCTA() {
     var btn = document.getElementById("obBtnMir0");
-    var extras = Array.from(selectedMirrors).filter(function (m) {
-      return m !== "own";
-    }).length;
-    if (extras === 0) {
-      btn.textContent = "Kies minstens één extra spiegel";
+    if (!btn) return;
+    normalizeSelectedMirrors();
+    var optionalCount = countOptionalMirrorsSelected();
+    if (optionalCount === 0) {
+      btn.textContent = "Kies minstens DateSense, FamilySense of FriendSense";
       btn.disabled = true;
     } else {
-      btn.textContent = "Verder met " + (extras + 1) + " spiegels";
+      var total = 2 + optionalCount;
+      btn.textContent = "Verder met " + total + " spiegels";
       btn.disabled = false;
     }
   }
 
   document.getElementById("obBtnMir0").addEventListener("click", async function () {
-    var extras = Array.from(selectedMirrors).filter(function (m) {
-      return m !== "own";
-    }).length;
-    if (extras === 0) return;
+    normalizeSelectedMirrors();
+    if (countOptionalMirrorsSelected() === 0) return;
     if (!sb) {
       showToast("Geen verbinding. Vernieuw de pagina.");
       return;

@@ -10,10 +10,12 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="03-06-2026 13:56">
+<meta name="fs-build" content="04-06-2026 16:17">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
+<script src="js/selfsense-aandachtspunten-detect.js"></script>
+<script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -234,8 +236,10 @@ html,body{height:100%;background:var(--cream);font-family:var(--font-sans);overf
 .sh{font-size:var(--fs-xs);font-weight:700;color:var(--m);text-transform:uppercase;letter-spacing:1px;margin:20px 0 12px}
 .ncard{border-radius:16px;padding:14px 15px;background:#fff;margin-bottom:10px;border-left:4px solid #999;border:1px solid rgba(0,0,0,.07);box-shadow:0 2px 8px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05)}
 .ncard.s{border-left-color:var(--r)} .ncard.a{border-left-color:#E07800} .ncard.c{border-left-color:#0066CC}
+.ncard.p{border-left-color:var(--self-medium);background:linear-gradient(180deg,color-mix(in srgb,var(--self-licht) 38%,#fff) 0%,#fff 100%)}
 .ncat{font-size:var(--fs-xs);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
 .ncard.s .ncat{color:var(--r)} .ncard.a .ncat{color:#E07800} .ncard.c .ncat{color:#0066CC}
+.ncard.p .ncat{color:var(--self-donker)}
 .ntext{font-size:var(--fs-sm);color:#333;line-height:1.5}
 .nlink{font-size:var(--fs-sm);color:var(--r);margin-top:6px;cursor:pointer;display:block;font-weight:600}
 
@@ -1099,6 +1103,20 @@ a:focus-visible,
 .profile-avatar-wrap.is-uploading .profile-avatar{filter:grayscale(.2);opacity:.88}
 .profile-photo-status{min-height:18px}
 
+/* Dagelijkse check-in (SelfSense) */
+.ss-checkin-overlay{position:fixed;inset:0;z-index:340;display:none;align-items:flex-end;justify-content:center}
+.ss-checkin-overlay.show{display:flex}
+.ss-checkin-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.ss-checkin-sheet{position:relative;z-index:2;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + var(--sb));max-height:82vh;overflow:auto;box-shadow:0 -8px 24px rgba(74,107,80,.14);border-top:3px solid color-mix(in srgb,var(--self-medium) 55%,#fff)}
+.ss-checkin-sheet h3{font-family:var(--font-serif);font-size:20px;color:var(--self-donker);margin-bottom:6px}
+.ss-checkin-sheet p{font-size:13px;color:var(--warm-bruin);line-height:1.55;margin-bottom:12px}
+.ss-checkin-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.ss-checkin-btn{padding:12px 10px;border-radius:12px;border:1px solid color-mix(in srgb,var(--self-medium) 32%,#e4e6eb);background:color-mix(in srgb,var(--self-licht) 22%,#fff);color:var(--self-donker);cursor:pointer;font-size:14px;font-weight:700;font-family:inherit;text-align:left;touch-action:manipulation}
+.ss-checkin-btn:active{background:color-mix(in srgb,var(--self-medium) 18%,#fff)}
+.ss-checkin-note{width:100%;margin-top:10px;padding:10px 12px;border:1px solid var(--b);border-radius:10px;font-size:13px;font-family:inherit;resize:vertical;min-height:52px}
+.ss-checkin-note-hint{font-size:11px;color:#6b756f;line-height:1.45;margin-top:6px}
+.ss-checkin-skip{margin-top:12px;width:100%;padding:10px;border:none;background:transparent;color:#777;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+
 /* ══ OWN SENSE CATEGORIEËN ══ */
 .own-cat{background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:16px;margin-bottom:12px;overflow:hidden;transition:border-color .2s;box-shadow:0 2px 10px rgba(0,0,0,.06)}
 .own-cat.filled{border-color:#C8E6C9}
@@ -1205,6 +1223,36 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 .app-depth-hint-txt{flex:1;min-width:0}
 .app-depth-hint.app-depth-hint--done{padding:4px 9px;font-size:10px;line-height:1.35;color:#6a7179;background:rgba(248,249,251,.92);border:1px solid rgba(228,230,235,.85);border-radius:6px;gap:0}
 .app-depth-hint--done .app-depth-hint-txt{flex:none;font-weight:600;color:#5c636b}
+.ss-aandachtspunten-banner-wrap{margin:0 0 12px;width:100%}
+a.ss-aandachtspunten-banner{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;text-decoration:none;color:var(--self-donker);background:linear-gradient(180deg,color-mix(in srgb,var(--self-licht) 55%,#fff) 0%,#fff 100%);border:1px solid color-mix(in srgb,var(--self-medium) 42%,#e4e6eb);box-shadow:0 2px 10px rgba(74,107,80,.08)}
+a.ss-aandachtspunten-banner:hover{filter:brightness(1.02)}
+.ss-aandachtspunten-banner-badge{flex:0 0 auto;font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:7px;background:color-mix(in srgb,var(--self-medium) 22%,#fff);color:var(--self-donker);line-height:1}
+.ss-aandachtspunten-banner-main{flex:1;min-width:0;font-size:13px;line-height:1.45;font-weight:600}
+.ss-aandachtspunten-banner-cta{flex:0 0 auto;font-size:20px;font-weight:300;color:var(--self-medium);line-height:1;margin-top:1px}
+button.ss-waar-ik-home-card{width:100%;max-width:100%;box-sizing:border-box;margin:0 0 12px;padding:12px 14px;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;border:1.5px solid color-mix(in srgb,var(--self-medium) 55%,#e4e6eb);border-radius:14px;background:linear-gradient(180deg,#fff 0%,color-mix(in srgb,var(--self-licht) 35%,#fff) 100%);box-shadow:0 2px 10px rgba(74,107,80,.07);font-family:inherit;-webkit-tap-highlight-color:transparent;appearance:none}
+button.ss-waar-ik-home-card:hover{filter:brightness(1.02)}
+button.ss-waar-ik-home-card:focus-visible{outline:2px solid var(--self-medium);outline-offset:2px}
+.ss-waar-ik-home-icon{flex:0 0 auto;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--self-medium) 18%,#fff);color:var(--self-donker)}
+.ss-waar-ik-home-main{flex:1;min-width:0}
+.ss-waar-ik-home-title{font-size:14px;font-weight:600;color:var(--self-donker);line-height:1.3}
+.ss-waar-ik-home-sub{font-size:12px;color:var(--warm-bruin);margin-top:2px;line-height:1.35}
+.ss-waar-ik-home-chevron{flex:0 0 auto;font-size:20px;font-weight:300;color:var(--self-medium);line-height:1}
+.ss-waar-ik-shell{padding:4px 2px 16px}
+.ss-waar-ik-subtitle{font-size:12px;color:var(--warm-bruin);margin:0 0 12px;line-height:1.4}
+.ss-waar-ik-row{width:100%;box-sizing:border-box;margin:0 0 8px;padding:12px 14px;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;border:1px solid color-mix(in srgb,var(--self-medium) 28%,#e4e6eb);border-radius:12px;background:#fff;font-family:inherit;font-size:14px;font-weight:500;color:var(--self-donker);line-height:1.35;-webkit-tap-highlight-color:transparent;appearance:none}
+.ss-waar-ik-row:hover{background:color-mix(in srgb,var(--self-licht) 22%,#fff)}
+.ss-waar-ik-row:focus-visible{outline:2px solid var(--self-medium);outline-offset:2px}
+.ss-waar-ik-row-label{flex:1;min-width:0}
+.ss-waar-ik-detail{padding:2px 2px 20px}
+.ss-waar-ik-sec{margin:0 0 16px}
+.ss-waar-ik-sec-h{font-size:12px;font-weight:700;color:var(--self-donker);margin:0 0 6px}
+.ss-waar-ik-evidence{font-size:13px;color:var(--warm-bruin);line-height:1.6}
+.ss-waar-ik-tips-card{padding:12px 14px;border-radius:12px;background:#fff;border:1px solid color-mix(in srgb,var(--self-medium) 22%,#e4e6eb);font-size:14px;color:var(--self-donker);line-height:1.55}
+.ss-waar-ik-movement{font-size:13px;color:var(--warm-bruin);font-style:italic;line-height:1.5;margin:0 0 14px}
+button.ss-waar-ik-cta-btn{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid color-mix(in srgb,var(--self-medium) 45%,#e4e6eb);background:color-mix(in srgb,var(--self-medium) 14%,#fff);color:var(--self-donker);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button.ss-waar-ik-cta-btn:hover:not(:disabled){filter:brightness(1.03)}
+button.ss-waar-ik-cta-btn:disabled{opacity:.65;cursor:wait}
+.ss-waar-ik-empty{font-size:13px;color:var(--warm-bruin);line-height:1.55;padding:8px 2px}
 .vertel-top-bar{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;padding:7px 11px!important;margin:5px 12px 0!important;border-bottom:1px solid var(--b);background:#fff}
 .vertel-top-bar .vertel-history-btn{padding:4px 8px!important;border-radius:8px!important;gap:6px!important}
 .vertel-top-bar .vertel-history-btn span{font-size:11px!important;font-weight:700}
@@ -2200,6 +2248,610 @@ function renderOwnAppDepthHintHtml(opt){
     +'<span class="app-depth-hint-cta" aria-hidden="true">›</span>'
     +'</button>';
 }
+function selfsenseOwnReviewUrl(){
+  return 'ownsense.html?returnTo='+encodeURIComponent('selfsense.html')+'&openReview=1';
+}
+var SS_CHECKIN_ANSWERS=['beter','hetzelfde','minder goed','heel zwaar','niet vandaag'];
+var SS_DETECT_SESSION_PREFIX='ss_aandacht_detect_v1:';
+var _ssDetectErrToastShown=false;
+function isSameLocalDate(a,b){
+  return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+}
+function showCheckinModal(show){
+  var m=document.getElementById('checkinModal');
+  if(!m)return;
+  m.classList.toggle('show',!!show);
+  m.setAttribute('aria-hidden',show?'false':'true');
+}
+function normalizeSelfsenseCheckinAnswer(answer){
+  var a=String(answer||'').trim();
+  return SS_CHECKIN_ANSWERS.indexOf(a)>=0?a:'';
+}
+async function maybeShowDailyCheckin(){
+  if(!sb||!S.user)return;
+  try{
+    var q=await sb.from('selfsense_checkins').select('created_at').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(1);
+    var rows=(q&&q.data)||[];
+    if(rows.length&&isSameLocalDate(new Date(rows[0].created_at),new Date()))return;
+    showCheckinModal(true);
+  }catch(e){console.warn('daily checkin check:',e);}
+}
+function scheduleDailyCheckinPrompt(){
+  setTimeout(function(){void maybeShowDailyCheckin();},700);
+}
+function ssDetectSessionKey(uid){
+  return SS_DETECT_SESSION_PREFIX+String(uid||'');
+}
+function shouldRunBootstrapAandachtDetect(uid){
+  try{
+    var raw=sessionStorage.getItem(ssDetectSessionKey(uid));
+    if(!raw)return true;
+    var ts=parseInt(raw,10);
+    if(!ts||isNaN(ts))return true;
+    return (Date.now()-ts)>24*60*60*1000;
+  }catch(_e){return true;}
+}
+function markBootstrapAandachtDetectRan(uid){
+  try{sessionStorage.setItem(ssDetectSessionKey(uid),String(Date.now()));}catch(_e){}
+}
+async function countSelfsenseCheckinsTotal(){
+  if(!sb||!S.user)return 0;
+  try{
+    var res=await sb.from('selfsense_checkins').select('id',{count:'exact',head:true}).eq('user_id',S.user.id);
+    if(res&&res.error){console.warn('[checkin count]',res.error);return 0;}
+    return Number(res.count)||0;
+  }catch(e){console.warn('[checkin count]',e);return 0;}
+}
+function handleAandachtDetectResult(data,opts){
+  opts=opts||{};
+  if(!data)return;
+  if(data.error||(data.ok===false&&data.httpStatus>=400)){
+    if(opts.source==='checkin'||!_ssDetectErrToastShown){
+      _ssDetectErrToastShown=true;
+      try{toast('Patroonherkenning is even niet beschikbaar. Probeer later opnieuw.');}catch(_t){}
+    }
+    return;
+  }
+  var reason=String(data.reason||'');
+  if(reason==='too_few_checkins'||reason==='ai_insufficient'||reason==='no_proposals'||reason==='parse_error')return;
+  if(reason==='proposals_inserted'||(Number(data.inserted)||0)>0){
+    try{void refreshHomeAandachtspuntenBanner();}catch(_b){}
+    try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
+    if(opts.source==='checkin'&&(Number(data.inserted)||0)>0){
+      try{toast('Sensei heeft '+Number(data.inserted)+' aandachtspunt'+(Number(data.inserted)===1?'':'en')+' klaarstaan in OWNSense.');}catch(_t2){}
+    }
+  }
+}
+async function runSelfsenseAandachtDetect(opts){
+  opts=opts||{};
+  if(typeof detectSelfsenseAandachtspuntenFireAndForget!=='function')return null;
+  var data=await detectSelfsenseAandachtspuntenFireAndForget({awaitResult:true});
+  handleAandachtDetectResult(data,opts);
+  return data;
+}
+async function scheduleBootstrapAandachtDetect(){
+  if(!sb||!S.user)return;
+  var uid=String(S.user.id||'');
+  if(!uid||!shouldRunBootstrapAandachtDetect(uid))return;
+  var total=await countSelfsenseCheckinsTotal();
+  if(total<4)return;
+  markBootstrapAandachtDetectRan(uid);
+  void runSelfsenseAandachtDetect({source:'bootstrap'});
+}
+async function saveCheckin(answer){
+  var ans=normalizeSelfsenseCheckinAnswer(answer);
+  if(!ans){
+    try{toast('Kies een van de opties.');}catch(_e){}
+    return;
+  }
+  var noteEl=document.getElementById('checkinNote');
+  var noteRaw=noteEl?String(noteEl.value||'').trim():'';
+  var note=noteRaw?noteRaw.slice(0,240):null;
+  showCheckinModal(false);
+  if(noteEl)noteEl.value='';
+  if(!sb||!S.user)return;
+  try{
+    var ins=await sb.from('selfsense_checkins').insert({user_id:S.user.id,answer:ans,note:note});
+    if(ins&&ins.error)throw ins.error;
+    try{toast('Check-in opgeslagen');}catch(_t){}
+    void runSelfsenseAandachtDetect({source:'checkin'});
+  }catch(e){
+    console.warn('saveCheckin',e);
+    try{toast('Check-in kon niet opgeslagen worden');}catch(_t2){}
+  }
+}
+async function fetchVoorgesteldAandachtspuntenCount(){
+  if(!sb||!S.user||!S.user.id)return 0;
+  try{
+    var res=await sb.from('own_aandachtspunten').select('id',{count:'exact',head:true})
+      .eq('user_id',S.user.id)
+      .eq('status','voorgesteld');
+    if(res&&res.error){
+      console.warn('[aandachtspunten count]',res.error);
+      return 0;
+    }
+    return (res&&typeof res.count==='number')?res.count:0;
+  }catch(e){
+    console.warn('[aandachtspunten count]',e);
+    return 0;
+  }
+}
+function renderHomeAandachtspuntenBannerHtml(n){
+  var count=parseInt(n,10)||0;
+  if(count<1)return'';
+  var txt=count===1
+    ?'Sensei heeft 1 aandachtspunt klaarstaan. Bekijk het bewijs en bevestig bewust in OWNSense.'
+    :'Sensei heeft '+count+' aandachtspunten klaarstaan. Bekijk het bewijs en bevestig ze bewust in OWNSense.';
+  var href=selfsenseOwnReviewUrl();
+  return '<a href="'+escHTML(href)+'" class="ss-aandachtspunten-banner" aria-label="'+escHTML(txt)+'">'
+    +'<span class="ss-aandachtspunten-banner-badge" aria-hidden="true">Aandachtspunt</span>'
+    +'<span class="ss-aandachtspunten-banner-main">'+escHTML(txt)+'</span>'
+    +'<span class="ss-aandachtspunten-banner-cta" aria-hidden="true">›</span>'
+    +'</a>';
+}
+async function refreshHomeAandachtspuntenBanner(){
+  var el=document.getElementById('homeAandachtspuntenBanner');
+  if(!el)return;
+  if(!S.user){
+    el.innerHTML='';
+    el.style.display='none';
+    return;
+  }
+  var n=await fetchVoorgesteldAandachtspuntenCount();
+  var html=renderHomeAandachtspuntenBannerHtml(n);
+  el.innerHTML=html;
+  el.style.display=html?'block':'none';
+  try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
+}
+var AANDACHT_NUDGE_STALE_VOORGESTELD_DAYS=5;
+var AANDACHT_NUDGE_REPEAT_DAYS=7;
+var AANDACHT_NUDGE_MOVEMENT_FRESH_DAYS=10;
+var AANDACHT_NUDGE_MOVEMENT_STALE_DAYS=21;
+function _aandachtNudgeMeta(){
+  try{return JSON.parse(getScopedStorage('dsAandachtNudgeMeta','{}')||'{}')||{};}catch(e){return{};}
+}
+function _saveAandachtNudgeMeta(m){
+  try{setScopedStorage('dsAandachtNudgeMeta',JSON.stringify(m||{}));}catch(e){}
+}
+function _aandachtNudgeDaysSince(iso){
+  if(!iso)return 0;
+  var t=new Date(iso).getTime();
+  if(isNaN(t))return 0;
+  return Math.floor((Date.now()-t)/86400000);
+}
+function _coachTaskOpen(id,coachSt){
+  var st=coachSt&&coachSt[id];
+  return!(st&&st.until&&st.until>Date.now());
+}
+async function fetchAandachtspuntenNudgeSnapshot(){
+  if(!sb||!S.user||!S.user.id)return null;
+  var uid=S.user.id;
+  var out={
+    voorgesteldCount:0,voorgesteldNewest:null,voorgesteldOldest:null,
+    bevestigdCount:0,bevestigdNewestConfirmed:null,bevestigdLatestMovementAt:0
+  };
+  try{
+    var vRes=await sb.from('own_aandachtspunten').select('id,created_at')
+      .eq('user_id',uid).eq('status','voorgesteld').order('created_at',{ascending:false});
+    if(vRes&&vRes.error){console.warn('[aandacht nudge]',vRes.error);return null;}
+    var vRows=(vRes&&vRes.data)||[];
+    out.voorgesteldCount=vRows.length;
+    if(vRows.length){
+      out.voorgesteldNewest=vRows[0].created_at||null;
+      out.voorgesteldOldest=vRows[vRows.length-1].created_at||null;
+    }
+    var bRes=await sb.from('own_aandachtspunten').select('id,confirmed_at,movement,updated_at')
+      .eq('user_id',uid).eq('status','bevestigd').order('confirmed_at',{ascending:false,nullsFirst:false});
+    if(bRes&&bRes.error){console.warn('[aandacht nudge]',bRes.error);return null;}
+    var bRows=(bRes&&bRes.data)||[];
+    out.bevestigdCount=bRows.length;
+    if(bRows.length){
+      out.bevestigdNewestConfirmed=bRows[0].confirmed_at||bRows[0].updated_at||null;
+      bRows.forEach(function(r){
+        parseAandachtspuntMovement(r.movement).forEach(function(m){
+          var at=m&&m.at?new Date(m.at).getTime():0;
+          if(at&&at>(out.bevestigdLatestMovementAt||0))out.bevestigdLatestMovementAt=at;
+        });
+      });
+    }
+  }catch(e){
+    console.warn('[aandacht nudge snapshot]',e);
+    return null;
+  }
+  return out;
+}
+function evaluateAandachtspuntenNudges(snap,meta,coachSt){
+  var showVoorgesteld=false,showBevestigd=false,voorgesteldReason='',bevestigdReason='';
+  if(!snap)return{showVoorgesteld:false,showBevestigd:false,voorgesteldReason:'',bevestigdReason:''};
+  meta=meta||{};
+  coachSt=coachSt||{};
+  if(snap.voorgesteldCount>0&&_coachTaskOpen('aandacht-nudge-voorgesteld',coachSt)){
+    var newest=String(snap.voorgesteldNewest||'');
+    var acked=String(meta.ackedVoorgesteldNewest||'');
+    if(newest&&newest!==acked){
+      showVoorgesteld=true;
+      voorgesteldReason='new_proposal';
+    }else if(_aandachtNudgeDaysSince(snap.voorgesteldOldest)>=AANDACHT_NUDGE_STALE_VOORGESTELD_DAYS){
+      var lastShown=parseInt(meta.lastVoorgesteldNudgeShownAt,10)||0;
+      if(!lastShown||Date.now()-lastShown>=AANDACHT_NUDGE_REPEAT_DAYS*86400000){
+        showVoorgesteld=true;
+        voorgesteldReason='stale_voorgesteld';
+      }
+    }
+  }
+  if(snap.bevestigdCount>0&&_coachTaskOpen('aandacht-nudge-waar-ik-aan-werk',coachSt)){
+    var movAt=parseInt(snap.bevestigdLatestMovementAt,10)||0;
+    var ackMov=parseInt(meta.ackedMovementAt,10)||0;
+    var ackBev=String(meta.ackedBevestigdNewest||'');
+    var newestBev=String(snap.bevestigdNewestConfirmed||'');
+    if(movAt&&movAt>ackMov&&_aandachtNudgeDaysSince(new Date(movAt).toISOString())<=AANDACHT_NUDGE_MOVEMENT_FRESH_DAYS){
+      showBevestigd=true;
+      bevestigdReason='movement';
+    }else if(newestBev&&newestBev!==ackBev){
+      showBevestigd=true;
+      bevestigdReason='new_bevestigd';
+    }else if(!movAt||_aandachtNudgeDaysSince(new Date(movAt).toISOString())>=AANDACHT_NUDGE_MOVEMENT_STALE_DAYS){
+      var lastB=parseInt(meta.lastBevestigdNudgeShownAt,10)||0;
+      if(!lastB||Date.now()-lastB>=AANDACHT_NUDGE_REPEAT_DAYS*86400000){
+        showBevestigd=true;
+        bevestigdReason='stale_werk';
+      }
+    }
+  }
+  return{showVoorgesteld:showVoorgesteld,showBevestigd:showBevestigd,voorgesteldReason:voorgesteldReason,bevestigdReason:bevestigdReason};
+}
+function stampAandachtNudgeAck(taskId,mode){
+  var snap=S.aandachtNudgeCtx&&S.aandachtNudgeCtx.snapshot;
+  if(!snap)return;
+  var meta=_aandachtNudgeMeta();
+  var tid=String(taskId||'');
+  if(tid==='aandacht-nudge-voorgesteld'&&snap.voorgesteldNewest){
+    meta.ackedVoorgesteldNewest=String(snap.voorgesteldNewest);
+  }
+  if(tid==='aandacht-nudge-waar-ik-aan-werk'){
+    if(snap.bevestigdNewestConfirmed)meta.ackedBevestigdNewest=String(snap.bevestigdNewestConfirmed);
+    if(snap.bevestigdLatestMovementAt)meta.ackedMovementAt=parseInt(snap.bevestigdLatestMovementAt,10)||0;
+  }
+  meta.lastNudgeAckAt=Date.now();
+  if(mode==='snooze')meta.lastNudgeSnoozeAt=Date.now();
+  _saveAandachtNudgeMeta(meta);
+}
+function buildAandachtspuntenNudgeTasks(){
+  var ctx=S.aandachtNudgeCtx;
+  if(!ctx||!ctx.ready)return[];
+  var tasks=[];
+  if(ctx.showVoorgesteld){
+    tasks.push({
+      id:'aandacht-nudge-voorgesteld',
+      type:'p',
+      prio:'low',
+      isAandachtNudge:true,
+      msg:'Sensei heeft iets voor je klaarstaan om rustig te bekijken. Neem je tijd, het wacht in OWNSense.',
+      openMsg:'Nog openstaand: een aandachtspunt wacht op je beoordeling in OWNSense.',
+      link:'Bekijk voorstel in OWNSense →',
+      action:"window.location.href='"+escJsStr(selfsenseOwnReviewUrl())+"'"
+    });
+  }
+  if(ctx.showBevestigd){
+    var msg=ctx.bevestigdReason==='movement'
+      ?'Je werkte recent aan een aandachtspunt. Zin om even stil te staan bij waar je aan werkt?'
+      :'Zin om even stil te staan bij waar je aan werkt?';
+    tasks.push({
+      id:'aandacht-nudge-waar-ik-aan-werk',
+      type:'p',
+      prio:'low',
+      isAandachtNudge:true,
+      msg:msg,
+      openMsg:'Nog openstaand: je bevestigde aandachtspunten staan klaar op Waar ik aan werk.',
+      link:'Open waar ik aan werk →',
+      action:"goScreen('waarIkAanWerk')"
+    });
+  }
+  return tasks;
+}
+async function refreshAandachtspuntenNudgeContext(){
+  if(!S.user){
+    S.aandachtNudgeCtx={ready:true,showVoorgesteld:false,showBevestigd:false,snapshot:null};
+    return S.aandachtNudgeCtx;
+  }
+  var snap=await fetchAandachtspuntenNudgeSnapshot();
+  var meta=_aandachtNudgeMeta();
+  var coachSt=_coachState();
+  var ev=evaluateAandachtspuntenNudges(snap,meta,coachSt);
+  if(ev.showVoorgesteld)meta.lastVoorgesteldNudgeShownAt=Date.now();
+  if(ev.showBevestigd)meta.lastBevestigdNudgeShownAt=Date.now();
+  if(ev.showVoorgesteld||ev.showBevestigd)_saveAandachtNudgeMeta(meta);
+  S.aandachtNudgeCtx={
+    ready:true,
+    snapshot:snap,
+    showVoorgesteld:!!ev.showVoorgesteld,
+    showBevestigd:!!ev.showBevestigd,
+    voorgesteldReason:ev.voorgesteldReason||'',
+    bevestigdReason:ev.bevestigdReason||''
+  };
+  if(S.screen==='notifications'){
+    try{goScreen('notifications',{skipFlush:true,preserveScroll:true});}catch(_rn){}
+  }
+  return S.aandachtNudgeCtx;
+}
+function renderNotificationsAandachtNudgeCard(n,state){
+  var st=state[n.id]||null;
+  var status='open';
+  if(st&&st.until&&st.until>Date.now())status=(st.mode==='snooze'?'snoozed':'done');
+  return '<div class="ncard p" style="margin-bottom:10px">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+    +'<div class="ncat">Uitnodiging</div>'
+    +'<div style="font-size:11px;color:var(--self-donker);font-weight:700">Zacht · '+escHTML(status)+'</div>'
+    +'</div>'
+    +'<div class="ntext">'+n.msg+'</div>'
+    +'<span class="nlink" onclick="'+n.action+'">'+escHTML(n.link)+'</span>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'
+    +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;border-color:color-mix(in srgb,var(--self-medium) 38%,#fff);background:color-mix(in srgb,var(--self-licht) 28%,#fff);color:var(--self-donker)" onclick="coachTaskSnooze(\''+escJsStr(n.id)+'\',72);goScreen(\'notifications\')">Later (3 dagen)</button>'
+    +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px" onclick="coachTaskAck(\''+escJsStr(n.id)+'\',\'dismiss\');goScreen(\'notifications\')">Weg</button>'
+    +'</div></div>';
+}
+function fmtAandachtspuntEvidenceDate(iso){
+  if(!iso)return'';
+  var d=new Date(iso);
+  if(isNaN(d.getTime()))return'';
+  return d.toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
+}
+function parseAandachtspuntEvidence(ev){
+  if(!ev)return[];
+  if(Array.isArray(ev))return ev;
+  if(typeof ev==='string'){
+    try{
+      var p=JSON.parse(ev);
+      return Array.isArray(p)?p:[];
+    }catch(_e){return[];}
+  }
+  return[];
+}
+function parseAandachtspuntMovement(mv){
+  if(!mv)return[];
+  if(Array.isArray(mv))return mv;
+  if(typeof mv==='string'){
+    try{
+      var p=JSON.parse(mv);
+      return Array.isArray(p)?p:[];
+    }catch(_e){return[];}
+  }
+  return[];
+}
+function formatCheckinAnswerLabel(answer){
+  var a=String(answer||'').trim();
+  if(!a)return'';
+  if(a==='minder goed')return'Minder goed';
+  if(a==='heel zwaar')return'Heel zwaar';
+  if(a==='niet vandaag')return'Niet vandaag';
+  if(a==='hetzelfde')return'Hetzelfde';
+  if(a==='beter')return'Beter';
+  return a.charAt(0).toUpperCase()+a.slice(1);
+}
+async function fetchCheckinAnswersByIds(ids){
+  var map={};
+  if(!sb||!S.user||!ids||!ids.length)return map;
+  var uniq=[];
+  ids.forEach(function(id){
+    id=String(id||'').trim();
+    if(id&&uniq.indexOf(id)<0)uniq.push(id);
+  });
+  if(!uniq.length)return map;
+  try{
+    var res=await sb.from('selfsense_checkins').select('id,answer').eq('user_id',S.user.id).in('id',uniq);
+    if(res&&res.data){
+      res.data.forEach(function(row){
+        if(row&&row.id)map[String(row.id)]=String(row.answer||'').trim();
+      });
+    }
+  }catch(e){console.warn('[checkin answers]',e);}
+  return map;
+}
+function formatAandachtspuntEvidenceLines(evidence,answerMap){
+  answerMap=answerMap||{};
+  var items=parseAandachtspuntEvidence(evidence);
+  if(!items.length)return'<div class="ss-waar-ik-evidence">Geen check-in momenten gekoppeld.</div>';
+  var lines=items.map(function(it){
+    var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
+    var cid=String(it&&it.checkin_id||'').trim();
+    var ans=cid?answerMap[cid]:'';
+    var ansLbl=formatCheckinAnswerLabel(ans);
+    var tail=ansLbl?(' · '+escHTML(ansLbl)):' · check-in';
+    return escHTML(when||'Onbekende datum')+tail;
+  }).join('<br>');
+  return '<div class="ss-waar-ik-evidence">'+lines+'</div>';
+}
+function renderAandachtspuntMovementLine(movement){
+  var items=parseAandachtspuntMovement(movement).filter(function(it){
+    return it&&String(it.at||'').trim();
+  });
+  if(!items.length)return'Nog geen moment vastgelegd waarop je hier aan werkte.';
+  var now=new Date();
+  var month=now.getMonth(), year=now.getFullYear();
+  var hasThisMonth=items.some(function(it){
+    var d=new Date(it.at);
+    return !isNaN(d.getTime())&&d.getMonth()===month&&d.getFullYear()===year;
+  });
+  if(hasThisMonth)return'Je werkte hier deze maand aan.';
+  var weekAgo=now.getTime()-7*24*60*60*1000;
+  var hasRecent=items.some(function(it){
+    var d=new Date(it.at);
+    return !isNaN(d.getTime())&&d.getTime()>=weekAgo;
+  });
+  if(hasRecent)return'Je werkte hier recent aan.';
+  return'Je werkte hier eerder aan.';
+}
+function aandachtspuntIdStr(id){
+  return String(id==null?'':id).trim();
+}
+function findBevestigdAandachtspunt(id){
+  var want=aandachtspuntIdStr(id);
+  if(!want)return null;
+  var rows=S.ssBevestigdeAandachtspunten;
+  if(!Array.isArray(rows))return null;
+  return rows.find(function(r){return r&&aandachtspuntIdStr(r.id)===want;})||null;
+}
+function invalidateBevestigdeAandachtspuntenCache(){
+  S.ssBevestigdeAandachtspunten=null;
+}
+async function fetchBevestigdeAandachtspunten(){
+  if(!sb||!S.user||!S.user.id)return [];
+  try{
+    var res=await sb.from('own_aandachtspunten').select('*')
+      .eq('user_id',S.user.id)
+      .eq('status','bevestigd')
+      .order('confirmed_at',{ascending:false,nullsFirst:false})
+      .order('created_at',{ascending:false});
+    if(res&&res.error){
+      console.warn('[bevestigde aandachtspunten]',res.error);
+      return [];
+    }
+    var rows=(res&&Array.isArray(res.data))?res.data:[];
+    S.ssBevestigdeAandachtspunten=rows;
+    return rows;
+  }catch(e){
+    console.warn('[bevestigde aandachtspunten]',e);
+    return [];
+  }
+}
+function renderHomeWaarIkAanWerkCardHtml(count){
+  var n=parseInt(count,10)||0;
+  if(n<1)return'';
+  var sub=n===1?'1 aandachtspunt':(n+' aandachtspunten');
+  return '<button type="button" class="ss-waar-ik-home-card" onclick="openWaarIkAanWerk()" aria-label="Waar ik aan werk, '+escHTML(sub)+'">'
+    +'<span class="ss-waar-ik-home-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c-4-2-8-5-8-11a8 8 0 0 1 16 0c0 6-4 9-8 11z"/><path d="M12 10v4"/><path d="M8 14h8"/></svg></span>'
+    +'<span class="ss-waar-ik-home-main"><div class="ss-waar-ik-home-title">Waar ik aan werk</div><div class="ss-waar-ik-home-sub">'+escHTML(sub)+'</div></span>'
+    +'<span class="ss-waar-ik-home-chevron" aria-hidden="true">›</span>'
+    +'</button>';
+}
+async function refreshHomeWaarIkAanWerkCard(){
+  var el=document.getElementById('homeWaarIkAanWerkMount');
+  if(!el)return;
+  if(!S.user){
+    el.innerHTML='';
+    el.style.display='none';
+    return;
+  }
+  var rows=await fetchBevestigdeAandachtspunten();
+  var html=renderHomeWaarIkAanWerkCardHtml(rows.length);
+  el.innerHTML=html;
+  el.style.display=html?'block':'none';
+}
+function openWaarIkAanWerk(){
+  S.viewAandachtspuntId=null;
+  goScreen('waarIkAanWerk');
+}
+function openWaarIkAanWerkDetail(id){
+  S.viewAandachtspuntId=aandachtspuntIdStr(id);
+  if(S.screen==='waarIkAanWerk'){
+    var mc=document.getElementById('mainContent');
+    if(mc)void renderWaarIkAanWerkInto(mc);
+    var row=findBevestigdAandachtspunt(S.viewAandachtspuntId);
+    var pt=document.getElementById('pgTitle');
+    if(pt)pt.textContent=row&&row.soft_name?String(row.soft_name):'Waar ik aan werk';
+    return;
+  }
+  goScreen('waarIkAanWerk');
+}
+function renderWaarIkAanWerkListHtml(rows){
+  if(!rows.length){
+    return '<div class="ss-waar-ik-shell"><div class="ss-waar-ik-empty">Er staan nog geen bevestigde aandachtspunten klaar. Bevestig eerst een voorstel in OWNSense.</div></div>';
+  }
+  var body='<div class="ss-waar-ik-shell"><div class="ss-waar-ik-subtitle">Aandachtspunten</div>';
+  rows.forEach(function(row){
+    var id=aandachtspuntIdStr(row.id);
+    var name=String(row.soft_name||'Aandachtspunt').trim()||'Aandachtspunt';
+    body+='<button type="button" class="ss-waar-ik-row" onclick="openWaarIkAanWerkDetail(\''+escJsStr(id)+'\')">'
+      +'<span class="ss-waar-ik-row-label">'+escHTML(name)+'</span>'
+      +'<span class="ss-waar-ik-home-chevron" aria-hidden="true">›</span>'
+      +'</button>';
+  });
+  body+='</div>';
+  return body;
+}
+function renderWaarIkAanWerkDetailHtml(row,answerMap){
+  var id=aandachtspuntIdStr(row.id);
+  var tips=String(row.tips_advice||'').trim();
+  var tipsHtml=tips
+    ?'<div class="ss-waar-ik-tips-card">'+escHTML(tips)+'</div>'
+    :'<div class="ss-waar-ik-tips-card" style="color:var(--warm-bruin);font-style:italic">Advies wordt nog voorbereid.</div>';
+  return '<div class="ss-waar-ik-detail">'
+    +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Waarop dit gebaseerd is</div>'
+    +formatAandachtspuntEvidenceLines(row.evidence,answerMap)
+    +'</div>'
+    +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Hoe je het kan aanpakken</div>'
+    +tipsHtml
+    +'</div>'
+    +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Beweging</div>'
+    +'<p class="ss-waar-ik-movement" id="ssAandachtMovementLine">'+escHTML(renderAandachtspuntMovementLine(row.movement))+'</p>'
+    +'<button type="button" class="ss-waar-ik-cta-btn" id="ssAandachtWorkedBtn" onclick="recordAandachtspuntHierAanGewerkt(\''+escJsStr(id)+'\')">Hier aan gewerkt</button>'
+    +'</div>'
+    +'</div>';
+}
+async function renderWaarIkAanWerkInto(el){
+  if(!el)return;
+  el.innerHTML='<div style="padding:16px 8px;font-size:13px;color:var(--warm-bruin)">Laden…</div>';
+  var rows=await fetchBevestigdeAandachtspunten();
+  var detailId=aandachtspuntIdStr(S.viewAandachtspuntId);
+  if(detailId){
+    var row=findBevestigdAandachtspunt(detailId);
+    if(!row){
+      S.viewAandachtspuntId=null;
+      var pt=document.getElementById('pgTitle');
+      if(pt)pt.textContent='Waar ik aan werk';
+      el.innerHTML=renderWaarIkAanWerkListHtml(rows);
+      return;
+    }
+    var pt2=document.getElementById('pgTitle');
+    if(pt2)pt2.textContent=String(row.soft_name||'Waar ik aan werk').trim()||'Waar ik aan werk';
+    var evIds=parseAandachtspuntEvidence(row.evidence).map(function(it){return it&&it.checkin_id;});
+    var answerMap=await fetchCheckinAnswersByIds(evIds);
+    el.innerHTML=renderWaarIkAanWerkDetailHtml(row,answerMap);
+    return;
+  }
+  el.innerHTML=renderWaarIkAanWerkListHtml(rows);
+}
+function rWaarIkAanWerk(el){
+  return renderWaarIkAanWerkInto(el);
+}
+var _aandachtWorkedBusy=false;
+async function recordAandachtspuntHierAanGewerkt(id){
+  if(_aandachtWorkedBusy)return;
+  id=aandachtspuntIdStr(id);
+  if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
+  var row=findBevestigdAandachtspunt(id);
+  if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
+  var btn=document.getElementById('ssAandachtWorkedBtn');
+  _aandachtWorkedBusy=true;
+  if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
+  try{
+    var items=parseAandachtspuntMovement(row.movement).slice();
+    items.push({note:'Hier aan gewerkt',at:new Date().toISOString()});
+    var res=await sb.from('own_aandachtspunten').update({movement:items,updated_at:new Date().toISOString()})
+      .eq('id',id)
+      .eq('user_id',S.user.id)
+      .select('*')
+      .maybeSingle();
+    if(res&&res.error)throw res.error;
+    var updated=res&&res.data?res.data:null;
+    if(!updated)throw new Error('Kon beweging niet opslaan.');
+    if(Array.isArray(S.ssBevestigdeAandachtspunten)){
+      var idx=S.ssBevestigdeAandachtspunten.findIndex(function(r){return r&&aandachtspuntIdStr(r.id)===id;});
+      if(idx>=0)S.ssBevestigdeAandachtspunten[idx]=updated;
+    }
+    var moveEl=document.getElementById('ssAandachtMovementLine');
+    if(moveEl)moveEl.textContent=renderAandachtspuntMovementLine(updated.movement);
+    toast('Genoteerd. Mooi dat je hier aandacht voor hebt.');
+    void refreshHomeWaarIkAanWerkCard();
+    try{void refreshAandachtspuntenNudgeContext();}catch(_mv){}
+  }catch(e){
+    console.warn('[aandachtspunt movement]',e);
+    toast('Opslaan mislukt. Probeer opnieuw.');
+  }finally{
+    _aandachtWorkedBusy=false;
+    if(btn){btn.disabled=false;btn.textContent='Hier aan gewerkt';}
+  }
+}
 function refreshOwnAppDepthHintMounts(){
   [['vertelAppDepthHint','app-depth-hint--vertel'],['sensesAppDepthHint','app-depth-hint--senses'],['homeAppDepthHint','app-depth-hint--home']].forEach(function(pair){
     var el=document.getElementById(pair[0]);
@@ -2250,6 +2902,11 @@ var S={
   /** Read-only AI-cache: sense_profiles-rijen die niet in S.pdata zitten (pure fs/ds). UI blijft ongewijzigd. */
   crossAppCache:{},
   viewDossier:null,viewTab:'overzicht',
+  /** Fase 4: detail-id op scherm waarIkAanWerk; null = lijst. */
+  viewAandachtspuntId:null,
+  ssBevestigdeAandachtspunten:null,
+  /** Fase 5: snapshot + eligibility voor zachte nudges in Mijn meldingen. */
+  aandachtNudgeCtx:null,
   // Vertel chat tijdelijk (wis na opslaan)
   vertelMsgs:[],
   /** Laatste gekozen dossier voor dit Vertel-gesprek (na opslaan of vanuit dossier); bewaart context tussen berichten. */
@@ -3733,6 +4390,9 @@ async function ssRunFullBootstrap(session,opts){
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
       try{scheduleDagAdviesRefresh();}catch(_e6){}
+      try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
+      try{scheduleDailyCheckinPrompt();}catch(_e8){}
+      try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
       ssSaveProfilesCache();
       ssRefreshUiAfterBackgroundSync();
     }catch(authErr){
@@ -3773,6 +4433,9 @@ async function bootstrapAuthenticated(session,opts){
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
       try{scheduleDagAdviesRefresh();}catch(_e6){}
+      try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
+      try{scheduleDailyCheckinPrompt();}catch(_e8){}
+      try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
       ssSaveProfilesCache();
     }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
   }
@@ -3784,19 +4447,46 @@ function showAuthenticatedShell(targetScreen){
   try{setBuildTag();}catch(_e){}
   try{goScreen(sc,{skipFlush:true});}catch(_e2){console.error('showAuthenticatedShell:',_e2);}
 }
+async function ssMirrorLifecycleGate(session){
+  var hub=window.SenseMirrorHub;
+  if(!hub||!sb||!session||!session.user)return true;
+  return hub.gateAppAfterAuth({
+    sb:sb,
+    userId:session.user.id,
+    appKey:'ss',
+    appHref:'selfsense.html',
+    onPaused:function(){
+      try{goScreen('home',{skipFlush:true});}catch(_gs){}
+      var mc=document.getElementById('mainContent');
+      if(mc&&typeof hub.renderPausedBannerHtml==='function'){
+        mc.innerHTML=hub.renderPausedBannerHtml('ss');
+        var btn=document.getElementById('scMirrorPausedReactivate');
+        if(btn)btn.addEventListener('click',function(){
+          hub.showResumeConfirmModal({sb:sb,userId:session.user.id,appKey:'ss',navigateTo:'selfsense.html'});
+        });
+      }
+    }
+  });
+}
 async function enterAuthenticatedApp(session,opts){
   opts=opts||{};
   if(!session||!session.user)return false;
   var uid=String(session.user.id||'');
   if(_authBootstrapInFlight)return _authBootstrapInFlight;
   if(!opts.forceResync&&_authBootstrappedUserId&&uid&&_authBootstrappedUserId===uid&&S.user){
+    var gated=await ssMirrorLifecycleGate(session);
+    if(!gated)return false;
     var _alreadyInApp=!(S.screen==='login'||S.screen==='register'||!S.screen);
     if(opts.screen||!_alreadyInApp)showAuthenticatedShell(opts.screen);
+    try{scheduleDailyCheckinPrompt();}catch(_dc){}
+    try{void scheduleBootstrapAandachtDetect();}catch(_dd){}
     return true;
   }
   _authBootstrapInFlight=(async function(){
     try{
       applyAuthSessionToState(session);
+      var gated=await ssMirrorLifecycleGate(session);
+      if(!gated)return false;
       var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
       if(navEarly)showAuthenticatedShell(opts.screen);
       await bootstrapAuthenticated(session,opts);
@@ -5322,6 +6012,9 @@ function applySignedOutClientState(){
   S.profiles=['OWN Sense'];
   S.pdata={};
   S.crossAppCache={};
+  S.viewAandachtspuntId=null;
+  invalidateBevestigdeAandachtspuntenCache();
+  S.aandachtNudgeCtx=null;
   updateNavTabIndicators();
 }
 async function doSignOut(){
@@ -5961,6 +6654,14 @@ function goBack(){
     goScreen(SELFSENSE_DISABLE_SENSES?'home':'senses');
     return;
   }
+  if(S.screen==='waarIkAanWerk'&&S.viewAandachtspuntId){
+    S.viewAandachtspuntId=null;
+    var pt=document.getElementById('pgTitle');
+    if(pt)pt.textContent='Waar ik aan werk';
+    var mc=document.getElementById('mainContent');
+    if(mc)void renderWaarIkAanWerkInto(mc);
+    return;
+  }
   goScreen(S.prev===S.screen?'home':S.prev);
 }
 
@@ -6010,7 +6711,7 @@ function _goScreenBody(sc,opts){
     sc='home';
   }
   // Protect screens when not authenticated
-  if(!S.user && ['senses','spiegel','own','advice','vertel','compare','dossier','notifications'].includes(sc)){
+  if(!S.user && ['senses','spiegel','own','advice','vertel','compare','dossier','notifications','waarIkAanWerk'].includes(sc)){
     sc='login';
   }
   // OWN Sense is een unified dossier (tabs met foto/tijdlijn/advies)
@@ -6019,6 +6720,7 @@ function _goScreenBody(sc,opts){
     return;
   }
   S.prev=S.screen;S.screen=sc;
+  if(sc==='waarIkAanWerk'&&prevScreen!=='waarIkAanWerk')S.viewAandachtspuntId=null;
   if(sc==='vertel'){
     void hydrateCrossAppRecentMsgs();
   }
@@ -6028,8 +6730,12 @@ function _goScreenBody(sc,opts){
   if(sc!=='home'&&_quickHelpTour&&_quickHelpTour.active){
     endQuickHelpTour(true);
   }
-  var T={home:'',spiegel:'Adem',senses:'Mijn Senses',own:'OWN Sense',advice:'Advies',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen'};
+  var T={home:'',spiegel:'Adem',senses:'Mijn Senses',own:'OWN Sense',advice:'Advies',vertel:'Vertel',settings:'Instellingen',menu:'Menu',login:'Inloggen',register:'Registreren',dossier:S.viewDossier||'Dossier',notifications:'Meldingen',waarIkAanWerk:'Waar ik aan werk'};
   var titleText=T[sc]||sc;
+  if(sc==='waarIkAanWerk'&&S.viewAandachtspuntId){
+    var _aRow=findBevestigdAandachtspunt(S.viewAandachtspuntId);
+    if(_aRow&&_aRow.soft_name)titleText=String(_aRow.soft_name).trim()||titleText;
+  }
   if(sc==='dossier'&&S.viewDossier)titleText=dn(S.viewDossier);
   document.getElementById('pgTitle').textContent=titleText;
   var lb=document.getElementById('logobar');
@@ -6043,7 +6749,7 @@ function _goScreenBody(sc,opts){
   document.getElementById('btnBack').style.visibility=hide.includes(sc)?'hidden':'visible';
   ['home','spiegel','senses','own','advice','vertel'].forEach(t=>{var e=document.getElementById('tab-'+t);if(e)e.classList.toggle('active',t===sc);});
   var mc=document.getElementById('mainContent');mc.innerHTML='';
-  var screens={home:rHome,spiegel:rSpiegel,senses:rSenses,own:rOWN,advice:rAdviceHub,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications};
+  var screens={home:rHome,spiegel:rSpiegel,senses:rSenses,own:rOWN,advice:rAdviceHub,vertel:rVertel,settings:rSettings,compare:rCompare,menu:rMenu,login:rLogin,register:rRegister,dossier:rDossier,notifications:rNotifications,waarIkAanWerk:rWaarIkAanWerk};
   if(screens[sc]){
     try{
       var r=screens[sc](mc);
@@ -7629,18 +8335,25 @@ function coachTaskAck(id,mode){
     goScreen('home');
     return;
   }
+  if(sid.indexOf('aandacht-nudge-')===0){
+    try{stampAandachtNudgeAck(sid,mode);}catch(_an){}
+  }
   var s=_coachState();
   var days=mode==='done'?14:7;
   s[id]={until:Date.now()+days*86400000,mode:mode};
   _saveCoachState(s);
-  goScreen('home');
+  goScreen(sid.indexOf('aandacht-nudge-')===0&&S.screen==='notifications'?'notifications':'home');
 }
 function coachTaskSnooze(id,hours){
   var h=Math.max(1,parseInt(hours,10)||24);
+  var sid=String(id||'');
+  if(sid.indexOf('aandacht-nudge-')===0){
+    try{stampAandachtNudgeAck(sid,'snooze');}catch(_sn){}
+  }
   var s=_coachState();
   s[id]={until:Date.now()+h*3600000,mode:'snooze'};
   _saveCoachState(s);
-  goScreen('home');
+  goScreen(sid.indexOf('aandacht-nudge-')===0&&S.screen==='notifications'?'notifications':'home');
 }
 function coachTaskStartVertel(id,msgText,dossierName,taskType){
   var tid=String(id||'').trim();
@@ -7824,6 +8537,8 @@ function humanTaskLabel(id){
   id=String(id||'');
   if(id.indexOf('spiegel-adem-dag-')===0)return'Adem planning vandaag';
   if(id.indexOf('spiegel-adem-')===0)return'Ademherinnering';
+  if(id==='aandacht-nudge-voorgesteld')return'Aandachtspunt beoordelen';
+  if(id==='aandacht-nudge-waar-ik-aan-werk')return'Waar ik aan werk';
   var t=id.indexOf('sense-')===0?'Fotoanalyse'
     :(id.indexOf('actie-')===0?'Actie'
     :(id.indexOf('check-')===0?'Check':'Melding'));
@@ -8130,6 +8845,8 @@ function rHome(el){
   ${onboardingHtml}
   ${basisNudgeHtml}
   <div id="homeAppDepthHint" class="app-depth-hint-wrap" aria-live="polite"></div>
+  <div id="homeAandachtspuntenBanner" class="ss-aandachtspunten-banner-wrap" aria-live="polite" style="display:none"></div>
+  <div id="homeWaarIkAanWerkMount" aria-live="polite" style="display:none"></div>
   ${renderAiImportHomeLanding()}
   <div class="mic-wrap">
     <span class="mic-ripple" aria-hidden="true"></span>
@@ -8146,6 +8863,8 @@ function rHome(el){
 </div>`;
   void ensureDailyRecoTipForHome();
   refreshOwnAppDepthHintMounts();
+  void refreshHomeAandachtspuntenBanner();
+  void refreshHomeWaarIkAanWerkCard();
 }
 
 function rSpiegel(el){
@@ -10833,11 +11552,14 @@ async function generatePlannerIdeas(){
 function rMenu(el){el.innerHTML=`<div style="padding:20px"><div style="font-size:15px;color:var(--r);font-weight:700;margin-bottom:14px">Hoofdfuncties</div><div class="g2"><button class="btn-r" onclick="openOwnSenseEntryPoint()">OWN Sense</button><button class="btn-r" onclick="goScreen('senses')">Mijn Senses</button><button class="btn-r" onclick="goScreen('senses')">Advies / Actie</button><button class="btn-r" style="grid-column:1/-1">Favorieten</button></div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Extra's</div><div class="g2">${['Instellingen','Abonnement','Meldingen','Feedback','Help & Support','Privacy'].map(x=>`<button class="btn-g">${x}</button>`).join('')}</div><div style="font-size:15px;color:var(--r);font-weight:700;margin:22px 0 14px">Account</div><div class="g2"><button class="btn-g" onclick="goScreen('settings')">API Key</button><button type="button" class="btn-g" onclick="safeSignOut()">Uitloggen</button></div></div>`;}
 
 function rNotifications(el){
+  if(S.user&&(!S.aandachtNudgeCtx||!S.aandachtNudgeCtx.ready)){
+    void refreshAandachtspuntenNudgeContext();
+  }
   var q=(S.notificationsFilter||'all');
   var sortBy=(S.notificationsSort||'prio');
   var state=_coachState();
   var now=Date.now();
-  var items=buildCoachTasks().map(function(t){
+  var coachItems=buildCoachTasks().map(function(t){
     var st=state[t.id]||null;
     var status='open';
     if(st&&st.until&&st.until>now)status=(st.mode==='snooze'?'snoozed':'done');
@@ -10845,13 +11567,21 @@ function rNotifications(el){
     var person=personMatch&&personMatch[1]?personMatch[1]:'';
     return {...t,status:status,person:person};
   });
+  var nudgeItems=buildAandachtspuntenNudgeTasks().map(function(t){
+    var st=state[t.id]||null;
+    var status='open';
+    if(st&&st.until&&st.until>now)status=(st.mode==='snooze'?'snoozed':'done');
+    return {...t,status:status,person:''};
+  });
+  var items=coachItems.slice();
   var recentItems=Object.keys(state).filter(function(id){
     var st=state[id];
     return st&&st.until&&st.until>now;
   }).map(function(id){
     var st=state[id]||{};
     var type='c';
-    if(id.indexOf('sense-')===0)type='s';
+    if(id.indexOf('aandacht-nudge-')===0)type='p';
+    else if(id.indexOf('sense-')===0)type='s';
     else if(id.indexOf('actie-')===0||id.indexOf('check-own-profile')===0)type='a';
     var pm=id.match(/-(.+Sense)$/);
     var person=pm&&pm[1]?pm[1]:'';
@@ -10869,7 +11599,13 @@ function rNotifications(el){
   var seen={};
   items.forEach(function(i){seen[i.id]=1;});
   recentItems.forEach(function(r){if(!seen[r.id])items.push(r);});
-  if(q!=='all')items=items.filter(function(t){return t.type===q;});
+  if(q==='p'){
+    items=nudgeItems;
+  }else if(q!=='all'){
+    items=items.filter(function(t){return t.type===q;});
+  }else{
+    nudgeItems.forEach(function(n){items.push(n);});
+  }
   if(sortBy==='person'){
     items.sort(function(a,b){return String(a.person||'').localeCompare(String(b.person||''));});
   }else if(sortBy==='newest'){
@@ -10879,20 +11615,29 @@ function rNotifications(el){
       return tb-ta;
     });
   }else{
-    items.sort(function(a,b){return prioWeight(b.prio||'low')-prioWeight(a.prio||'low');});
+    items.sort(function(a,b){
+      if(a.type==='p'&&b.type!=='p')return 1;
+      if(b.type==='p'&&a.type!=='p')return-1;
+      return prioWeight(b.prio||'low')-prioWeight(a.prio||'low');
+    });
   }
   var chips='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px">'
     +'<button class="coach-save-other" style="'+(q==='all'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'all\';goScreen(\'notifications\')">Alles</button>'
     +'<button class="coach-save-other" style="'+(q==='s'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'s\';goScreen(\'notifications\')">SENSE</button>'
     +'<button class="coach-save-other" style="'+(q==='a'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'a\';goScreen(\'notifications\')">ACTIE</button>'
     +'<button class="coach-save-other" style="'+(q==='c'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsFilter=\'c\';goScreen(\'notifications\')">CHECK</button>'
+    +'<button class="coach-save-other" style="'+(q==='p'?'border-color:var(--self-medium);color:var(--self-donker)':'')+'" onclick="S.notificationsFilter=\'p\';goScreen(\'notifications\')">UITNODIGING</button>'
     +'</div>';
   chips+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px">'
     +'<button class="coach-save-other" style="'+(sortBy==='newest'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'newest\';goScreen(\'notifications\')">Nieuwste</button>'
     +'<button class="coach-save-other" style="'+(sortBy==='prio'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'prio\';goScreen(\'notifications\')">Prioriteit</button>'
     +'<button class="coach-save-other" style="'+(sortBy==='person'?'border-color:var(--r);color:var(--r)':'')+'" onclick="S.notificationsSort=\'person\';goScreen(\'notifications\')">Per persoon</button>'
     +'</div>';
+  if(q==='all'&&nudgeItems.length){
+    chips+='<div style="font-size:12px;color:#5f6b67;line-height:1.45;margin:-2px 0 10px">Uitnodigingen voor aandachtspunten staan apart van Sense, Actie en Check. Geen tips in de melding zelf.</div>';
+  }
   var body=items.length?items.map(function(n){
+    if(n.type==='p')return renderNotificationsAandachtNudgeCard(n,state);
     var pr=(n.prio||'low');
     var prTxt=(pr==='high'?'High':(pr==='medium'?'Medium':'Low'));
     var prCol=(pr==='high'?'#B42318':(pr==='medium'?'#A55B00':'#005A9E'));
@@ -17216,6 +17961,8 @@ try{
   window.openDossierProfiel=openDossierProfiel;
   window.opslaanInDossierSticky=opslaanInDossierSticky;
   window.saveOwnDailyMoodKey=saveOwnDailyMoodKey;
+  window.saveCheckin=saveCheckin;
+  window.showCheckinModal=showCheckinModal;
   window.safeSignOut=safeSignOut;
   window.closeDrawer=closeDrawer;
   window.openDrawer=openDrawer;
@@ -17341,6 +18088,23 @@ setTimeout(function(){
     <div class="spiegel-info-block"><strong>Verlengd uitademen 4-6</strong><p>Voor piekeren, angst of overprikkeling.</p></div>
     <div class="spiegel-info-block"><strong>Praat je liever?</strong><p>Gebruik Vertel om vrij te ontladen en daarna pas te structureren.</p></div>
     <button type="button" class="spiegel-info-ok" onclick="closeSpiegelInfo()">Begrepen</button>
+  </div>
+</div>
+<div id="checkinModal" class="ss-checkin-overlay" aria-hidden="true">
+  <div class="ss-checkin-bg" onclick="showCheckinModal(false)"></div>
+  <div class="ss-checkin-sheet" role="dialog" aria-modal="true" aria-label="Dagelijkse check-in" onclick="event.stopPropagation()">
+    <h3>Hoe is het vandaag met jou?</h3>
+    <p>Vergeleken met gisteren. Eén tik is genoeg.</p>
+    <div class="ss-checkin-grid">
+      <button type="button" class="ss-checkin-btn" data-answer="beter" onclick="saveCheckin(this.dataset.answer)">Beter</button>
+      <button type="button" class="ss-checkin-btn" data-answer="hetzelfde" onclick="saveCheckin(this.dataset.answer)">Hetzelfde</button>
+      <button type="button" class="ss-checkin-btn" data-answer="minder goed" onclick="saveCheckin(this.dataset.answer)">Minder goed</button>
+      <button type="button" class="ss-checkin-btn" data-answer="heel zwaar" onclick="saveCheckin(this.dataset.answer)">Heel zwaar</button>
+      <button type="button" class="ss-checkin-btn" data-answer="niet vandaag" onclick="saveCheckin(this.dataset.answer)">Niet vandaag</button>
+    </div>
+    <label for="checkinNote" class="ss-checkin-note-hint" style="display:block;margin-top:12px">Optioneel: één zin erbij (helpt Sensei bij «niet vandaag»)</label>
+    <textarea id="checkinNote" class="ss-checkin-note" rows="2" maxlength="240" placeholder="Bijv. rustige dag, of waarom het zwaar voelt"></textarea>
+    <button type="button" class="ss-checkin-skip" onclick="showCheckinModal(false)">Vandaag overslaan</button>
   </div>
 </div>
 <div id="ademRemBootOverlay" class="adem-rem-boot-overlay" aria-hidden="true" onclick="if(event.target===this)closeAdemReminderBootPopup(false)">
