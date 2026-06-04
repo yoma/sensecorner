@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SenseCorner - Kennismaking</title>
-  <meta name="ob-build" content="29-05-2026 16:40">
+  <meta name="ob-build" content="04-06-2026 19:01">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1446,6 +1446,14 @@
       { q: meta.q2, h: meta.h2 }
     ];
   }
+  function pruneSelectedMirrorsWithoutMeta() {
+    ["date", "family", "friend"].forEach(function (m) {
+      if (selectedMirrors.has(m) && !MIRROR_META[m]) selectedMirrors.delete(m);
+    });
+  }
+  function mirrorHubMetaReady() {
+    return !!(MIRROR_META.date && MIRROR_META.self);
+  }
   function normalizeSelectedMirrors() {
     if (typeof SMH.normalizeOnboardingMirrors === "function") {
       selectedMirrors = SMH.normalizeOnboardingMirrors(selectedMirrors);
@@ -1455,6 +1463,12 @@
       if (!["date", "family", "friend"].some(function (m) { return selectedMirrors.has(m); })) {
         selectedMirrors.add("date");
       }
+    }
+    pruneSelectedMirrorsWithoutMeta();
+    if (!["date", "family", "friend"].some(function (m) { return selectedMirrors.has(m); })) {
+      if (MIRROR_META.date) selectedMirrors.add("date");
+      else if (MIRROR_META.family) selectedMirrors.add("family");
+      else if (MIRROR_META.friend) selectedMirrors.add("friend");
     }
   }
   function countOptionalMirrorsSelected() {
@@ -2678,11 +2692,12 @@
       var id = order[o];
       if (!selectedMirrors.has(id)) continue;
       var meta = MIRROR_META[id];
+      if (!meta) continue;
       var qs = getMirrorQuestions(id, meta);
       for (var qi = 0; qi < qs.length; qi++) {
         r.push({ kind: "q", mirror: id, key: id + "_" + String(qi + 1), idx: qi, meta: meta });
       }
-      r.push({ kind: "sum", mirror: id, text: meta.sum, meta: meta });
+      r.push({ kind: "sum", mirror: id, text: meta.sum || "", meta: meta });
     }
     r.push({ kind: "final" });
     return r;
@@ -3547,6 +3562,12 @@
   }
 
   function startQuestionsFromMirror() {
+    normalizeSelectedMirrors();
+    if (!mirrorHubMetaReady()) {
+      console.error("onboarding: SenseMirrorHub MIRROR_META ontbreekt (js/sense-mirror-hub.js geladen?)");
+      showToast("Spiegelconfiguratie laadt niet. Vernieuw de pagina. Blijft het mis? Controleer of js/sense-mirror-hub.js bereikbaar is.");
+      return;
+    }
     route = buildRoute();
     routeIndex = 0;
     routeStarted = true;

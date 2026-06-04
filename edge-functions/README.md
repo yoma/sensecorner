@@ -12,7 +12,7 @@ De apps roepen `sensei-chat` aan via `fetch`; WhatsApp gebruikt Twilio-webhook.
 
 ### selfsense-aandachtspunten-detect (Fase 2)
 
-Offline detectie van 0-3 voorgestelde aandachtspunten uit `selfsense_checkins` naar `own_aandachtspunten` (status `voorgesteld`, `tips_advice` leeg). Model: `claude-opus-4-6`. Minimaal 4 relevante check-ins (code + prompt).
+Offline detectie van 0-3 voorgestelde aandachtspunten naar `own_aandachtspunten` (status `voorgesteld`, `tips_advice` leeg). Model: `claude-opus-4-6`. Minimaal 4 relevante check-ins (code + prompt). **Evidence** alleen uit `selfsense_checkins` (`{ checkin_id, created_at }`). **Context** (geen bewijs): bevestigde `own_facts` (`status = accepted`) en OWN Sense-profiel voor kader en framen; patronen die alleen in context staan worden na de AI-call gefilterd.
 
 **Triggers in de apps**
 

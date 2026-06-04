@@ -1,8 +1,9 @@
 /**
  * SelfSense aandachtspunten detectie (Fase 2, offline).
  * Endpoint: POST /functions/v1/selfsense-aandachtspunten-detect
- * Bron: uitsluitend selfsense_checkins. Schrijft naar own_aandachtspunten (status voorgesteld).
- * tips_advice blijft leeg tot bevestiging (Fase 3+).
+ * Evidence: alleen selfsense_checkins ({ checkin_id, created_at }).
+ * Context (redenering, geen bewijs): bevestigde own_facts + OWN Sense-profiel.
+ * Schrijft naar own_aandachtspunten (status voorgesteld). tips_advice leeg tot Fase 3+.
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,6 +16,10 @@ const MIN_RELEVANT_CHECKINS = 4;
 const MAX_PROPOSALS = 3;
 const LOOKBACK_DAYS = 90;
 const MAX_CHECKINS_LOAD = 40;
+const MAX_CONFIRMED_FACTS = 40;
+const MAX_PROFILE_TEXT_CHARS = 900;
+const MIN_EVIDENCE_PATTERN_OVERLAP = 0.06;
+const MIN_FACTS_ONLY_OVERLAP = 0.1;
 const OFFLINE_MODEL = "claude-opus-4-6";
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
@@ -32,13 +37,20 @@ const DUNNE_CONTEXT_DEFAULT =
   "DUNNE CONTEXT: Als het dossier of de context weinig concrete informatie bevat over deze specifieke persoon of situatie, zeg dat dan expliciet aan de gebruiker (bijvoorbeeld: ik werk hier met beperkte info). Geef voorlopige richting op gezonde principes, geen vast advies dat doet alsof je de persoon goed kent. Stel daarna een gerichte vervolgvraag om het dossier te verrijken. Geef wel advies wanneer er voldoende context is; doorvragen is alleen voor echte dunne situaties.";
 
 const AANDACHTSPUNTEN_DUNNE_EXTRA =
-  "AANDACHTSPUNTEN-DETECTIE (SelfSense, offline): Je leest alleen de meegeleverde check-in rijen. Bij onvoldoende of te vage inhoud verzin je geen aandachtspunten. Geef dan insufficient: true en een warme user_message in het Nederlands: eerlijk dat er nog te weinig info is, uitnodigend naar verder invullen van check-ins en vragen, geen verwijt, geen patroon verzinnen. Gebruik nooit Unicode U+2014 (em dash).";
+  "AANDACHTSPUNTEN-DETECTIE (SelfSense, offline): Je werkt gezien wat we van de gebruiker weten (context) en de meegeleverde check-ins. Context (feiten, profiel) mag je denken en framen verrijken, maar nooit als bewijs gebruiken of doen alsof het check-ins zijn. Bewijs komt uitsluitend uit check-in rijen. Minimaal ${MIN_RELEVANT_CHECKINS} relevante check-ins zijn al door de server gecontroleerd; als de inhoud toch dun of vaag is, verzin je geen aandachtspunten. Geef dan insufficient: true en een warme user_message in het Nederlands: eerlijk dat er nog te weinig info is, uitnodigend naar verder invullen van check-ins en vragen, geen verwijt, geen patroon verzinnen. Gebruik nooit Unicode U+2014 (em dash).";
 
-const AANDACHTSPUNTEN_EXTRACT_RULES = `AANDACHTSPUNTEN-EXTRACTIE (strikt, parallel aan own_facts):
+const AANDACHTSPUNTEN_CONTEXT_RULES = `CONTEXT VS CHECK-INS (verplicht):
+- Sectie CHECK-INS: enige geldige bron voor evidence en voor het bestaan van een patroon.
+- Sectie CONTEXT: bevestigde OwnSense-feiten en profiel, alleen voor relevantie, naam en kader ("gezien wat we van je weten").
+- Citeer context nooit in evidence, soft_name niet alsof een feit een check-in was.
+- Als een patroon alleen in context staat en niet herhaald in check-ins: geen voorstel.
+- Geen decoratief bewijs: elk evidence-item moet een check-in zijn die het patroon echt ondersteunt.`;
+
+const AANDACHTSPUNTEN_EXTRACT_RULES = `AANDACHTSPUNTEN-EXTRACTIE (strikt):
 - Output: alleen geldig JSON-object, geen markdown.
 - Maximaal ${MAX_PROPOSALS} voorstellen in proposals-array (0-${MAX_PROPOSALS}).
 - Elk voorstel: soft_name (zachte, niet-oordelende eerste-persoon formulering, kort), evidence (array met 2-6 items).
-- Elk evidence-item: exact {"checkin_id":"<uuid>","created_at":"<ISO8601>"} en checkin_id MOET in de meegeleverde lijst staan.
+- Elk evidence-item: exact {"checkin_id":"<uuid>","created_at":"<ISO8601>"} en checkin_id MOET in CHECK-INS staan.
 - Geen scores, percentages, cijfers of interpretatielabels.
 - Verboden in soft_name: lijkt, mogelijk, potentieel, vermoedelijk, waarschijnlijk, schijnt, neemt een houding aan, bevindt zich in een stadium, wijst op.
 - Alleen patronen die expliciet en herhaald in meerdere check-ins terugkomen; geen eenmalige stemming als vast patroon.
@@ -50,6 +62,20 @@ type CheckinRow = {
   created_at: string;
   answer: string;
   note: string | null;
+};
+
+type OwnFactRow = {
+  category: string | null;
+  subcategory: string | null;
+  fact_text: string;
+  is_constraint: boolean | null;
+  source_app: string | null;
+};
+
+type ProfileContext = {
+  roepnaam: string;
+  algemeen_text: string;
+  insight_ss: string;
 };
 
 type EvidenceItem = { checkin_id: string; created_at: string };
@@ -230,6 +256,136 @@ function formatCheckinsForPrompt(rows: CheckinRow[]): string {
     .join("\n");
 }
 
+function truncateForPrompt(text: string, maxLen: number): string {
+  const s = normStr(text);
+  if (!s || s.length <= maxLen) return s;
+  return s.slice(0, maxLen) + "…";
+}
+
+async function loadConfirmedOwnFacts(userId: string): Promise<OwnFactRow[]> {
+  const res = await sb
+    .from("own_facts")
+    .select("category, subcategory, fact_text, is_constraint, source_app")
+    .eq("user_id", userId)
+    .eq("status", "accepted")
+    .neq("subcategory", "completed")
+    .order("updated_at", { ascending: false })
+    .limit(MAX_CONFIRMED_FACTS);
+  if (res.error) {
+    console.warn("loadConfirmedOwnFacts", res.error.message);
+    return [];
+  }
+  return (res.data || [])
+    .map((r) => ({
+      category: normStr(r.category) || null,
+      subcategory: normStr(r.subcategory) || null,
+      fact_text: normStr(r.fact_text),
+      is_constraint: !!r.is_constraint,
+      source_app: normStr(r.source_app) || null,
+    }))
+    .filter((r) => r.fact_text.length > 0);
+}
+
+function formatFactsForPrompt(facts: OwnFactRow[]): string {
+  if (!facts.length) return "(geen bevestigde feiten)";
+  const constraints = facts.filter((f) => f.is_constraint);
+  const regular = facts.filter((f) => !f.is_constraint);
+  const parts: string[] = [];
+  if (constraints.length) {
+    parts.push("Harde constraints (niet als check-in gebruiken):");
+    for (const f of constraints.slice(0, 12)) {
+      parts.push(`- ${f.fact_text}`);
+    }
+  }
+  if (regular.length) {
+    parts.push("Bevestigde feiten (alleen context, geen bewijs):");
+    for (const f of regular) {
+      const cat = f.category || "algemeen";
+      const sub = f.subcategory ? ` / ${f.subcategory}` : "";
+      parts.push(`- [${cat}${sub}] ${f.fact_text}`);
+    }
+  }
+  return parts.join("\n");
+}
+
+function factsCorpusText(facts: OwnFactRow[]): string {
+  return facts.map((f) => f.fact_text).join(" ");
+}
+
+async function loadProfileContextForPrompt(userId: string): Promise<ProfileContext> {
+  const out: ProfileContext = { roepnaam: "", algemeen_text: "", insight_ss: "" };
+  try {
+    const profRes = await sb
+      .from("sense_profiles")
+      .select("props, algemeen_text, insight_ss")
+      .eq("user_id", userId)
+      .eq("name", "OWN Sense")
+      .maybeSingle();
+    if (profRes.error) {
+      console.warn("loadProfileContext", profRes.error.message);
+      return out;
+    }
+    const props = profRes.data?.props;
+    const p = props && typeof props === "object" ? (props as Record<string, unknown>) : {};
+    const pm = p.meta && typeof p.meta === "object" ? (p.meta as Record<string, unknown>) : {};
+    const candidates = [
+      normStr(p.roepnaam), normStr(pm.roepnaam),
+      normStr(p.display_name), normStr(pm.display_name),
+    ].filter((s) => s && !/^own\s*sense$/i.test(s));
+    out.roepnaam = candidates[0] || "";
+    out.algemeen_text = truncateForPrompt(String(profRes.data?.algemeen_text ?? ""), MAX_PROFILE_TEXT_CHARS);
+    out.insight_ss = truncateForPrompt(String(profRes.data?.insight_ss ?? ""), 500);
+  } catch (e) {
+    console.warn("loadProfileContextForPrompt", e);
+  }
+  return out;
+}
+
+function formatProfileForPrompt(profile: ProfileContext): string {
+  const lines: string[] = [];
+  if (profile.roepnaam) lines.push(`roepnaam=${profile.roepnaam}`);
+  if (profile.algemeen_text) lines.push(`profiel_samenvatting=${profile.algemeen_text}`);
+  if (profile.insight_ss) lines.push(`selfsense_inzicht=${profile.insight_ss}`);
+  return lines.length ? lines.join("\n") : "(geen profielcontext)";
+}
+
+function checkinTextBlob(rows: CheckinRow[]): string {
+  return rows
+    .map((r) => `${normStr(r.answer)} ${normStr(r.note)}`)
+    .join(" ")
+    .trim();
+}
+
+function proposalSupportedByCheckinEvidence(
+  softName: string,
+  evidence: EvidenceItem[],
+  checkinById: Map<string, CheckinRow>,
+  allRelevant: CheckinRow[],
+  factsText: string,
+): boolean {
+  const cited: CheckinRow[] = [];
+  for (const e of evidence) {
+    const row = checkinById.get(e.checkin_id);
+    if (row) cited.push(row);
+  }
+  if (cited.length < 2) return false;
+
+  const citedText = checkinTextBlob(cited);
+  if (!citedText) return false;
+  const citedOverlap = wordOverlapScore(softName, citedText);
+  if (citedOverlap < MIN_EVIDENCE_PATTERN_OVERLAP) return false;
+
+  const allCheckinText = checkinTextBlob(allRelevant);
+  const checkinOverlap = wordOverlapScore(softName, allCheckinText);
+  if (!factsText) return true;
+
+  const factsOverlap = wordOverlapScore(softName, factsText);
+  if (factsOverlap >= MIN_FACTS_ONLY_OVERLAP && checkinOverlap < MIN_EVIDENCE_PATTERN_OVERLAP) {
+    return false;
+  }
+  return true;
+}
+
 function normalizeEvidence(
   raw: unknown,
   checkinById: Map<string, CheckinRow>,
@@ -287,9 +443,30 @@ function buildSystemPrompt(dunneContext: string): string {
   return [
     dunneContext,
     AANDACHTSPUNTEN_DUNNE_EXTRA,
+    AANDACHTSPUNTEN_CONTEXT_RULES,
     AANDACHTSPUNTEN_EXTRACT_RULES,
     'JSON-schema: {"insufficient":boolean,"user_message":string|null,"proposals":[{"soft_name":string,"evidence":[{"checkin_id":string,"created_at":string}]}]}',
   ].join("\n\n");
+}
+
+function buildUserPromptContent(
+  relevant: CheckinRow[],
+  facts: OwnFactRow[],
+  profile: ProfileContext,
+): string {
+  const relevantCount = relevant.length;
+  const framing =
+    "Analyseer gezien wat we van deze gebruiker weten (context) en onderstaande check-ins. " +
+    "Stel alleen aandachtspunten voor als het patroon in de check-ins zichtbaar is. Geef JSON volgens schema.\n\n";
+  const checkinsBlock =
+    `=== CHECK-INS (enige bron voor evidence; ${relevantCount} relevante rijen, laatste ${LOOKBACK_DAYS} dagen) ===\n` +
+    formatCheckinsForPrompt(relevant);
+  const contextBlock =
+    `=== CONTEXT (alleen redenering en kader, nooit in evidence) ===\n` +
+    formatProfileForPrompt(profile) +
+    "\n\n" +
+    formatFactsForPrompt(facts);
+  return framing + checkinsBlock + "\n\n" + contextBlock;
 }
 
 Deno.serve(async (req: Request) => {
@@ -344,12 +521,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const checkinById = new Map(relevant.map((r) => [r.id, r]));
-    const dunne = await loadDunneContextClause();
+    const [dunne, confirmedFacts, profileCtx] = await Promise.all([
+      loadDunneContextClause(),
+      loadConfirmedOwnFacts(userId),
+      loadProfileContextForPrompt(userId),
+    ]);
+    const factsCorpus = factsCorpusText(confirmedFacts);
     const system = buildSystemPrompt(dunne);
-    const userContent =
-      `Check-ins (${relevantCount} relevante rijen, laatste ${LOOKBACK_DAYS} dagen):\n` +
-      formatCheckinsForPrompt(relevant) +
-      "\n\nAnalyseer en geef JSON volgens schema.";
+    const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx);
 
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -397,6 +576,7 @@ Deno.serve(async (req: Request) => {
     const rawProposals = Array.isArray(parsed.proposals) ? parsed.proposals : [];
     const insertedRows: { id: string; soft_name: string; evidence: EvidenceItem[] }[] = [];
     let skippedDuplicates = 0;
+    let skippedWeakEvidence = 0;
 
     for (const p of rawProposals.slice(0, MAX_PROPOSALS)) {
       if (!p || typeof p !== "object") continue;
@@ -404,6 +584,10 @@ Deno.serve(async (req: Request) => {
       if (!softName || isRejectedSpeculativeText(softName)) continue;
       const evidence = normalizeEvidence((p as Record<string, unknown>).evidence, checkinById);
       if (!evidence.length) continue;
+      if (!proposalSupportedByCheckinEvidence(softName, evidence, checkinById, relevant, factsCorpus)) {
+        skippedWeakEvidence++;
+        continue;
+      }
       if (isDuplicateProposal(softName, evidence, existing)) {
         skippedDuplicates++;
         continue;
@@ -436,6 +620,7 @@ Deno.serve(async (req: Request) => {
       relevant_count: relevantCount,
       inserted: insertedRows.length,
       skipped_duplicates: skippedDuplicates,
+      skipped_weak_evidence: skippedWeakEvidence,
       proposals: insertedRows,
     });
   } catch (e) {

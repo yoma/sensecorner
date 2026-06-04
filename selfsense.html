@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-06-2026 16:17">
+<meta name="fs-build" content="04-06-2026 17:33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -2294,13 +2294,26 @@ function shouldRunBootstrapAandachtDetect(uid){
 function markBootstrapAandachtDetectRan(uid){
   try{sessionStorage.setItem(ssDetectSessionKey(uid),String(Date.now()));}catch(_e){}
 }
-async function countSelfsenseCheckinsTotal(){
+function isRelevantSelfsenseCheckinRow(row){
+  var answer=String(row&&row.answer||'').trim();
+  if(!answer)return false;
+  var note=String(row&&row.note||'').trim();
+  if(answer!=='niet vandaag')return true;
+  return note.length>=8;
+}
+async function countRelevantSelfsenseCheckins(){
   if(!sb||!S.user)return 0;
   try{
-    var res=await sb.from('selfsense_checkins').select('id',{count:'exact',head:true}).eq('user_id',S.user.id);
-    if(res&&res.error){console.warn('[checkin count]',res.error);return 0;}
-    return Number(res.count)||0;
-  }catch(e){console.warn('[checkin count]',e);return 0;}
+    var cutoff=new Date(Date.now()-90*24*60*60*1000).toISOString();
+    var res=await sb.from('selfsense_checkins').select('answer,note')
+      .eq('user_id',S.user.id).gte('created_at',cutoff)
+      .order('created_at',{ascending:false}).limit(40);
+    if(res&&res.error){console.warn('[relevant checkin count]',res.error);return 0;}
+    var rows=(res&&res.data)||[];
+    var n=0;
+    for(var i=0;i<rows.length;i++)if(isRelevantSelfsenseCheckinRow(rows[i]))n++;
+    return n;
+  }catch(e){console.warn('[relevant checkin count]',e);return 0;}
 }
 function handleAandachtDetectResult(data,opts){
   opts=opts||{};
@@ -2313,7 +2326,14 @@ function handleAandachtDetectResult(data,opts){
     return;
   }
   var reason=String(data.reason||'');
-  if(reason==='too_few_checkins'||reason==='ai_insufficient'||reason==='no_proposals'||reason==='parse_error')return;
+  if(reason==='too_few_checkins'||reason==='ai_insufficient'){
+    if(opts.source==='checkin'){
+      var msg=String(data.user_message||'').trim();
+      if(msg){try{toast(msg);}catch(_t0){}}
+    }
+    return;
+  }
+  if(reason==='no_proposals'||reason==='parse_error')return;
   if(reason==='proposals_inserted'||(Number(data.inserted)||0)>0){
     try{void refreshHomeAandachtspuntenBanner();}catch(_b){}
     try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
@@ -2333,10 +2353,14 @@ async function scheduleBootstrapAandachtDetect(){
   if(!sb||!S.user)return;
   var uid=String(S.user.id||'');
   if(!uid||!shouldRunBootstrapAandachtDetect(uid))return;
-  var total=await countSelfsenseCheckinsTotal();
-  if(total<4)return;
-  markBootstrapAandachtDetectRan(uid);
-  void runSelfsenseAandachtDetect({source:'bootstrap'});
+  var relevant=await countRelevantSelfsenseCheckins();
+  if(relevant<4)return;
+  try{
+    await runSelfsenseAandachtDetect({source:'bootstrap'});
+    markBootstrapAandachtDetectRan(uid);
+  }catch(_e){
+    console.warn('[bootstrap aandacht detect]',_e);
+  }
 }
 async function saveCheckin(answer){
   var ans=normalizeSelfsenseCheckinAnswer(answer);
