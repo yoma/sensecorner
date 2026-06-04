@@ -10475,7 +10475,7 @@ function applyInstantDailyRecoFallback(cats){
   if(typeof senseSparseDailyRecoFallback!=='function')return false;
   var fb=senseSparseDailyRecoFallback(senseiLocalDayKey());
   if(!fb||!String(fb.text||'').trim())return false;
-  setDailyRecoCache({ts:new Date().toISOString(),text:String(fb.text).trim(),categories:cats,sparse:true});
+  setDailyRecoCache({ts:new Date().toISOString(),text:String(fb.text).trim(),categories:cats,sparse:true,isFallback:true});
   _dailyRecoHomeLastError='';
   return true;
 }
@@ -10564,7 +10564,7 @@ async function ensureDailyRecoTipForHome(opts){
     return;
   }
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback;
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
     if(!hasValidCache)applyInstantDailyRecoFallback(cats);
@@ -10654,7 +10654,7 @@ function tryApplySparseDagAdviesFallback(){
   if(typeof senseSparseDagAdviesFallback!=='function')return false;
   var fb=senseSparseDagAdviesFallback(senseiLocalDayKey());
   if(!fb||!String(fb.text||'').trim())return false;
-  setDagAdviesCache({ts:new Date().toISOString(),text:String(fb.text).trim(),sparse:true});
+  setDagAdviesCache({ts:new Date().toISOString(),text:String(fb.text).trim(),sparse:true,isFallback:true});
   return true;
 }
 function primeSparseDagAdviesForHub(){
@@ -10684,7 +10684,7 @@ async function ensureDagAdviesForAdviceHub(opts){
     return;
   }
   var cache=getDagAdviesCache();
-  if(cache&&!hasDagAdviesExpired(cache)&&!forceManual)return;
+  if(cache&&!hasDagAdviesExpired(cache)&&!cache.isFallback&&!forceManual)return;
   if(_dagAdviesFetching)return;
   var st=getAdviceHubState();
   var updateUi=S.screen==='advice'&&(forceManual||st.route==='dagadvies');
