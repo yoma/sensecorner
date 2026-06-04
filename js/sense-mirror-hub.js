@@ -214,7 +214,7 @@
 
   async function fetchProfiles(sb, userId) {
     if (!sb || !userId) return [];
-    var res = await sb.from("sense_profiles").select("name,props,last_active").eq("user_id", userId);
+    var res = await sb.from("sense_profiles").select("name,props,last_active,bericht_count").eq("user_id", userId);
     if (res && res.error) throw new Error(res.error.message || "Profielen laden mislukt");
     return Array.isArray(res.data) ? res.data : [];
   }
@@ -229,13 +229,127 @@
     return "active";
   }
 
+  function allMirrorFactSubcategories() {
+    var subs = [];
+    Object.keys(ANSWER_KEYS_BY_MIRROR).forEach(function (mirrorId) {
+      var keys = ANSWER_KEYS_BY_MIRROR[mirrorId] || [];
+      keys.forEach(function (k) {
+        var sub = ANSWER_KEY_TO_SUB[k];
+        if (sub && subs.indexOf(sub) < 0) subs.push(sub);
+      });
+    });
+    return subs;
+  }
+
+  function mirrorHasFactsInSet(mirrorId, subcatSet) {
+    var keys = ANSWER_KEYS_BY_MIRROR[mirrorId] || [];
+    for (var i = 0; i < keys.length; i++) {
+      var sub = ANSWER_KEY_TO_SUB[keys[i]];
+      if (sub && subcatSet.has(sub)) return true;
+    }
+    return false;
+  }
+
+  async function fetchMirrorFactSubcats(sb, userId) {
+    var set = new Set();
+    if (!sb || !userId) return set;
+    var subs = allMirrorFactSubcategories();
+    if (!subs.length) return set;
+    var res = await sb.from("own_facts").select("subcategory").eq("user_id", userId).in("subcategory", subs);
+    if (res && res.error) return set;
+    (Array.isArray(res.data) ? res.data : []).forEach(function (r) {
+      var s = String((r && r.subcategory) || "").trim();
+      if (s) set.add(s);
+    });
+    return set;
+  }
+
+  async function hasOnboardingCompletedMarker(sb, userId) {
+    if (!sb || !userId) return false;
+    var res = await sb
+      .from("own_facts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("source_app", "onboarding")
+      .eq("subcategory", "completed")
+      .limit(1)
+      .maybeSingle();
+    return !!(res && res.data);
+  }
+
+  function normalizeAppScopeList(meta) {
+    meta = meta && typeof meta === "object" ? meta : {};
+    var raw = meta.app_scope;
+    var list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : [];
+    return list
+      .map(function (v) {
+        return String(v || "").toLowerCase().trim();
+      })
+      .filter(Boolean);
+  }
+
+  function contactRowHintsApp(row, appKey) {
+    if (!row || !appKey) return false;
+    var nm = normalizeProfileNameKey(row.name);
+    if (nm === "ownsense" || nm === "datesense" || nm === "familysense" || nm === "friendsense" || nm === "selfsense") {
+      return false;
+    }
+    var props = row.props && typeof row.props === "object" ? row.props : {};
+    var meta = props.meta && typeof props.meta === "object" ? props.meta : {};
+    var scopes = normalizeAppScopeList(meta);
+    if (appKey === "fr") {
+      if (String(meta.friend_rol || meta.friend_relatie || "").trim()) return true;
+      return scopes.indexOf("fr") >= 0;
+    }
+    if (appKey === "fs") {
+      if (String(meta.familie_rol || meta.familie_relatie || "").trim()) return true;
+      return scopes.indexOf("fs") >= 0;
+    }
+    if (appKey === "ss") return scopes.indexOf("ss") >= 0;
+    if (appKey === "ds") {
+      if (scopes.indexOf("ds") >= 0) return true;
+      if (scopes.indexOf("fr") >= 0 || scopes.indexOf("fs") >= 0) return false;
+      if (String(meta.friend_rol || meta.friend_relatie || meta.familie_rol || meta.familie_relatie || "").trim()) {
+        return false;
+      }
+      return (parseInt(row.bericht_count, 10) || 0) > 0;
+    }
+    return false;
+  }
+
+  function inferActiveFromContacts(rows, appKey) {
+    if (!rows || !rows.length) return false;
+    for (var i = 0; i < rows.length; i++) {
+      if (contactRowHintsApp(rows[i], appKey)) return true;
+    }
+    return false;
+  }
+
   async function getMirrorStatuses(sb, userId) {
     var rows = await fetchProfiles(sb, userId);
+    var factSubs = await fetchMirrorFactSubcats(sb, userId);
+    var onboardingDone = await hasOnboardingCompletedMarker(sb, userId);
     var out = { ds: "never_opened", fr: "never_opened", fs: "never_opened", ss: "never_opened" };
     Object.keys(APP_MIRROR_IDS).forEach(function (appKey) {
       var mirrorId = APP_MIRROR_IDS[appKey];
       var row = profileRowForMirror(rows, mirrorId);
-      out[appKey] = deriveStatusFromRow(row, appKey);
+      if (row) {
+        out[appKey] = deriveStatusFromRow(row, appKey);
+        return;
+      }
+      if (mirrorHasFactsInSet(mirrorId, factSubs)) {
+        out[appKey] = "active";
+        return;
+      }
+      if (mirrorId === "self" && onboardingDone) {
+        out[appKey] = "active";
+        return;
+      }
+      if (onboardingDone && inferActiveFromContacts(rows, appKey)) {
+        out[appKey] = "active";
+        return;
+      }
+      out[appKey] = "never_opened";
     });
     return out;
   }
@@ -260,7 +374,6 @@
       .from("own_facts")
       .select("id")
       .eq("user_id", userId)
-      .eq("source_app", "onboarding")
       .in("subcategory", subs)
       .limit(1);
     return !!(res && res.data && res.data.length);
@@ -454,10 +567,11 @@
 
   function showMirrorIntakeModal(opts) {
     opts = opts || {};
-    if (_intakeOpen) return;
+    if (_intakeOpen) return false;
     var mirrorId = APP_MIRROR_IDS[opts.appKey] || opts.mirrorId;
     var meta = MIRROR_META[mirrorId];
-    if (!meta || !opts.sb || !opts.userId) return;
+    if (!meta || !opts.sb || !opts.userId) return false;
+    injectMirrorOverlayStyles();
     _intakeOpen = true;
     setSettingUpFlag(opts.appKey || MIRROR_APP_KEYS[mirrorId], true);
 
@@ -589,6 +703,7 @@
     renderStep();
     document.body.appendChild(overlay);
     bindStep();
+    return true;
   }
 
   function showResumeConfirmModal(opts) {

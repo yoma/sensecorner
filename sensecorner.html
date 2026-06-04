@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="29-05-2026 17:07">
+<meta name="sc-build" content="04-06-2026 19:17">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -2352,7 +2352,8 @@ a.app-card{color:inherit;text-decoration:none}
         window.location.href=target+(target.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
         return true;
       }
-      SMH.showMirrorIntakeModal({
+      if(SMH.injectMirrorOverlayStyles)SMH.injectMirrorOverlayStyles();
+      var intakeOpened=SMH.showMirrorIntakeModal({
         sb:sb,
         userId:userSession.id,
         appKey:appKey,
@@ -2360,7 +2361,8 @@ a.app-card{color:inherit;text-decoration:none}
         via:'hub_card',
         onError:function(err){alert(String((err&&err.message)||'Opslaan mislukt'));}
       });
-      return true;
+      if(intakeOpened)return true;
+      return false;
     }
     return false;
   }
@@ -3216,13 +3218,13 @@ a.app-card{color:inherit;text-decoration:none}
       return;
     }
     if(userSession){
+      e.preventDefault();
       var handled=await scHandleMirrorAppCardClick(card,target,e);
       if(handled)return;
       card.setAttribute('data-sc-nav','1');
       card.classList.add('loading');
       card.setAttribute('aria-busy','true');
-      var appKey=scAppKeyFromHref(target);
-      if(appKey){try{scBumpAppVisit(userSession,appKey);}catch(_visit){}}
+      openAppWithAuth(target);
       return;
     }
     e.preventDefault();
