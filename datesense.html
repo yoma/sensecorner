@@ -9731,7 +9731,9 @@ async function ensureDailyRecoTipForHome(opts){
     return;
   }
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback;
+  var _ownNow=(S.pdata&&S.pdata['OWN Sense'])||{};
+  var _haveRichCtx=Object.keys(_ownNow.categories||{}).length>0||String(_ownNow.summary||'').trim().length>=40;
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback&&!(cache.sparse&&_haveRichCtx);
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
     if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';

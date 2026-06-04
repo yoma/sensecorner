@@ -10563,8 +10563,10 @@ async function ensureDailyRecoTipForHome(opts){
     if(forceManual)toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
     return;
   }
+  var ownEarly=getOwnCellWithCacheFallback();
+  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback;
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback&&!(cache.sparse&&!sparseLocal);
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
     if(!hasValidCache)applyInstantDailyRecoFallback(cats);
@@ -10584,8 +10586,6 @@ async function ensureDailyRecoTipForHome(opts){
       paintHomeRecoCard();
     }
   }
-  var ownEarly=getOwnCellWithCacheFallback();
-  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
   var run=async function(){
     var retryHandoff=false;
     _dailyRecoHomeFetching=true;
