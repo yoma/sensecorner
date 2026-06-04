@@ -731,7 +731,7 @@
       (focus ? ' Focus: ' + focus + '.' : '') +
       ' Nederlands.';
     var text = '';
-    var apiTimeoutMs = pack.sparse ? 8000 : 28000;
+    var apiTimeoutMs = pack.sparse ? 20000 : 28000;
     if (pack.sparse) {
       try {
         text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutMs, null, {
@@ -742,7 +742,7 @@
         var msgS = (eSparse && eSparse.message) ? String(eSparse.message) : '';
         if (senseIsRateLimitMessage(msgS)) throw eSparse;
         var fb = senseSparseDailyRecoFallback(opts.dayKey);
-        if (fb && fb.text) return fb;
+        if (fb && fb.text) return {text:fb.text,sparse:true,isFallback:true};
         throw eSparse;
       }
     } else {

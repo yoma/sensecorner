@@ -921,14 +921,22 @@ a.app-card{color:inherit;text-decoration:none}
     if(!rt&&exp&&exp<now-120000)return null;
     return sess;
   }
+  var _scRefreshingSession=false;
   async function scRefreshSessionSafe(){
     if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return null;
+    if(_scRefreshingSession){
+      await new Promise(function(r){setTimeout(r,600);});
+      return scSessionFromPersisted();
+    }
+    _scRefreshingSession=true;
     try{
       var rr=await scTimeoutFallback(sb.auth.refreshSession(),18000,null);
       if(rr===null)return scSessionFromPersisted();
       var session=rr&&rr.data&&rr.data.session;
       if(session&&session.user)return session;
-    }catch(_e){}
+    }catch(_e){}finally{
+      _scRefreshingSession=false;
+    }
     return scSessionFromPersisted();
   }
   function scStartSessionKeepAlive(){
@@ -940,7 +948,6 @@ a.app-card{color:inherit;text-decoration:none}
         return refreshAuthUi();
       }).catch(function(){});
     };
-    tick();
     _scSessionKeepAliveTimer=setInterval(tick,3*60*1000);
   }
   async function scGetSessionRobust(){
@@ -949,7 +956,7 @@ a.app-card{color:inherit;text-decoration:none}
     var attempts=[
       {timeout:12000,wait:400,doRefresh:false},
       {timeout:15000,wait:700,doRefresh:true},
-      {timeout:15000,wait:0,doRefresh:true}
+      {timeout:15000,wait:0,doRefresh:false}
     ];
     for(var i=0;i<attempts.length;i++){
       var cfg=attempts[i];
@@ -1005,6 +1012,15 @@ a.app-card{color:inherit;text-decoration:none}
       if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
       _scSignOutDebounceTimer=setTimeout(async function(){
         _scSignOutDebounceTimer=null;
+        var persisted=scSessionFromPersisted();
+        if(persisted&&persisted.user&&persisted.access_token){
+          var pExp=(persisted.expires_at?persisted.expires_at*1000:0)||0;
+          if(!pExp||pExp>Date.now()+60000){
+            scStartSessionKeepAlive();
+            Promise.resolve(refreshAuthUi()).catch(function(){});
+            return;
+          }
+        }
         var recovered=await scRefreshSessionSafe();
         if(!recovered||!recovered.user)recovered=await scGetSessionRobust();
         if(recovered&&recovered.user){

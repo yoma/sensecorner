@@ -4846,7 +4846,15 @@ async function loadAll(opts){
   opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
-  var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  var _loadAllRes=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  if(_loadAllRes&&_loadAllRes.error&&!_loadAllRes.data){
+    var _loadAllUid=String(S.user&&S.user.id||'');
+    if(_loadAllUid&&!fsApplyProfilesCacheIfAvailable(_loadAllUid)){
+      S.profiles=['OWN Sense'];S.pdata={};
+    }
+    return;
+  }
+  var data=_loadAllRes&&_loadAllRes.data;
   S.profiles=['OWN Sense'];S.pdata={};
   if(!data||!data.length){
     await ensureP('OWN Sense');
@@ -7869,7 +7877,7 @@ async function ensureDailyRecoTipForHome(opts){
     return;
   }
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback;
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
     if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';
@@ -7888,8 +7896,9 @@ async function ensureDailyRecoTipForHome(opts){
       var raw=await fetchDailyRecoTipText(cats);
       var text=typeof raw==='object'?String(raw.text||'').trim():String(raw||'').trim();
       var sparse=typeof raw==='object'?!!raw.sparse:true;
+      var resultIsFallback=typeof raw==='object'&&!!raw.isFallback;
       if(!text)throw new Error('Leeg antwoord ontvangen.');
-      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse});
+      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse,isFallback:resultIsFallback||undefined});
       _dailyRecoHomeLastError='';
     }catch(e){
       var msg=(e&&e.message)?String(e.message):'Tip laden lukte niet.';
@@ -11307,7 +11316,7 @@ const SENSEI_RECO_DOMAIN_MAP={
   plekken:['uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels','visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be']
 };
 const SENSEI_RECO_PREFS_KEY='fs_reco_prefs_v1';
-const SENSEI_RECO_DAILY_KEY='fs_reco_daily_tip_v1';
+const SENSEI_RECO_DAILY_KEY='fs_reco_daily_tip_v2';
 function defaultRecoPrefs(){
   var categories={};
   SENSEI_RECO_CATEGORY_META.forEach(function(c){categories[c.key]=true;});
