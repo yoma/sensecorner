@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-06-2026 17:33">
+<meta name="fs-build" content="04-06-2026 19:27">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -3518,28 +3518,143 @@ function ownProfileSetupComplete(){
   var meta=own.meta||{};
   return !!(String(meta.birthdate||'').trim()&&(String(meta.city||'').trim()||String(meta.country||'').trim()));
 }
+function getOwnSenseBasisMetaForUi(){
+  var own=(S.pdata&&S.pdata['OWN Sense'])||{};
+  if(typeof senseExtractOwnBasisMetaFromOwnCell==='function'){
+    return senseExtractOwnBasisMetaFromOwnCell(own,readOwnHubBasisFallback());
+  }
+  return own.meta&&typeof own.meta==='object'?own.meta:{};
+}
+function readSelfSenseGuideSuppressedFlag(){
+  try{return String(getScopedStorage('ss_home_guide_suppressed_v1','0')||'0')==='1';}catch(_e){return false;}
+}
+function markSelfSenseGuideSuppressed(on){
+  var val=on!==false?'1':'0';
+  setScopedStorage('ss_home_guide_suppressed_v1',val);
+  S.selfSenseGuideSuppressed=(val==='1');
+}
+function isSelfSenseGuideSuppressed(){
+  if(S.selfSenseGuideSuppressed===true)return true;
+  return readSelfSenseGuideSuppressedFlag();
+}
+function resetSelfSenseGuideRuntimeSignals(){
+  S.selfSenseGuideSuppressed=false;
+  S.selfSenseHasVertelSignal=false;
+  S.selfSenseHasAdviceSignal=false;
+  S._guideSignalsUid='';
+}
+function selfSenseAdviceDoneLocal(own){
+  own=own||((S.pdata&&S.pdata['OWN Sense'])||{});
+  if(!!String((((own.meta||{}).last_advice||{}).html||'').trim()))return true;
+  if(S.selfSenseHasAdviceSignal)return true;
+  var cache=S.adviesCache&&S.adviesCache['OWN Sense'];
+  return !!(cache&&String(cache.html||'').trim());
+}
+function selfSenseVertelDoneLocal(own){
+  own=own||((S.pdata&&S.pdata['OWN Sense'])||{});
+  if((own.count||0)>0)return true;
+  var ownProgress=getProfielProgressCounts('OWN Sense');
+  if(ownProgress&&ownProgress.filled>0)return true;
+  var depth=getOwnAppDepthProgress();
+  if(depth&&depth.filled>0)return true;
+  if(S.selfSenseHasVertelSignal)return true;
+  try{
+    var rows=(S.sessionHistoryPager&&Array.isArray(S.sessionHistoryPager.rows))?S.sessionHistoryPager.rows:[];
+    if(rows.some(function(r){return r&&r.role==='user'&&String(r.content||'').trim();}))return true;
+  }catch(_e){}
+  return false;
+}
+async function refreshSelfSenseGuideSignals(){
+  if(!S.user||!sb)return;
+  var uid=String(S.user.id||'');
+  if(!uid)return;
+  S._guideSignalsUid=uid;
+  var own=(S.pdata&&S.pdata['OWN Sense'])||{count:0,categories:{},meta:{}};
+  if(selfSenseVertelDoneLocal(own))S.selfSenseHasVertelSignal=true;
+  if(selfSenseAdviceDoneLocal(own))S.selfSenseHasAdviceSignal=true;
+  var onboardingDone=false;
+  try{
+    var oc=await withTimeout(
+      sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle(),
+      7000,
+      null
+    );
+    onboardingDone=!!(oc&&oc.data);
+  }catch(_oc){}
+  if(!S.selfSenseHasVertelSignal){
+    try{
+      var sr=await withTimeout(
+        sb.from('sense_sessions').select('id').eq('user_id',uid).eq('vertel_app',VERTEL_APP_SLUG).limit(1).maybeSingle(),
+        6000,
+        null
+      );
+      if(sr&&sr.data)S.selfSenseHasVertelSignal=true;
+    }catch(_sr){}
+  }
+  if(!S.selfSenseHasVertelSignal){
+    try{
+      var srAny=await withTimeout(
+        sb.from('sense_sessions').select('id').eq('user_id',uid).limit(1).maybeSingle(),
+        6000,
+        null
+      );
+      if(srAny&&srAny.data)S.selfSenseHasVertelSignal=true;
+    }catch(_srAny){}
+  }
+  if(!S.selfSenseHasVertelSignal){
+    try{
+      var ur=await withTimeout(
+        sb.from('sense_messages').select('id').eq('user_id',uid).eq('role','user').limit(1).maybeSingle(),
+        6000,
+        null
+      );
+      if(ur&&ur.data)S.selfSenseHasVertelSignal=true;
+    }catch(_ur){}
+  }
+  if(!S.selfSenseHasAdviceSignal){
+    try{
+      var ar=await withTimeout(
+        sb.from('sense_messages').select('html,created_at').eq('user_id',uid).eq('profile_name','OWN Sense').eq('role','ai').order('created_at',{ascending:false}).limit(1).maybeSingle(),
+        7000,
+        null
+      );
+      var aiHtml=ar&&ar.data?normalizeLoadedMsgHtml(ar.data.html):'';
+      if(String(aiHtml||'').trim()){
+        S.selfSenseHasAdviceSignal=true;
+        var d=S.pdata['OWN Sense'];
+        if(d&&!String((((d.meta||{}).last_advice||{}).html||'')).trim()){
+          d.meta=d.meta||{};
+          d.meta.last_advice={
+            html:String(aiHtml).trim(),
+            updated_at:ar.data.created_at||new Date().toISOString()
+          };
+          S.pdata['OWN Sense']=d;
+          try{await saveP('OWN Sense',d.props,d.count,d.categories,d.summary,d.meta);}catch(_sp){}
+        }
+      }
+    }catch(_ar){}
+  }
+  var items=getOnboardingChecklist();
+  if(items.every(function(x){return x.done;}))markSelfSenseGuideSuppressed(true);
+  else if(onboardingDone&&ownProfileSetupComplete())markSelfSenseGuideSuppressed(true);
+  else if(onboardingDone&&(S.selfSenseHasVertelSignal||S.selfSenseHasAdviceSignal))markSelfSenseGuideSuppressed(true);
+}
 function getOnboardingChecklist(){
   var own=S.pdata['OWN Sense']||{count:0,categories:{},meta:{}};
-  var ownCount=own.count||0;
-  var ownProgress=getProfielProgressCounts('OWN Sense');
-  var ownHasProfileAnswers=!!(ownProgress&&ownProgress.filled>0);
-  var ownHasVertelHistory=(function(){
-    try{
-      var rows=(S.sessionHistoryPager&&Array.isArray(S.sessionHistoryPager.rows))?S.sessionHistoryPager.rows:[];
-      return rows.some(function(r){return r&&r.role==='user'&&String(r.content||'').trim();});
-    }catch(_e){return false;}
-  })();
-  var ownHasAdvice=!!String((((own.meta||{}).last_advice||{}).html||'').trim());
   return [
     {id:'own-profile',done:ownProfileSetupComplete(),label:'Vul je basisprofiel in',action:"openOwnSenseEntryPoint({focus:'basis'})"},
-    {id:'vertel-start',done:ownCount>0||ownHasProfileAnswers||ownHasVertelHistory,label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"},
-    {id:'advies-start',done:ownHasAdvice,label:'Genereer je eerste advies',action:"goScreen('advice')"}
+    {id:'vertel-start',done:selfSenseVertelDoneLocal(own),label:'Start met Vertel of voeg context toe',action:"goScreen('vertel')"},
+    {id:'advies-start',done:selfSenseAdviceDoneLocal(own),label:'Genereer je eerste advies',action:"goScreen('advice')"}
   ];
 }
 function renderOnboardingCard(){
+  if(isSelfSenseGuideSuppressed())return'';
   var items=getOnboardingChecklist();
   var doneCount=items.filter(function(x){return x.done;}).length;
-  if(doneCount===items.length)return'';
+  if(doneCount===items.length){
+    markSelfSenseGuideSuppressed(true);
+    return'';
+  }
   return '<div class="ai-rich-card" style="margin:0 0 14px;text-align:left">'
     +'<div class="home-tour-cta">'
     +'<button type="button" class="home-tour-btn" onclick="startFullAppTour()">🧭 Korte rondleiding</button>'
@@ -4285,6 +4400,8 @@ function getPostAuthTargetScreen(){
 }
 function applyAuthSessionToState(session){
   if(!session||!session.user)return false;
+  var uid=String(session.user.id||'');
+  if(S._guideSignalsUid&&S._guideSignalsUid!==uid)resetSelfSenseGuideRuntimeSignals();
   S.user=session.user;
   _setAuthTokenFromSession(session);
   if(!S.apiKey)S.apiKey='hub_server_managed';
@@ -4442,6 +4559,12 @@ async function bootstrapAuthenticated(session,opts){
         try{updateNavTabIndicators();}catch(_e3){}
       }
     }catch(_e4){}
+    void (async function(){
+      try{
+        await refreshSelfSenseGuideSignals();
+        ssRefreshUiAfterBackgroundSync();
+      }catch(_fpGuide){}
+    })();
     void ssRunFullBootstrap(session,opts);
     _authBootstrappedUserId=String(session.user.id||'');
     return true;
@@ -6031,6 +6154,7 @@ async function doRegister(){
 
 function applySignedOutClientState(){
   resetAuthenticatedBootState();
+  resetSelfSenseGuideRuntimeSignals();
   S.user=null;
   S.adminRole='user';
   S.profiles=['OWN Sense'];
@@ -6174,6 +6298,7 @@ async function loadAll(opts){
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{syncOwnBasisMetaFromHub();}catch(_basisHub){}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
+  try{await refreshSelfSenseGuideSignals();}catch(_g){console.warn('refreshSelfSenseGuideSignals',_g);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   ssSaveProfilesCache();
   if(opts.deferHeavy===false){
@@ -8762,7 +8887,10 @@ function rHome(el){
   if(typeof S.homeModeEditorOpen!=='boolean')S.homeModeEditorOpen=!hasExplicitMode;
   var showModeEditor=!!S.homeModeEditorOpen;
   var onboardingHtml=renderOnboardingCard();
-  var basisNudgeHtml=(typeof renderBasisprofielNudgeIfNeeded==='function')?renderBasisprofielNudgeIfNeeded((((S.pdata||{})['OWN Sense']||{}).meta)||{},'ss'):'';
+  var basisNudgeHtml='';
+  if(!isSelfSenseGuideSuppressed()&&typeof renderBasisprofielNudgeIfNeeded==='function'){
+    basisNudgeHtml=renderBasisprofielNudgeIfNeeded(getOwnSenseBasisMetaForUi(),'ss');
+  }
   var hasContacts=cs.length>0;
 
   // Coach taken: roterend, niet alles tegelijk, met wegvinken/afwerken
