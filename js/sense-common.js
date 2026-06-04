@@ -558,6 +558,7 @@
     return { text: advices[hash], sparse: true };
   }
 
+  /** Alleen via loadMsgs({ probeBeforeLoad: true }); routine pad = één query, geen extra round-trip. */
   var _senseMsgsProbeCache = {};
   var _senseMsgsProbeInflight = {};
 
