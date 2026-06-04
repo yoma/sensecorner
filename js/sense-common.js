@@ -695,7 +695,7 @@
       recentUserLines: [],
       hubFallback: opts.hubFallback || null
     });
-    if (!packPre.sparse && typeof opts.loadRecentUserLines === 'function') {
+    if (!packPre.sparse && !opts.skipLoadMsgs && typeof opts.loadRecentUserLines === 'function') {
       try {
         recentUserLines = await opts.loadRecentUserLines();
       } catch (_lr) {}

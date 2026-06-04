@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-06-2026 21:09">
+<meta name="fs-build" content="04-06-2026 21:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -4466,7 +4466,7 @@ async function resolveSession(opts){
   var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
   for(var i=0;i<attempts;i++){
     try{
-      var res=await withTimeout(client.auth.getSession(),getTimeout,null);
+      var res=await withTimeout(client.auth.getSession(),getTimeout,null,{label:'resolveSession.getSession'});
       var session=res&&res.data&&res.data.session;
       if(session&&session.user&&String(session.access_token||'').trim())return session;
     }catch(_e){}
@@ -4487,7 +4487,7 @@ async function persistLoginSessionFromSignIn(signRes){
       var setRes=await withTimeout(sb.auth.setSession({
         access_token:session.access_token,
         refresh_token:session.refresh_token
-      }),8000,null);
+      }),8000,null,{label:'persistLoginSessionFromSignIn.setSession'});
       return !!(setRes&&!setRes.error);
     }catch(_e){}
   }
@@ -4548,7 +4548,7 @@ async function ssSyncAuthClientFromSession(session){
     await withTimeout(sb.auth.setSession({
       access_token:session.access_token,
       refresh_token:session.refresh_token
-    }),8000,null);
+    }),8000,null,{label:'ssSyncAuthClientFromSession.setSession'});
   }catch(_e){}
 }
 function ssRefreshUiAfterBackgroundSync(){
@@ -6575,6 +6575,7 @@ function normalizeLoadedMsgHtml(v){
 }
 
 var _loadMsgsInflightByKey={};
+var _loadMsgsInflightByProfile={};
 async function loadMsgs(pn,opt){
   if(!S.user)return[];
   var o=opt||{};
@@ -6583,6 +6584,7 @@ async function loadMsgs(pn,opt){
   var selectCols=o.select||'*';
   var innerTimeoutMs=parseInt(o.innerTimeoutMs,10)||6000;
   var uid=S.user.id;
+  var profileKey=String(uid)+'|'+String(pn);
   if(o.probeBeforeLoad===true&&typeof senseProbeProfileHasMsgs==='function'){
     try{
       var probed=await senseProbeProfileHasMsgs(sb,uid,pn,{
@@ -6591,6 +6593,14 @@ async function loadMsgs(pn,opt){
       });
       if(probed===false)return [];
     }catch(_pr){}
+  }
+  if(_loadMsgsInflightByProfile[profileKey]){
+    try{
+      return await _loadMsgsInflightByProfile[profileKey];
+    }catch(_pin){
+      if(o.throwOnError)throw _pin;
+      return [];
+    }
   }
   var inflightKey=String(uid)+'|'+String(pn)+'|'+limit+'|'+(asc?'1':'0')+'|'+selectCols;
   if(_loadMsgsInflightByKey[inflightKey])return _loadMsgsInflightByKey[inflightKey];
@@ -6605,7 +6615,9 @@ async function loadMsgs(pn,opt){
     try{
       res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
     }catch(te){
-      console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+      if(!o.quietOnTimeout){
+        console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+      }
       if(o.throwOnError)throw te;
       return [];
     }
@@ -6627,10 +6639,12 @@ async function loadMsgs(pn,opt){
     });
   })();
   _loadMsgsInflightByKey[inflightKey]=task;
+  _loadMsgsInflightByProfile[profileKey]=task;
   try{
     return await task;
   }finally{
     delete _loadMsgsInflightByKey[inflightKey];
+    delete _loadMsgsInflightByProfile[profileKey];
   }
 }
 
@@ -10349,7 +10363,15 @@ async function runAdviceHubRecommendationsNow(){
     var skipHubMsgs=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownHub,[]);
     try{
       if(!skipHubMsgs){
-        var batch=await loadMsgs('OWN Sense',{limit:16,asc:false,select:'html,role',innerTimeoutMs:3500});
+        var batch=await loadMsgs('OWN Sense',{
+          limit:16,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
         (batch||[]).forEach(function(m){
         if(!m||m.role!=='user')return;
         var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -10409,27 +10431,17 @@ function armDailyRecoHomeWatchdog(){
     var cacheWd=getDailyRecoCache();
     var hasCache=cacheWd&&String(cacheWd.text||'').trim()&&!hasDailyRecoExpired(cacheWd);
     if(!hasCache){
-      var ownWd=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
-      var useFb=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownWd,[]);
-      if(useFb&&typeof senseSparseDailyRecoFallback==='function'){
-        var fb=senseSparseDailyRecoFallback(senseiLocalDayKey());
-        if(fb&&String(fb.text||'').trim()){
-          setDailyRecoCache({ts:new Date().toISOString(),text:String(fb.text).trim(),categories:catsWd,sparse:true});
-          _dailyRecoHomeLastError='';
-        }else if(!_dailyRecoHomeLastError){
-          _dailyRecoHomeLastError='Tip laden duurde te lang. Tik op Vernieuw tip.';
-        }
-      }else if(!_dailyRecoHomeLastError){
+      if(!applyInstantDailyRecoFallback(catsWd)&&!_dailyRecoHomeLastError){
         _dailyRecoHomeLastError='Tip laden duurde te lang. Tik op Vernieuw tip.';
+      }else{
+        _dailyRecoHomeLastError='';
       }
     }
     paintHomeRecoCard();
   },_DAILY_RECO_HOME_WATCHDOG_MS);
 }
-function tryApplySparseDailyRecoFallback(cats){
+function applyInstantDailyRecoFallback(cats){
   if(!cats||!cats.length)return false;
-  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
-  if(typeof senseShouldUseSparseDailyRecoFallback!=='function'||!senseShouldUseSparseDailyRecoFallback(own,[]))return false;
   if(typeof senseSparseDailyRecoFallback!=='function')return false;
   var fb=senseSparseDailyRecoFallback(senseiLocalDayKey());
   if(!fb||!String(fb.text||'').trim())return false;
@@ -10437,12 +10449,18 @@ function tryApplySparseDailyRecoFallback(cats){
   _dailyRecoHomeLastError='';
   return true;
 }
+function tryApplySparseDailyRecoFallback(cats){
+  if(!cats||!cats.length)return false;
+  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  if(typeof senseShouldUseSparseDailyRecoFallback!=='function'||!senseShouldUseSparseDailyRecoFallback(own,[]))return false;
+  return applyInstantDailyRecoFallback(cats);
+}
 function primeSparseDailyRecoForHome(){
   if(!S.user)return;
   var cache=getDailyRecoCache();
   if(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache))return;
   var cats=getRecoEnabledCategories(getRecoPrefs());
-  if(cats.length)tryApplySparseDailyRecoFallback(cats);
+  if(cats.length)applyInstantDailyRecoFallback(cats);
 }
 async function fetchDailyRecoTipText(cats,opt){
   opt=opt||{};
@@ -10464,11 +10482,20 @@ async function fetchDailyRecoTipText(cats,opt){
     displayName:getUserHoofdNaam(),
     dayKey:senseiLocalDayKey(),
     hubFallback:typeof readOwnHubBasisFallback==='function'?readOwnHubBasisFallback():null,
+    skipLoadMsgs:skipLoadMsgs,
     loadRecentUserLines:async function(){
       if(skipLoadMsgs)return [];
       var lines=[];
       try{
-        var batch=await loadMsgs('OWN Sense',{limit:12,asc:false,innerTimeoutMs:3500});
+        var batch=await loadMsgs('OWN Sense',{
+          limit:12,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:parseInt(opt.loadMsgsTimeoutMs,10)||12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
         (batch||[]).forEach(function(m){
           if(!m||m.role!=='user')return;
           var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -10495,20 +10522,25 @@ async function ensureDailyRecoTipForHome(opts){
   var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
+    if(!hasValidCache)applyInstantDailyRecoFallback(cats);
     if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';
     paintHomeRecoCard();
     return;
   }
   if(_dailyRecoHomeTask&&!forceManual)return _dailyRecoHomeTask;
-  var ownEarly=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
-  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
-  if(sparseLocal&&!forceManual){
-    if(tryApplySparseDailyRecoFallback(cats)){
+  var hadTipBeforeFetch=false;
+  if(!forceManual){
+    var curTip=getDailyRecoCache();
+    hadTipBeforeFetch=curTip&&String(curTip.text||'').trim()&&!hasDailyRecoExpired(curTip);
+    if(!hadTipBeforeFetch){
+      applyInstantDailyRecoFallback(cats);
+      hadTipBeforeFetch=!!(getDailyRecoCache()&&String(getDailyRecoCache().text||'').trim());
       _dailyRecoHomeLastError='';
       paintHomeRecoCard();
-      return;
     }
   }
+  var ownEarly=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
   var run=async function(){
     var retryHandoff=false;
     _dailyRecoHomeFetching=true;
@@ -10516,12 +10548,13 @@ async function ensureDailyRecoTipForHome(opts){
     paintHomeRecoCard();
     armDailyRecoHomeWatchdog();
     var fetchTimeoutMs=sparseLocal?_DAILY_RECO_HOME_TIMEOUT_SPARSE_MS:_DAILY_RECO_HOME_TIMEOUT_RICH_MS;
+    var skipMsgs=!forceManual;
     try{
       var raw=await withTimeout(
-        fetchDailyRecoTipText(cats,{skipLoadMsgs:sparseLocal}),
+        fetchDailyRecoTipText(cats,{skipLoadMsgs:skipMsgs,loadMsgsTimeoutMs:12000}),
         fetchTimeoutMs,
         'Tip laden timeout',
-        {label:'ensureDailyRecoTipForHome',meta:{retry:retryCount,sparse:sparseLocal}}
+        {label:'ensureDailyRecoTipForHome',meta:{retry:retryCount,sparse:sparseLocal,skipLoadMsgs:skipMsgs}}
       );
       var text=typeof raw==='object'?String(raw.text||'').trim():String(raw||'').trim();
       var sparse=typeof raw==='object'?!!raw.sparse:true;
@@ -10542,7 +10575,9 @@ async function ensureDailyRecoTipForHome(opts){
         await ensureDailyRecoTipForHome({retryCount:retryCount+1});
         return;
       }
-      if(tryApplySparseDailyRecoFallback(cats)){
+      if(hadTipBeforeFetch||(getDailyRecoCache()&&String(getDailyRecoCache().text||'').trim()&&!hasDailyRecoExpired(getDailyRecoCache()))){
+        _dailyRecoHomeLastError='';
+      }else if(tryApplySparseDailyRecoFallback(cats)||applyInstantDailyRecoFallback(cats)){
         _dailyRecoHomeLastError='';
       }else{
         _dailyRecoHomeLastError=msg;
@@ -10581,10 +10616,7 @@ function primeSparseDagAdviesForHub(){
   if(!S.user)return;
   var cache=getDagAdviesCache();
   if(cache&&String(cache.text||'').trim()&&!hasDagAdviesExpired(cache))return;
-  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
-  if(typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(own,[])){
-    tryApplySparseDagAdviesFallback();
-  }
+  tryApplySparseDagAdviesFallback();
 }
 function armDagAdviesWatchdog(updateUi){
   clearDagAdviesWatchdog();
@@ -10613,11 +10645,9 @@ async function ensureDagAdviesForAdviceHub(opts){
   var updateUi=S.screen==='advice'&&(forceManual||st.route==='dagadvies');
   var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
   var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(own,[]);
-  if(sparseLocal&&!forceManual){
-    if(tryApplySparseDagAdviesFallback()){
-      if(updateUi)refreshAdviceHubDagAdviesIfVisible();
-      return;
-    }
+  if(!forceManual&&(!cache||hasDagAdviesExpired(cache))){
+    tryApplySparseDagAdviesFallback();
+    if(updateUi)refreshAdviceHubDagAdviesIfVisible();
   }
   _dagAdviesFetching=true;
   if(updateUi)refreshAdviceHubDagAdviesIfVisible();
@@ -10634,9 +10664,17 @@ async function ensureDagAdviesForAdviceHub(opts){
       });
     }catch(_oc){}
     var recentUserLines=[];
-    if(!sparseLocal){
+    if(forceManual&&!sparseLocal){
       try{
-        var batch=await loadMsgs('OWN Sense',{limit:12,asc:false,select:'html,role',innerTimeoutMs:3500});
+        var batch=await loadMsgs('OWN Sense',{
+          limit:12,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
         (batch||[]).forEach(function(m){
           if(!m||m.role!=='user')return;
           var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
