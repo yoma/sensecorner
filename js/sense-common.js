@@ -731,7 +731,8 @@
       (focus ? ' Focus: ' + focus + '.' : '') +
       ' Nederlands.';
     var text = '';
-    var apiTimeoutMs = pack.sparse ? 20000 : 28000;
+    var apiTimeoutMs = pack.sparse ? 20000 : 45000;
+    var apiTimeoutPlainMs = pack.sparse ? 20000 : 15000;
     if (pack.sparse) {
       try {
         text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutMs, null, {
@@ -756,7 +757,7 @@
         if (senseIsRateLimitMessage(msg1)) {
           throw e1;
         }
-        text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutMs, null, {
+        text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutPlainMs, null, {
           disable_web_search: true
         });
       }
