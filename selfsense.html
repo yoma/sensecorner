@@ -4427,6 +4427,11 @@ function senseClearAuthStorage(){
 async function senseRecoverSessionAfterSignOutEvent(authClient){
   var client=authClient||sb;
   if(!client||!client.auth)return null;
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    var pExp=(persisted.expires_at?persisted.expires_at*1000:0)||0;
+    if(!pExp||pExp>Date.now()+60000)return persisted;
+  }
   try{
     var sess=await withTimeout(client.auth.getSession(),3000,null);
     var session=sess&&sess.data&&sess.data.session;
@@ -4710,6 +4715,7 @@ function registerAuthStateListener(){
         _senseSignOutDebounceTimer=null;
         var recovered=await senseRecoverSessionAfterSignOutEvent();
         if(recovered&&recovered.user){
+          _setAuthTokenFromSession(recovered);
           void enterAuthenticatedApp(recovered,{fullSync:false,forceResync:false});
           return;
         }
@@ -4775,6 +4781,18 @@ async function getAccessTokenFresh(forceRefresh){
   var now=Date.now();
   if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
     return _authTokenCache.token;
+  }
+  if(!forceRefresh){
+    var _persisted=senseSessionFromPersisted();
+    if(_persisted&&_persisted.access_token){
+      var _pExp=(_persisted.expires_at?_persisted.expires_at*1000:0)||0;
+      if(!_pExp||_pExp>now+60000){
+        _setAuthTokenFromSession(_persisted);
+        if(_authTokenCache.token&&(_authTokenCache.expiresAt===0||_authTokenCache.expiresAt>now)){
+          return _authTokenCache.token;
+        }
+      }
+    }
   }
   var session=null;
   try{
@@ -6321,7 +6339,15 @@ async function loadAll(opts){
   opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
-  var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  var _loadAllRes=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  if(_loadAllRes&&_loadAllRes.error&&!_loadAllRes.data){
+    var _loadAllUid=String(S.user&&S.user.id||'');
+    if(_loadAllUid&&!ssApplyProfilesCacheIfAvailable(_loadAllUid)){
+      S.profiles=['OWN Sense'];S.pdata={};S.crossAppCache={};
+    }
+    return;
+  }
+  var data=_loadAllRes&&_loadAllRes.data;
   S.profiles=['OWN Sense'];S.pdata={};S.crossAppCache={};
   if(!data||!data.length){
     await ensureP('OWN Sense');
@@ -10459,6 +10485,21 @@ function tryApplySparseDailyRecoFallback(cats){
   if(typeof senseShouldUseSparseDailyRecoFallback!=='function'||!senseShouldUseSparseDailyRecoFallback(own,[]))return false;
   return applyInstantDailyRecoFallback(cats);
 }
+function getOwnCellWithCacheFallback(){
+  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var cats=own.categories||{};
+  if(!Object.keys(cats).length&&!String(own.summary||'').trim()){
+    try{
+      var uid=S.user&&String(S.user.id||'');
+      var snap=uid?ssLoadProfilesCache(uid):null;
+      var cached=snap&&snap.pdata&&snap.pdata['OWN Sense'];
+      if(cached&&(Object.keys(cached.categories||{}).length||String(cached.summary||'').trim())){
+        return cached;
+      }
+    }catch(_e){}
+  }
+  return own;
+}
 function primeSparseDailyRecoForHome(){
   if(!S.user)return;
   var cache=getDailyRecoCache();
@@ -10469,7 +10510,7 @@ function primeSparseDailyRecoForHome(){
 async function fetchDailyRecoTipText(cats,opt){
   opt=opt||{};
   var allowedDomains=buildRecoDomainsFromCategories(cats);
-  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var own=getOwnCellWithCacheFallback();
   var skipLoadMsgs=!!opt.skipLoadMsgs;
   if(typeof senseFetchDailyRecoTipText!=='function'){
     var usr='Doel: een fijne, concrete dagtip in mensentaal.';
@@ -10543,7 +10584,7 @@ async function ensureDailyRecoTipForHome(opts){
       paintHomeRecoCard();
     }
   }
-  var ownEarly=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var ownEarly=getOwnCellWithCacheFallback();
   var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
   var run=async function(){
     var retryHandoff=false;
@@ -10647,7 +10688,7 @@ async function ensureDagAdviesForAdviceHub(opts){
   if(_dagAdviesFetching)return;
   var st=getAdviceHubState();
   var updateUi=S.screen==='advice'&&(forceManual||st.route==='dagadvies');
-  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var own=getOwnCellWithCacheFallback();
   var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(own,[]);
   if(!forceManual&&(!cache||hasDagAdviesExpired(cache))){
     tryApplySparseDagAdviesFallback();
