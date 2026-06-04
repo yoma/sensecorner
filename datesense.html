@@ -5219,6 +5219,9 @@ async function saveMsg(pn,role,html){
   }
   if(res&&res.error)throw new Error(res.error.message);
   sync('ok');
+  if(S.user&&S.user.id&&typeof senseInvalidateProfileMsgsProbe==='function'){
+    try{senseInvalidateProfileMsgsProbe(S.user.id,pn);}catch(_inv){}
+  }
   if(String(pn)==='OWN Sense'){
     try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   }
@@ -5244,6 +5247,7 @@ function normalizeLoadedMsgHtml(v){
   return String(v);
 }
 
+var _loadMsgsInflightByKey={};
 async function loadMsgs(pn,opt){
   if(!S.user)return[];
   var o=opt||{};
@@ -5251,33 +5255,56 @@ async function loadMsgs(pn,opt){
   var asc=o.asc===undefined?true:!!o.asc;
   var selectCols=o.select||'*';
   var innerTimeoutMs=parseInt(o.innerTimeoutMs,10)||6000;
-  var q=sb.from('sense_messages')
-    .select(selectCols)
-    .eq('user_id',S.user.id)
-    .eq('profile_name',pn)
-    .order('created_at',{ascending:asc})
-    .limit(limit);
-  var res;
+  var uid=S.user.id;
+  if(o.skipProbe!==true&&typeof senseProbeProfileHasMsgs==='function'){
+    try{
+      var probed=await senseProbeProfileHasMsgs(sb,uid,pn,{
+        withTimeout:withTimeout,
+        timeoutMs:parseInt(o.probeTimeoutMs,10)||2200
+      });
+      if(probed===false)return [];
+    }catch(_pr){}
+  }
+  var inflightKey=String(uid)+'|'+String(pn)+'|'+limit+'|'+(asc?'1':'0')+'|'+selectCols;
+  if(_loadMsgsInflightByKey[inflightKey])return _loadMsgsInflightByKey[inflightKey];
+  var task=(async function(){
+    var q=sb.from('sense_messages')
+      .select(selectCols)
+      .eq('user_id',uid)
+      .eq('profile_name',pn)
+      .order('created_at',{ascending:asc})
+      .limit(limit);
+    var res;
+    try{
+      res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
+    }catch(te){
+      console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+      if(o.throwOnError)throw te;
+      return [];
+    }
+    var data=res&&res.data;
+    var error=res&&res.error;
+    if(error){
+      console.warn('loadMsgs failed for',pn,error.message||error);
+      if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
+      return [];
+    }
+    var rows=data||[];
+    if(typeof senseMarkProfileMsgsProbe==='function'){
+      try{senseMarkProfileMsgsProbe(uid,pn,rows.length>0);}catch(_mk){}
+    }
+    return rows.map(function(row){
+      if(!row||typeof row!=='object')return row;
+      if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
+      return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
+    });
+  })();
+  _loadMsgsInflightByKey[inflightKey]=task;
   try{
-    res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
-  }catch(te){
-    console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
-    if(o.throwOnError)throw te;
-    return [];
+    return await task;
+  }finally{
+    delete _loadMsgsInflightByKey[inflightKey];
   }
-  var data=res&&res.data;
-  var error=res&&res.error;
-  if(error){
-    console.warn('loadMsgs failed for',pn,error.message||error);
-    if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
-    return [];
-  }
-  var rows=data||[];
-  return rows.map(function(row){
-    if(!row||typeof row!=='object')return row;
-    if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
-    return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
-  });
 }
 
 /** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen - advies moet de recentste zien. */
@@ -5288,7 +5315,9 @@ async function loadMsgsRecentChronological(pn,limit,opts){
     limit:cap,
     asc:false,
     select:o.select||'*',
-    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000
+    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000,
+    skipProbe:o.skipProbe,
+    probeTimeoutMs:o.probeTimeoutMs
   });
   var arr=batch||[];
   return arr.slice().reverse();
