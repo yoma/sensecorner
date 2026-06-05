@@ -429,6 +429,96 @@
     return lines;
   }
 
+  global._ownAandachtspuntenCoachContext = '';
+
+  function senseParseAandachtspuntEvidence(evidence) {
+    if (!evidence) return [];
+    if (Array.isArray(evidence)) return evidence;
+    try {
+      if (typeof evidence === 'string') return JSON.parse(evidence);
+    } catch (_e) {}
+    return [];
+  }
+
+  function senseIsEigenEvidenceItem(it) {
+    return !!(it && String(it.type || '').trim() === 'eigen');
+  }
+
+  function senseIsEigenAandachtspuntRow(row) {
+    return senseParseAandachtspuntEvidence(row && row.evidence).some(senseIsEigenEvidenceItem);
+  }
+
+  function senseAandachtspuntOriginLabel(row) {
+    return senseIsEigenAandachtspuntRow(row) ? 'eigen reflectie' : 'bevestigd voorstel';
+  }
+
+  function senseIsAandachtspuntCompleted(row) {
+    return !!(row && row.completed_at && String(row.completed_at).trim());
+  }
+
+  function senseActiveBevestigdeAandachtspunten(rows) {
+    return (rows || []).filter(function (r) {
+      return (
+        r &&
+        String(r.status || '')
+          .trim()
+          .toLowerCase() === 'bevestigd' &&
+        !senseIsAandachtspuntCompleted(r)
+      );
+    });
+  }
+
+  function senseFormatAandachtspuntenCoachBlock(rows) {
+    var active = senseActiveBevestigdeAandachtspunten(rows);
+    if (!active.length) return '';
+    var lines = [
+      'BEVESTIGDE AANDACHTSPUNTEN (actief; respecteer in advies, niet opnieuw als nieuw voorstel behandelen):'
+    ];
+    active.forEach(function (row) {
+      var name = String(row.soft_name || '').trim();
+      if (!name) return;
+      var label = senseAandachtspuntOriginLabel(row);
+      var tip = String(row.tips_advice || '').trim();
+      var line = '- [' + label + '] ' + name.substring(0, 200);
+      if (tip) line += ' (werkadvies: ' + tip.substring(0, 160) + ')';
+      lines.push(line);
+    });
+    lines.push(
+      'EIGEN REFLECTIE = door de gebruiker zelf toegevoegd. BEVESTIGD VOORSTEL = bewust bevestigd na Sensei-voorstel.'
+    );
+    return lines.join('\n');
+  }
+
+  function appendOwnAandachtspuntenCoachContext(lines) {
+    if (!lines) return;
+    var block = String(global._ownAandachtspuntenCoachContext || '').trim();
+    if (block) lines.push(block);
+  }
+
+  async function refreshOwnAandachtspuntenCoachContext(sb, userId) {
+    global._ownAandachtspuntenCoachContext = '';
+    if (!sb || !userId) return;
+    try {
+      var res = await sb
+        .from('own_aandachtspunten')
+        .select('soft_name,status,evidence,tips_advice,completed_at')
+        .eq('user_id', userId)
+        .eq('status', 'bevestigd')
+        .order('confirmed_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(40);
+      if (res && res.error) return;
+      var block = senseFormatAandachtspuntenCoachBlock((res && res.data) || []);
+      if (block) global._ownAandachtspuntenCoachContext = block;
+    } catch (_e2) {}
+  }
+
+  async function refreshOwnAandachtspuntenCoachContextAuto() {
+    var sb = global.sb || global.__obSupabase;
+    var uid = global.S && global.S.user && global.S.user.id;
+    return refreshOwnAandachtspuntenCoachContext(sb, uid);
+  }
+
   function senseBuildOwnRecoContextPack(ownCell, extra) {
     ownCell = ownCell && typeof ownCell === 'object' ? ownCell : { meta: {}, categories: {} };
     extra = extra && typeof extra === 'object' ? extra : {};
@@ -449,6 +539,7 @@
     if (summary) lines.push('Samenvatting: ' + summary);
     if (catLines.length) lines.push('Profielantwoorden: ' + catLines.slice(0, 12).join(' | '));
     if (recent.length) lines.push('Recente eigen berichten: ' + recent.slice(0, 6).join(' | '));
+    appendOwnAandachtspuntenCoachContext(lines);
     var sparse = catLines.length === 0 && recent.length === 0 && summary.length < 40;
     return {
       lines: lines,
@@ -848,6 +939,14 @@
   global.senseRefreshPhotoRef = senseRefreshPhotoRef;
   global.senseCollectOwnCategoryLines = senseCollectOwnCategoryLines;
   global.senseBuildOwnRecoContextPack = senseBuildOwnRecoContextPack;
+  global.senseParseAandachtspuntEvidence = senseParseAandachtspuntEvidence;
+  global.senseIsEigenAandachtspuntRow = senseIsEigenAandachtspuntRow;
+  global.senseAandachtspuntOriginLabel = senseAandachtspuntOriginLabel;
+  global.senseActiveBevestigdeAandachtspunten = senseActiveBevestigdeAandachtspunten;
+  global.senseFormatAandachtspuntenCoachBlock = senseFormatAandachtspuntenCoachBlock;
+  global.appendOwnAandachtspuntenCoachContext = appendOwnAandachtspuntenCoachContext;
+  global.refreshOwnAandachtspuntenCoachContext = refreshOwnAandachtspuntenCoachContext;
+  global.refreshOwnAandachtspuntenCoachContextAuto = refreshOwnAandachtspuntenCoachContextAuto;
   global.senseRecoNoFabricationRules = senseRecoNoFabricationRules;
   global.senseIsRateLimitMessage = senseIsRateLimitMessage;
   global.senseRecoStatusNoticeHtml = senseRecoStatusNoticeHtml;

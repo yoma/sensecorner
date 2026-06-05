@@ -55,7 +55,8 @@ const AANDACHTSPUNTEN_EXTRACT_RULES = `AANDACHTSPUNTEN-EXTRACTIE (strikt):
 - Verboden in soft_name: lijkt, mogelijk, potentieel, vermoedelijk, waarschijnlijk, schijnt, neemt een houding aan, bevindt zich in een stadium, wijst op.
 - Alleen patronen die expliciet en herhaald in meerdere check-ins terugkomen; geen eenmalige stemming als vast patroon.
 - tips_advice: nooit invullen (laat weg of null).
-- Bij twijfel: lege proposals en insufficient true met user_message.`;
+- Bij twijfel: lege proposals en insufficient true met user_message.
+- Stel geen aandachtspunt voor dat al voorkomt onder BESTAANDE BEVESTIGDE AANDACHTSPUNTEN (inclusief eigen reflectie).`;
 
 type CheckinRow = {
   id: string;
@@ -79,6 +80,12 @@ type ProfileContext = {
 };
 
 type EvidenceItem = { checkin_id: string; created_at: string };
+type StoredEvidenceItem = EvidenceItem & { type?: string };
+
+type ExistingAandachtspunt = {
+  soft_name: string;
+  evidence: StoredEvidenceItem[];
+};
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -405,9 +412,7 @@ function normalizeEvidence(
   return out.length >= 2 ? out : [];
 }
 
-async function loadExistingForDedup(userId: string): Promise<
-  { soft_name: string; evidence: EvidenceItem[] }[]
-> {
+async function loadExistingForDedup(userId: string): Promise<ExistingAandachtspunt[]> {
   const res = await sb
     .from("own_aandachtspunten")
     .select("soft_name, evidence")
@@ -418,18 +423,54 @@ async function loadExistingForDedup(userId: string): Promise<
   if (res.error) return [];
   return (res.data || []).map((r) => ({
     soft_name: normStr(r.soft_name),
-    evidence: Array.isArray(r.evidence) ? (r.evidence as EvidenceItem[]) : [],
+    evidence: Array.isArray(r.evidence) ? (r.evidence as StoredEvidenceItem[]) : [],
   }));
+}
+
+function evidenceIsEigen(evidence: StoredEvidenceItem[]): boolean {
+  return (evidence || []).some((e) => normStr(e.type) === "eigen");
+}
+
+async function loadBevestigdeAandachtspuntenForPrompt(
+  userId: string,
+): Promise<{ soft_name: string; origin: string }[]> {
+  const res = await sb
+    .from("own_aandachtspunten")
+    .select("soft_name, evidence, completed_at")
+    .eq("user_id", userId)
+    .eq("status", "bevestigd")
+    .order("confirmed_at", { ascending: false, nullsFirst: false })
+    .limit(30);
+  if (res.error) return [];
+  return (res.data || [])
+    .filter((r) => !normStr(r.completed_at))
+    .map((r) => {
+      const ev = Array.isArray(r.evidence) ? (r.evidence as StoredEvidenceItem[]) : [];
+      return {
+        soft_name: normStr(r.soft_name),
+        origin: evidenceIsEigen(ev) ? "eigen reflectie" : "bevestigd voorstel",
+      };
+    })
+    .filter((r) => r.soft_name);
+}
+
+function formatBevestigdeAandachtspuntenForPrompt(
+  items: { soft_name: string; origin: string }[],
+): string {
+  if (!items.length) return "(geen actieve bevestigde aandachtspunten)";
+  return items.map((i) => `- [${i.origin}] ${i.soft_name}`).join("\n");
 }
 
 function isDuplicateProposal(
   softName: string,
   evidence: EvidenceItem[],
-  existing: { soft_name: string; evidence: EvidenceItem[] }[],
+  existing: ExistingAandachtspunt[],
 ): boolean {
   const ids = new Set(evidence.map((e) => e.checkin_id));
   for (const ex of existing) {
-    if (wordOverlapScore(softName, ex.soft_name) > 0.55) return true;
+    const nameScore = wordOverlapScore(softName, ex.soft_name);
+    if (nameScore > 0.55) return true;
+    if (evidenceIsEigen(ex.evidence) && nameScore > 0.32) return true;
     const exIds = (ex.evidence || []).map((e) => normStr(e.checkin_id)).filter(Boolean);
     if (exIds.length && ids.size) {
       const overlap = exIds.filter((id) => ids.has(id)).length;
@@ -453,6 +494,7 @@ function buildUserPromptContent(
   relevant: CheckinRow[],
   facts: OwnFactRow[],
   profile: ProfileContext,
+  bevestigde: { soft_name: string; origin: string }[],
 ): string {
   const relevantCount = relevant.length;
   const framing =
@@ -466,7 +508,10 @@ function buildUserPromptContent(
     formatProfileForPrompt(profile) +
     "\n\n" +
     formatFactsForPrompt(facts);
-  return framing + checkinsBlock + "\n\n" + contextBlock;
+  const bevestigdBlock =
+    `\n\n=== BESTAANDE BEVESTIGDE AANDACHTSPUNTEN (niet opnieuw voorstellen) ===\n` +
+    formatBevestigdeAandachtspuntenForPrompt(bevestigde);
+  return framing + checkinsBlock + "\n\n" + contextBlock + bevestigdBlock;
 }
 
 Deno.serve(async (req: Request) => {
@@ -521,14 +566,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const checkinById = new Map(relevant.map((r) => [r.id, r]));
-    const [dunne, confirmedFacts, profileCtx] = await Promise.all([
+    const [dunne, confirmedFacts, profileCtx, bevestigdeAandacht] = await Promise.all([
       loadDunneContextClause(),
       loadConfirmedOwnFacts(userId),
       loadProfileContextForPrompt(userId),
+      loadBevestigdeAandachtspuntenForPrompt(userId),
     ]);
     const factsCorpus = factsCorpusText(confirmedFacts);
     const system = buildSystemPrompt(dunne);
-    const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx);
+    const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx, bevestigdeAandacht);
 
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);

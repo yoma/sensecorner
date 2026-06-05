@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="05-06-2026 17:53">
+<meta name="fr-build" content="05-06-2026 18:12">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -3182,6 +3182,7 @@ async function frRunFullBootstrap(session,opts){
       await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
       try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
+      try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{initSessie();}catch(_e2){}
       try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
@@ -3221,6 +3222,7 @@ async function bootstrapAuthenticated(session,opts){
       await applySenseiCoreToAdviceCore(FRIENDSENSE_ADVICE_CORE_OPTS);
       try{await loadAll({deferHeavy:true});}catch(e){console.error('loadAll error:',e);}
       try{await refreshOwnFactsCoachContext();}catch(_e){}
+      try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{initSessie();}catch(_e2){}
       try{ownFactsAutoAcceptStaleRpcFireAndForget();}catch(_e3){}
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
@@ -10196,6 +10198,7 @@ function buildAdviceContextPayload(name,d,msgs){
     ownMetaForLens=(((S.pdata||{})['OWN Sense']||{}).meta)||null;
   }
   appendOwnHubMirrorCoachContext(lines,ownMetaForLens);
+  if(typeof appendOwnAandachtspuntenCoachContext==='function')appendOwnAandachtspuntenCoachContext(lines);
   var payload='Dossier: '+dn(name)+'\nEigenschappen: '+JSON.stringify((d&&d.props)||{});
   if(name!=='OWN Sense'&&famRel)payload+='\nRol in jullie vriendschap: '+famRel;
   if(lines.length)payload+='\n'+lines.join('\n');
@@ -14625,6 +14628,10 @@ function buildCoachContext(){
   if(_ownFactsCoachContext){
     lines.push(_ownFactsCoachContext);
     lines.push('');
+  }
+  if(typeof appendOwnAandachtspuntenCoachContext==='function'){
+    appendOwnAandachtspuntenCoachContext(lines);
+    if(_ownAandachtspuntenCoachContext)lines.push('');
   }
   /* Contacten eerst: bij afkappen op max. lengte verdwijnen ze anders vaak (OWN-blok is lang). */
   var contacts=getActiveContactNames();

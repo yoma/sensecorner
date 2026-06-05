@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="05-06-2026 15:10">
+<meta name="os-build" content="05-06-2026 18:12">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -3306,11 +3306,12 @@ function renderAandachtspuntenHistoryList(){
       var sid=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var bevestigd=isBevestigdOwnAandachtspunt(a);
       var st=bevestigd?'Bevestigd':'Verworpen';
+      var origin=bevestigd&&typeof senseAandachtspuntOriginLabel==='function'?senseAandachtspuntOriginLabel(a):'';
       return '<div class="accepted-fact-row'+(bevestigd?' accepted-fact-row--bevestigd':'')+'">'
         +'<div class="accepted-fact-body">'
         +'<div class="accepted-fact-text">'+escHTML(a.soft_name||'')+'</div>'
         +(bevestigd?'<div class="accepted-fact-hint">Open aandachtspunt voor advies en opvolging</div>':'')
-        +'<div class="accepted-fact-meta">'+escHTML(st)+(a.source_app?(' · '+escHTML(a.source_app)):'')+'</div>'
+        +'<div class="accepted-fact-meta">'+escHTML(st)+(origin?(' · '+escHTML(origin)):'')+(a.source_app?(' · '+escHTML(a.source_app)):'')+'</div>'
         +'</div>'
         +'<button class="btn-mini-delete" type="button" onclick="deleteOwnAandachtspunt(\''+sid+'\')" title="Aandachtspunt wissen" aria-label="Wissen">×</button>'
         +'</div>';
@@ -7054,6 +7055,16 @@ function selfSenseFactsInsightLines(){
     return '[SelfSense feit] '+String(f.fact_text||'').trim();
   }).filter(function(s){return s.length>20;});
 }
+function selfSenseAandachtspuntenInsightLines(){
+  if(!ownAandachtspunten||!ownAandachtspunten.length)return [];
+  var active=typeof senseActiveBevestigdeAandachtspunten==='function'
+    ?senseActiveBevestigdeAandachtspunten(ownAandachtspunten)
+    :ownAandachtspunten.filter(function(a){return a&&a.status==='bevestigd'&&!a.completed_at;});
+  return active.map(function(a){
+    var label=typeof senseAandachtspuntOriginLabel==='function'?senseAandachtspuntOriginLabel(a):'bevestigd voorstel';
+    return '[SelfSense aandachtspunt · '+label+'] '+String(a.soft_name||'').trim();
+  }).filter(function(s){return s.length>15;});
+}
 function rowsForInsightScope(scope){
   var rows=ownTimeline.filter(isRelevantOwnTimelineEntry);
   if(scope==='all')return ownTimeline.slice();
@@ -7073,6 +7084,9 @@ function rowsForInsightScope(scope){
       addRow({profile_name:'OWN Sense',role:'user',html:line,content:line,_synthetic:true});
     });
     selfSenseFactsInsightLines().forEach(function(line){
+      addRow({profile_name:'OWN Sense',role:'user',html:line,content:line,_synthetic:true});
+    });
+    selfSenseAandachtspuntenInsightLines().forEach(function(line){
       addRow({profile_name:'OWN Sense',role:'user',html:line,content:line,_synthetic:true});
     });
     return ssList;
