@@ -490,6 +490,177 @@
     );
   }
 
+  function senseSparseDailyRecoFallback(dayKey) {
+    var tips = [
+      'Een lichte tip voor vandaag: neem 5 minuten bewust rust zonder scherm. Een korte pauze helpt je hoofd tot rust komen.',
+      'Hier is een algemene suggestie: kies één kleine stap die je vandaag wél kunt zetten. Klein is ook vooruit.',
+      'Vandaag mag het licht zijn: drink een glas water en adem drie keer rustig in en uit voordat je verder gaat.',
+      'Een haalbare tip: schrijf één zin op over wat je nu nodig hebt. Dat hoeft niet perfect te zijn.',
+      'Neem vandaag een moment om buiten of bij een raam te staan. Frisse lucht en licht geven vaak wat ruimte.',
+      'Plan bewust één moment van stilte in je dag, ook al is het maar twee minuten.',
+      'Zet je telefoon even weg bij je eerste kop koffie of thee. Begin de dag met iets rustigs.',
+      'Kies één ding dat je vandaag níet hoeft te doen. Dat maakt ruimte voor wat wél belangrijk is.'
+    ];
+    var key = String(dayKey || '').trim();
+    if (!key) {
+      try {
+        var dt = new Date();
+        key =
+          dt.getFullYear() +
+          '-' +
+          (dt.getMonth() + 1 < 10 ? '0' : '') +
+          (dt.getMonth() + 1) +
+          '-' +
+          (dt.getDate() < 10 ? '0' : '') +
+          dt.getDate();
+      } catch (_d) {
+        key = '0';
+      }
+    }
+    var hash = 0;
+    for (var i = 0; i < key.length; i++) {
+      hash = (hash + key.charCodeAt(i) * (i + 3)) % tips.length;
+    }
+    return { text: tips[hash], sparse: true };
+  }
+
+  function senseSparseDagAdviesFallback(dayKey) {
+    var advices = [
+      'Vandaag mag het licht zijn. Kies één kleine stap die je wél kunt zetten, ook al voelt de rest nog zwaar. Dat is al vooruit.',
+      'Een warm algemeen dagadvies: neem bewust vijf minuten rust zonder scherm. Een korte pauze geeft je hoofd wat ruimte.',
+      'Begin de dag rustig: drink een glas water en adem drie keer langzaam in en uit voordat je verder gaat.',
+      'Plan bewust één moment van stilte in, ook al is het maar twee minuten. Stilte is geen luxe, het helpt je bij te stellen.',
+      'Schrijf één zin op over wat je nu nodig hebt. Het hoeft niet mooi te zijn; helder voor jezelf is genoeg.',
+      'Sta even bij een raam of loop kort naar buiten. Licht en frisse lucht geven vaak wat perspectief.',
+      'Kies vandaag één ding dat je níet hoeft te doen. Dat maakt ruimte voor wat wél belangrijk is.',
+      'Zet je telefoon even weg bij je eerste kop koffie of thee. Begin met iets rustigs in plaats van meteen te reageren.'
+    ];
+    var key = String(dayKey || '').trim();
+    if (!key) {
+      try {
+        var dt = new Date();
+        key =
+          dt.getFullYear() +
+          '-' +
+          (dt.getMonth() + 1 < 10 ? '0' : '') +
+          (dt.getMonth() + 1) +
+          '-' +
+          (dt.getDate() < 10 ? '0' : '') +
+          dt.getDate();
+      } catch (_d2) {
+        key = '0';
+      }
+    }
+    var hash = 0;
+    for (var j = 0; j < key.length; j++) {
+      hash = (hash + key.charCodeAt(j) * (j + 5)) % advices.length;
+    }
+    return { text: advices[hash], sparse: true };
+  }
+
+  /** Alleen via loadMsgs({ probeBeforeLoad: true }); routine pad = één query, geen extra round-trip. */
+  var _senseMsgsProbeCache = {};
+  var _senseMsgsProbeInflight = {};
+
+  function senseMsgsProbeKey(uid, pn) {
+    return String(uid || '') + '|' + String(pn || '');
+  }
+
+  function senseInvalidateProfileMsgsProbe(uid, pn) {
+    delete _senseMsgsProbeCache[senseMsgsProbeKey(uid, pn)];
+    delete _senseMsgsProbeCache[String(uid || '') + '|user-any'];
+  }
+
+  function senseMarkProfileMsgsProbe(uid, pn, hasMsgs) {
+    if (!uid || !pn) return;
+    _senseMsgsProbeCache[senseMsgsProbeKey(uid, pn)] = {
+      state: hasMsgs ? 'has' : 'empty',
+      at: Date.now()
+    };
+  }
+
+  async function senseProbeProfileHasMsgs(sb, uid, pn, opt) {
+    opt = opt && typeof opt === 'object' ? opt : {};
+    if (!sb || !uid || !pn) return null;
+    var key = senseMsgsProbeKey(uid, pn);
+    var cached = _senseMsgsProbeCache[key];
+    var maxAge = parseInt(opt.maxAgeMs, 10) || 300000;
+    if (cached && Date.now() - cached.at < maxAge) return cached.state === 'has';
+    if (_senseMsgsProbeInflight[key]) return _senseMsgsProbeInflight[key];
+    var timeoutMs = parseInt(opt.timeoutMs, 10) || 2200;
+    var withTimeoutFn = opt.withTimeout;
+    var run = (async function () {
+      try {
+        var q = sb
+          .from('sense_messages')
+          .select('id')
+          .eq('user_id', uid)
+          .eq('profile_name', pn)
+          .limit(1);
+        var res;
+        if (typeof withTimeoutFn === 'function') {
+          res = await withTimeoutFn(q, timeoutMs, 'Berichten-probe timeout', {
+            label: 'senseProbeProfileHasMsgs',
+            meta: { profile: pn }
+          });
+        } else {
+          res = await q;
+        }
+        if (res && res.error) return null;
+        var has = !!(res && res.data && res.data.length);
+        _senseMsgsProbeCache[key] = { state: has ? 'has' : 'empty', at: Date.now() };
+        return has;
+      } catch (_pe) {
+        return null;
+      } finally {
+        delete _senseMsgsProbeInflight[key];
+      }
+    })();
+    _senseMsgsProbeInflight[key] = run;
+    return run;
+  }
+
+  async function senseProbeUserRoleHasMsgs(sb, uid, opt) {
+    opt = opt && typeof opt === 'object' ? opt : {};
+    if (!sb || !uid) return null;
+    var key = String(uid || '') + '|user-any';
+    var cached = _senseMsgsProbeCache[key];
+    var maxAge = parseInt(opt.maxAgeMs, 10) || 300000;
+    if (cached && Date.now() - cached.at < maxAge) return cached.state === 'has';
+    if (_senseMsgsProbeInflight[key]) return _senseMsgsProbeInflight[key];
+    var timeoutMs = parseInt(opt.timeoutMs, 10) || 2200;
+    var withTimeoutFn = opt.withTimeout;
+    var run = (async function () {
+      try {
+        var q = sb.from('sense_messages').select('id').eq('user_id', uid).eq('role', 'user').limit(1);
+        var res;
+        if (typeof withTimeoutFn === 'function') {
+          res = await withTimeoutFn(q, timeoutMs, 'User-berichten-probe timeout', {
+            label: 'senseProbeUserRoleHasMsgs',
+            meta: {}
+          });
+        } else {
+          res = await q;
+        }
+        if (res && res.error) return null;
+        var has = !!(res && res.data && res.data.length);
+        _senseMsgsProbeCache[key] = { state: has ? 'has' : 'empty', at: Date.now() };
+        return has;
+      } catch (_pu) {
+        return null;
+      } finally {
+        delete _senseMsgsProbeInflight[key];
+      }
+    })();
+    _senseMsgsProbeInflight[key] = run;
+    return run;
+  }
+
+  function senseShouldUseSparseDailyRecoFallback(ownCell, recentUserLines) {
+    var pack = senseBuildOwnRecoContextPack(ownCell, { recentUserLines: recentUserLines || [] });
+    return !!pack.sparse;
+  }
+
   function senseRecoNoFabricationRules(mode) {
     mode = mode === 'sparse' ? 'sparse' : 'rich';
     var rules =
@@ -518,7 +689,13 @@
       return { text: '', sparse: true };
     }
     var recentUserLines = [];
-    if (typeof opts.loadRecentUserLines === 'function') {
+    var packPre = senseBuildOwnRecoContextPack(ownCell, {
+      displayName: opts.displayName,
+      summary: ownCell.summary,
+      recentUserLines: [],
+      hubFallback: opts.hubFallback || null
+    });
+    if (!packPre.sparse && !opts.skipLoadMsgs && typeof opts.loadRecentUserLines === 'function') {
       try {
         recentUserLines = await opts.loadRecentUserLines();
       } catch (_lr) {}
@@ -554,22 +731,35 @@
       (focus ? ' Focus: ' + focus + '.' : '') +
       ' Nederlands.';
     var text = '';
-    try {
-      text = await callAPI(sysSearch, [{ role: 'user', content: usr }], 420, 28000, null, {
-        allowed_domains: allowedDomains
-      });
-    } catch (e1) {
-      console.warn('senseFetchDailyRecoTipText search', e1);
-      // Bij een rate limit (429 / "overbevraagd") geen tweede call doen: dat
-      // verergert de overbelasting alleen. Geef de fout door zodat de UI de
-      // rustige "probeer straks opnieuw"-melding kan tonen.
-      var msg1 = (e1 && e1.message) ? String(e1.message) : '';
-      if (/overbevraagd|\b429\b|rate.?limit|too many requests/i.test(msg1)) {
-        throw e1;
+    var apiTimeoutMs = pack.sparse ? 15000 : 22000;
+    var apiTimeoutPlainMs = pack.sparse ? 15000 : 10000;
+    if (pack.sparse) {
+      try {
+        text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutMs, null, {
+          disable_web_search: true
+        });
+      } catch (eSparse) {
+        console.warn('senseFetchDailyRecoTipText sparse plain', eSparse);
+        var msgS = (eSparse && eSparse.message) ? String(eSparse.message) : '';
+        if (senseIsRateLimitMessage(msgS)) throw eSparse;
+        var fb = senseSparseDailyRecoFallback(opts.dayKey);
+        if (fb && fb.text) return {text:fb.text,sparse:true,isFallback:true};
+        throw eSparse;
       }
-      text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, 28000, null, {
-        disable_web_search: true
-      });
+    } else {
+      try {
+        text = await callAPI(sysSearch, [{ role: 'user', content: usr }], 420, apiTimeoutMs, null, {
+          allowed_domains: allowedDomains
+        });
+      } catch (e1) {
+        console.warn('senseFetchDailyRecoTipText search', e1);
+        var msg1 = (e1 && e1.message) ? String(e1.message) : '';
+        if (senseIsRateLimitMessage(msg1)) throw e1;
+        if (/timeout|AI request timeout/i.test(msg1)) throw e1;
+        text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutPlainMs, null, {
+          disable_web_search: true
+        });
+      }
     }
     return { text: String(text || '').trim(), sparse: pack.sparse };
   }
@@ -661,6 +851,13 @@
   global.senseRecoNoFabricationRules = senseRecoNoFabricationRules;
   global.senseIsRateLimitMessage = senseIsRateLimitMessage;
   global.senseRecoStatusNoticeHtml = senseRecoStatusNoticeHtml;
+  global.senseSparseDailyRecoFallback = senseSparseDailyRecoFallback;
+  global.senseSparseDagAdviesFallback = senseSparseDagAdviesFallback;
+  global.senseProbeProfileHasMsgs = senseProbeProfileHasMsgs;
+  global.senseProbeUserRoleHasMsgs = senseProbeUserRoleHasMsgs;
+  global.senseInvalidateProfileMsgsProbe = senseInvalidateProfileMsgsProbe;
+  global.senseMarkProfileMsgsProbe = senseMarkProfileMsgsProbe;
+  global.senseShouldUseSparseDailyRecoFallback = senseShouldUseSparseDailyRecoFallback;
   global.senseFetchDailyRecoTipText = senseFetchDailyRecoTipText;
   global.senseSetFieldSaveStatus = senseSetFieldSaveStatus;
   global.senseFieldSaveIdFromTextareaId = senseFieldSaveIdFromTextareaId;

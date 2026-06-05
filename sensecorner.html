@@ -921,14 +921,22 @@ a.app-card{color:inherit;text-decoration:none}
     if(!rt&&exp&&exp<now-120000)return null;
     return sess;
   }
+  var _scRefreshingSession=false;
   async function scRefreshSessionSafe(){
     if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return null;
+    if(_scRefreshingSession){
+      await new Promise(function(r){setTimeout(r,600);});
+      return scSessionFromPersisted();
+    }
+    _scRefreshingSession=true;
     try{
       var rr=await scTimeoutFallback(sb.auth.refreshSession(),18000,null);
       if(rr===null)return scSessionFromPersisted();
       var session=rr&&rr.data&&rr.data.session;
       if(session&&session.user)return session;
-    }catch(_e){}
+    }catch(_e){}finally{
+      _scRefreshingSession=false;
+    }
     return scSessionFromPersisted();
   }
   function scStartSessionKeepAlive(){
@@ -2246,6 +2254,19 @@ a.app-card{color:inherit;text-decoration:none}
   var SC_APP_LINK_KEY={'datesense.html':'ds','friendsense.html':'fr','familysense.html':'fs','selfsense.html':'ss'};
   var SMH=window.SenseMirrorHub||null;
   var _scMirrorStatuses={ds:'never_opened',fr:'never_opened',fs:'never_opened',ss:'never_opened'};
+  var SC_MIRROR_CACHE_KEY='sc_mirror_statuses_v1::';
+  function scSaveMirrorStatusesCache(uid,statuses){
+    try{if(uid&&statuses)localStorage.setItem(SC_MIRROR_CACHE_KEY+uid,JSON.stringify({ts:Date.now(),statuses:statuses}));}catch(_e){}
+  }
+  function scLoadMirrorStatusesCache(uid){
+    try{
+      if(!uid)return null;
+      var raw=localStorage.getItem(SC_MIRROR_CACHE_KEY+uid);
+      if(!raw)return null;
+      var p=JSON.parse(raw);
+      return (p&&p.statuses)?p.statuses:null;
+    }catch(_e){return null;}
+  }
   function scMirrorHubReady(){
     return !!(SMH&&sb&&typeof SMH.getMirrorStatuses==='function');
   }
@@ -2262,15 +2283,20 @@ a.app-card{color:inherit;text-decoration:none}
     scRenderHubMirrorManage(statuses);
   }
   async function scRefreshMirrorStatuses(user){
-    if(!scMirrorHubReady()||!user||!user.id){
-      scApplyMirrorStatusesToGrid({ds:'never_opened',fr:'never_opened',fs:'never_opened',ss:'never_opened'});
+    var uid=user&&String(user.id||'');
+    if(!scMirrorHubReady()||!user||!uid){
+      var cached0=uid?scLoadMirrorStatusesCache(uid):null;
+      scApplyMirrorStatusesToGrid(cached0||{ds:'never_opened',fr:'never_opened',fs:'never_opened',ss:'never_opened'});
       return;
     }
     try{
       var st=await SMH.getMirrorStatuses(sb,user.id);
+      scSaveMirrorStatusesCache(uid,st);
       scApplyMirrorStatusesToGrid(st);
     }catch(e){
       console.warn('mirror statuses',e);
+      var cached=scLoadMirrorStatusesCache(uid);
+      if(cached)scApplyMirrorStatusesToGrid(cached);
     }
   }
   function scRenderHubMirrorManage(statuses){
@@ -2546,7 +2572,7 @@ a.app-card{color:inherit;text-decoration:none}
         if(bs!==as)return bs-as;
         return (SC_APP_DEFAULT_RANK[ak]!=null?SC_APP_DEFAULT_RANK[ak]:9)-(SC_APP_DEFAULT_RANK[bk]!=null?SC_APP_DEFAULT_RANK[bk]:9);
       });
-      cards.forEach(function(card){grid.appendChild(card);});
+      cards.forEach(function(card){card.classList.remove('enter');grid.appendChild(card);});
     }catch(e){
       console.warn('sensecorner app grid sort',e);
     }

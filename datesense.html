@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="04-06-2026 21:33">
+<meta name="ds-build" content="04-06-2026 21:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -4959,7 +4959,15 @@ async function loadAll(opts){
   opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
-  var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  var _loadAllRes=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  if(_loadAllRes&&_loadAllRes.error&&!_loadAllRes.data){
+    var _loadAllUid=String(S.user&&S.user.id||'');
+    if(_loadAllUid&&!dsApplyProfilesCacheIfAvailable(_loadAllUid)){
+      S.profiles=['OWN Sense'];S.pdata={};
+    }
+    return;
+  }
+  var data=_loadAllRes&&_loadAllRes.data;
   S.profiles=['OWN Sense'];S.pdata={};
   if(!data||!data.length){
     await ensureP('OWN Sense');
@@ -5219,6 +5227,9 @@ async function saveMsg(pn,role,html){
   }
   if(res&&res.error)throw new Error(res.error.message);
   sync('ok');
+  if(S.user&&S.user.id&&typeof senseInvalidateProfileMsgsProbe==='function'){
+    try{senseInvalidateProfileMsgsProbe(S.user.id,pn);}catch(_inv){}
+  }
   if(String(pn)==='OWN Sense'){
     try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   }
@@ -5244,6 +5255,7 @@ function normalizeLoadedMsgHtml(v){
   return String(v);
 }
 
+var _loadMsgsInflightByKey={};
 async function loadMsgs(pn,opt){
   if(!S.user)return[];
   var o=opt||{};
@@ -5251,33 +5263,56 @@ async function loadMsgs(pn,opt){
   var asc=o.asc===undefined?true:!!o.asc;
   var selectCols=o.select||'*';
   var innerTimeoutMs=parseInt(o.innerTimeoutMs,10)||6000;
-  var q=sb.from('sense_messages')
-    .select(selectCols)
-    .eq('user_id',S.user.id)
-    .eq('profile_name',pn)
-    .order('created_at',{ascending:asc})
-    .limit(limit);
-  var res;
+  var uid=S.user.id;
+  if(o.probeBeforeLoad===true&&typeof senseProbeProfileHasMsgs==='function'){
+    try{
+      var probed=await senseProbeProfileHasMsgs(sb,uid,pn,{
+        withTimeout:withTimeout,
+        timeoutMs:parseInt(o.probeTimeoutMs,10)||1200
+      });
+      if(probed===false)return [];
+    }catch(_pr){}
+  }
+  var inflightKey=String(uid)+'|'+String(pn)+'|'+limit+'|'+(asc?'1':'0')+'|'+selectCols;
+  if(_loadMsgsInflightByKey[inflightKey])return _loadMsgsInflightByKey[inflightKey];
+  var task=(async function(){
+    var q=sb.from('sense_messages')
+      .select(selectCols)
+      .eq('user_id',uid)
+      .eq('profile_name',pn)
+      .order('created_at',{ascending:asc})
+      .limit(limit);
+    var res;
+    try{
+      res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
+    }catch(te){
+      console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+      if(o.throwOnError)throw te;
+      return [];
+    }
+    var data=res&&res.data;
+    var error=res&&res.error;
+    if(error){
+      console.warn('loadMsgs failed for',pn,error.message||error);
+      if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
+      return [];
+    }
+    var rows=data||[];
+    if(typeof senseMarkProfileMsgsProbe==='function'){
+      try{senseMarkProfileMsgsProbe(uid,pn,rows.length>0);}catch(_mk){}
+    }
+    return rows.map(function(row){
+      if(!row||typeof row!=='object')return row;
+      if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
+      return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
+    });
+  })();
+  _loadMsgsInflightByKey[inflightKey]=task;
   try{
-    res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
-  }catch(te){
-    console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
-    if(o.throwOnError)throw te;
-    return [];
+    return await task;
+  }finally{
+    delete _loadMsgsInflightByKey[inflightKey];
   }
-  var data=res&&res.data;
-  var error=res&&res.error;
-  if(error){
-    console.warn('loadMsgs failed for',pn,error.message||error);
-    if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
-    return [];
-  }
-  var rows=data||[];
-  return rows.map(function(row){
-    if(!row||typeof row!=='object')return row;
-    if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
-    return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
-  });
 }
 
 /** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen - advies moet de recentste zien. */
@@ -5288,7 +5323,9 @@ async function loadMsgsRecentChronological(pn,limit,opts){
     limit:cap,
     asc:false,
     select:o.select||'*',
-    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000
+    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000,
+    probeBeforeLoad:o.probeBeforeLoad,
+    probeTimeoutMs:o.probeTimeoutMs
   });
   var arr=batch||[];
   return arr.slice().reverse();
@@ -9694,7 +9731,9 @@ async function ensureDailyRecoTipForHome(opts){
     return;
   }
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
+  var _ownNow=(S.pdata&&S.pdata['OWN Sense'])||{};
+  var _haveRichCtx=Object.keys(_ownNow.categories||{}).length>0||String(_ownNow.summary||'').trim().length>=40;
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback&&!(cache.sparse&&_haveRichCtx);
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
     if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';
@@ -9713,8 +9752,9 @@ async function ensureDailyRecoTipForHome(opts){
       var raw=await fetchDailyRecoTipText(cats);
       var text=typeof raw==='object'?String(raw.text||'').trim():String(raw||'').trim();
       var sparse=typeof raw==='object'?!!raw.sparse:true;
+      var resultIsFallback=typeof raw==='object'&&!!raw.isFallback;
       if(!text)throw new Error('Leeg antwoord ontvangen.');
-      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse});
+      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse,isFallback:resultIsFallback||undefined});
       _dailyRecoHomeLastError='';
     }catch(e){
       var msg=(e&&e.message)?String(e.message):'Tip laden lukte niet.';
@@ -12215,7 +12255,7 @@ const SENSEI_RECO_DOMAIN_MAP={
   plekken:['uitinvlaanderen.be','visitflanders.com','museumpasmusees.be','visit.brussels','visitantwerpen.be','visitgent.com','visitleuven.be','visitbruges.be']
 };
 const SENSEI_RECO_PREFS_KEY='ds_reco_prefs_v1';
-const SENSEI_RECO_DAILY_KEY='ds_reco_daily_tip_v1';
+const SENSEI_RECO_DAILY_KEY='ds_reco_daily_tip_v2';
 function defaultRecoPrefs(){
   var categories={};
   SENSEI_RECO_CATEGORY_META.forEach(function(c){categories[c.key]=true;});

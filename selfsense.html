@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="04-06-2026 19:27">
+<meta name="fs-build" content="04-06-2026 21:18">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1871,8 +1871,8 @@ const SENSEI_RECO_CATEGORY_META=[
   {key:'plekken',label:'Plekken'}
 ];
 const SENSEI_RECO_PREFS_KEY='ss_reco_prefs_v1';
-const SENSEI_RECO_DAILY_KEY='ss_reco_daily_tip_v1';
-const SENSEI_DAG_ADVIES_KEY='ss_dag_advies_v1';
+const SENSEI_RECO_DAILY_KEY='ss_reco_daily_tip_v2';
+const SENSEI_DAG_ADVIES_KEY='ss_dag_advies_v2';
 function getSenseiTipsWhitelistDomains(){
   return SENSEI_ALLOWED_DOMAINS.slice();
 }
@@ -1972,6 +1972,7 @@ function refreshAdviceHubDagAdviesIfVisible(){
 }
 function scheduleDagAdviesRefresh(){
   if(!S.user)return;
+  try{primeSparseDagAdviesForHub();}catch(_ps){}
   void ensureDagAdviesForAdviceHub();
 }
 function isWhitelistTipRequest(text){
@@ -3542,6 +3543,34 @@ function resetSelfSenseGuideRuntimeSignals(){
   S.selfSenseHasVertelSignal=false;
   S.selfSenseHasAdviceSignal=false;
   S._guideSignalsUid='';
+  S._guideSignalsProbed=false;
+}
+function ssHydrateSelfSenseGuideFromLocal(uid){
+  uid=String(uid||'').trim();
+  if(!uid)return;
+  S._guideSignalsUid=uid;
+  if(readSelfSenseGuideSuppressedFlag())S.selfSenseGuideSuppressed=true;
+  var own=(S.pdata&&S.pdata['OWN Sense'])||{count:0,categories:{},meta:{}};
+  if(selfSenseVertelDoneLocal(own))S.selfSenseHasVertelSignal=true;
+  if(selfSenseAdviceDoneLocal(own))S.selfSenseHasAdviceSignal=true;
+  var items=getOnboardingChecklist();
+  if(items.every(function(x){return x.done;}))markSelfSenseGuideSuppressed(true);
+}
+function ssGuideSignalsProbePending(){
+  if(isSelfSenseGuideSuppressed())return false;
+  return S._guideSignalsProbed!==true;
+}
+function ssPrepareFastPaintBeforeHome(session){
+  if(!session||!session.user)return;
+  var uid=String(session.user.id||'');
+  migrateLegacyUserPrefs();
+  var hadCache=ssApplyProfilesCacheIfAvailable(uid);
+  if(hadCache){
+    try{reconcileSessAssignMapsAtLogin();}catch(_e){}
+    try{scrubCrossAccountRuntimeState();}catch(_e2){}
+  }
+  ssHydrateSelfSenseGuideFromLocal(uid);
+  if(isSelfSenseGuideSuppressed())S._guideSignalsProbed=true;
 }
 function selfSenseAdviceDoneLocal(own){
   own=own||((S.pdata&&S.pdata['OWN Sense'])||{});
@@ -3565,18 +3594,25 @@ function selfSenseVertelDoneLocal(own){
   return false;
 }
 async function refreshSelfSenseGuideSignals(){
-  if(!S.user||!sb)return;
+  if(!S.user||!sb){S._guideSignalsProbed=true;return;}
   var uid=String(S.user.id||'');
-  if(!uid)return;
+  if(!uid){S._guideSignalsProbed=true;return;}
   S._guideSignalsUid=uid;
+  if(isSelfSenseGuideSuppressed()){S._guideSignalsProbed=true;return;}
   var own=(S.pdata&&S.pdata['OWN Sense'])||{count:0,categories:{},meta:{}};
   if(selfSenseVertelDoneLocal(own))S.selfSenseHasVertelSignal=true;
   if(selfSenseAdviceDoneLocal(own))S.selfSenseHasAdviceSignal=true;
+  var itemsEarly=getOnboardingChecklist();
+  if(itemsEarly.every(function(x){return x.done;})){
+    markSelfSenseGuideSuppressed(true);
+    S._guideSignalsProbed=true;
+    return;
+  }
   var onboardingDone=false;
   try{
     var oc=await withTimeout(
       sb.from('own_facts').select('id').eq('user_id',uid).eq('source_app','onboarding').eq('subcategory','completed').limit(1).maybeSingle(),
-      7000,
+      3500,
       null
     );
     onboardingDone=!!(oc&&oc.data);
@@ -3585,7 +3621,7 @@ async function refreshSelfSenseGuideSignals(){
     try{
       var sr=await withTimeout(
         sb.from('sense_sessions').select('id').eq('user_id',uid).eq('vertel_app',VERTEL_APP_SLUG).limit(1).maybeSingle(),
-        6000,
+        3500,
         null
       );
       if(sr&&sr.data)S.selfSenseHasVertelSignal=true;
@@ -3595,27 +3631,28 @@ async function refreshSelfSenseGuideSignals(){
     try{
       var srAny=await withTimeout(
         sb.from('sense_sessions').select('id').eq('user_id',uid).limit(1).maybeSingle(),
-        6000,
+        3500,
         null
       );
       if(srAny&&srAny.data)S.selfSenseHasVertelSignal=true;
     }catch(_srAny){}
   }
-  if(!S.selfSenseHasVertelSignal){
+  var ownSparseGuide=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(own,[]);
+  if(!S.selfSenseHasVertelSignal&&!ownSparseGuide){
     try{
       var ur=await withTimeout(
         sb.from('sense_messages').select('id').eq('user_id',uid).eq('role','user').limit(1).maybeSingle(),
-        6000,
+        3500,
         null
       );
       if(ur&&ur.data)S.selfSenseHasVertelSignal=true;
     }catch(_ur){}
   }
-  if(!S.selfSenseHasAdviceSignal){
+  if(!S.selfSenseHasAdviceSignal&&!ownSparseGuide){
     try{
       var ar=await withTimeout(
         sb.from('sense_messages').select('html,created_at').eq('user_id',uid).eq('profile_name','OWN Sense').eq('role','ai').order('created_at',{ascending:false}).limit(1).maybeSingle(),
-        7000,
+        3500,
         null
       );
       var aiHtml=ar&&ar.data?normalizeLoadedMsgHtml(ar.data.html):'';
@@ -3638,6 +3675,7 @@ async function refreshSelfSenseGuideSignals(){
   if(items.every(function(x){return x.done;}))markSelfSenseGuideSuppressed(true);
   else if(onboardingDone&&ownProfileSetupComplete())markSelfSenseGuideSuppressed(true);
   else if(onboardingDone&&(S.selfSenseHasVertelSignal||S.selfSenseHasAdviceSignal))markSelfSenseGuideSuppressed(true);
+  S._guideSignalsProbed=true;
 }
 function getOnboardingChecklist(){
   var own=S.pdata['OWN Sense']||{count:0,categories:{},meta:{}};
@@ -3647,8 +3685,15 @@ function getOnboardingChecklist(){
     {id:'advies-start',done:selfSenseAdviceDoneLocal(own),label:'Genereer je eerste advies',action:"goScreen('advice')"}
   ];
 }
+function renderOnboardingGuideSkeleton(){
+  return '<div class="ai-rich-card" style="margin:0 0 14px;text-align:left">'
+    +'<div class="ai-sec"><div class="ai-sec-title"><span>Startgids</span></div>'
+    +'<p class="ai-sec-text" style="color:#888;margin:0">Profiel laden…</p>'
+    +'</div></div>';
+}
 function renderOnboardingCard(){
   if(isSelfSenseGuideSuppressed())return'';
+  if(ssGuideSignalsProbePending())return renderOnboardingGuideSkeleton();
   var items=getOnboardingChecklist();
   var doneCount=items.filter(function(x){return x.done;}).length;
   if(doneCount===items.length){
@@ -4382,6 +4427,11 @@ function senseClearAuthStorage(){
 async function senseRecoverSessionAfterSignOutEvent(authClient){
   var client=authClient||sb;
   if(!client||!client.auth)return null;
+  var persisted=senseSessionFromPersisted();
+  if(persisted&&persisted.user&&String(persisted.access_token||'').trim()){
+    var pExp=(persisted.expires_at?persisted.expires_at*1000:0)||0;
+    if(!pExp||pExp>Date.now()+60000)return persisted;
+  }
   try{
     var sess=await withTimeout(client.auth.getSession(),3000,null);
     var session=sess&&sess.data&&sess.data.session;
@@ -4421,7 +4471,7 @@ async function resolveSession(opts){
   var getTimeout=opts.getTimeout!=null?opts.getTimeout:8000;
   for(var i=0;i<attempts;i++){
     try{
-      var res=await withTimeout(client.auth.getSession(),getTimeout,null);
+      var res=await withTimeout(client.auth.getSession(),getTimeout,null,{label:'resolveSession.getSession'});
       var session=res&&res.data&&res.data.session;
       if(session&&session.user&&String(session.access_token||'').trim())return session;
     }catch(_e){}
@@ -4442,7 +4492,7 @@ async function persistLoginSessionFromSignIn(signRes){
       var setRes=await withTimeout(sb.auth.setSession({
         access_token:session.access_token,
         refresh_token:session.refresh_token
-      }),8000,null);
+      }),8000,null,{label:'persistLoginSessionFromSignIn.setSession'});
       return !!(setRes&&!setRes.error);
     }catch(_e){}
   }
@@ -4503,7 +4553,7 @@ async function ssSyncAuthClientFromSession(session){
     await withTimeout(sb.auth.setSession({
       access_token:session.access_token,
       refresh_token:session.refresh_token
-    }),8000,null);
+    }),3000,null,{label:'ssSyncAuthClientFromSession.setSession'});
   }catch(_e){}
 }
 function ssRefreshUiAfterBackgroundSync(){
@@ -4531,11 +4581,13 @@ async function ssRunFullBootstrap(session,opts){
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
       try{scheduleDagAdviesRefresh();}catch(_e6){}
-      try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
       try{scheduleDailyCheckinPrompt();}catch(_e8){}
-      try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
       ssSaveProfilesCache();
       ssRefreshUiAfterBackgroundSync();
+      setTimeout(function(){
+        try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
+        try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
+      },7000);
     }catch(authErr){
       console.error('ssRunFullBootstrap:',authErr);
     }finally{
@@ -4551,20 +4603,7 @@ async function bootstrapAuthenticated(session,opts){
   opts=opts||{};
   if(!applyAuthSessionToState(session))return false;
   if(opts.fastPaint){
-    try{
-      migrateLegacyUserPrefs();
-      if(ssApplyProfilesCacheIfAvailable(String(session.user.id||''))){
-        try{reconcileSessAssignMapsAtLogin();}catch(_e){}
-        try{scrubCrossAccountRuntimeState();}catch(_e2){}
-        try{updateNavTabIndicators();}catch(_e3){}
-      }
-    }catch(_e4){}
-    void (async function(){
-      try{
-        await refreshSelfSenseGuideSignals();
-        ssRefreshUiAfterBackgroundSync();
-      }catch(_fpGuide){}
-    })();
+    try{updateNavTabIndicators();}catch(_e3){}
     void ssRunFullBootstrap(session,opts);
     _authBootstrappedUserId=String(session.user.id||'');
     return true;
@@ -4580,10 +4619,12 @@ async function bootstrapAuthenticated(session,opts){
       try{applySenseDeepLinkFromUrl();}catch(_e4){}
       try{scheduleDailyRecoTipRefresh();}catch(_e5){}
       try{scheduleDagAdviesRefresh();}catch(_e6){}
-      try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
       try{scheduleDailyCheckinPrompt();}catch(_e8){}
-      try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
       ssSaveProfilesCache();
+      setTimeout(function(){
+        try{void refreshAandachtspuntenNudgeContext();}catch(_e7){}
+        try{void scheduleBootstrapAandachtDetect();}catch(_e9){}
+      },7000);
     }catch(authErr){console.error('bootstrapAuthenticated:',authErr);}
   }
   _authBootstrappedUserId=String(session.user.id||'');
@@ -4634,6 +4675,9 @@ async function enterAuthenticatedApp(session,opts){
       applyAuthSessionToState(session);
       var gated=await ssMirrorLifecycleGate(session);
       if(!gated)return false;
+      if(opts.fastPaint){
+        try{ssPrepareFastPaintBeforeHome(session);}catch(_fpPrep){}
+      }
       var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
       if(navEarly)showAuthenticatedShell(opts.screen);
       await bootstrapAuthenticated(session,opts);
@@ -4671,6 +4715,7 @@ function registerAuthStateListener(){
         _senseSignOutDebounceTimer=null;
         var recovered=await senseRecoverSessionAfterSignOutEvent();
         if(recovered&&recovered.user){
+          _setAuthTokenFromSession(recovered);
           void enterAuthenticatedApp(recovered,{fullSync:false,forceResync:false});
           return;
         }
@@ -4736,6 +4781,18 @@ async function getAccessTokenFresh(forceRefresh){
   var now=Date.now();
   if(!forceRefresh&&_authTokenCache.token&&_authTokenCache.expiresAt>now){
     return _authTokenCache.token;
+  }
+  if(!forceRefresh){
+    var _persisted=senseSessionFromPersisted();
+    if(_persisted&&_persisted.access_token){
+      var _pExp=(_persisted.expires_at?_persisted.expires_at*1000:0)||0;
+      if(!_pExp||_pExp>now+60000){
+        _setAuthTokenFromSession(_persisted);
+        if(_authTokenCache.token&&(_authTokenCache.expiresAt===0||_authTokenCache.expiresAt>now)){
+          return _authTokenCache.token;
+        }
+      }
+    }
   }
   var session=null;
   try{
@@ -6282,7 +6339,15 @@ async function loadAll(opts){
   opts=opts||{};
   if(!S.user)return;
   migrateLegacyUserPrefs();
-  var {data}=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  var _loadAllRes=await sb.from('sense_profiles').select('*').eq('user_id',S.user.id).order('created_at');
+  if(_loadAllRes&&_loadAllRes.error&&!_loadAllRes.data){
+    var _loadAllUid=String(S.user&&S.user.id||'');
+    if(_loadAllUid&&!ssApplyProfilesCacheIfAvailable(_loadAllUid)){
+      S.profiles=['OWN Sense'];S.pdata={};S.crossAppCache={};
+    }
+    return;
+  }
+  var data=_loadAllRes&&_loadAllRes.data;
   S.profiles=['OWN Sense'];S.pdata={};S.crossAppCache={};
   if(!data||!data.length){
     await ensureP('OWN Sense');
@@ -6298,7 +6363,13 @@ async function loadAll(opts){
   try{await mergeOwnsenseProfileV1IntoOwnSensePdata();}catch(e){console.warn('merge hub→OWN Sense',e);}
   try{syncOwnBasisMetaFromHub();}catch(_basisHub){}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
-  try{await refreshSelfSenseGuideSignals();}catch(_g){console.warn('refreshSelfSenseGuideSignals',_g);}
+  var ownGuide=(S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}};
+  var deferGuideProbe=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownGuide,[]);
+  if(deferGuideProbe){
+    setTimeout(function(){try{void refreshSelfSenseGuideSignals();}catch(_gd){}},6000);
+  }else{
+    try{await refreshSelfSenseGuideSignals();}catch(_g){console.warn('refreshSelfSenseGuideSignals',_g);}
+  }
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   ssSaveProfilesCache();
   if(opts.deferHeavy===false){
@@ -6505,6 +6576,9 @@ async function saveMsg(pn,role,html){
   }
   if(res&&res.error)throw new Error(res.error.message);
   sync('ok');
+  if(S.user&&S.user.id&&typeof senseInvalidateProfileMsgsProbe==='function'){
+    try{senseInvalidateProfileMsgsProbe(S.user.id,pn);}catch(_inv){}
+  }
   if(String(pn)==='OWN Sense'){
     try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   }
@@ -6530,6 +6604,8 @@ function normalizeLoadedMsgHtml(v){
   return String(v);
 }
 
+var _loadMsgsInflightByKey={};
+var _loadMsgsInflightByProfile={};
 async function loadMsgs(pn,opt){
   if(!S.user)return[];
   var o=opt||{};
@@ -6537,39 +6613,83 @@ async function loadMsgs(pn,opt){
   var asc=o.asc===undefined?true:!!o.asc;
   var selectCols=o.select||'*';
   var innerTimeoutMs=parseInt(o.innerTimeoutMs,10)||6000;
-  var q=sb.from('sense_messages')
-    .select(selectCols)
-    .eq('user_id',S.user.id)
-    .eq('profile_name',pn)
-    .order('created_at',{ascending:asc})
-    .limit(limit);
-  var res;
+  var uid=S.user.id;
+  var profileKey=String(uid)+'|'+String(pn);
+  if(o.probeBeforeLoad===true&&typeof senseProbeProfileHasMsgs==='function'){
+    try{
+      var probed=await senseProbeProfileHasMsgs(sb,uid,pn,{
+        withTimeout:withTimeout,
+        timeoutMs:parseInt(o.probeTimeoutMs,10)||1200
+      });
+      if(probed===false)return [];
+    }catch(_pr){}
+  }
+  if(_loadMsgsInflightByProfile[profileKey]){
+    try{
+      return await _loadMsgsInflightByProfile[profileKey];
+    }catch(_pin){
+      if(o.throwOnError)throw _pin;
+      return [];
+    }
+  }
+  var inflightKey=String(uid)+'|'+String(pn)+'|'+limit+'|'+(asc?'1':'0')+'|'+selectCols;
+  if(_loadMsgsInflightByKey[inflightKey])return _loadMsgsInflightByKey[inflightKey];
+  var task=(async function(){
+    var q=sb.from('sense_messages')
+      .select(selectCols)
+      .eq('user_id',uid)
+      .eq('profile_name',pn)
+      .order('created_at',{ascending:asc})
+      .limit(limit);
+    var res;
+    try{
+      res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
+    }catch(te){
+      if(!o.quietOnTimeout){
+        console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
+      }
+      if(o.throwOnError)throw te;
+      return [];
+    }
+    var data=res&&res.data;
+    var error=res&&res.error;
+    if(error){
+      console.warn('loadMsgs failed for',pn,error.message||error);
+      if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
+      return [];
+    }
+    var rows=data||[];
+    if(typeof senseMarkProfileMsgsProbe==='function'){
+      try{senseMarkProfileMsgsProbe(uid,pn,rows.length>0);}catch(_mk){}
+    }
+    return rows.map(function(row){
+      if(!row||typeof row!=='object')return row;
+      if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
+      return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
+    });
+  })();
+  _loadMsgsInflightByKey[inflightKey]=task;
+  _loadMsgsInflightByProfile[profileKey]=task;
   try{
-    res=await withTimeout(q,innerTimeoutMs,'Berichten laden timeout',{label:'loadMsgs',meta:{profile:pn,limit:limit,select:selectCols}});
-  }catch(te){
-    console.warn('loadMsgs timeout/fail for',pn,te&&te.message?te.message:te);
-    if(o.throwOnError)throw te;
-    return [];
+    return await task;
+  }finally{
+    delete _loadMsgsInflightByKey[inflightKey];
+    delete _loadMsgsInflightByProfile[profileKey];
   }
-  var data=res&&res.data;
-  var error=res&&res.error;
-  if(error){
-    console.warn('loadMsgs failed for',pn,error.message||error);
-    if(o.throwOnError)throw new Error(error.message||String(error.code||error)||'Berichten laden mislukt');
-    return [];
-  }
-  var rows=data||[];
-  return rows.map(function(row){
-    if(!row||typeof row!=='object')return row;
-    if(!Object.prototype.hasOwnProperty.call(row,'html'))return row;
-    return Object.assign({},row,{html:normalizeLoadedMsgHtml(row.html)});
-  });
 }
 
 /** Laatste `limit` tijdlijnberichten, chronologisch (oud → nieuw). `asc:true`+`limit` alleen geeft de oudste rijen - advies moet de recentste zien. */
-async function loadMsgsRecentChronological(pn,limit){
+async function loadMsgsRecentChronological(pn,limit,opts){
   var cap=Math.max(1,Math.min(1000,parseInt(limit||120,10)));
-  var batch=await loadMsgs(pn,{limit:cap,asc:false});
+  var o=opts||{};
+  var batch=await loadMsgs(pn,{
+    limit:cap,
+    asc:false,
+    select:o.select||'*',
+    innerTimeoutMs:parseInt(o.innerTimeoutMs,10)||6000,
+    probeBeforeLoad:o.probeBeforeLoad,
+    probeTimeoutMs:o.probeTimeoutMs
+  });
   var arr=batch||[];
   return arr.slice().reverse();
 }
@@ -8888,7 +9008,7 @@ function rHome(el){
   var showModeEditor=!!S.homeModeEditorOpen;
   var onboardingHtml=renderOnboardingCard();
   var basisNudgeHtml='';
-  if(!isSelfSenseGuideSuppressed()&&typeof renderBasisprofielNudgeIfNeeded==='function'){
+  if(!isSelfSenseGuideSuppressed()&&!ssGuideSignalsProbePending()&&typeof renderBasisprofielNudgeIfNeeded==='function'){
     basisNudgeHtml=renderBasisprofielNudgeIfNeeded(getOwnSenseBasisMetaForUi(),'ss');
   }
   var hasContacts=cs.length>0;
@@ -8985,6 +9105,8 @@ function rHome(el){
       +'<button class="coach-save-other" style="font-size:12px;padding:6px 8px;margin-top:8px" onclick="goScreen(\'notifications\')">Bekijk meldingenhistoriek</button>'
       +'</div>';
   }
+  primeSparseDailyRecoForHome();
+  try{primeSparseDagAdviesForHub();}catch(_pd){}
   var recoHtml='<div id="homeRecoMount">'+renderHomeRecoCard()+'</div>';
 
   el.innerHTML=`
@@ -10115,7 +10237,7 @@ function rAdviceHub(el){
     var dagCache=getDagAdviesCache();
     var dagHas=dagCache&&dagCache.text&&!hasDagAdviesExpired(dagCache);
     var dagBody;
-    if(_dagAdviesFetching){
+    if(_dagAdviesFetching&&!dagHas){
       dagBody='<div style="font-size:13px;color:#6b7280;line-height:1.5">DagAdvies wordt geladen…</div>';
     }else if(dagHas){
       dagBody=formatAiCard(String(dagCache.text||''));
@@ -10267,14 +10389,26 @@ async function runAdviceHubRecommendationsNow(){
   try{
     var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
     var recentUserLines=[];
+    var ownHub=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+    var skipHubMsgs=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownHub,[]);
     try{
-      var batch=await loadMsgs('OWN Sense',{limit:16,asc:false});
-      (batch||[]).forEach(function(m){
+      if(!skipHubMsgs){
+        var batch=await loadMsgs('OWN Sense',{
+          limit:16,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
+        (batch||[]).forEach(function(m){
         if(!m||m.role!=='user')return;
         var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
         if(clean)recentUserLines.push(clean);
       });
-      recentUserLines=recentUserLines.filter(Boolean).slice(0,8);
+        recentUserLines=recentUserLines.filter(Boolean).slice(0,8);
+      }
     }catch(_om){}
     var catTxt=cats.join(', ');
     var allowedDomains=buildRecoDomainsFromCategories(cats);
@@ -10310,13 +10444,78 @@ async function runAdviceHubRecommendationsNow(){
 var _dailyRecoHomeFetching=false;
 var _dailyRecoHomeLastError='';
 var _dailyRecoHomeTask=null;
-async function fetchDailyRecoTipText(cats){
-  var allowedDomains=buildRecoDomainsFromCategories(cats);
+var _dailyRecoHomeWatchdog=null;
+var _DAILY_RECO_HOME_TIMEOUT_SPARSE_MS=30000;
+var _DAILY_RECO_HOME_TIMEOUT_RICH_MS=65000;
+var _DAILY_RECO_HOME_WATCHDOG_MS=10000;
+function clearDailyRecoHomeWatchdog(){
+  if(_dailyRecoHomeWatchdog){clearTimeout(_dailyRecoHomeWatchdog);_dailyRecoHomeWatchdog=null;}
+}
+function armDailyRecoHomeWatchdog(){
+  clearDailyRecoHomeWatchdog();
+  _dailyRecoHomeWatchdog=setTimeout(function(){
+    if(!_dailyRecoHomeFetching)return;
+    _dailyRecoHomeFetching=false;
+    _dailyRecoHomeTask=null;
+    var catsWd=getRecoEnabledCategories(getRecoPrefs());
+    var cacheWd=getDailyRecoCache();
+    var hasCache=cacheWd&&String(cacheWd.text||'').trim()&&!hasDailyRecoExpired(cacheWd);
+    if(!hasCache){
+      if(!applyInstantDailyRecoFallback(catsWd)&&!_dailyRecoHomeLastError){
+        _dailyRecoHomeLastError='Tip laden duurde te lang. Tik op Vernieuw tip.';
+      }else{
+        _dailyRecoHomeLastError='';
+      }
+    }
+    paintHomeRecoCard();
+  },_DAILY_RECO_HOME_WATCHDOG_MS);
+}
+function applyInstantDailyRecoFallback(cats){
+  if(!cats||!cats.length)return false;
+  if(typeof senseSparseDailyRecoFallback!=='function')return false;
+  var fb=senseSparseDailyRecoFallback(senseiLocalDayKey());
+  if(!fb||!String(fb.text||'').trim())return false;
+  setDailyRecoCache({ts:new Date().toISOString(),text:String(fb.text).trim(),categories:cats,sparse:true,isFallback:true});
+  _dailyRecoHomeLastError='';
+  return true;
+}
+function tryApplySparseDailyRecoFallback(cats){
+  if(!cats||!cats.length)return false;
   var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  if(typeof senseShouldUseSparseDailyRecoFallback!=='function'||!senseShouldUseSparseDailyRecoFallback(own,[]))return false;
+  return applyInstantDailyRecoFallback(cats);
+}
+function getOwnCellWithCacheFallback(){
+  var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
+  var cats=own.categories||{};
+  if(!Object.keys(cats).length&&!String(own.summary||'').trim()){
+    try{
+      var uid=S.user&&String(S.user.id||'');
+      var snap=uid?ssLoadProfilesCache(uid):null;
+      var cached=snap&&snap.pdata&&snap.pdata['OWN Sense'];
+      if(cached&&(Object.keys(cached.categories||{}).length||String(cached.summary||'').trim())){
+        return cached;
+      }
+    }catch(_e){}
+  }
+  return own;
+}
+function primeSparseDailyRecoForHome(){
+  if(!S.user)return;
+  var cache=getDailyRecoCache();
+  if(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache))return;
+  var cats=getRecoEnabledCategories(getRecoPrefs());
+  if(cats.length)applyInstantDailyRecoFallback(cats);
+}
+async function fetchDailyRecoTipText(cats,opt){
+  opt=opt||{};
+  var allowedDomains=buildRecoDomainsFromCategories(cats);
+  var own=getOwnCellWithCacheFallback();
+  var skipLoadMsgs=!!opt.skipLoadMsgs;
   if(typeof senseFetchDailyRecoTipText!=='function'){
     var usr='Doel: een fijne, concrete dagtip in mensentaal.';
     var sysPlain='Je bent SelfSensei. Geef precies 1 korte dagtip (max 5 zinnen). Geen links. Verzin geen gevoelens. Focus: zelfzorg, rust en herstel. Nederlands.';
-    var text=await callAPI(sysPlain,[{role:'user',content:usr}],360,28000,null,{disable_web_search:true});
+    var text=await callAPI(sysPlain,[{role:'user',content:usr}],360,8000,null,{disable_web_search:true});
     return {text:String(text||'').trim(),sparse:true};
   }
   return await senseFetchDailyRecoTipText({
@@ -10326,11 +10525,22 @@ async function fetchDailyRecoTipText(cats){
     focus:'zelfzorg, herstel, rust en emotieregulatie',
     ownCell:own,
     displayName:getUserHoofdNaam(),
+    dayKey:senseiLocalDayKey(),
     hubFallback:typeof readOwnHubBasisFallback==='function'?readOwnHubBasisFallback():null,
+    skipLoadMsgs:skipLoadMsgs,
     loadRecentUserLines:async function(){
+      if(skipLoadMsgs)return [];
       var lines=[];
       try{
-        var batch=await loadMsgs('OWN Sense',{limit:12,asc:false});
+        var batch=await loadMsgs('OWN Sense',{
+          limit:12,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:parseInt(opt.loadMsgsTimeoutMs,10)||12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
         (batch||[]).forEach(function(m){
           if(!m||m.role!=='user')return;
           var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -10353,42 +10563,78 @@ async function ensureDailyRecoTipForHome(opts){
     if(forceManual)toast('Zet minstens één aanbevelingscategorie aan onder Advies.');
     return;
   }
+  var ownEarly=getOwnCellWithCacheFallback();
+  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(ownEarly,[]);
   var cache=getDailyRecoCache();
-  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache);
+  var hasValidCache=cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache)&&!cache.isFallback&&!(cache.sparse&&!sparseLocal);
   if(hasValidCache&&!forceManual)return;
   if(!forceManual&&S._senseiBackgroundCooldownUntil&&Date.now()<S._senseiBackgroundCooldownUntil){
+    if(!hasValidCache)applyInstantDailyRecoFallback(cats);
     if(!_dailyRecoHomeLastError)_dailyRecoHomeLastError='Sensei is even overbevraagd. Probeer straks opnieuw of tik op vernieuwen.';
     paintHomeRecoCard();
     return;
   }
   if(_dailyRecoHomeTask&&!forceManual)return _dailyRecoHomeTask;
+  var hadTipBeforeFetch=false;
+  if(!forceManual){
+    var curTip=getDailyRecoCache();
+    hadTipBeforeFetch=curTip&&String(curTip.text||'').trim()&&!hasDailyRecoExpired(curTip);
+    if(!hadTipBeforeFetch){
+      applyInstantDailyRecoFallback(cats);
+      hadTipBeforeFetch=!!(getDailyRecoCache()&&String(getDailyRecoCache().text||'').trim());
+      _dailyRecoHomeLastError='';
+      paintHomeRecoCard();
+    }
+  }
   var run=async function(){
+    var retryHandoff=false;
     _dailyRecoHomeFetching=true;
     _dailyRecoHomeLastError='';
     paintHomeRecoCard();
+    armDailyRecoHomeWatchdog();
+    var fetchTimeoutMs=sparseLocal?_DAILY_RECO_HOME_TIMEOUT_SPARSE_MS:_DAILY_RECO_HOME_TIMEOUT_RICH_MS;
+    var skipMsgs=!forceManual;
     try{
-      try{
-        await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
-      }catch(_tok){}
-      var raw=await fetchDailyRecoTipText(cats);
+      var raw=await withTimeout(
+        fetchDailyRecoTipText(cats,{skipLoadMsgs:skipMsgs,loadMsgsTimeoutMs:12000}),
+        fetchTimeoutMs,
+        'Tip laden timeout',
+        {label:'ensureDailyRecoTipForHome',meta:{retry:retryCount,sparse:sparseLocal,skipLoadMsgs:skipMsgs}}
+      );
       var text=typeof raw==='object'?String(raw.text||'').trim():String(raw||'').trim();
       var sparse=typeof raw==='object'?!!raw.sparse:true;
+      var resultIsFallback=typeof raw==='object'&&!!raw.isFallback;
       if(!text)throw new Error('Leeg antwoord ontvangen.');
-      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse});
+      setDailyRecoCache({ts:new Date().toISOString(),text:text,categories:cats,sparse:sparse,isFallback:resultIsFallback||undefined});
       _dailyRecoHomeLastError='';
     }catch(e){
       var msg=(e&&e.message)?String(e.message):'Tip laden lukte niet.';
-      _dailyRecoHomeLastError=msg;
-      if(forceManual)toast('Tip laden lukte niet. '+msg);
       console.warn('ensureDailyRecoTipForHome',e);
       var rateLimited=/overbevraagd|\b429\b|rate.?limit|too many requests/i.test(msg);
       if(retryCount<1&&!forceManual&&!rateLimited){
-        await new Promise(function(r){setTimeout(r,2500);});
-        return ensureDailyRecoTipForHome({retryCount:retryCount+1});
+        retryHandoff=true;
+        await new Promise(function(r){setTimeout(r,1500);});
+        _dailyRecoHomeFetching=false;
+        _dailyRecoHomeTask=null;
+        clearDailyRecoHomeWatchdog();
+        paintHomeRecoCard();
+        await ensureDailyRecoTipForHome({retryCount:retryCount+1});
+        return;
+      }
+      if(hadTipBeforeFetch||(getDailyRecoCache()&&String(getDailyRecoCache().text||'').trim()&&!hasDailyRecoExpired(getDailyRecoCache()))){
+        _dailyRecoHomeLastError='';
+      }else if(tryApplySparseDailyRecoFallback(cats)||applyInstantDailyRecoFallback(cats)){
+        _dailyRecoHomeLastError='';
+      }else{
+        _dailyRecoHomeLastError=msg;
+        if(forceManual)toast('Tip laden lukte niet. '+msg);
       }
     }finally{
-      _dailyRecoHomeFetching=false;
-      paintHomeRecoCard();
+      if(!retryHandoff){
+        clearDailyRecoHomeWatchdog();
+        _dailyRecoHomeFetching=false;
+        paintHomeRecoCard();
+      }
     }
   };
   _dailyRecoHomeTask=run();
@@ -10399,6 +10645,37 @@ async function ensureDailyRecoTipForHome(opts){
   }
 }
 var _dagAdviesFetching=false;
+var _dagAdviesWatchdog=null;
+var _DAG_ADVIES_FETCH_TIMEOUT_MS=50000;
+var _DAG_ADVIES_WATCHDOG_MS=26000;
+function clearDagAdviesWatchdog(){
+  if(_dagAdviesWatchdog){clearTimeout(_dagAdviesWatchdog);_dagAdviesWatchdog=null;}
+}
+function tryApplySparseDagAdviesFallback(){
+  if(typeof senseSparseDagAdviesFallback!=='function')return false;
+  var fb=senseSparseDagAdviesFallback(senseiLocalDayKey());
+  if(!fb||!String(fb.text||'').trim())return false;
+  setDagAdviesCache({ts:new Date().toISOString(),text:String(fb.text).trim(),sparse:true,isFallback:true});
+  return true;
+}
+function primeSparseDagAdviesForHub(){
+  if(!S.user)return;
+  var cache=getDagAdviesCache();
+  if(cache&&String(cache.text||'').trim()&&!hasDagAdviesExpired(cache))return;
+  tryApplySparseDagAdviesFallback();
+}
+function armDagAdviesWatchdog(updateUi){
+  clearDagAdviesWatchdog();
+  _dagAdviesWatchdog=setTimeout(function(){
+    if(!_dagAdviesFetching)return;
+    _dagAdviesFetching=false;
+    clearDagAdviesWatchdog();
+    if(!getDagAdviesCache()||!String((getDagAdviesCache()||{}).text||'').trim()){
+      tryApplySparseDagAdviesFallback();
+    }
+    if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  },_DAG_ADVIES_WATCHDOG_MS);
+}
 async function ensureDagAdviesForAdviceHub(opts){
   opts=opts||{};
   var forceManual=!!opts.forceManual;
@@ -10408,14 +10685,20 @@ async function ensureDagAdviesForAdviceHub(opts){
     return;
   }
   var cache=getDagAdviesCache();
-  if(cache&&!hasDagAdviesExpired(cache)&&!forceManual)return;
+  if(cache&&!hasDagAdviesExpired(cache)&&!cache.isFallback&&!forceManual)return;
   if(_dagAdviesFetching)return;
   var st=getAdviceHubState();
   var updateUi=S.screen==='advice'&&(forceManual||st.route==='dagadvies');
+  var own=getOwnCellWithCacheFallback();
+  var sparseLocal=typeof senseShouldUseSparseDailyRecoFallback==='function'&&senseShouldUseSparseDailyRecoFallback(own,[]);
+  if(!forceManual&&(!cache||hasDagAdviesExpired(cache))){
+    tryApplySparseDagAdviesFallback();
+    if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  }
   _dagAdviesFetching=true;
   if(updateUi)refreshAdviceHubDagAdviesIfVisible();
+  armDagAdviesWatchdog(updateUi);
   try{
-    var own=((S.pdata&&S.pdata['OWN Sense'])||{meta:{},categories:{}});
     var ownMeta=own.meta||{};
     var ownCatLines=[];
     try{
@@ -10427,28 +10710,46 @@ async function ensureDagAdviesForAdviceHub(opts){
       });
     }catch(_oc){}
     var recentUserLines=[];
-    try{
-      var batch=await loadMsgs('OWN Sense',{limit:12,asc:false});
-      (batch||[]).forEach(function(m){
-        if(!m||m.role!=='user')return;
-        var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-        if(clean)recentUserLines.push(clean);
-      });
-    }catch(_rm){}
-    var sys='Je bent SelfSensei. Schrijf een warm, persoonlijk algemeen dagadvies voor vandaag (max 6 zinnen). Focus op zelfzorg, rust, emotieregulatie en herstel. Geen partner- of relatieadvies. Geen links. Begin met 1 zin die aansluit op wat deze gebruiker voelt of meemaakt. Gebruik GEEN markdown-tabellen. Nederlands.';
+    if(forceManual&&!sparseLocal){
+      try{
+        var batch=await loadMsgs('OWN Sense',{
+          limit:12,
+          asc:false,
+          select:'html,role',
+          innerTimeoutMs:12000,
+          probeBeforeLoad:true,
+          probeTimeoutMs:1200,
+          quietOnTimeout:true
+        });
+        (batch||[]).forEach(function(m){
+          if(!m||m.role!=='user')return;
+          var clean=String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+          if(clean)recentUserLines.push(clean);
+        });
+      }catch(_rm){}
+    }
+    var noFab=typeof senseRecoNoFabricationRules==='function'?senseRecoNoFabricationRules(sparseLocal?'sparse':'rich'):'Verzin geen gevoelens of situaties.';
+    var sys='Je bent SelfSensei. Schrijf een warm, persoonlijk algemeen dagadvies voor vandaag (max 6 zinnen). Focus op zelfzorg, rust, emotieregulatie en herstel. Geen partner- of relatieadvies. Geen links. '+noFab+' Gebruik GEEN markdown-tabellen. Nederlands.';
     var usr='Context gebruiker:\n'+[ownMeta.city,ownMeta.country,ownMeta.intent,own.summary].filter(Boolean).join(' · ')
       +(ownCatLines.length?'\nProfielregels:\n- '+ownCatLines.slice(0,8).join('\n- '):'')
       +(recentUserLines.length?'\nRecente eigen signalen:\n- '+recentUserLines.slice(0,6).join('\n- '):'')
       +'\n\nDoel: algemeen advies van de dag dat vandaag haalbaar aanvoelt.';
-    var raw=await callAPI(sys,[{role:'user',content:usr}],380,20000);
-    setDagAdviesCache({ts:new Date().toISOString(),text:String(raw||'')});
+    var apiMs=sparseLocal?12000:20000;
+    var raw=await withTimeout(
+      callAPI(sys,[{role:'user',content:usr}],380,apiMs,null,sparseLocal?{disable_web_search:true}:null),
+      _DAG_ADVIES_FETCH_TIMEOUT_MS,
+      'DagAdvies timeout',
+      {label:'ensureDagAdviesForAdviceHub',meta:{sparse:sparseLocal}}
+    );
+    setDagAdviesCache({ts:new Date().toISOString(),text:String(raw||''),sparse:!!sparseLocal});
     if(updateUi)refreshAdviceHubDagAdviesIfVisible();
   }catch(e){
-    if(forceManual){
+    if(!tryApplySparseDagAdviesFallback()&&forceManual){
       toast('DagAdvies laden lukte niet. '+(e&&e.message?String(e.message):'Probeer later opnieuw.'));
     }
     console.warn('ensureDagAdviesForAdviceHub',e);
   }finally{
+    clearDagAdviesWatchdog();
     _dagAdviesFetching=false;
     if(updateUi)refreshAdviceHubDagAdviesIfVisible();
   }
@@ -10501,8 +10802,10 @@ function renderHomeRecoCard(){
       :'<div style="font-size:13px;color:#9a6a1f;line-height:1.5">'+escHTML(_dailyRecoHomeLastError)+'</div>';
   }else if(!prefs.auto_enabled){
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Automatisch laden staat uit. Tik op <strong>Vernieuw tip</strong> of zet auto dagtip aan onder Advies.</div>';
+  }else if(!cats.length){
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Zet minstens één aanbevelingscategorie aan onder Advies om een dagtip te krijgen.</div>';
   }else{
-    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
+    body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Nog geen tip voor vandaag. Vul je profiel aan of tik op <strong>Vernieuw tip</strong>.</div>';
   }
   var recoBadge=hasTip?(cache.sparse===false?'Op maat':'Algemeen'):'Algemeen';
   return '<div class="reco-card">'
@@ -12709,7 +13012,7 @@ function dossierHasAdviceInput(name){
 async function dossierHasAdviceInputRobust(name){
   if(dossierHasAdviceInput(name))return true;
   try{
-    var msgs=await loadMsgs(name,{limit:20,asc:false});
+    var msgs=await loadMsgs(name,{limit:20,asc:false,select:'html,role',innerTimeoutMs:4000});
     var hasUser=(msgs||[]).some(function(m){
       if(!m)return false;
       if(String(m.role||'')!=='user')return false;
@@ -13934,8 +14237,11 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
   var token='';
+  var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor((customTimeoutMs||30000)*0.4)));
   try{
-    token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
+    token=await runSenseiAuthSerialized(function(){
+      return withTimeout(getAccessTokenFresh(false),authBudgetMs,'Sessie timeout - probeer opnieuw in te loggen');
+    });
   }catch(e){
     throw e;
   }
