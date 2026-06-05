@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="05-06-2026 14:22">
+<meta name="fs-build" content="05-06-2026 14:48">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1244,19 +1244,21 @@ button.ss-waar-ik-home-card:focus-visible{outline:2px solid var(--self-medium);o
 .ss-waar-ik-row:focus-visible{outline:2px solid var(--self-medium);outline-offset:2px}
 .ss-waar-ik-row-label{flex:1;min-width:0}
 .ss-waar-ik-detail{padding:12px 14px 18px;max-width:620px;margin:0 auto;width:100%;box-sizing:border-box}
-.ss-waar-ik-detail-grid{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 10px}
+.ss-waar-ik-detail-grid{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 10px;align-items:start}
 @media (min-width:640px){
-  .ss-waar-ik-detail-grid{grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:14px;align-items:start}
+  .ss-waar-ik-detail-grid{grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:14px}
+  .ss-waar-ik-detail-grid>.ss-waar-ik-sec:last-child{position:sticky;top:12px;align-self:start}
 }
-.ss-waar-ik-sec{margin:0}
+.ss-waar-ik-sec{margin:0;min-width:0}
 .ss-waar-ik-sec-h{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--self-medium);margin:0 0 6px}
 .ss-waar-ik-evidence-card{padding:0;border:none;background:transparent}
 .ss-waar-ik-evidence{font-size:13px;color:var(--warm-bruin);line-height:1.5}
 .ss-waar-ik-evidence-list{display:flex;flex-direction:column;gap:0;border-radius:10px;border:1px solid color-mix(in srgb,var(--self-medium) 18%,#e4e6eb);background:#fff;overflow:hidden}
 .ss-waar-ik-evidence-item{
-  padding:8px 10px;border:none;border-bottom:1px solid color-mix(in srgb,var(--self-medium) 12%,#e4e6eb);
-  background:#fff;font-size:13px;line-height:1.4;color:var(--self-donker);
+  display:block;padding:7px 10px;border:none;border-bottom:1px solid color-mix(in srgb,var(--self-medium) 12%,#e4e6eb);
+  background:#fff;font-size:13px;line-height:1.35;color:var(--self-donker);
 }
+.ss-waar-ik-evidence-item.open{background:color-mix(in srgb,var(--self-licht) 18%,#fff)}
 .ss-waar-ik-evidence-item:last-child{border-bottom:none}
 .ss-waar-ik-evidence-row{display:flex;align-items:baseline;gap:6px;min-width:0;width:100%}
 .ss-waar-ik-evidence-date{flex:0 0 auto;font-weight:600;color:var(--self-donker);font-size:12px}
@@ -1267,7 +1269,8 @@ button.ss-waar-ik-home-card:focus-visible{outline:2px solid var(--self-medium);o
 button.ss-waar-ik-evidence-item--btn{cursor:pointer;text-align:left;width:100%;font-family:inherit;appearance:none;-webkit-tap-highlight-color:transparent}
 button.ss-waar-ik-evidence-item--btn:hover{background:color-mix(in srgb,var(--self-licht) 24%,#fff)}
 button.ss-waar-ik-evidence-item--btn:focus-visible{outline:2px solid var(--self-medium);outline-offset:-2px}
-.ss-waar-ik-evidence-detail{padding:8px 0 2px;font-size:12px;line-height:1.5;color:var(--warm-bruin);border-top:1px solid color-mix(in srgb,var(--self-medium) 10%,#e4e6eb);margin-top:6px}
+.ss-waar-ik-evidence-detail{padding:6px 0 0;font-size:12px;line-height:1.45;color:var(--warm-bruin);border-top:1px solid color-mix(in srgb,var(--self-medium) 8%,#e4e6eb);margin-top:5px}
+.ss-waar-ik-evidence-item:not(.open) .ss-waar-ik-evidence-detail{display:none}
 .ss-waar-ik-evidence-detail-p{margin:0 0 6px;color:var(--self-donker)}
 .ss-waar-ik-evidence-detail-k{font-weight:600;color:var(--self-medium)}
 .ss-waar-ik-evidence-detail-help{margin:0 0 8px;font-size:11px;line-height:1.45;color:var(--warm-bruin)}
@@ -2792,7 +2795,6 @@ function formatAandachtspuntEvidencePreview(cid,checkinMap){
   if(!shortLabel&&note){
     shortLabel=note.length>42?note.slice(0,42)+'…':note;
   }
-  if(!shortLabel)shortLabel='Geen tekst';
   return{
     answer:ans,
     note:note,
@@ -2806,9 +2808,8 @@ function buildAandachtspuntEvidenceDetailHtml(prev){
     return '<p class="ss-waar-ik-evidence-detail-p">Deze check-in kon niet worden geladen.</p>';
   }
   if(!prev.hasContent){
-    return '<p class="ss-waar-ik-evidence-detail-p">Bij deze check-in is geen antwoord of notitie bewaard.</p>'
-      +'<p class="ss-waar-ik-evidence-detail-help">Voeg bij je volgende check-in optioneel een korte zin toe. Dat helpt Sensei om context te bewaren.</p>'
-      +'<button type="button" class="ss-waar-ik-evidence-checkin-link" onclick="showCheckinModal(true)">Open check-in</button>';
+    return '<p class="ss-waar-ik-evidence-detail-p">Geen antwoord bewaard.</p>'
+      +'<p class="ss-waar-ik-evidence-detail-help">Bij je volgende check-in kan je optioneel een korte zin toevoegen.</p>';
   }
   var html='';
   if(prev.answer){
@@ -2818,17 +2819,34 @@ function buildAandachtspuntEvidenceDetailHtml(prev){
     html+='<p class="ss-waar-ik-evidence-detail-p"><span class="ss-waar-ik-evidence-detail-k">Notitie</span> '+escHTML(prev.note)+'</p>';
   }
   if(prev.answer&&!prev.note){
-    html+='<p class="ss-waar-ik-evidence-detail-help">Geen extra notitie. Je kunt bij een volgende check-in optioneel meer context toevoegen.</p>'
-      +'<button type="button" class="ss-waar-ik-evidence-checkin-link" onclick="showCheckinModal(true)">Open check-in</button>';
+    html+='<p class="ss-waar-ik-evidence-detail-help">Geen extra notitie bewaard.</p>';
   }
   return html;
 }
 function toggleAandachtspuntEvidenceDetail(btn){
   if(!btn)return;
-  var open=btn.classList.toggle('open');
-  btn.setAttribute('aria-expanded',open?'true':'false');
-  var detail=btn.querySelector('.ss-waar-ik-evidence-detail');
-  if(detail)detail.hidden=!open;
+  var list=btn.closest('.ss-waar-ik-evidence-list');
+  var willOpen=!btn.classList.contains('open');
+  if(list){
+    list.querySelectorAll('.ss-waar-ik-evidence-item.open').forEach(function(other){
+      if(other===btn)return;
+      other.classList.remove('open');
+      other.setAttribute('aria-expanded','false');
+      var od=other.querySelector('.ss-waar-ik-evidence-detail');
+      if(od)od.hidden=true;
+    });
+  }
+  if(willOpen){
+    btn.classList.add('open');
+    btn.setAttribute('aria-expanded','true');
+    var detail=btn.querySelector('.ss-waar-ik-evidence-detail');
+    if(detail)detail.hidden=false;
+  }else{
+    btn.classList.remove('open');
+    btn.setAttribute('aria-expanded','false');
+    var detail2=btn.querySelector('.ss-waar-ik-evidence-detail');
+    if(detail2)detail2.hidden=true;
+  }
 }
 function formatAandachtspuntEvidenceLines(evidence,checkinMap){
   checkinMap=checkinMap||{};
@@ -2838,11 +2856,14 @@ function formatAandachtspuntEvidenceLines(evidence,checkinMap){
     var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
     var cid=String(it&&it.checkin_id||'').trim();
     var prev=formatAandachtspuntEvidencePreview(cid,checkinMap);
+    var previewHtml=prev.hasContent
+      ?('<span class="ss-waar-ik-evidence-sep" aria-hidden="true">·</span>'
+        +'<span class="ss-waar-ik-evidence-preview">'+escHTML(prev.shortLabel)+'</span>')
+      :'';
     return '<button type="button" class="ss-waar-ik-evidence-item ss-waar-ik-evidence-item--btn" onclick="toggleAandachtspuntEvidenceDetail(this)" aria-expanded="false">'
       +'<span class="ss-waar-ik-evidence-row">'
       +'<span class="ss-waar-ik-evidence-date">'+escHTML(when||'?')+'</span>'
-      +'<span class="ss-waar-ik-evidence-sep" aria-hidden="true">·</span>'
-      +'<span class="ss-waar-ik-evidence-preview">'+escHTML(prev.shortLabel)+'</span>'
+      +previewHtml
       +'<span class="ss-waar-ik-evidence-chevron" aria-hidden="true">›</span>'
       +'</span>'
       +'<div class="ss-waar-ik-evidence-detail" hidden>'+buildAandachtspuntEvidenceDetailHtml(prev)+'</div>'
@@ -2852,7 +2873,7 @@ function formatAandachtspuntEvidenceLines(evidence,checkinMap){
 }
 function formatAandachtspuntMovementNote(note){
   var n=String(note||'').trim();
-  if(!n||n==='Hier aan gewerkt')return'Moment vastgelegd';
+  if(!n||n==='Hier aan gewerkt')return'Vandaag aan gewerkt';
   return n;
 }
 function fmtAandachtspuntMovementDate(iso){
@@ -2919,7 +2940,7 @@ function renderAandachtspuntMovementLine(movement){
   var items=parseAandachtspuntMovement(movement).filter(function(it){
     return it&&String(it.at||'').trim();
   });
-  if(!items.length)return'Nog geen moment vastgelegd waarop je hier aan werkte.';
+  if(!items.length)return'Nog niet genoteerd dat je hieraan werkte.';
   var now=new Date();
   var month=now.getMonth(), year=now.getFullYear();
   var hasThisMonth=items.some(function(it){
@@ -3023,7 +3044,7 @@ function renderWaarIkAanWerkListHtml(rows){
   }
   var body='<div class="ss-waar-ik-shell"><div class="ss-waar-ik-subtitle">Aandachtspunten</div>';
   if(!active.length){
-    body+='<div class="ss-waar-ik-empty" style="padding:0 2px 10px">Geen actieve aandachtspunten. Je hebt er '+completed.length+' afgewerkt.</div>';
+    body+='<div class="ss-waar-ik-empty" style="padding:0 2px 10px">Geen actieve aandachtspunten. Je hebt er '+completed.length+' in balans.</div>';
   }
   active.forEach(function(row){
     var id=aandachtspuntIdStr(row.id);
@@ -3036,7 +3057,7 @@ function renderWaarIkAanWerkListHtml(rows){
   if(completed.length){
     var showCompleted=!!S.showWaarIkCompleted;
     body+='<button type="button" class="ss-waar-ik-completed-toggle" onclick="toggleWaarIkCompletedList()">'
-      +(showCompleted?'Verberg afgewerkte':'Toon afgewerkte')+' ('+completed.length+')</button>';
+      +(showCompleted?'Verberg in balans':'Toon in balans')+' ('+completed.length+')</button>';
     if(showCompleted){
       completed.forEach(function(row){
         var id=aandachtspuntIdStr(row.id);
@@ -3044,7 +3065,7 @@ function renderWaarIkAanWerkListHtml(rows){
         var doneWhen=fmtAandachtspuntCompletedDate(row.completed_at);
         body+='<button type="button" class="ss-waar-ik-row ss-waar-ik-row--completed" onclick="openWaarIkAanWerkDetail(\''+escJsStr(id)+'\')">'
           +'<span class="ss-waar-ik-row-label">'+escHTML(name)
-          +(doneWhen?('<span class="ss-waar-ik-row-meta">Afgewerkt · '+escHTML(doneWhen)+'</span>'):'')
+          +(doneWhen?('<span class="ss-waar-ik-row-meta">In balans · '+escHTML(doneWhen)+'</span>'):'')
           +'</span>'
           +'<span class="ss-waar-ik-home-chevron" aria-hidden="true">›</span>'
           +'</button>';
@@ -3063,12 +3084,12 @@ function renderWaarIkAanWerkDetailHtml(row,checkinMap){
     :'<div class="ss-waar-ik-tips-card" style="color:var(--warm-bruin);font-style:italic">Advies wordt nog voorbereid.</div>';
   var movementList=formatAandachtspuntMovementListHtml(row.movement,!!S.showWaarIkMovementAll);
   var movementListHtml='<div class="ss-waar-ik-movement-list" id="ssAandachtMovementList">'+movementList+'</div>';
-  var completedBanner=isDone?('<div class="ss-waar-ik-completed-banner" id="ssAandachtCompletedBanner">Afgewerkt op '+escHTML(fmtAandachtspuntCompletedDate(row.completed_at)||'onbekende datum')+'. Je kunt dit heropenen als het thema terugkomt.</div>'):'';
+  var completedBanner=isDone?('<div class="ss-waar-ik-completed-banner" id="ssAandachtCompletedBanner">In balans sinds '+escHTML(fmtAandachtspuntCompletedDate(row.completed_at)||'onbekende datum')+'. Je kan dit weer actief maken als het thema terugkomt.</div>'):'';
   var completeIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
   var completeBtn=isDone
-    ?'<button type="button" class="ss-waar-ik-complete-btn ss-waar-ik-complete-btn--reopen" id="ssAandachtCompleteBtn" onclick="reopenAandachtspunt(\''+escJsStr(id)+'\')">Heropen dit aandachtspunt</button>'
-    :'<button type="button" class="ss-waar-ik-complete-btn" id="ssAandachtCompleteBtn" onclick="markAandachtspuntAfgewerkt(\''+escJsStr(id)+'\')">'+completeIcon+' Markeer als afgewerkt</button>';
-  var workedBtn=isDone?'':('<div class="ss-waar-ik-cta-row"><button type="button" class="ss-waar-ik-cta-btn" id="ssAandachtWorkedBtn" onclick="toggleAandachtspuntWorkedForm()" aria-expanded="false">Moment vastleggen</button></div>'
+    ?'<button type="button" class="ss-waar-ik-complete-btn ss-waar-ik-complete-btn--reopen" id="ssAandachtCompleteBtn" onclick="reopenAandachtspunt(\''+escJsStr(id)+'\')">Weer actief maken</button>'
+    :'<button type="button" class="ss-waar-ik-complete-btn" id="ssAandachtCompleteBtn" onclick="markAandachtspuntAfgewerkt(\''+escJsStr(id)+'\')">'+completeIcon+' Aandachtspunt momenteel in balans</button>';
+  var workedBtn=isDone?'':('<div class="ss-waar-ik-cta-row"><button type="button" class="ss-waar-ik-cta-btn" id="ssAandachtWorkedBtn" onclick="toggleAandachtspuntWorkedForm()" aria-expanded="false">Vandaag aan gewerkt</button></div>'
     +'<div class="ss-waar-ik-worked-form" id="ssAandachtWorkedForm" hidden>'
     +'<input type="text" class="ss-waar-ik-worked-note" id="ssAandachtWorkedNote" maxlength="120" placeholder="Optioneel: wat deed je vandaag?">'
     +'<div class="ss-waar-ik-worked-actions">'
@@ -3144,7 +3165,7 @@ async function recordAandachtspuntHierAanGewerkt(id,note){
   if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
   var row=findBevestigdAandachtspunt(id);
   if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
-  if(isAandachtspuntCompleted(row)){toast('Heropen dit aandachtspunt om verder te werken.');return;}
+  if(isAandachtspuntCompleted(row)){toast('Maak dit aandachtspunt eerst weer actief om verder te werken.');return;}
   var btn=document.getElementById('ssAandachtWorkedBtn');
   var saveBtn=document.querySelector('.ss-waar-ik-worked-save');
   _aandachtWorkedBusy=true;
@@ -3197,16 +3218,16 @@ async function markAandachtspuntAfgewerkt(id){
   if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
   var row=findBevestigdAandachtspunt(id);
   if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
-  if(isAandachtspuntCompleted(row)){toast('Dit aandachtspunt staat al als afgewerkt.');return;}
+  if(isAandachtspuntCompleted(row)){toast('Dit aandachtspunt is al in balans.');return;}
   var ok=false;
-  try{ok=window.confirm('Markeer «'+String(row.soft_name||'dit aandachtspunt').trim()+'» als afgewerkt? Je vindt het terug onder afgewerkte punten.');}catch(_e){ok=false;}
+  try{ok=window.confirm('Voel je dat «'+String(row.soft_name||'dit aandachtspunt').trim()+'» momenteel in balans is? Je vindt het terug onder aandachtspunten in balans.');}catch(_e){ok=false;}
   if(!ok)return;
   var btn=document.getElementById('ssAandachtCompleteBtn');
   _aandachtCompleteBusy=true;
   if(btn)btn.disabled=true;
   try{
     await updateAandachtspuntRowLocal(id,{completed_at:new Date().toISOString()});
-    toast('Afgewerkt. Goed bezig met je voortgang.');
+    toast('Genoteerd. Mooi dat je hier even bij stilstaat.');
     S.viewAandachtspuntId=null;
     var mc=document.getElementById('mainContent');
     if(mc)void renderWaarIkAanWerkInto(mc);
@@ -3217,7 +3238,7 @@ async function markAandachtspuntAfgewerkt(id){
   }catch(e){
     console.warn('[aandachtspunt complete]',e);
     if(isAandachtspuntCompletedAtMissingErr(e)){
-      toast('Afgewerkt markeren is nog niet beschikbaar. Laat de database-update voor completed_at uitvoeren.');
+      toast('In balans markeren is nog niet beschikbaar. Laat de database-update voor completed_at uitvoeren.');
     }else{
       toast('Opslaan mislukt. Probeer opnieuw.');
     }
@@ -3238,7 +3259,7 @@ async function reopenAandachtspunt(id){
   if(btn)btn.disabled=true;
   try{
     var updated=await updateAandachtspuntRowLocal(id,{completed_at:null});
-    toast('Heropend. Je kunt hier weer aan werken.');
+    toast('Weer actief. Je kan hier opnieuw aan werken.');
     var mc=document.getElementById('mainContent');
     if(mc){
       var evIds=parseAandachtspuntEvidence(updated.evidence).map(function(it){return it&&it.checkin_id;});
@@ -3250,9 +3271,9 @@ async function reopenAandachtspunt(id){
   }catch(e){
     console.warn('[aandachtspunt reopen]',e);
     if(isAandachtspuntCompletedAtMissingErr(e)){
-      toast('Heropenen is nog niet beschikbaar. Laat de database-update voor completed_at uitvoeren.');
+      toast('Weer actief maken is nog niet beschikbaar. Laat de database-update voor completed_at uitvoeren.');
     }else{
-      toast('Heropenen mislukt. Probeer opnieuw.');
+      toast('Activeren mislukt. Probeer opnieuw.');
     }
   }finally{
     _aandachtCompleteBusy=false;
@@ -6273,8 +6294,8 @@ function applySenseDeepLinkFromUrl(){
     var want=String(sp.get('screen')||sp.get('coach')||'').trim().toLowerCase();
     if(want==='notifications'||want==='meldingen'){
       goScreen('notifications');
-    }else if(want==='waarikanwerk'||want==='mijnaandachtspunten'||want==='aandachtspunten'){
-      goScreen('waarIkAanWerk');
+    }else if(want==='waarikanwerk'||want==='waarikaanwerk'||want==='mijnaandachtspunten'||want==='aandachtspunten'){
+      openWaarIkAanWerk();
     }
     if(sp.has('screen')||sp.has('coach')){
       sp.delete('screen');sp.delete('coach');
@@ -6283,6 +6304,12 @@ function applySenseDeepLinkFromUrl(){
     }
   }catch(_e){}
 }
+try{
+  window.addEventListener('pageshow',function(ev){
+    if(!ev.persisted)return;
+    try{applySenseDeepLinkFromUrl();}catch(_ps){}
+  });
+}catch(_pse){}
 function initQuickNavBackToApp(){
   var back=document.getElementById('backAppBtn');
   if(!back)return;
