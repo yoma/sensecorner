@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="04-06-2026 16:17">
+<meta name="os-build" content="05-06-2026 11:47">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -623,6 +623,20 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   background:#fff;border:0.5px solid var(--border);border-radius:16px;padding:14px;
   display:flex;flex-direction:column;gap:10px;
 }
+.import-modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:2px}
+#reviewFactsModal .import-modal-sheet.review-facts-sheet--empty{
+  width:min(92vw,380px);gap:8px;padding:18px 20px 16px;text-align:center;
+}
+#reviewFactsModal .import-modal-sheet.review-facts-sheet--empty #reviewFactsModalSub{display:none}
+#reviewFactsModal .import-modal-sheet.review-facts-sheet--empty #reviewFactsList{
+  flex:0 0 auto;max-height:none;overflow:visible;
+}
+.review-facts-empty-msg{
+  padding:14px 6px 6px;font-size:14px;color:var(--warm-bruin);line-height:1.5;
+}
+#reviewFactsModal .import-modal-sheet.review-facts-sheet--empty .import-modal-footer{
+  justify-content:center;margin-top:6px;
+}
 .import-tabs{display:flex;gap:6px;min-width:0}
 .import-tab{flex:1;min-width:0;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fafbfc;font-size:12px;font-weight:700;cursor:pointer}
 .import-tab.active{background:rgba(200,212,181,.35);border-color:rgba(107,142,111,.4);color:var(--app-donker)}
@@ -996,13 +1010,15 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 
 <div class="import-modal" id="reviewFactsModal" aria-hidden="true">
   <div class="import-modal-bg" onclick="closeReviewFactsModal()"></div>
-  <div class="import-modal-sheet">
-    <div style="font-size:16px;font-weight:800">Nieuwe gegevens beoordelen</div>
-    <div class="subtle" id="reviewFactsModalSub">Goedkeuren, aanpassen of weigeren. Alles in één keer kan ook bij gewone gegevens.</div>
+  <div class="import-modal-sheet" id="reviewFactsModalSheet">
+    <div class="import-modal-head">
+      <div style="font-size:16px;font-weight:800">Nieuwe gegevens beoordelen</div>
+      <div class="subtle" id="reviewFactsModalSub">Goedkeuren, aanpassen of weigeren. Alles in één keer kan ook bij gewone gegevens.</div>
+    </div>
     <div id="reviewFactsStaleBanner" style="display:none"></div>
     <div id="reviewFactsBulkBar" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px"></div>
     <div id="reviewFactsList" style="overflow:auto;max-height:56vh"></div>
-    <div style="display:flex;gap:8px">
+    <div class="import-modal-footer">
       <button type="button" class="btn btn-muted" onclick="closeReviewFactsModal()">Sluiten</button>
     </div>
   </div>
@@ -3348,10 +3364,10 @@ function updateReviewFactsModalSubcopy(){
 async function renderReviewFacts(){
   var el=document.getElementById('reviewFactsList');
   var bulk=document.getElementById('reviewFactsBulkBar');
+  var sheet=document.getElementById('reviewFactsModalSheet');
   if(!el)return;
   await hydrateCheckinAnswersForEvidenceLists(getVoorgesteldeAandachtspunten().map(function(a){return a&&a.evidence;}));
   renderReviewModalStaleBanner();
-  updateReviewFactsModalSubcopy();
   var pending=getPendingFacts();
   var aandHtml=renderReviewAandachtspuntenHtml();
   if(bulk){
@@ -3362,10 +3378,13 @@ async function renderReviewFacts(){
     }
   }
   if(!pending.length&&!aandHtml){
-    el.innerHTML='<div class="placeholder" style="padding:10px 0">Niets te beoordelen.</div>';
+    if(sheet)sheet.classList.add('review-facts-sheet--empty');
+    el.innerHTML='<div class="review-facts-empty-msg">Niets te beoordelen.</div>';
     renderReviewModalStaleBanner();
     return;
   }
+  if(sheet)sheet.classList.remove('review-facts-sheet--empty');
+  updateReviewFactsModalSubcopy();
   var dossierNames=getOwnReviewDossierNames();
   var factsHtml=pending.length?pending.map(function(f){
     var doss=String(f.source_dossier||'').trim()||'OWN Sense';
@@ -3462,7 +3481,7 @@ async function acceptAandachtspunt(id){
     renderReviewFacts();
     updateOwnPendingNavBadge();
     renderMijTab();
-    flashOwnsenseMessage('Bevestigd. Je vindt dit straks onder Waar ik aan werk in SelfSense.',false,{durationMs:7200});
+    flashOwnsenseMessage('Bevestigd. Je vindt dit straks in Mijn aandachtspunten in SelfSense.',false,{durationMs:7200});
   }catch(e){
     console.warn('[acceptAandachtspunt]',id,e);
     flashOwnsenseMessage(formatSenseiErrForUser(e,'Kon aandachtspunt niet bevestigen. Probeer opnieuw.'),true);
