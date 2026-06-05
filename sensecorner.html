@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="05-06-2026 15:14">
+<meta name="sc-build" content="05-06-2026 15:26">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -2764,6 +2764,39 @@ a.app-card{color:inherit;text-decoration:none}
       return !!(cache&&String(cache.text||'').trim()&&!scHasDailyRecoExpired(cache));
     }catch(_e){return false;}
   }
+  function scGetMsUntilNextDailyReco(){
+    var now=new Date();
+    var next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0);
+    return Math.max(0,next.getTime()-now.getTime());
+  }
+  function scFormatDailyRecoCountdown(ms){
+    ms=Math.max(0,parseInt(ms,10)||0);
+    var sec=Math.floor(ms/1000);
+    var h=Math.floor(sec/3600);
+    var m=Math.floor((sec%3600)/60);
+    var s=sec%60;
+    if(h>=1)return h+'u '+m+'m';
+    if(m>=1)return m+'m '+s+'s';
+    return s+'s';
+  }
+  function scDailyRecoCardHintHtml(user,dailyKey,prefsKey){
+    if(!user||!scRecoCategoriesEnabled(user,prefsKey))return '';
+    if(scIsDailyRecoRequestAvailable(user,dailyKey,prefsKey)){
+      return 'Nieuwe dagtip klaar, open app';
+    }
+    if(scHasDailyRecoTipToday(user,dailyKey)){
+      return 'Dagtip klaar, open app · nieuwe tip over <span class="sc-daily-reco-cd">'+scFormatDailyRecoCountdown(scGetMsUntilNextDailyReco())+'</span>';
+    }
+    return '';
+  }
+  var _scDailyRecoCountdownTimer=null;
+  function scEnsureDailyRecoCountdownTimer(){
+    if(_scDailyRecoCountdownTimer)return;
+    _scDailyRecoCountdownTimer=setInterval(function(){
+      var cd=scFormatDailyRecoCountdown(scGetMsUntilNextDailyReco());
+      document.querySelectorAll('.sc-daily-reco-cd').forEach(function(el){el.textContent=cd;});
+    },60000);
+  }
   function scRecoCategoriesEnabled(user,prefsKey){
     try{
       var raw=scScopedStorageGet(prefsKey,user,'')||'';
@@ -3020,27 +3053,42 @@ a.app-card{color:inherit;text-decoration:none}
     var el=document.getElementById('scCoachHintSelfsense');
     var card=document.querySelector('.app-card.self-card[data-app-key="ss"]');
     var recoAvail=user&&scIsDailyRecoRequestAvailable(user,'ss_reco_daily_tip_v2','ss_reco_prefs_v1');
+    var hasTip=user&&scHasDailyRecoTipToday(user,'ss_reco_daily_tip_v2');
     if(card){
-      var link=ssCount>0?scSelfSenseCardLink(ssCount):(recoAvail?'selfsense.html?screen=home':'selfsense.html');
+      var link=ssCount>0?scSelfSenseCardLink(ssCount):((recoAvail||hasTip)?'selfsense.html?screen=home':'selfsense.html');
       card.setAttribute('data-app-link',link);
       card.setAttribute('href',link);
     }
     if(!el)return;
-    if(!user||(!ssCount&&!recoAvail)){
+    if(ssCount){
+      el.hidden=false;
+      var tail=ssCount===1?'actief aandachtspunt':'actieve aandachtspunten';
+      el.innerHTML='<span class="app-coach-hint__n">'+String(ssCount)+'</span> '+tail+' in SelfSense';
+      el.setAttribute('aria-label',String(ssCount)+' '+tail+' in SelfSense');
+      return;
+    }
+    if(!user){
       el.textContent='';
       el.hidden=true;
       el.removeAttribute('aria-label');
       return;
     }
-    el.hidden=false;
-    if(ssCount){
-      var tail=ssCount===1?'actief aandachtspunt':'actieve aandachtspunten';
-      el.innerHTML='<span class="app-coach-hint__n">'+String(ssCount)+'</span> '+tail+' in SelfSense';
-      el.setAttribute('aria-label',String(ssCount)+' '+tail+' in SelfSense');
-    }else{
-      el.textContent='Nieuwe aanbeveling klaar in SelfSense';
-      el.setAttribute('aria-label','Nieuwe aanbeveling klaar in SelfSense');
+    if(recoAvail){
+      el.hidden=false;
+      el.textContent='Nieuwe dagtip klaar, open app';
+      el.setAttribute('aria-label','Nieuwe dagtip klaar in SelfSense');
+      return;
     }
+    if(hasTip){
+      scEnsureDailyRecoCountdownTimer();
+      el.hidden=false;
+      el.innerHTML='Dagtip klaar, open app · nieuwe tip over <span class="sc-daily-reco-cd">'+scFormatDailyRecoCountdown(scGetMsUntilNextDailyReco())+'</span>';
+      el.setAttribute('aria-label','Dagtip klaar in SelfSense');
+      return;
+    }
+    el.textContent='';
+    el.hidden=true;
+    el.removeAttribute('aria-label');
   }
   function scApplyOwnHeroHint(user,ownCount){
     var el=document.getElementById('scCoachHintOwnsense');
@@ -3105,20 +3153,32 @@ a.app-card{color:inherit;text-decoration:none}
       wipe(frEl);
       return;
     }
-    function applyHint(el,n,appLabel){
+    function applyHint(el,n,appLabel,dailyKey,prefsKey){
       if(!el)return;
-      if(n===null||n===undefined||n<1){
-        wipe(el);
+      if(n>=1){
+        el.hidden=false;
+        var tail=n===1?'openstaande melding':'openstaande meldingen';
+        el.innerHTML='<span class="app-coach-hint__n">'+String(n)+'</span> '+tail;
+        el.setAttribute('aria-label',String(n)+' '+tail+' in '+appLabel);
         return;
       }
-      el.hidden=false;
-      var tail=n===1?'openstaande melding':'openstaande meldingen';
-      el.innerHTML='<span class="app-coach-hint__n">'+String(n)+'</span> '+tail;
-      el.setAttribute('aria-label',String(n)+' '+tail+' in '+appLabel);
+      var recoHint=scDailyRecoCardHintHtml(user,dailyKey,prefsKey);
+      if(recoHint){
+        scEnsureDailyRecoCountdownTimer();
+        el.hidden=false;
+        if(recoHint.indexOf('<span')>=0){
+          el.innerHTML=recoHint;
+        }else{
+          el.textContent=recoHint;
+        }
+        el.setAttribute('aria-label',recoHint.replace(/<[^>]*>/g,''));
+        return;
+      }
+      wipe(el);
     }
-    applyHint(dsEl,dsN,'DateSense');
-    applyHint(fsEl,fsN,'FamilySense');
-    applyHint(frEl,frN,'FriendSense');
+    applyHint(dsEl,dsN,'DateSense','ds_reco_daily_tip_v2','ds_reco_prefs_v1');
+    applyHint(fsEl,fsN,'FamilySense','fs_reco_daily_tip_v2','fs_reco_prefs_v1');
+    applyHint(frEl,frN,'FriendSense','fr_reco_daily_tip_v2','fr_reco_prefs_v1');
   }
   function updateAppCardCoachHints(user){
     if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);void scRefreshHubAttentionHints(null);return;}

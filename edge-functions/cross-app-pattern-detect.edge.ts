@@ -294,15 +294,26 @@ function formatFactsForPrompt(facts: OwnFactRow[]): string {
 function buildDetectSystemPrompt(): string {
   return `Je bent een zorgvuldige gedragsanalist voor een persoonlijk coaching-systeem.
 
-TAAK: Identificeer terugkerende gedragspatronen die DE GEBRUIKER ZELF toont, uitsluitend op basis van berichten die de gebruiker in eerste persoon over zichzelf schrijft.
+TAAK: Identificeer terugkerende gedragspatronen die DE GEBRUIKER ZELF toont en die het waard zijn om bewust van te zijn — uitdagingen, triggers, reactiepatronen of terugkerende moeilijkheden.
+
+WAT WEL een aandachtspunt is:
+- Terugkerende emotionele reacties: "ik raak snel geïrriteerd", "ik trek me terug als het spannend wordt"
+- Gedragspatronen met impact: "ik stel moeilijke gesprekken steeds uit", "ik ga over mijn grenzen als iemand iets vraagt"
+- Triggers: "ik reageer heftig als ik me niet gehoord voel"
+- Terugkerende moeilijkheden: "ik vind het moeilijk om nee te zeggen"
+
+WAT GEEN aandachtspunt is:
+- Positieve gewoonten of voorkeuren: "ik voel me beter als ik sport" → NIET voorstellen
+- Neutrale observaties: "ik hou van muziek", "ik werk graag 's ochtends" → NIET voorstellen
+- Eenmalige situaties, ook al zijn ze negatief
 
 STRIKTE REGELS:
-1. EERSTE PERSOON VERPLICHT: Een patroon mag alleen aan de gebruiker toegeschreven worden als de gebruiker het expliciet over zichzelf zegt met "ik", "me", "mij", "mijn gevoel", "ik merk dat ik", "ik reageer", "ik voel".
-2. NOOIT ANDEREN TOESCHRIJVEN: Als de gebruiker schrijft "hij is ongeduldig", "mijn partner reageert snel", "zij kan niet stilzitten" → dat zijn patronen van ANDEREN, nooit van de gebruiker zelf.
-3. REACTIES OP ANDEREN ZIJN WEL GELDIG: "ik raak geïrriteerd als hij te laat is" → dit is een patroon VAN DE GEBRUIKER (hun eigen reactie).
-4. MINIMUM: Patroon moet zichtbaar zijn in berichten vanuit minstens ${MIN_DISTINCT_CONTEXTS} verschillende gesprekscontexten (combinatie van app + dag). Gesprekken op dezelfde dag in verschillende apps tellen elk apart mee.
-5. GEEN SPECULATIE: Geen woorden als "lijkt", "mogelijk", "waarschijnlijk", "potentieel".
-6. [hoge-vertrouwen] berichten (OWN Sense) zijn het meest betrouwbaar. Andere apps vereisen extra zekerheid dat het over de gebruiker gaat.
+1. EERSTE PERSOON VERPLICHT: alleen als de gebruiker het expliciet over zichzelf zegt met "ik", "me", "mij", "ik merk dat ik", "ik reageer", "ik voel".
+2. NOOIT ANDEREN TOESCHRIJVEN: "hij is ongeduldig", "mijn partner reageert snel" → patronen van ANDEREN, nooit van de gebruiker.
+3. REACTIES OP ANDEREN ZIJN WEL GELDIG: "ik raak geïrriteerd als hij te laat is" → patroon VAN DE GEBRUIKER.
+4. MINIMUM: patroon zichtbaar in minstens ${MIN_DISTINCT_CONTEXTS} verschillende gesprekscontexten (app + dag).
+5. GEEN SPECULATIE: geen "lijkt", "mogelijk", "waarschijnlijk", "potentieel".
+6. [hoge-vertrouwen] berichten (OWN Sense) meest betrouwbaar. Andere apps vereisen extra zekerheid.
 7. Bij twijfel: geen voorstel. Een lege lijst is een correct antwoord.
 
 OUTPUT: Alleen geldig JSON, geen markdown.

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="05-06-2026 15:14">
+<meta name="fr-build" content="05-06-2026 15:26">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -7964,6 +7964,10 @@ async function refreshHomeDailyRecoTipManual(){
     toast('Er wordt al een tip geladen.');
     return;
   }
+  if(!canRefreshHomeDailyRecoManual()){
+    toast('Je hebt vandaag al je aanbeveling. Nieuwe tip over '+formatDailyRecoCountdown(getMsUntilNextDailyReco())+'.');
+    return;
+  }
   if(!S.user||!sb){
     toast('Log eerst in om een dagtip te laden.');
     return;
@@ -8010,7 +8014,7 @@ function renderHomeRecoCard(){
     +renderDailyRecoAvailabilityNote()
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
-    +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'
+    +(canRefreshHomeDailyRecoManual()?'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>':'')
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="goScreen(\'advice\');setAdviceHubRoute(\'recommend\')">Open aanbevelingen</button>'
     +'</div>'
     +(cats.length?'':'<div style="font-size:11px;color:#8a8f97;margin-top:8px">Categorieen staan uit in Advies. Zet daar minstens 1 aan.</div>')
@@ -11429,6 +11433,42 @@ function hasDailyRecoTipToday(){
   var cache=getDailyRecoCache();
   return !!(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache));
 }
+function getMsUntilNextDailyReco(){
+  var now=new Date();
+  var next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0);
+  return Math.max(0,next.getTime()-now.getTime());
+}
+function formatDailyRecoCountdown(ms){
+  ms=Math.max(0,parseInt(ms,10)||0);
+  var sec=Math.floor(ms/1000);
+  var h=Math.floor(sec/3600);
+  var m=Math.floor((sec%3600)/60);
+  var s=sec%60;
+  if(h>=1)return h+'u '+m+'m';
+  if(m>=1)return m+'m '+s+'s';
+  return s+'s';
+}
+function hasRichDailyRecoProfileCtx(){
+  var own=(S.pdata&&S.pdata['OWN Sense'])||{};
+  return Object.keys(own.categories||{}).length>0||String(own.summary||'').trim().length>=40;
+}
+function canRefreshHomeDailyRecoManual(){
+  if(!hasDailyRecoTipToday())return true;
+  if(_dailyRecoHomeLastError)return true;
+  var cache=getDailyRecoCache();
+  if(cache&&cache.isFallback)return true;
+  if(cache&&cache.sparse&&hasRichDailyRecoProfileCtx())return true;
+  return false;
+}
+var _dailyRecoCountdownTimer=null;
+function updateDailyRecoCountdownSpans(){
+  var cd=formatDailyRecoCountdown(getMsUntilNextDailyReco());
+  document.querySelectorAll('.daily-reco-cd').forEach(function(el){el.textContent=cd;});
+}
+function ensureDailyRecoCountdownTimer(){
+  if(_dailyRecoCountdownTimer)return;
+  _dailyRecoCountdownTimer=setInterval(updateDailyRecoCountdownSpans,60000);
+}
 function isDailyRecoRequestAvailable(){
   if(!getRecoEnabledCategories(getRecoPrefs()).length)return false;
   if(_dailyRecoHomeFetching)return false;
@@ -11441,13 +11481,15 @@ function renderDailyRecoAvailabilityNote(){
     return '<div style="font-size:12px;color:#0A5D9E;background:#EEF7FF;border:1px solid #CFE7FF;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Er staat een nieuwe aanbeveling klaar. Tik op <strong>Vernieuw tip</strong> om die op te halen.</div>';
   }
   if(hasDailyRecoTipToday()){
-    return '<div style="font-size:12px;color:#5f6b67;background:#F7FAF8;border:1px solid #D7EBDD;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Je hebt vandaag al een aanbeveling. Morgen staat er weer een nieuwe klaar. Wil je tussendoor vernieuwen? Dat kan via <strong>Vernieuw tip</strong>.</div>';
+    ensureDailyRecoCountdownTimer();
+    return '<div class="daily-reco-countdown-note" style="font-size:12px;color:#5f6b67;background:#F7FAF8;border:1px solid #D7EBDD;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Je hebt vandaag je aanbeveling. Nieuwe tip over <span class="daily-reco-cd">'+formatDailyRecoCountdown(getMsUntilNextDailyReco())+'</span>.</div>';
   }
   return'';
 }
 function paintHomeRecoCard(){
   var mount=document.getElementById('homeRecoMount');
   if(mount)mount.innerHTML=renderHomeRecoCard();
+  if(hasDailyRecoTipToday()&&getRecoEnabledCategories(getRecoPrefs()).length)ensureDailyRecoCountdownTimer();
 }
 function refreshHomeRecoCardIfVisible(){
   if(S.screen!=='home')return;
