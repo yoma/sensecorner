@@ -530,20 +530,28 @@ Deno.serve(async (req: Request) => {
     const system = buildSystemPrompt(dunne);
     const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx);
 
-    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: OFFLINE_MODEL,
-        max_tokens: 1200,
-        system,
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+    const claudeAbort = new AbortController();
+    const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);
+    let claudeRes: Response;
+    try {
+      claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: OFFLINE_MODEL,
+          max_tokens: 1200,
+          system,
+          messages: [{ role: "user", content: userContent }],
+        }),
+        signal: claudeAbort.signal,
+      });
+    } finally {
+      clearTimeout(claudeTimer);
+    }
 
     const claudeData = (await claudeRes.json()) as Record<string, unknown>;
     if (!claudeRes.ok) {

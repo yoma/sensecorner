@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="04-06-2026 19:17">
+<meta name="sc-build" content="05-06-2026 09:51">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="SenseCorner">
@@ -921,61 +922,108 @@ a.app-card{color:inherit;text-decoration:none}
     if(!rt&&exp&&exp<now-120000)return null;
     return sess;
   }
-  var _scRefreshingSession=false;
-  async function scRefreshSessionSafe(){
-    if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return null;
-    if(_scRefreshingSession){
-      await new Promise(function(r){setTimeout(r,600);});
+  var _scRefreshInFlight=null;
+  var _scLastRefreshAttempt=0;
+  var _scRefreshBackoffUntil=0;
+  var _scRefreshBackoffMs=0;
+  var SC_REFRESH_MIN_INTERVAL_MS=45000;
+  var SC_REFRESH_NEAR_EXPIRY_MS=5*60*1000;
+  function scSessionExpiryMs(sess){
+    return (sess&&sess.expires_at?sess.expires_at*1000:0)||0;
+  }
+  function scSessionIsUsable(sess){
+    if(!sess||!sess.user)return false;
+    var exp=scSessionExpiryMs(sess);
+    if(!exp)return !!String(sess.access_token||'').trim();
+    if(exp>Date.now()-30000)return true;
+    return !!String(sess.refresh_token||'').trim();
+  }
+  function scSessionNeedsRefresh(sess){
+    if(!sess||!sess.user)return false;
+    var exp=scSessionExpiryMs(sess);
+    if(!exp)return false;
+    return exp<Date.now()+SC_REFRESH_NEAR_EXPIRY_MS;
+  }
+  function scIsRefreshRateLimited(err){
+    if(!err)return false;
+    var status=Number(err.status||err.statusCode||0);
+    if(status===429)return true;
+    var msg=String((err.message||err)+'').toLowerCase();
+    return msg.indexOf('429')>=0||msg.indexOf('rate limit')>=0||msg.indexOf('too many')>=0;
+  }
+  function scNoteRefreshRateLimit(){
+    var wait=Math.min(120000,(_scRefreshBackoffMs||15000)*2);
+    _scRefreshBackoffMs=wait;
+    _scRefreshBackoffUntil=Date.now()+wait;
+  }
+  async function scRefreshSessionSafe(force){
+    if(!sb||!sb.auth||typeof sb.auth.refreshSession!=='function')return scSessionFromPersisted();
+    var now=Date.now();
+    if(!force&&now<_scRefreshBackoffUntil)return scSessionFromPersisted();
+    if(_scRefreshInFlight){
+      try{return await _scRefreshInFlight;}catch(_w){return scSessionFromPersisted();}
+    }
+    var persisted=scSessionFromPersisted();
+    if(!force){
+      if(persisted&&persisted.user&&!scSessionNeedsRefresh(persisted))return persisted;
+      if(now-_scLastRefreshAttempt<SC_REFRESH_MIN_INTERVAL_MS)return persisted||scSessionFromPersisted();
+    }
+    _scLastRefreshAttempt=now;
+    _scRefreshInFlight=(async function(){
+      try{
+        var rr=await scTimeoutFallback(sb.auth.refreshSession(),18000,null);
+        if(rr===null)return scSessionFromPersisted();
+        if(rr&&rr.error){
+          if(scIsRefreshRateLimited(rr.error))scNoteRefreshRateLimit();
+          return scSessionFromPersisted();
+        }
+        _scRefreshBackoffMs=0;
+        _scRefreshBackoffUntil=0;
+        var session=rr&&rr.data&&rr.data.session;
+        if(session&&session.user)return session;
+      }catch(e){
+        if(scIsRefreshRateLimited(e))scNoteRefreshRateLimit();
+      }finally{
+        _scRefreshInFlight=null;
+      }
       return scSessionFromPersisted();
-    }
-    _scRefreshingSession=true;
-    try{
-      var rr=await scTimeoutFallback(sb.auth.refreshSession(),18000,null);
-      if(rr===null)return scSessionFromPersisted();
-      var session=rr&&rr.data&&rr.data.session;
-      if(session&&session.user)return session;
-    }catch(_e){}finally{
-      _scRefreshingSession=false;
-    }
-    return scSessionFromPersisted();
+    })();
+    return _scRefreshInFlight;
   }
   function scStartSessionKeepAlive(){
     if(_scSessionKeepAliveTimer){try{clearInterval(_scSessionKeepAliveTimer);}catch(_c){}}
     var tick=function(){
       if(document.visibilityState!=='visible')return;
-      scRefreshSessionSafe().then(function(sess){
+      var persisted=scSessionFromPersisted();
+      if(persisted&&persisted.user&&!scSessionNeedsRefresh(persisted))return;
+      scRefreshSessionSafe(false).then(function(sess){
         if(sess&&sess.user)return;
+        if(scSessionIsUsable(scSessionFromPersisted()))return;
         return refreshAuthUi();
       }).catch(function(){});
     };
-    tick();
-    _scSessionKeepAliveTimer=setInterval(tick,3*60*1000);
+    _scSessionKeepAliveTimer=setInterval(tick,5*60*1000);
   }
   async function scGetSessionRobust(){
     var persisted=scSessionFromPersisted();
     if(!sb||!sb.auth||typeof sb.auth.getSession!=='function')return persisted;
+    if(persisted&&persisted.user&&scSessionIsUsable(persisted)&&!scSessionNeedsRefresh(persisted))return persisted;
     var attempts=[
-      {timeout:12000,wait:400,doRefresh:false},
-      {timeout:15000,wait:700,doRefresh:true},
-      {timeout:15000,wait:0,doRefresh:true}
+      {timeout:12000,wait:400},
+      {timeout:15000,wait:700}
     ];
     for(var i=0;i<attempts.length;i++){
       var cfg=attempts[i];
       try{
-        if(cfg.doRefresh){
-          var refreshed=await scRefreshSessionSafe();
-          if(refreshed&&refreshed.user)return refreshed;
-        }
         var sess=await scTimeoutFallback(sb.auth.getSession(),cfg.timeout,undefined);
         if(sess===undefined){
-          if(persisted&&persisted.user)return persisted;
+          if(persisted&&persisted.user&&scSessionIsUsable(persisted))return persisted;
           continue;
         }
         var session=sess&&sess.data&&sess.data.session;
         if(session&&session.user){
-          var expAt=(session.expires_at?session.expires_at*1000:0)||0;
-          if(expAt&&expAt<Date.now()+180000){
-            var near=await scRefreshSessionSafe();
+          if(scSessionNeedsRefresh(session)){
+            var near=await scRefreshSessionSafe(false);
             if(near&&near.user)return near;
           }
           return session;
@@ -985,15 +1033,20 @@ a.app-card{color:inherit;text-decoration:none}
         try{await new Promise(function(r){setTimeout(r,cfg.wait);});}catch(_w){}
       }
     }
+    if(scSessionIsUsable(persisted))return persisted;
+    if(scSessionNeedsRefresh(persisted)){
+      var refreshed=await scRefreshSessionSafe(false);
+      if(refreshed&&refreshed.user)return refreshed;
+    }
     if(typeof sb.auth.getUser==='function'){
       try{
         var gu=await scTimeoutFallback(sb.auth.getUser(),12000,undefined);
         if(gu===undefined){
-          if(persisted&&persisted.user)return persisted;
+          if(persisted&&persisted.user&&scSessionIsUsable(persisted))return persisted;
         }else{
           var usr=gu&&gu.data&&gu.data.user;
           if(usr&&usr.id){
-            if(persisted&&persisted.access_token)return persisted;
+            if(persisted&&persisted.access_token&&scSessionIsUsable(persisted))return persisted;
             return {user:usr,access_token:''};
           }
         }
@@ -1013,7 +1066,14 @@ a.app-card{color:inherit;text-decoration:none}
       if(_scSignOutDebounceTimer){try{clearTimeout(_scSignOutDebounceTimer);}catch(_t){}}
       _scSignOutDebounceTimer=setTimeout(async function(){
         _scSignOutDebounceTimer=null;
-        var recovered=await scRefreshSessionSafe();
+        var persisted=scSessionFromPersisted();
+        if(persisted&&persisted.user&&scSessionIsUsable(persisted)){
+          scStartSessionKeepAlive();
+          Promise.resolve(refreshAuthUi()).catch(function(){});
+          return;
+        }
+        var recovered=null;
+        if(scSessionNeedsRefresh(persisted))recovered=await scRefreshSessionSafe(false);
         if(!recovered||!recovered.user)recovered=await scGetSessionRobust();
         if(recovered&&recovered.user){
           scStartSessionKeepAlive();
@@ -3283,12 +3343,20 @@ a.app-card{color:inherit;text-decoration:none}
       }).catch(function(){});
     }
   });
+  var _scVisibleDebounceTimer=null;
   function scOnPageVisibleAgain(){
-    (async function(){
-      try{await scRefreshSessionSafe();}catch(_e){}
-      try{await refreshAuthUi();}catch(_e2){}
-      getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
-    })();
+    if(_scVisibleDebounceTimer){try{clearTimeout(_scVisibleDebounceTimer);}catch(_t){}}
+    _scVisibleDebounceTimer=setTimeout(function(){
+      _scVisibleDebounceTimer=null;
+      (async function(){
+        var persisted=scSessionFromPersisted();
+        if(!persisted||!persisted.user||scSessionNeedsRefresh(persisted)){
+          try{await scRefreshSessionSafe(false);}catch(_e){}
+        }
+        try{await refreshAuthUi();}catch(_e2){}
+        getCurrentUser().then(function(u){refreshCoachHintsFromServer(u);}).catch(function(){});
+      })();
+    },800);
   }
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState!=='visible')return;
