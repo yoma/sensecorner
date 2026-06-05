@@ -1047,6 +1047,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 <script>
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+window.SURL=SURL;
 var PK=['gevoeligheid','openheid','humor','directheid','avontuur','stabiliteit','vertrouwen','communicatie','onafhankelijkheid'];
 var PL=['Gevoeligheid','Openheid','Humor','Directheid','Avontuur','Stabiliteit','Vertrouwen','Communicatie','Onafhankelijkheid'];
 function ownHubPromptQ(p){
@@ -6144,9 +6145,12 @@ function formatSenseiErrForUser(e,fallback){
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs,opts){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
-  var token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
-  if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var timeoutMs=typeof customTimeoutMs==='number'&&customTimeoutMs>0?customTimeoutMs:90000;
+  var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor(timeoutMs*0.4)));
+  var token=await runSenseiAuthSerialized(function(){
+    return withTimeout(getAccessTokenFresh(false),authBudgetMs,'Sessie timeout - probeer opnieuw in te loggen');
+  });
+  if(!token)throw new Error('Je sessie is verlopen. Log opnieuw in via SenseCorner.');
   var controller=new AbortController();
   var outerTimer=setTimeout(function(){
     try{controller.abort();}catch(_e){}

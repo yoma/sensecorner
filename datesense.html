@@ -1475,6 +1475,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 // ══ Config ══════════════════════════════════════════════════════
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
 const SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
+window.SURL=SURL;
 var _metaBuild=document.querySelector('meta[name="ds-build"]');
 var _metaBuildContent=_metaBuild&&_metaBuild.getAttribute('content')?_metaBuild.getAttribute('content'):'v2026-03-27-1';
 const APP_BUILD_LABEL=String(_metaBuildContent||' - ').trim();
@@ -12428,8 +12429,11 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
   var token='';
+  var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor((customTimeoutMs||30000)*0.4)));
   try{
-    token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
+    token=await runSenseiAuthSerialized(function(){
+      return withTimeout(getAccessTokenFresh(false),authBudgetMs,'Sessie timeout - probeer opnieuw in te loggen');
+    });
   }catch(e){
     throw e;
   }
