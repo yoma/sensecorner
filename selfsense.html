@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="05-06-2026 14:48">
+<meta name="fs-build" content="05-06-2026 15:14">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1993,6 +1993,26 @@ function hasDailyRecoExpired(cacheObj){
   if(!cacheObj||!cacheObj.ts)return true;
   return senseiLocalDayKey(cacheObj.ts)!==senseiLocalDayKey();
 }
+function hasDailyRecoTipToday(){
+  var cache=getDailyRecoCache();
+  return !!(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache));
+}
+function isDailyRecoRequestAvailable(){
+  if(!getRecoEnabledCategories(getRecoPrefs()).length)return false;
+  if(_dailyRecoHomeFetching)return false;
+  return !hasDailyRecoTipToday();
+}
+function renderDailyRecoAvailabilityNote(){
+  if(_dailyRecoHomeFetching)return'';
+  if(!getRecoEnabledCategories(getRecoPrefs()).length)return'';
+  if(isDailyRecoRequestAvailable()){
+    return '<div style="font-size:12px;color:#0A5D9E;background:#EEF7FF;border:1px solid #CFE7FF;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Er staat een nieuwe aanbeveling klaar. Tik op <strong>Vernieuw tip</strong> om die op te halen.</div>';
+  }
+  if(hasDailyRecoTipToday()){
+    return '<div style="font-size:12px;color:#5f6b67;background:#F7FAF8;border:1px solid #D7EBDD;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Je hebt vandaag al een aanbeveling. Morgen staat er weer een nieuwe klaar. Wil je tussendoor vernieuwen? Dat kan via <strong>Vernieuw tip</strong>.</div>';
+  }
+  return'';
+}
 function paintHomeRecoCard(){
   var mount=document.getElementById('homeRecoMount');
   if(mount)mount.innerHTML=renderHomeRecoCard();
@@ -2751,6 +2771,47 @@ function parseAandachtspuntMovement(mv){
   }
   return[];
 }
+var SS_CHECKIN_EVIDENCE_QUESTION='Hoe is het vandaag met jou? Vergeleken met gisteren.';
+function normalizeEvidenceCheckinId(id){
+  id=String(id||'').trim();
+  return id?id.toLowerCase():'';
+}
+function isMessageEvidenceItem(it){
+  return !!(it&&String(it.message_id||'').trim());
+}
+function evidenceItemCheckinId(it){
+  if(!it||isMessageEvidenceItem(it))return'';
+  return normalizeEvidenceCheckinId(it.checkin_id||it.id);
+}
+function collectEvidenceCheckinIds(evidence){
+  var ids=[];
+  parseAandachtspuntEvidence(evidence).forEach(function(it){
+    var id=evidenceItemCheckinId(it);
+    if(id&&ids.indexOf(id)<0)ids.push(id);
+  });
+  return ids;
+}
+function readEvidenceInlineCheckin(it){
+  if(!it)return{answer:'',note:'',answerLabel:''};
+  var rawAns=String(it.answer||'').trim();
+  var lbl=String(it.answer_label||'').trim();
+  if(!lbl&&rawAns)lbl=formatCheckinAnswerLabel(rawAns);
+  if(!rawAns&&lbl){
+    var rev=String(lbl).toLowerCase();
+    if(SS_CHECKIN_ANSWERS.indexOf(rev)>=0)rawAns=rev;
+  }
+  return{
+    answer:rawAns,
+    note:String(it.note||'').trim(),
+    answerLabel:lbl||formatCheckinAnswerLabel(rawAns)
+  };
+}
+function lookupCheckinRow(checkinMap,cid){
+  checkinMap=checkinMap||{};
+  if(!cid)return null;
+  var key=normalizeEvidenceCheckinId(cid);
+  return checkinMap[key]||checkinMap[cid]||null;
+}
 function formatCheckinAnswerLabel(answer){
   var a=String(answer||'').trim();
   if(!a)return'';
@@ -2766,16 +2827,18 @@ async function fetchCheckinRowsByIds(ids){
   if(!sb||!S.user||!ids||!ids.length)return map;
   var uniq=[];
   ids.forEach(function(id){
-    id=String(id||'').trim();
+    id=normalizeEvidenceCheckinId(id);
     if(id&&uniq.indexOf(id)<0)uniq.push(id);
   });
   if(!uniq.length)return map;
   try{
     var res=await sb.from('selfsense_checkins').select('id,answer,note,created_at').eq('user_id',S.user.id).in('id',uniq);
+    if(res&&res.error)console.warn('[checkin rows]',res.error);
     if(res&&res.data){
       res.data.forEach(function(row){
         if(row&&row.id){
-          map[String(row.id)]={
+          var key=normalizeEvidenceCheckinId(row.id);
+          map[key]={
             answer:String(row.answer||'').trim(),
             note:String(row.note||'').trim(),
             created_at:row.created_at||''
@@ -2786,29 +2849,63 @@ async function fetchCheckinRowsByIds(ids){
   }catch(e){console.warn('[checkin rows]',e);}
   return map;
 }
-function formatAandachtspuntEvidencePreview(cid,checkinMap){
+function formatMessageEvidencePreview(it){
+  var excerpt=String(it&&it.excerpt||'').trim();
+  var app=String(it&&it.app||'').trim();
+  var appLbl=app?('Gesprek in '+app):'';
+  var shortLabel=excerpt||appLbl||'Bericht';
+  if(shortLabel.length>42)shortLabel=shortLabel.slice(0,42)+'…';
+  return{
+    isMessage:true,
+    answer:appLbl,
+    note:excerpt,
+    shortLabel:shortLabel,
+    hasContent:!!(excerpt||appLbl),
+    missingCheckin:false
+  };
+}
+function formatAandachtspuntEvidencePreview(cid,checkinMap,evItem){
   checkinMap=checkinMap||{};
-  var row=cid?checkinMap[cid]:null;
-  var ans=formatCheckinAnswerLabel(row&&row.answer);
-  var note=String(row&&row.note||'').trim();
+  if(isMessageEvidenceItem(evItem))return formatMessageEvidencePreview(evItem);
+  var inline=readEvidenceInlineCheckin(evItem);
+  var row=lookupCheckinRow(checkinMap,cid);
+  var ans=formatCheckinAnswerLabel(row&&row.answer||inline.answer)||inline.answerLabel;
+  var note=String(row&&row.note||inline.note||'').trim();
   var shortLabel=ans||'';
   if(!shortLabel&&note){
     shortLabel=note.length>42?note.slice(0,42)+'…':note;
   }
+  var hasInline=!!(inline.answer||inline.note||inline.answerLabel);
   return{
+    isMessage:false,
     answer:ans,
     note:note,
     shortLabel:shortLabel,
     hasContent:!!(ans||note),
-    missingCheckin:!!cid&&!row
+    missingCheckin:!!cid&&!row&&!hasInline
   };
 }
 function buildAandachtspuntEvidenceDetailHtml(prev){
+  if(prev.isMessage){
+    if(!prev.hasContent){
+      return '<p class="ss-waar-ik-evidence-detail-p">Geen berichtfragment bewaard.</p>';
+    }
+    var msgHtml='';
+    if(prev.answer){
+      msgHtml+='<p class="ss-waar-ik-evidence-detail-p"><span class="ss-waar-ik-evidence-detail-k">Bron</span> '+escHTML(prev.answer)+'</p>';
+    }
+    if(prev.note){
+      msgHtml+='<p class="ss-waar-ik-evidence-detail-p"><span class="ss-waar-ik-evidence-detail-k">Fragment</span> '+escHTML(prev.note)+'</p>';
+    }
+    return msgHtml;
+  }
   if(prev.missingCheckin){
-    return '<p class="ss-waar-ik-evidence-detail-p">Deze check-in kon niet worden geladen.</p>';
+    return '<p class="ss-waar-ik-evidence-detail-p">Deze check-in kon niet worden geladen.</p>'
+      +'<p class="ss-waar-ik-evidence-detail-help">Het koppeling-ID is mogelijk verouderd. De datum komt uit het voorstel in OWNSense.</p>';
   }
   if(!prev.hasContent){
     return '<p class="ss-waar-ik-evidence-detail-p">Geen antwoord bewaard.</p>'
+      +'<p class="ss-waar-ik-evidence-detail-help"><span class="ss-waar-ik-evidence-detail-k">Vraag</span> '+escHTML(SS_CHECKIN_EVIDENCE_QUESTION)+'</p>'
       +'<p class="ss-waar-ik-evidence-detail-help">Bij je volgende check-in kan je optioneel een korte zin toevoegen.</p>';
   }
   var html='';
@@ -2851,11 +2948,11 @@ function toggleAandachtspuntEvidenceDetail(btn){
 function formatAandachtspuntEvidenceLines(evidence,checkinMap){
   checkinMap=checkinMap||{};
   var items=parseAandachtspuntEvidence(evidence);
-  if(!items.length)return'<div class="ss-waar-ik-evidence">Geen check-in momenten gekoppeld.</div>';
+  if(!items.length)return'<div class="ss-waar-ik-evidence">Geen bewijs gekoppeld.</div>';
   var lines=items.map(function(it){
     var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
-    var cid=String(it&&it.checkin_id||'').trim();
-    var prev=formatAandachtspuntEvidencePreview(cid,checkinMap);
+    var cid=evidenceItemCheckinId(it);
+    var prev=formatAandachtspuntEvidencePreview(cid,checkinMap,it);
     var previewHtml=prev.hasContent
       ?('<span class="ss-waar-ik-evidence-sep" aria-hidden="true">·</span>'
         +'<span class="ss-waar-ik-evidence-preview">'+escHTML(prev.shortLabel)+'</span>')
@@ -3014,9 +3111,8 @@ async function refreshHomeWaarIkAanWerkCard(){
   el.style.display=html?'block':'none';
 }
 function openWaarIkAanWerk(){
-  S.viewAandachtspuntId=null;
-  S.showWaarIkMovementAll=false;
-  goScreen('waarIkAanWerk');
+  clearWaarIkAanWerkDetailState();
+  goScreen('waarIkAanWerk',{skipFlush:true});
 }
 function openWaarIkAanWerkDetail(id){
   S.viewAandachtspuntId=aandachtspuntIdStr(id);
@@ -3130,8 +3226,7 @@ async function renderWaarIkAanWerkInto(el){
     }
     var pt2=document.getElementById('pgTitle');
     if(pt2)pt2.textContent=String(row.soft_name||'Mijn aandachtspunten').trim()||'Mijn aandachtspunten';
-    var evIds=parseAandachtspuntEvidence(row.evidence).map(function(it){return it&&it.checkin_id;});
-    var checkinMap=await fetchCheckinRowsByIds(evIds);
+    var checkinMap=await fetchCheckinRowsByIds(collectEvidenceCheckinIds(row.evidence));
     el.innerHTML=renderWaarIkAanWerkDetailHtml(row,checkinMap);
     return;
   }
@@ -3262,8 +3357,7 @@ async function reopenAandachtspunt(id){
     toast('Weer actief. Je kan hier opnieuw aan werken.');
     var mc=document.getElementById('mainContent');
     if(mc){
-      var evIds=parseAandachtspuntEvidence(updated.evidence).map(function(it){return it&&it.checkin_id;});
-      var checkinMap=await fetchCheckinRowsByIds(evIds);
+      var checkinMap=await fetchCheckinRowsByIds(collectEvidenceCheckinIds(updated.evidence));
       mc.innerHTML=renderWaarIkAanWerkDetailHtml(updated,checkinMap);
     }
     void refreshHomeWaarIkAanWerkCard();
@@ -3688,6 +3782,7 @@ function getPromptText(key){
 }
 function ensureRenderHealthy(source){
   if(_renderHealthBusy)return;
+  if(S.screen==='waarIkAanWerk'||S.screen==='notifications')return;
   var mc=document.getElementById('mainContent');
   if(!mc)return;
   var hasChild=!!(mc.children&&mc.children.length);
@@ -4850,8 +4945,42 @@ function resetAuthenticatedBootState(){
   _authBootstrappedUserId='';
   _authBootstrapInFlight=null;
 }
+var _pendingSenseDeepLinkScreen=null;
+var _senseDeepLinkCaptured=false;
+function normalizeSenseDeepLinkScreen(raw){
+  var want=String(raw||'').trim().toLowerCase();
+  if(want==='notifications'||want==='meldingen')return'notifications';
+  if(want==='waarikanwerk'||want==='waarikaanwerk'||want==='mijnaandachtspunten'||want==='aandachtspunten')return'waarIkAanWerk';
+  return null;
+}
+function captureSenseDeepLinkFromUrlOnce(){
+  if(_senseDeepLinkCaptured)return;
+  _senseDeepLinkCaptured=true;
+  try{
+    var sp=new URLSearchParams(window.location.search||'');
+    var sc=normalizeSenseDeepLinkScreen(sp.get('screen')||sp.get('coach')||'');
+    if(sc)_pendingSenseDeepLinkScreen=sc;
+  }catch(_e){}
+}
+function clearSenseDeepLinkPending(){
+  _pendingSenseDeepLinkScreen=null;
+}
+function peekSenseDeepLinkScreen(){
+  if(_pendingSenseDeepLinkScreen)return _pendingSenseDeepLinkScreen;
+  try{
+    var sp=new URLSearchParams(window.location.search||'');
+    return normalizeSenseDeepLinkScreen(sp.get('screen')||sp.get('coach')||'');
+  }catch(_e){}
+  return null;
+}
+try{captureSenseDeepLinkFromUrlOnce();}catch(_sdlCap){}
+function clearWaarIkAanWerkDetailState(){
+  S.viewAandachtspuntId=null;
+  S.showWaarIkMovementAll=false;
+  S.showWaarIkCompleted=false;
+}
 function getPostAuthTargetScreen(){
-  return 'home';
+  return peekSenseDeepLinkScreen()||'home';
 }
 function applyAuthSessionToState(session){
   if(!session||!session.user)return false;
@@ -4964,7 +5093,7 @@ async function ssSyncAuthClientFromSession(session){
 function ssRefreshUiAfterBackgroundSync(){
   try{
     updateNavTabIndicators();
-    if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'||S.screen==='vertel'){
+    if(S.screen==='home'||S.screen==='senses'||S.screen==='own'||S.screen==='dossier'||S.screen==='vertel'||S.screen==='waarIkAanWerk'||S.screen==='notifications'){
       goScreen(S.screen,{skipFlush:true,preserveScroll:true});
     }
     ensureRenderHealthy('bg-sync');
@@ -5070,7 +5199,10 @@ async function enterAuthenticatedApp(session,opts){
     var gated=await ssMirrorLifecycleGate(session);
     if(!gated)return false;
     var _alreadyInApp=!(S.screen==='login'||S.screen==='register'||!S.screen);
-    if(opts.screen||!_alreadyInApp)showAuthenticatedShell(opts.screen);
+    if(opts.screen||!_alreadyInApp){
+      showAuthenticatedShell(opts.screen||getPostAuthTargetScreen());
+      clearSenseDeepLinkPending();
+    }
     try{scheduleDailyCheckinPrompt();}catch(_dc){}
     try{void scheduleBootstrapAandachtDetect();}catch(_dd){}
     return true;
@@ -5083,10 +5215,12 @@ async function enterAuthenticatedApp(session,opts){
       if(opts.fastPaint){
         try{ssPrepareFastPaintBeforeHome(session);}catch(_fpPrep){}
       }
-      var navEarly=(S.screen==='login'||S.screen==='register')||!!opts.screen||!!opts.fastPaint;
-      if(navEarly)showAuthenticatedShell(opts.screen);
+      var bootScreen=opts.screen||getPostAuthTargetScreen();
+      var navEarly=(S.screen==='login'||S.screen==='register')||bootScreen!=='home'||!!opts.fastPaint;
+      if(navEarly)showAuthenticatedShell(bootScreen);
       await bootstrapAuthenticated(session,opts);
-      if(!navEarly)showAuthenticatedShell(opts.screen);
+      if(!navEarly)showAuthenticatedShell(bootScreen);
+      clearSenseDeepLinkPending();
       return true;
     }catch(e){
       console.error('enterAuthenticatedApp:',e);
@@ -5109,7 +5243,7 @@ function registerAuthStateListener(){
       var uid=String((ses.user&&ses.user.id)||'');
       var needsBootstrap=onLoginScreen||!_authBootstrappedUserId||(_authBootstrappedUserId!==uid);
       void handleAuthSignedIn(ses,{
-        screen:onLoginScreen?getPostAuthTargetScreen():undefined,
+        screen:getPostAuthTargetScreen(),
         fullSync:needsBootstrap,
         forceResync:needsBootstrap
       });
@@ -6287,18 +6421,19 @@ function clearAuthHash(){
     history.replaceState(null,'',window.location.pathname+window.location.search);
   }
 }
-/** SenseCorner / extern: `?screen=notifications` of `?coach=notifications` opent Mijn meldingen na load. */
+/** SenseCorner / OWNSense / extern: `?screen=…` opent doelscherm na load (lijst, geen detail). */
 function applySenseDeepLinkFromUrl(){
   try{
     var sp=new URLSearchParams(window.location.search||'');
-    var want=String(sp.get('screen')||sp.get('coach')||'').trim().toLowerCase();
-    if(want==='notifications'||want==='meldingen'){
-      goScreen('notifications');
-    }else if(want==='waarikanwerk'||want==='waarikaanwerk'||want==='mijnaandachtspunten'||want==='aandachtspunten'){
-      openWaarIkAanWerk();
+    var sc=peekSenseDeepLinkScreen();
+    if(sc==='notifications'){
+      goScreen('notifications',{skipFlush:true});
+    }else if(sc==='waarIkAanWerk'){
+      clearWaarIkAanWerkDetailState();
+      goScreen('waarIkAanWerk',{skipFlush:true});
     }
-    if(sp.has('screen')||sp.has('coach')){
-      sp.delete('screen');sp.delete('coach');
+    if(sp.has('screen')||sp.has('coach')||sp.has('list')){
+      sp.delete('screen');sp.delete('coach');sp.delete('list');
       var rest=sp.toString();
       history.replaceState(null,'',window.location.pathname+(rest?'?'+rest:''));
     }
@@ -6415,6 +6550,7 @@ async function handlePendingAuthFromUrl(){
 }
 
 async function init(){
+  captureSenseDeepLinkFromUrlOnce();
   initQuickNavBackToApp();
   initPhotoPreview();
   window.__fsBootOk=true;
@@ -6441,6 +6577,7 @@ async function init(){
     if(session){
       var uid=String(session.user.id||'');
       var hasProfilesCache=ssHasProfilesCache(uid);
+      if(peekSenseDeepLinkScreen()==='waarIkAanWerk')clearWaarIkAanWerkDetailState();
       void enterAuthenticatedApp(session,{
         screen:getPostAuthTargetScreen(),
         forceResync:!hasProfilesCache,
@@ -7402,7 +7539,7 @@ function _goScreenBody(sc,opts){
     return;
   }
   S.prev=S.screen;S.screen=sc;
-  if(sc==='waarIkAanWerk'&&prevScreen!=='waarIkAanWerk')S.viewAandachtspuntId=null;
+  if(sc==='waarIkAanWerk'&&prevScreen!=='waarIkAanWerk')clearWaarIkAanWerkDetailState();
   if(sc==='vertel'){
     void hydrateCrossAppRecentMsgs();
   }
@@ -9166,6 +9303,17 @@ function buildCoachTasks(){
   var ownMissingProfile=!getProfileMetaCompletion('OWN Sense').complete;
   if(ownMissingProfile){
     tasks.push({id:'check-own-profile',type:'a',prio:'high',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open OWN Sense →',action:"openOwnSenseEntryPoint()"});
+  }
+  if(isDailyRecoRequestAvailable()){
+    tasks.push({
+      id:'actie-daily-reco-'+senseiLocalDayKey(),
+      type:'a',
+      prio:'medium',
+      msg:'Er staat een <strong>nieuwe dag-aanbeveling</strong> klaar. Ga naar Home en tik op Vernieuw tip.',
+      openMsg:'Nog openstaand: je dag-aanbeveling voor vandaag wacht nog.',
+      link:'Naar aanbeveling →',
+      action:"goScreen('home');setTimeout(function(){try{var m=document.getElementById('homeRecoMount');if(m)m.scrollIntoView({behavior:'smooth',block:'center'});}catch(_e){}},220)"
+    });
   }
   buildSpiegelAdemCoachTaskAppend().forEach(function(t){tasks.push(t);});
   return tasks;
@@ -11220,9 +11368,19 @@ function renderHomeRecoCard(){
   }else{
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Nog geen tip voor vandaag. Vul je profiel aan of tik op <strong>Vernieuw tip</strong>.</div>';
   }
-  var recoBadge=hasTip?(cache.sparse===false?'Op maat':'Algemeen'):'Algemeen';
+  var recoBadge;
+  if(_dailyRecoHomeFetching){
+    recoBadge='Laden…';
+  }else if(isDailyRecoRequestAvailable()){
+    recoBadge='Nieuw klaar';
+  }else if(hasTip){
+    recoBadge=(cache.sparse===false?'Op maat':'Algemeen');
+  }else{
+    recoBadge='Algemeen';
+  }
   return '<div class="reco-card">'
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">'+recoBadge+'</div></div>'
+    +renderDailyRecoAvailabilityNote()
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'

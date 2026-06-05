@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="05-06-2026 14:48">
+<meta name="os-build" content="05-06-2026 15:10">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -713,7 +713,10 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 .accepted-fact-body{flex:1;min-width:0}
 .accepted-fact-text{font-family:var(--font-serif);font-size:14px;line-height:1.55;color:var(--chocolade)}
 .accepted-fact-meta{font-size:11px;color:var(--warm-bruin);margin-top:4px}
-.accepted-fact-hint{font-size:11px;color:var(--warm-bruin);margin-top:3px;line-height:1.45;font-weight:500;opacity:.9}
+.accepted-fact-hint{font-size:12px;color:var(--self-donker);margin-top:4px;line-height:1.45;font-weight:600}
+.os-aandacht-ss-link{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--self-licht) 42%,#fff);border:1px solid color-mix(in srgb,var(--self-medium) 35%,#E9DEDA)}
+.os-aandacht-ss-link a{color:var(--self-donker);font-weight:700;text-decoration:none}
+.os-aandacht-ss-link a:hover{text-decoration:underline}
 .auto-fact-tag{
   display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;
   font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
@@ -2269,6 +2272,13 @@ async function loadOwnBrainTables(){
     var growthRes=await client.from('own_growth_events').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(400);
     if(growthRes&&Array.isArray(growthRes.data))ownGrowthEvents=growthRes.data;
   }catch(_e){}
+  try{renderAandachtspuntenHistoryList();}catch(_ra){}
+}
+function ownAandachtspuntStatusNorm(status){
+  return String(status||'').trim().toLowerCase();
+}
+function isBevestigdOwnAandachtspunt(row){
+  return !!(row&&ownAandachtspuntStatusNorm(row.status)==='bevestigd');
 }
 
 async function refreshOwnPhotoSlotPreviews(){
@@ -3150,7 +3160,9 @@ async function hydrateCheckinAnswersForEvidenceLists(evidenceLists){
   var ids=[];
   (evidenceLists||[]).forEach(function(ev){
     parseAandachtspuntEvidence(ev).forEach(function(it){
-      var id=String(it&&it.checkin_id||'').trim();
+      if(it&&String(it.message_id||'').trim())return;
+      if(String(it&&it.answer_label||it&&it.answer||'').trim())return;
+      var id=String(it&&it.checkin_id||'').trim().toLowerCase();
       if(id&&ids.indexOf(id)<0&&!_ownCheckinAnswerCache[id])ids.push(id);
     });
   });
@@ -3160,13 +3172,69 @@ async function hydrateCheckinAnswersForEvidenceLists(evidenceLists){
   var uid=await ownReviewUidAsync(client);
   if(!uid)return;
   try{
-    var res=await client.from('selfsense_checkins').select('id,answer').eq('user_id',uid).in('id',ids);
+    var res=await client.from('selfsense_checkins').select('id,answer,note').eq('user_id',uid).in('id',ids);
     if(res&&res.data){
       res.data.forEach(function(row){
-        if(row&&row.id)_ownCheckinAnswerCache[String(row.id)]=String(row.answer||'').trim();
+        if(row&&row.id){
+          var key=String(row.id).trim().toLowerCase();
+          _ownCheckinAnswerCache[key]=String(row.answer||'').trim();
+        }
       });
     }
   }catch(e){console.warn('[own checkin answers]',e);}
+}
+async function enrichCheckinEvidenceSnapshot(evidence){
+  var items=parseAandachtspuntEvidence(evidence);
+  if(!items.length)return evidence;
+  if(items.some(function(it){return it&&String(it.message_id||'').trim();}))return evidence;
+  var ids=[];
+  items.forEach(function(it){
+    var id=String(it&&it.checkin_id||'').trim();
+    if(id&&ids.indexOf(id)<0)ids.push(id);
+  });
+  if(!ids.length)return evidence;
+  var client=initSupabase();
+  if(!client)return evidence;
+  var uid=await ownReviewUidAsync(client);
+  if(!uid)return evidence;
+  var map={};
+  try{
+    var res=await client.from('selfsense_checkins').select('id,answer,note').eq('user_id',uid).in('id',ids);
+    if(res&&res.error)console.warn('[enrich evidence snapshot]',res.error);
+    if(res&&res.data){
+      res.data.forEach(function(row){
+        if(row&&row.id){
+          var key=String(row.id).trim().toLowerCase();
+          map[key]={
+            answer:String(row.answer||'').trim(),
+            note:String(row.note||'').trim()||null
+          };
+        }
+      });
+    }
+  }catch(e){console.warn('[enrich evidence snapshot]',e);return evidence;}
+  return items.map(function(it){
+    if(!it||typeof it!=='object')return it;
+    var cid=String(it.checkin_id||'').trim().toLowerCase();
+    var row=cid?map[cid]:null;
+    if(!row)return it;
+    var answer=row.answer||String(it.answer||'').trim();
+    return Object.assign({},it,{
+      answer:answer,
+      note:row.note!=null?row.note:(it.note!=null?it.note:null),
+      answer_label:formatCheckinAnswerLabelOs(answer)
+    });
+  });
+}
+function ownCheckinEvidenceLabel(it){
+  var inlineLbl=String(it&&it.answer_label||'').trim();
+  if(inlineLbl)return inlineLbl;
+  var inlineAns=String(it&&it.answer||'').trim();
+  if(inlineAns)return formatCheckinAnswerLabelOs(inlineAns);
+  var note=String(it&&it.note||'').trim();
+  if(note)return note.length>48?note.slice(0,48)+'…':note;
+  var cid=String(it&&it.checkin_id||'').trim().toLowerCase();
+  return formatCheckinAnswerLabelOs(cid?_ownCheckinAnswerCache[cid]:'');
 }
 function parseAandachtspuntEvidence(ev){
   if(!ev)return[];
@@ -3182,7 +3250,7 @@ function parseAandachtspuntEvidence(ev){
 function formatAandachtspuntEvidenceHtml(evidence){
   var items=parseAandachtspuntEvidence(evidence);
   if(!items.length)return'<div class="subtle">Geen bewijs gekoppeld.</div>';
-  var isMsgEvidence=items.length>0&&items[0]&&items[0].message_id;
+  var isMsgEvidence=items.some(function(it){return it&&String(it.message_id||'').trim();});
   if(isMsgEvidence){
     var lis=items.map(function(it){
       var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
@@ -3194,8 +3262,7 @@ function formatAandachtspuntEvidenceHtml(evidence){
   }
   var lis=items.map(function(it){
     var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
-    var cid=String(it&&it.checkin_id||'').trim();
-    var ansLbl=formatCheckinAnswerLabelOs(cid?_ownCheckinAnswerCache[cid]:'');
+    var ansLbl=ownCheckinEvidenceLabel(it);
     var tail=ansLbl?escHTML(ansLbl):'check-in';
     return '<li>'+(when?escHTML(when)+', ':'')+tail+'</li>';
   }).join('');
@@ -3203,7 +3270,9 @@ function formatAandachtspuntEvidenceHtml(evidence){
 }
 function getAandachtspuntenHistory(){
   return (ownAandachtspunten||[]).filter(function(a){
-    return a&&(a.status==='bevestigd'||a.status==='verworpen');
+    if(!a)return false;
+    var st=ownAandachtspuntStatusNorm(a.status);
+    return st==='bevestigd'||st==='verworpen';
   });
 }
 function renderAandachtspuntenHistoryList(){
@@ -3219,21 +3288,28 @@ function renderAandachtspuntenHistoryList(){
     return;
   }
   el.style.display='';
-  var bevestigdN=list.filter(function(a){return a&&a.status==='bevestigd';}).length;
+  var bevestigdN=list.filter(isBevestigdOwnAandachtspunt).length;
+  var wasOpen=false;
+  try{
+    var prev=el.querySelector('details.accepted-facts-collapsible');
+    if(prev&&prev.open)wasOpen=true;
+  }catch(_e){}
   var ssLink=bevestigdN>0
-    ?'<p class="subtle" style="margin:0 0 10px"><a href="selfsense.html?screen=waarIkAanWerk" style="color:var(--self-donker);font-weight:600;text-decoration:none">Werk aan je aandachtspunten in SelfSense →</a></p>'
+    ?'<div class="os-aandacht-ss-link"><a href="selfsense.html?screen=waarIkAanWerk&amp;list=1">Werk aan je aandachtspunten in SelfSense →</a></div>'
     :'';
-  el.innerHTML='<details class="cat-mini accepted-facts-collapsible"><summary>Jouw aandachtspunten ('+list.length+')</summary><div class="cat-mini-body">'
+  el.innerHTML=ssLink
+    +'<details class="cat-mini accepted-facts-collapsible"'+(wasOpen?' open':'')+'>'
+    +'<summary>Jouw aandachtspunten ('+list.length+')</summary><div class="cat-mini-body">'
     +'<p class="subtle" style="margin:0 0 8px">Bevestigde of verworpen punten. Wis wat je niet meer wilt bewaren.</p>'
-    +ssLink
     +'<div class="accepted-facts-list">'+list.map(function(a){
       var id=ownAandachtspuntIdStr(a.id);
       var sid=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      var st=a.status==='bevestigd'?'Bevestigd':'Verworpen';
-      return '<div class="accepted-fact-row">'
+      var bevestigd=isBevestigdOwnAandachtspunt(a);
+      var st=bevestigd?'Bevestigd':'Verworpen';
+      return '<div class="accepted-fact-row'+(bevestigd?' accepted-fact-row--bevestigd':'')+'">'
         +'<div class="accepted-fact-body">'
         +'<div class="accepted-fact-text">'+escHTML(a.soft_name||'')+'</div>'
-        +(a.status==='bevestigd'?'<div class="accepted-fact-hint">Open aandachtspunt voor advies en opvolging</div>':'')
+        +(bevestigd?'<div class="accepted-fact-hint">Open aandachtspunt voor advies en opvolging</div>':'')
         +'<div class="accepted-fact-meta">'+escHTML(st)+(a.source_app?(' · '+escHTML(a.source_app)):'')+'</div>'
         +'</div>'
         +'<button class="btn-mini-delete" type="button" onclick="deleteOwnAandachtspunt(\''+sid+'\')" title="Aandachtspunt wissen" aria-label="Wissen">×</button>'
@@ -3474,10 +3550,12 @@ async function acceptAandachtspunt(id){
   try{
     var tips=await generateAandachtspuntTipsAdvice(row);
     var nowIso=new Date().toISOString();
+    var enrichedEvidence=await enrichCheckinEvidenceSnapshot(row.evidence);
     var updated=await updateOwnAandachtspuntRow(id,{
       status:'bevestigd',
       tips_advice:tips,
-      confirmed_at:nowIso
+      confirmed_at:nowIso,
+      evidence:enrichedEvidence
     });
     if(!updated){
       flashOwnsenseMessage('Kon aandachtspunt niet bevestigen. Probeer opnieuw.',true);

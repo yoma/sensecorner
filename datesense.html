@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="04-06-2026 21:18">
+<meta name="ds-build" content="05-06-2026 15:11">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -7481,6 +7481,17 @@ function buildCoachTasks(){
   if(ownMissingProfile){
     tasks.push({id:'check-own-profile',type:'a',prio:'high',msg:'Je OWN profiel is nog niet volledig. Werk dit af voor scherper advies.',link:'Open OWN Sense om je profiel aan te vullen →',action:"openOwnSenseEntryPoint()"});
   }
+  if(isDailyRecoRequestAvailable()){
+    tasks.push({
+      id:'actie-daily-reco-'+senseiLocalDayKey(),
+      type:'a',
+      prio:'medium',
+      msg:'Er staat een <strong>nieuwe dag-aanbeveling</strong> klaar. Ga naar Home en tik op Vernieuw tip.',
+      openMsg:'Nog openstaand: je dag-aanbeveling voor vandaag wacht nog.',
+      link:'Naar aanbeveling →',
+      action:"goScreen('home');setTimeout(function(){try{var m=document.getElementById('homeRecoMount');if(m)m.scrollIntoView({behavior:'smooth',block:'center'});}catch(_e){}},220)"
+    });
+  }
   return tasks;
 }
 function prioWeight(p){return p==='high'?3:(p==='medium'?2:1);}
@@ -9815,9 +9826,19 @@ function renderHomeRecoCard(){
   }else{
     body='<div style="font-size:13px;color:#6b7280;line-height:1.5">Je dagtip wordt automatisch voorbereid. Even geduld of tik op vernieuwen.</div>';
   }
-  var recoBadge=hasTip?(cache.sparse===false?'Op maat':'Algemeen'):'Algemeen';
+  var recoBadge;
+  if(_dailyRecoHomeFetching){
+    recoBadge='Laden…';
+  }else if(isDailyRecoRequestAvailable()){
+    recoBadge='Nieuw klaar';
+  }else if(hasTip){
+    recoBadge=(cache.sparse===false?'Op maat':'Algemeen');
+  }else{
+    recoBadge='Algemeen';
+  }
   return '<div class="reco-card">'
     +'<div class="reco-head"><div class="reco-title">Aanbeveling van vandaag</div><div class="reco-state">'+recoBadge+'</div></div>'
+    +renderDailyRecoAvailabilityNote()
     +'<div class="reco-body">'+body+'</div>'
     +'<div class="reco-actions">'
     +'<button type="button" class="coach-save-other" style="font-size:12px;padding:7px 10px" onclick="void refreshHomeDailyRecoTipManual()">Vernieuw tip</button>'
@@ -12311,6 +12332,26 @@ function senseiLocalDayKey(isoOrDate){
 function hasDailyRecoExpired(cacheObj){
   if(!cacheObj||!cacheObj.ts)return true;
   return senseiLocalDayKey(cacheObj.ts)!==senseiLocalDayKey();
+}
+function hasDailyRecoTipToday(){
+  var cache=getDailyRecoCache();
+  return !!(cache&&String(cache.text||'').trim()&&!hasDailyRecoExpired(cache));
+}
+function isDailyRecoRequestAvailable(){
+  if(!getRecoEnabledCategories(getRecoPrefs()).length)return false;
+  if(_dailyRecoHomeFetching)return false;
+  return !hasDailyRecoTipToday();
+}
+function renderDailyRecoAvailabilityNote(){
+  if(_dailyRecoHomeFetching)return'';
+  if(!getRecoEnabledCategories(getRecoPrefs()).length)return'';
+  if(isDailyRecoRequestAvailable()){
+    return '<div style="font-size:12px;color:#0A5D9E;background:#EEF7FF;border:1px solid #CFE7FF;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Er staat een nieuwe aanbeveling klaar. Tik op <strong>Vernieuw tip</strong> om die op te halen.</div>';
+  }
+  if(hasDailyRecoTipToday()){
+    return '<div style="font-size:12px;color:#5f6b67;background:#F7FAF8;border:1px solid #D7EBDD;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45">Je hebt vandaag al een aanbeveling. Morgen staat er weer een nieuwe klaar. Wil je tussendoor vernieuwen? Dat kan via <strong>Vernieuw tip</strong>.</div>';
+  }
+  return'';
 }
 function paintHomeRecoCard(){
   var mount=document.getElementById('homeRecoMount');

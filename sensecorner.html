@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="05-06-2026 12:25">
+<meta name="sc-build" content="05-06-2026 15:14">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -2741,6 +2741,44 @@ a.app-card{color:inherit;text-decoration:none}
     });
     return focusFilled;
   }
+  function scScopedStorageGet(base,user,fallback){
+    var uid=String(user&&(user.id||user.email)||'').trim()||'guest';
+    var raw=localStorage.getItem(base+'::'+uid);
+    return raw==null?(fallback==null?'':fallback):raw;
+  }
+  function scLocalDayKey(isoOrDate){
+    var dt=isoOrDate?(typeof isoOrDate==='string'?new Date(isoOrDate):isoOrDate):new Date();
+    if(!dt||!isFinite(dt.getTime()))return '';
+    var y=dt.getFullYear(),mo=dt.getMonth()+1,da=dt.getDate();
+    return y+'-'+(mo<10?'0':'')+mo+'-'+(da<10?'0':'')+da;
+  }
+  function scHasDailyRecoExpired(cacheObj){
+    if(!cacheObj||!cacheObj.ts)return true;
+    return scLocalDayKey(cacheObj.ts)!==scLocalDayKey();
+  }
+  function scHasDailyRecoTipToday(user,dailyKey){
+    try{
+      var raw=scScopedStorageGet(dailyKey,user,'')||'';
+      if(!raw)return false;
+      var cache=JSON.parse(raw)||{};
+      return !!(cache&&String(cache.text||'').trim()&&!scHasDailyRecoExpired(cache));
+    }catch(_e){return false;}
+  }
+  function scRecoCategoriesEnabled(user,prefsKey){
+    try{
+      var raw=scScopedStorageGet(prefsKey,user,'')||'';
+      if(!raw)return true;
+      var p=JSON.parse(raw)||{};
+      var src=(p.categories&&typeof p.categories==='object')?p.categories:{};
+      var keys=Object.keys(src);
+      if(!keys.length)return true;
+      return keys.some(function(k){return src[k]!==false;});
+    }catch(_e){return true;}
+  }
+  function scIsDailyRecoRequestAvailable(user,dailyKey,prefsKey){
+    if(!user||!scRecoCategoriesEnabled(user,prefsKey))return false;
+    return !scHasDailyRecoTipToday(user,dailyKey);
+  }
   function scBuildDateSenseCoachTasks(pack,user){
     var pdata=pack.pdata||{};
     var profiles=pack.profiles||[];
@@ -2819,9 +2857,12 @@ a.app-card{color:inherit;text-decoration:none}
     if(!scProfileMetaComplete(pdata,'OWN Sense')){
       tasks.push({id:'check-own-profile'});
     }
+    if(user&&scIsDailyRecoRequestAvailable(user,'ds_reco_daily_tip_v2','ds_reco_prefs_v1')){
+      tasks.push({id:'actie-daily-reco-'+scLocalDayKey()});
+    }
     return tasks;
   }
-  function scBuildFamilySenseCoachTasks(pack){
+  function scBuildFamilySenseCoachTasks(pack,user){
     var pdata=pack.pdata||{};
     var profiles=pack.profiles||[];
     var tasks=[];
@@ -2870,9 +2911,12 @@ a.app-card{color:inherit;text-decoration:none}
     if(!scProfileMetaComplete(pdata,'OWN Sense')){
       tasks.push({id:'check-own-profile'});
     }
+    if(user&&scIsDailyRecoRequestAvailable(user,'fs_reco_daily_tip_v2','fs_reco_prefs_v1')){
+      tasks.push({id:'actie-daily-reco-'+scLocalDayKey()});
+    }
     return tasks;
   }
-  function scBuildFriendSenseCoachTasks(pack){
+  function scBuildFriendSenseCoachTasks(pack,user){
     var pdata=pack.pdata||{};
     var profiles=pack.profiles||[];
     var tasks=[];
@@ -2921,6 +2965,9 @@ a.app-card{color:inherit;text-decoration:none}
     if(!scProfileMetaComplete(pdata,'OWN Sense')){
       tasks.push({id:'check-own-profile'});
     }
+    if(user&&scIsDailyRecoRequestAvailable(user,'fr_reco_daily_tip_v2','fr_reco_prefs_v1')){
+      tasks.push({id:'actie-daily-reco-'+scLocalDayKey()});
+    }
     return tasks;
   }
   function scCoachOpenCountAfterState(taskList,stateRaw){
@@ -2938,7 +2985,7 @@ a.app-card{color:inherit;text-decoration:none}
     return 'sc_coach_open_'+app+'::'+uid;
   }
   function scSelfSenseCardLink(count){
-    return count>0?'selfsense.html?screen=waarIkAanWerk':'selfsense.html';
+    return count>0?'selfsense.html?screen=waarIkAanWerk&list=1':'selfsense.html';
   }
   function scOwnReviewLink(){
     return 'ownsense.html?openReview=1';
@@ -2972,22 +3019,28 @@ a.app-card{color:inherit;text-decoration:none}
   function scApplySelfSenseCardHint(user,ssCount){
     var el=document.getElementById('scCoachHintSelfsense');
     var card=document.querySelector('.app-card.self-card[data-app-key="ss"]');
+    var recoAvail=user&&scIsDailyRecoRequestAvailable(user,'ss_reco_daily_tip_v2','ss_reco_prefs_v1');
     if(card){
-      var link=scSelfSenseCardLink(ssCount);
+      var link=ssCount>0?scSelfSenseCardLink(ssCount):(recoAvail?'selfsense.html?screen=home':'selfsense.html');
       card.setAttribute('data-app-link',link);
       card.setAttribute('href',link);
     }
     if(!el)return;
-    if(!user||!ssCount){
+    if(!user||(!ssCount&&!recoAvail)){
       el.textContent='';
       el.hidden=true;
       el.removeAttribute('aria-label');
       return;
     }
     el.hidden=false;
-    var tail=ssCount===1?'actief aandachtspunt':'actieve aandachtspunten';
-    el.innerHTML='<span class="app-coach-hint__n">'+String(ssCount)+'</span> '+tail+' in SelfSense';
-    el.setAttribute('aria-label',String(ssCount)+' '+tail+' in SelfSense');
+    if(ssCount){
+      var tail=ssCount===1?'actief aandachtspunt':'actieve aandachtspunten';
+      el.innerHTML='<span class="app-coach-hint__n">'+String(ssCount)+'</span> '+tail+' in SelfSense';
+      el.setAttribute('aria-label',String(ssCount)+' '+tail+' in SelfSense');
+    }else{
+      el.textContent='Nieuwe aanbeveling klaar in SelfSense';
+      el.setAttribute('aria-label','Nieuwe aanbeveling klaar in SelfSense');
+    }
   }
   function scApplyOwnHeroHint(user,ownCount){
     var el=document.getElementById('scCoachHintOwnsense');
@@ -3084,8 +3137,8 @@ a.app-card{color:inherit;text-decoration:none}
     try{
       var coachRaw=scReadCoachState(user);
       var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(_scLastCoachPack,user),coachRaw);
-      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(_scLastCoachPack),coachRaw);
-      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(_scLastCoachPack),coachRaw);
+      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(_scLastCoachPack,user),coachRaw);
+      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(_scLastCoachPack,user),coachRaw);
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
       scReorderAppGrid(user,_scLastCoachPack);
@@ -3106,8 +3159,8 @@ a.app-card{color:inherit;text-decoration:none}
       _scLastCoachPack=pack;
       var coachRaw=scReadCoachState(user);
       var ds=scCoachOpenCountAfterState(scBuildDateSenseCoachTasks(pack,user),coachRaw);
-      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(pack),coachRaw);
-      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(pack),coachRaw);
+      var fs=scCoachOpenCountAfterState(scBuildFamilySenseCoachTasks(pack,user),coachRaw);
+      var fr=scCoachOpenCountAfterState(scBuildFriendSenseCoachTasks(pack,user),coachRaw);
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
       scReorderAppGrid(user,pack);
