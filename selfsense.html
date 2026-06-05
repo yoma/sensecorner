@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="05-06-2026 18:12">
+<meta name="fs-build" content="05-06-2026 18:21">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1304,6 +1304,9 @@ button.ss-waar-ik-complete-btn svg{flex:0 0 auto}
 .ss-waar-ik-row--completed{opacity:.78}
 .ss-waar-ik-row-meta{font-size:11px;color:var(--warm-bruin);margin-top:2px}
 .ss-waar-ik-tips-card{padding:10px 12px;border-radius:10px;background:#fff;border:1px solid color-mix(in srgb,var(--self-medium) 22%,#e4e6eb);font-size:13px;color:var(--self-donker);line-height:1.55;max-width:42em}
+.ss-waar-ik-tips-refresh{display:block;margin:8px 0 0;padding:0;border:none;background:transparent;color:var(--self-medium);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.ss-waar-ik-tips-refresh:hover{color:var(--self-donker)}
+.ss-waar-ik-tips-refresh:disabled{opacity:.55;cursor:default;text-decoration:none}
 .ss-waar-ik-sec--movement{
   padding:10px 12px;border-radius:11px;
   background:color-mix(in srgb,var(--self-licht) 22%,#fff);
@@ -3251,6 +3254,7 @@ async function saveEigenAandachtspunt(){
       var mc=document.getElementById('mainContent');
       if(mc)void renderWaarIkAanWerkInto(mc);
     }
+    void ensureAandachtspuntTipsAdvice(res.data);
     try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
   }catch(e){
     console.warn('[eigen aandachtspunt]',e);
@@ -3325,16 +3329,109 @@ function renderWaarIkAanWerkListHtml(rows){
   body+='</div>';
   return body;
 }
+var _aandachtTipsGenBusy={};
+async function generateAandachtspuntTipsAdvice(row){
+  var name=String(row&&row.soft_name||'').trim();
+  if(!name)return'';
+  var isEigen=isEigenAandachtspunt(row);
+  var fallback='Neem dit bewust mee vandaag: '+name+'. Kies één klein moment om er iets anders mee te doen dan je gewoonte.';
+  try{
+    var coachCtx=typeof buildCoachContext==='function'?buildCoachContext():'';
+    var sys='Je bent SelfSensei. Schrijf precies één concreet, warm advies (max 4 zinnen) om te werken aan een bevestigd aandachtspunt. Geen scores, geen percentages, geen alarmtoon, geen schuld. Nederlands. Gebruik nooit Unicode U+2014 (em dash). Geef alleen de advieszin(nen), geen titel.';
+    var usrParts=[];
+    if(coachCtx)usrParts.push('Achtergrond:\n'+coachCtx);
+    usrParts.push('Aandachtspunt: '+name);
+    if(isEigen){
+      usrParts.push('Dit aandachtspunt voegde de gebruiker zelf toe (eigen reflectie). Sluit aan bij wat je over hen weet.');
+    }else{
+      var evLines=parseAandachtspuntEvidence(row&&row.evidence).map(function(it){
+        return fmtAandachtspuntEvidenceDate(it&&it.created_at)||'';
+      }).filter(Boolean).join(', ');
+      if(evLines)usrParts.push('Check-in momenten: '+evLines);
+    }
+    usrParts.push('Schrijf praktisch advies dat de gebruiker vandaag kan proberen.');
+    var tip=await callAPI(sys,[{role:'user',content:usrParts.join('\n\n')}],420,45000,null,{disable_web_search:true});
+    tip=String(tip||'').trim();
+    if(tip)return tip;
+  }catch(e){
+    console.warn('[generateAandachtspuntTipsAdvice]',e);
+  }
+  return fallback;
+}
+async function ensureAandachtspuntTipsAdvice(row,opts){
+  opts=opts||{};
+  if(!row||!row.id||!sb||!S.user||!S.user.id)return row;
+  var id=aandachtspuntIdStr(row.id);
+  var tips=String(row.tips_advice||'').trim();
+  if(tips&&!opts.force)return row;
+  if(_aandachtTipsGenBusy[id]){
+    try{return await _aandachtTipsGenBusy[id];}catch(_w){return row;}
+  }
+  var job=(async function(){
+    try{
+      var newTips=await generateAandachtspuntTipsAdvice(row);
+      return await updateAandachtspuntRowLocal(id,{tips_advice:newTips});
+    }catch(e){
+      console.warn('[ensureAandachtspuntTipsAdvice]',id,e);
+      var fb='Neem dit bewust mee vandaag: '+String(row.soft_name||'').trim()+'. Kies één klein moment om er iets anders mee te doen dan je gewoonte.';
+      try{return await updateAandachtspuntRowLocal(id,{tips_advice:fb});}catch(_e2){
+        return Object.assign({},row,{tips_advice:fb});
+      }
+    }finally{
+      delete _aandachtTipsGenBusy[id];
+    }
+  })();
+  _aandachtTipsGenBusy[id]=job;
+  var updated=await job;
+  try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_r){}
+  return updated||row;
+}
+async function refreshAandachtspuntTipsInDetail(row,forceRefresh){
+  if(!row)return;
+  var id=aandachtspuntIdStr(row.id);
+  if(aandachtspuntIdStr(S.viewAandachtspuntId)!==id)return;
+  var updated=await ensureAandachtspuntTipsAdvice(row,{force:!!forceRefresh});
+  if(aandachtspuntIdStr(S.viewAandachtspuntId)!==id)return;
+  var mc=document.getElementById('mainContent');
+  if(!mc)return;
+  var checkinMap=await fetchCheckinRowsByIds(collectEvidenceCheckinIds(updated.evidence));
+  mc.innerHTML=renderWaarIkAanWerkDetailHtml(updated,checkinMap);
+}
+async function refreshEigenAandachtspuntTips(id){
+  id=aandachtspuntIdStr(id);
+  var row=findBevestigdAandachtspunt(id);
+  if(!row||!isEigenAandachtspunt(row))return;
+  var btn=document.getElementById('ssAandachtTipsRefreshBtn');
+  if(btn&&btn.disabled)return;
+  if(btn){btn.disabled=true;btn.textContent='Bezig…';}
+  var tipsEl=document.getElementById('ssAandachtTipsCard');
+  if(tipsEl){
+    tipsEl.textContent='Advies wordt voorbereid…';
+    tipsEl.style.fontStyle='italic';
+    tipsEl.style.color='var(--warm-bruin)';
+  }
+  try{
+    await refreshAandachtspuntTipsInDetail(row,true);
+  }catch(e){
+    console.warn('[refreshEigenAandachtspuntTips]',e);
+    toast('Kon advies niet vernieuwen. Probeer later opnieuw.');
+    if(btn){btn.disabled=false;btn.textContent='Vernieuw advies';}
+  }
+}
 function renderWaarIkAanWerkDetailHtml(row,checkinMap){
   var id=aandachtspuntIdStr(row.id);
   var isDone=isAandachtspuntCompleted(row);
   var isEigen=isEigenAandachtspunt(row);
   var tips=String(row.tips_advice||'').trim();
-  var tipsHtml=tips
-    ?'<div class="ss-waar-ik-tips-card">'+escHTML(tips)+'</div>'
-    :(isEigen
-      ?'<div class="ss-waar-ik-tips-card" style="color:var(--warm-bruin)">Eigen reflectie. Werk er op jouw manier aan, zonder Sensei-advies.</div>'
-      :'<div class="ss-waar-ik-tips-card" style="color:var(--warm-bruin);font-style:italic">Advies wordt nog voorbereid.</div>');
+  var tipsHtml;
+  if(tips){
+    tipsHtml='<div class="ss-waar-ik-tips-card" id="ssAandachtTipsCard">'+escHTML(tips)+'</div>';
+    if(isEigen){
+      tipsHtml+='<button type="button" class="ss-waar-ik-tips-refresh" id="ssAandachtTipsRefreshBtn" onclick="refreshEigenAandachtspuntTips(\''+escJsStr(id)+'\')">Vernieuw advies</button>';
+    }
+  }else{
+    tipsHtml='<div class="ss-waar-ik-tips-card" id="ssAandachtTipsCard" style="color:var(--warm-bruin);font-style:italic">Advies wordt voorbereid…</div>';
+  }
   var movementList=formatAandachtspuntMovementListHtml(row.movement,!!S.showWaarIkMovementAll);
   var movementListHtml='<div class="ss-waar-ik-movement-list" id="ssAandachtMovementList">'+movementList+'</div>';
   var completedBanner=isDone?('<div class="ss-waar-ik-completed-banner" id="ssAandachtCompletedBanner">In balans sinds '+escHTML(fmtAandachtspuntCompletedDate(row.completed_at)||'onbekende datum')+'. Je kan dit weer actief maken als het thema terugkomt.</div>'):'';
@@ -3385,6 +3482,9 @@ async function renderWaarIkAanWerkInto(el){
     if(pt2)pt2.textContent=String(row.soft_name||'Mijn aandachtspunten').trim()||'Mijn aandachtspunten';
     var checkinMap=await fetchCheckinRowsByIds(collectEvidenceCheckinIds(row.evidence));
     el.innerHTML=renderWaarIkAanWerkDetailHtml(row,checkinMap);
+    if(!String(row.tips_advice||'').trim()){
+      void refreshAandachtspuntTipsInDetail(row,false);
+    }
     return;
   }
   el.innerHTML=renderWaarIkAanWerkListHtml(rows);
