@@ -133,6 +133,8 @@
     setting_up: "Instellen"
   };
 
+  var MIRROR_INTAKE_ACTIVATE_MSG = "Graag even deze vragen invullen om je app te activeren?";
+
   function getMirrorQuestions(mirrorId, meta) {
     meta = meta || MIRROR_META[mirrorId];
     if (!meta) return [];
@@ -616,6 +618,9 @@
         "/" +
         questions.length +
         "</div>" +
+        (step === 0
+          ? '<p class="sc-mirror-intro">' + escapeHtml(MIRROR_INTAKE_ACTIVATE_MSG) + "</p>"
+          : "") +
         '<h2 id="scMirrorIntakeTitle" class="sc-mirror-title">' +
         escapeHtml((q && q.q) || "") +
         "</h2>" +
@@ -752,6 +757,7 @@
       ".sc-mirror-overlay{position:fixed;inset:0;z-index:1100;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px}" +
       ".sc-mirror-modal{width:min(440px,100%);max-height:90vh;overflow:auto;background:#F5F0E8;border-radius:16px;border:1px solid rgba(61,47,31,.14);padding:18px 16px 16px;box-shadow:0 20px 48px rgba(74,58,42,.2)}" +
       ".sc-mirror-kicker{font-size:11px;font-weight:700;color:rgba(61,47,31,.55);margin-bottom:8px}" +
+      ".sc-mirror-intro{font-size:14px;color:rgba(61,47,31,.75);line-height:1.5;margin:0 0 12px}" +
       ".sc-mirror-title{font-family:Lora,serif;font-size:20px;color:#2A1810;margin:0 0 10px;line-height:1.35}" +
       ".sc-mirror-hint{font-size:13px;color:rgba(61,47,31,.65);line-height:1.55;margin:0 0 14px}" +
       ".sc-mirror-input{width:100%;border:1px solid rgba(61,47,31,.18);border-radius:12px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;min-height:88px}" +
