@@ -3164,7 +3164,17 @@ function parseAandachtspuntEvidence(ev){
 }
 function formatAandachtspuntEvidenceHtml(evidence){
   var items=parseAandachtspuntEvidence(evidence);
-  if(!items.length)return'<div class="subtle">Geen check-in momenten gekoppeld.</div>';
+  if(!items.length)return'<div class="subtle">Geen bewijs gekoppeld.</div>';
+  var isMsgEvidence=items.length>0&&items[0]&&items[0].message_id;
+  if(isMsgEvidence){
+    var lis=items.map(function(it){
+      var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
+      var app=escHTML(String(it&&it.app||'').trim()||'app');
+      var excerpt=escHTML(String(it&&it.excerpt||'').trim());
+      return '<li>'+(when?escHTML(when)+', ':'')+app+(excerpt?' – “'+excerpt+'”':'')+'</li>';
+    }).join('');
+    return '<div class="review-aandacht-evidence"><div style="font-size:11px;font-weight:700;color:var(--self-donker)">Bewijs (berichten)</div><ul>'+lis+'</ul></div>';
+  }
   var lis=items.map(function(it){
     var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
     var cid=String(it&&it.checkin_id||'').trim();
@@ -3305,7 +3315,7 @@ function renderReviewAandachtspuntenHtml(){
   list.sort(function(a,b){
     return String(b.created_at||'').localeCompare(String(a.created_at||''));
   });
-  return '<div class="review-section-label">Aandachtspunten (SelfSense)</div>'
+  return '<div class="review-section-label">Aandachtspunten</div>'
     +'<p class="review-aandacht-note">Alleen individueel bevestigen. Geen bulk-accept en geen auto-accept na tien dagen.</p>'
     +list.map(function(a){
       return '<div class="review-aandachtspunt-card" data-review-aandacht-id="'+escHTML(a.id)+'">'

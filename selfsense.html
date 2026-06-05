@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="05-06-2026 09:30">
+<meta name="fs-build" content="05-06-2026 10:46">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -2284,6 +2284,45 @@ function scheduleDailyCheckinPrompt(){
 function ssDetectSessionKey(uid){
   return SS_DETECT_SESSION_PREFIX+String(uid||'');
 }
+var SS_CROSS_DETECT_KEY='ss_cross_detect_v1:';
+function shouldRunCrossAppDetect(uid){
+  try{
+    var raw=sessionStorage.getItem(SS_CROSS_DETECT_KEY+String(uid||''));
+    if(!raw)return true;
+    var ts=parseInt(raw,10);
+    if(!ts||isNaN(ts))return true;
+    return (Date.now()-ts)>48*60*60*1000;
+  }catch(_e){return true;}
+}
+function markCrossAppDetectRan(uid){
+  try{sessionStorage.setItem(SS_CROSS_DETECT_KEY+String(uid||''),String(Date.now()));}catch(_e){}
+}
+async function runCrossAppPatternDetect(){
+  if(!S.user||!window.SURL)return;
+  var uid=String(S.user.id||'');
+  if(!uid||!shouldRunCrossAppDetect(uid))return;
+  try{
+    var token='';
+    try{
+      var sess=await sb.auth.getSession();
+      token=sess&&sess.data&&sess.data.session&&sess.data.session.access_token?String(sess.data.session.access_token):'';
+    }catch(_e){}
+    if(!token)return;
+    var url=window.SURL.replace(/\/$/,'')+'/functions/v1/cross-app-pattern-detect';
+    var res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({})});
+    var raw=await res.text();
+    var data=null;
+    try{data=JSON.parse(raw);}catch(_pe){}
+    markCrossAppDetectRan(uid);
+    if(data&&(Number(data.inserted)||0)>0){
+      try{void refreshHomeAandachtspuntenBanner();}catch(_b){}
+      try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
+      try{toast('Sensei heeft '+Number(data.inserted)+' gedragspatroon'+(Number(data.inserted)===1?'':'en')+' herkend. Bekijk ze in OWNSense.');}catch(_t){}
+    }
+  }catch(_e){
+    console.warn('[cross-app detect]',_e);
+  }
+}
 function shouldRunBootstrapAandachtDetect(uid){
   try{
     var raw=sessionStorage.getItem(ssDetectSessionKey(uid));
@@ -2363,6 +2402,8 @@ async function scheduleBootstrapAandachtDetect(){
   }catch(_e){
     console.warn('[bootstrap aandacht detect]',_e);
   }
+  // Cross-app detectie met vertraging (niet-blokkerend, max 1x per 48u)
+  setTimeout(function(){void runCrossAppPatternDetect();},8000);
 }
 async function saveCheckin(answer){
   var ans=normalizeSelfsenseCheckinAnswer(answer);
