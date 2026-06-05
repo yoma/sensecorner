@@ -3437,7 +3437,7 @@ async function updateOwnAandachtspuntRow(id,patch){
 }
 async function acceptAandachtspunt(id){
   id=ownAandachtspuntIdStr(id);
-  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy||window.__ownsenseReviewAandachtBusy)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewAandachtBusy)return;
   var row=findOwnAandachtspuntById(id);
   if(!row||row.status!=='voorgesteld'){
     flashOwnsenseMessage('Aandachtspunt niet gevonden. Vernieuw het venster.',true);
@@ -3472,7 +3472,7 @@ async function acceptAandachtspunt(id){
 }
 async function rejectAandachtspunt(id){
   id=ownAandachtspuntIdStr(id);
-  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy||window.__ownsenseReviewAandachtBusy)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewAandachtBusy)return;
   window.__ownsenseReviewAandachtBusy=id;
   setReviewAandachtButtonsBusy(id,true,'reject');
   try{
@@ -3496,7 +3496,7 @@ async function rejectAandachtspunt(id){
 }
 function editAandachtspunt(id){
   id=ownAandachtspuntIdStr(id);
-  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy||window.__ownsenseReviewAandachtBusy)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewAandachtBusy)return;
   var row=findOwnAandachtspuntById(id);
   if(!row||row.status!=='voorgesteld')return;
   var card=getReviewAandachtCard(id);
@@ -3517,7 +3517,7 @@ function cancelEditAandachtspunt(id){
 }
 async function saveEditAandachtspunt(id){
   id=ownAandachtspuntIdStr(id);
-  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy||window.__ownsenseReviewAandachtBusy)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewAandachtBusy)return;
   var row=findOwnAandachtspuntById(id);
   if(!row||row.status!=='voorgesteld')return;
   var card=getReviewAandachtCard(id);
@@ -4963,25 +4963,9 @@ function senseAuthLock(name,acquireTimeout,fn){
       return fn();
     });
   }
-  var maxWait=Math.min(2000,(typeof acquireTimeout==='number'&&acquireTimeout>0)?acquireTimeout:2000);
-  var ac=null,timer=null;
-  try{
-    if(typeof AbortController!=='undefined'){
-      ac=new AbortController();
-      timer=setTimeout(function(){try{ac.abort();}catch(_e){}},maxWait);
-    }
-  }catch(_e){ac=null;}
-  return navigator.locks.request(name,ac?{signal:ac.signal}:{},function(){
-    if(timer){clearTimeout(timer);timer=null;}
+  return navigator.locks.request(name,{ifAvailable:true},function(lock){
+    if(!lock){try{console.warn('[senseAuthLock] slot bezet, draait zonder slot',{lock:name});}catch(_e){}}
     return fn();
-  }).catch(function(err){
-    if(timer){clearTimeout(timer);timer=null;}
-    var nm=(err&&err.name)?String(err.name):'';
-    if(nm==='AbortError'){
-      try{console.warn('[senseAuthLock] slot niet verkregen binnen '+maxWait+'ms, draait zonder slot',{lock:name});}catch(_e){}
-      return fn();
-    }
-    throw err;
   });
 }
 function initSupabase(){
