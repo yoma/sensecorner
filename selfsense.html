@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="05-06-2026 11:52">
+<meta name="fs-build" content="05-06-2026 12:25">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
@@ -1261,6 +1261,25 @@ button.ss-waar-ik-home-card:focus-visible{outline:2px solid var(--self-medium);o
 }
 .ss-waar-ik-evidence-date{font-weight:600;color:var(--self-donker)}
 .ss-waar-ik-evidence-meta{font-size:12px;color:var(--warm-bruin);margin-top:2px}
+button.ss-waar-ik-evidence-item--btn{cursor:pointer;text-align:left;width:100%;font-family:inherit;appearance:none;-webkit-tap-highlight-color:transparent}
+button.ss-waar-ik-evidence-item--btn:hover{background:color-mix(in srgb,var(--self-licht) 38%,#fff)}
+button.ss-waar-ik-evidence-item--btn:focus-visible{outline:2px solid var(--self-medium);outline-offset:2px}
+.ss-waar-ik-evidence-preview{font-size:13px;color:var(--self-donker);margin-top:2px;line-height:1.45}
+.ss-waar-ik-evidence-note{font-size:12px;color:var(--warm-bruin);margin-top:6px;line-height:1.5;display:none;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--self-medium) 14%,#e4e6eb)}
+.ss-waar-ik-evidence-item.open .ss-waar-ik-evidence-note{display:block}
+.ss-waar-ik-evidence-hint{font-size:11px;color:var(--self-medium);margin-top:4px}
+.ss-waar-ik-movement-list{display:flex;flex-direction:column;gap:6px;margin:0 0 12px;max-width:42em}
+.ss-waar-ik-movement-entry{padding:8px 10px;border-radius:10px;background:#fff;border:1px solid color-mix(in srgb,var(--self-medium) 16%,#e4e6eb);font-size:13px;line-height:1.45}
+.ss-waar-ik-movement-date{font-weight:600;color:var(--self-donker);font-size:12px}
+.ss-waar-ik-movement-note{color:var(--warm-bruin);margin-top:2px;font-size:12px}
+.ss-waar-ik-completed-banner{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--self-medium) 12%,#fff);border:1px solid color-mix(in srgb,var(--self-medium) 28%,#e4e6eb);font-size:13px;color:var(--self-donker);margin:0 0 12px;line-height:1.45}
+.ss-waar-ik-complete-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+button.ss-waar-ik-complete-btn{width:auto;padding:10px 16px;border-radius:10px;border:1px solid color-mix(in srgb,var(--self-medium) 35%,#e4e6eb);background:#fff;color:var(--self-donker);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button.ss-waar-ik-complete-btn:hover{filter:brightness(1.02)}
+button.ss-waar-ik-complete-btn--reopen{background:color-mix(in srgb,var(--self-licht) 30%,#fff)}
+.ss-waar-ik-completed-toggle{width:100%;margin:10px 0 6px;padding:10px 12px;border-radius:10px;border:1px dashed color-mix(in srgb,var(--self-medium) 30%,#e4e6eb);background:transparent;color:var(--warm-bruin);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left}
+.ss-waar-ik-row--completed{opacity:.78}
+.ss-waar-ik-row-meta{font-size:11px;color:var(--warm-bruin);margin-top:2px}
 .ss-waar-ik-tips-card{padding:12px 14px;border-radius:12px;background:#fff;border:1px solid color-mix(in srgb,var(--self-medium) 22%,#e4e6eb);font-size:14px;color:var(--self-donker);line-height:1.6;max-width:42em}
 .ss-waar-ik-sec--movement{
   padding:14px 16px;border-radius:14px;
@@ -2533,14 +2552,19 @@ async function fetchAandachtspuntenNudgeSnapshot(){
       out.voorgesteldNewest=vRows[0].created_at||null;
       out.voorgesteldOldest=vRows[vRows.length-1].created_at||null;
     }
-    var bRes=await sb.from('own_aandachtspunten').select('id,confirmed_at,movement,updated_at')
+    var bRes=await sb.from('own_aandachtspunten').select('id,confirmed_at,movement,updated_at,completed_at')
       .eq('user_id',uid).eq('status','bevestigd').order('confirmed_at',{ascending:false,nullsFirst:false});
+    if(bRes&&bRes.error){
+      bRes=await sb.from('own_aandachtspunten').select('id,confirmed_at,movement,updated_at')
+        .eq('user_id',uid).eq('status','bevestigd').order('confirmed_at',{ascending:false,nullsFirst:false});
+    }
     if(bRes&&bRes.error){console.warn('[aandacht nudge]',bRes.error);return null;}
     var bRows=(bRes&&bRes.data)||[];
-    out.bevestigdCount=bRows.length;
-    if(bRows.length){
-      out.bevestigdNewestConfirmed=bRows[0].confirmed_at||bRows[0].updated_at||null;
-      bRows.forEach(function(r){
+    var activeRows=bRows.filter(function(r){return r&&!isAandachtspuntCompleted(r);});
+    out.bevestigdCount=activeRows.length;
+    if(activeRows.length){
+      out.bevestigdNewestConfirmed=activeRows[0].confirmed_at||activeRows[0].updated_at||null;
+      activeRows.forEach(function(r){
         parseAandachtspuntMovement(r.movement).forEach(function(m){
           var at=m&&m.at?new Date(m.at).getTime():0;
           if(at&&at>(out.bevestigdLatestMovementAt||0))out.bevestigdLatestMovementAt=at;
@@ -2721,7 +2745,7 @@ function formatCheckinAnswerLabel(answer){
   if(a==='beter')return'Beter';
   return a.charAt(0).toUpperCase()+a.slice(1);
 }
-async function fetchCheckinAnswersByIds(ids){
+async function fetchCheckinRowsByIds(ids){
   var map={};
   if(!sb||!S.user||!ids||!ids.length)return map;
   var uniq=[];
@@ -2731,31 +2755,97 @@ async function fetchCheckinAnswersByIds(ids){
   });
   if(!uniq.length)return map;
   try{
-    var res=await sb.from('selfsense_checkins').select('id,answer').eq('user_id',S.user.id).in('id',uniq);
+    var res=await sb.from('selfsense_checkins').select('id,answer,note').eq('user_id',S.user.id).in('id',uniq);
     if(res&&res.data){
       res.data.forEach(function(row){
-        if(row&&row.id)map[String(row.id)]=String(row.answer||'').trim();
+        if(row&&row.id){
+          map[String(row.id)]={
+            answer:String(row.answer||'').trim(),
+            note:String(row.note||'').trim()
+          };
+        }
       });
     }
-  }catch(e){console.warn('[checkin answers]',e);}
+  }catch(e){console.warn('[checkin rows]',e);}
   return map;
 }
-function formatAandachtspuntEvidenceLines(evidence,answerMap){
-  answerMap=answerMap||{};
+function formatAandachtspuntEvidencePreview(cid,checkinMap){
+  checkinMap=checkinMap||{};
+  var row=cid?checkinMap[cid]:null;
+  var ans=formatCheckinAnswerLabel(row&&row.answer);
+  var note=String(row&&row.note||'').trim();
+  if(ans&&note)return{label:ans,note:note,expandable:true};
+  if(ans)return{label:ans,note:'',expandable:!!note};
+  if(note)return{label:'Check-in',note:note,expandable:true};
+  return{label:'Check-in zonder vastgelegde tekst',note:'',expandable:false};
+}
+function toggleAandachtspuntEvidenceDetail(btn){
+  if(!btn)return;
+  var open=btn.classList.toggle('open');
+  btn.setAttribute('aria-expanded',open?'true':'false');
+  var note=btn.querySelector('.ss-waar-ik-evidence-note');
+  if(note)note.hidden=!open;
+}
+function formatAandachtspuntEvidenceLines(evidence,checkinMap){
+  checkinMap=checkinMap||{};
   var items=parseAandachtspuntEvidence(evidence);
   if(!items.length)return'<div class="ss-waar-ik-evidence">Geen check-in momenten gekoppeld.</div>';
   var lines=items.map(function(it){
     var when=fmtAandachtspuntEvidenceDate(it&&it.created_at);
     var cid=String(it&&it.checkin_id||'').trim();
-    var ans=cid?answerMap[cid]:'';
-    var ansLbl=formatCheckinAnswerLabel(ans);
-    var meta=ansLbl?escHTML(ansLbl):'check-in';
-    return '<div class="ss-waar-ik-evidence-item">'
+    var prev=formatAandachtspuntEvidencePreview(cid,checkinMap);
+    var noteHtml=prev.note?('<div class="ss-waar-ik-evidence-note" hidden>'+escHTML(prev.note)+'</div>'):'';
+    var hintHtml=prev.expandable?'<div class="ss-waar-ik-evidence-hint">Tik voor volledige tekst</div>':'';
+    return '<button type="button" class="ss-waar-ik-evidence-item ss-waar-ik-evidence-item--btn" onclick="toggleAandachtspuntEvidenceDetail(this)" aria-expanded="false">'
       +'<div class="ss-waar-ik-evidence-date">'+escHTML(when||'Onbekende datum')+'</div>'
-      +'<div class="ss-waar-ik-evidence-meta">'+meta+'</div>'
-      +'</div>';
+      +'<div class="ss-waar-ik-evidence-preview">'+escHTML(prev.label)+'</div>'
+      +noteHtml
+      +hintHtml
+      +'</button>';
   }).join('');
   return '<div class="ss-waar-ik-evidence"><div class="ss-waar-ik-evidence-list">'+lines+'</div></div>';
+}
+function fmtAandachtspuntMovementDate(iso){
+  if(!iso)return'';
+  var d=new Date(iso);
+  if(isNaN(d.getTime()))return'';
+  var now=new Date();
+  if(isSameLocalDate(d,now)){
+    return'Vandaag, '+d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+  }
+  return d.toLocaleDateString('nl-BE',{day:'numeric',month:'short',year:d.getFullYear()!==now.getFullYear()?'numeric':undefined});
+}
+function formatAandachtspuntMovementListHtml(movement){
+  var items=parseAandachtspuntMovement(movement).filter(function(it){
+    return it&&String(it.at||'').trim();
+  });
+  items.sort(function(a,b){
+    return new Date(b.at).getTime()-new Date(a.at).getTime();
+  });
+  if(!items.length)return'';
+  return items.map(function(it){
+    var when=fmtAandachtspuntMovementDate(it.at);
+    var note=String(it&&it.note||'Hier aan gewerkt').trim()||'Hier aan gewerkt';
+    return '<div class="ss-waar-ik-movement-entry">'
+      +'<div class="ss-waar-ik-movement-date">'+escHTML(when||'Onbekende datum')+'</div>'
+      +'<div class="ss-waar-ik-movement-note">'+escHTML(note)+'</div>'
+      +'</div>';
+  }).join('');
+}
+function isAandachtspuntCompleted(row){
+  return !!(row&&row.completed_at&&String(row.completed_at).trim());
+}
+function activeBevestigdeAandachtspunten(rows){
+  return (rows||[]).filter(function(r){return r&&!isAandachtspuntCompleted(r);});
+}
+function completedBevestigdeAandachtspunten(rows){
+  return (rows||[]).filter(function(r){return r&&isAandachtspuntCompleted(r);});
+}
+function fmtAandachtspuntCompletedDate(iso){
+  if(!iso)return'';
+  var d=new Date(iso);
+  if(isNaN(d.getTime()))return'';
+  return d.toLocaleDateString('nl-BE',{day:'numeric',month:'long',year:'numeric'});
 }
 function renderAandachtspuntMovementLine(movement){
   var items=parseAandachtspuntMovement(movement).filter(function(it){
@@ -2829,7 +2919,8 @@ async function refreshHomeWaarIkAanWerkCard(){
     return;
   }
   var rows=await fetchBevestigdeAandachtspunten();
-  var html=renderHomeWaarIkAanWerkCardHtml(rows.length);
+  var active=activeBevestigdeAandachtspunten(rows);
+  var html=renderHomeWaarIkAanWerkCardHtml(active.length);
   el.innerHTML=html;
   el.style.display=html?'block':'none';
 }
@@ -2849,12 +2940,22 @@ function openWaarIkAanWerkDetail(id){
   }
   goScreen('waarIkAanWerk');
 }
+function toggleWaarIkCompletedList(){
+  S.showWaarIkCompleted=!S.showWaarIkCompleted;
+  var mc=document.getElementById('mainContent');
+  if(mc)void renderWaarIkAanWerkInto(mc);
+}
 function renderWaarIkAanWerkListHtml(rows){
-  if(!rows.length){
+  var active=activeBevestigdeAandachtspunten(rows);
+  var completed=completedBevestigdeAandachtspunten(rows);
+  if(!active.length&&!completed.length){
     return '<div class="ss-waar-ik-shell"><div class="ss-waar-ik-empty">Er staan nog geen bevestigde aandachtspunten klaar. Bevestig eerst een voorstel in OWNSense.</div></div>';
   }
   var body='<div class="ss-waar-ik-shell"><div class="ss-waar-ik-subtitle">Aandachtspunten</div>';
-  rows.forEach(function(row){
+  if(!active.length){
+    body+='<div class="ss-waar-ik-empty" style="padding:0 2px 10px">Geen actieve aandachtspunten. Je hebt er '+completed.length+' afgewerkt.</div>';
+  }
+  active.forEach(function(row){
     var id=aandachtspuntIdStr(row.id);
     var name=String(row.soft_name||'Aandachtspunt').trim()||'Aandachtspunt';
     body+='<button type="button" class="ss-waar-ik-row" onclick="openWaarIkAanWerkDetail(\''+escJsStr(id)+'\')">'
@@ -2862,19 +2963,47 @@ function renderWaarIkAanWerkListHtml(rows){
       +'<span class="ss-waar-ik-home-chevron" aria-hidden="true">›</span>'
       +'</button>';
   });
+  if(completed.length){
+    var showCompleted=!!S.showWaarIkCompleted;
+    body+='<button type="button" class="ss-waar-ik-completed-toggle" onclick="toggleWaarIkCompletedList()">'
+      +(showCompleted?'Verberg afgewerkte':'Toon afgewerkte')+' ('+completed.length+')</button>';
+    if(showCompleted){
+      completed.forEach(function(row){
+        var id=aandachtspuntIdStr(row.id);
+        var name=String(row.soft_name||'Aandachtspunt').trim()||'Aandachtspunt';
+        var doneWhen=fmtAandachtspuntCompletedDate(row.completed_at);
+        body+='<button type="button" class="ss-waar-ik-row ss-waar-ik-row--completed" onclick="openWaarIkAanWerkDetail(\''+escJsStr(id)+'\')">'
+          +'<span class="ss-waar-ik-row-label">'+escHTML(name)
+          +(doneWhen?('<span class="ss-waar-ik-row-meta">Afgewerkt · '+escHTML(doneWhen)+'</span>'):'')
+          +'</span>'
+          +'<span class="ss-waar-ik-home-chevron" aria-hidden="true">›</span>'
+          +'</button>';
+      });
+    }
+  }
   body+='</div>';
   return body;
 }
-function renderWaarIkAanWerkDetailHtml(row,answerMap){
+function renderWaarIkAanWerkDetailHtml(row,checkinMap){
   var id=aandachtspuntIdStr(row.id);
+  var isDone=isAandachtspuntCompleted(row);
   var tips=String(row.tips_advice||'').trim();
   var tipsHtml=tips
     ?'<div class="ss-waar-ik-tips-card">'+escHTML(tips)+'</div>'
     :'<div class="ss-waar-ik-tips-card" style="color:var(--warm-bruin);font-style:italic">Advies wordt nog voorbereid.</div>';
+  var movementList=formatAandachtspuntMovementListHtml(row.movement);
+  var movementListHtml=movementList?('<div class="ss-waar-ik-movement-list" id="ssAandachtMovementList">'+movementList+'</div>'):('<div class="ss-waar-ik-movement-list" id="ssAandachtMovementList"></div>');
+  var completedBanner=isDone?('<div class="ss-waar-ik-completed-banner" id="ssAandachtCompletedBanner">Afgewerkt op '+escHTML(fmtAandachtspuntCompletedDate(row.completed_at)||'onbekende datum')+'. Je kunt dit heropenen als het thema terugkomt.</div>'):'';
+  var completeBtn=isDone
+    ?'<button type="button" class="ss-waar-ik-complete-btn ss-waar-ik-complete-btn--reopen" id="ssAandachtCompleteBtn" onclick="reopenAandachtspunt(\''+escJsStr(id)+'\')">Heropen dit aandachtspunt</button>'
+    :'<button type="button" class="ss-waar-ik-complete-btn" id="ssAandachtCompleteBtn" onclick="markAandachtspuntAfgewerkt(\''+escJsStr(id)+'\')">Markeer als afgewerkt</button>';
+  var workedBtn=isDone?'':('<div class="ss-waar-ik-cta-row"><button type="button" class="ss-waar-ik-cta-btn" id="ssAandachtWorkedBtn" onclick="recordAandachtspuntHierAanGewerkt(\''+escJsStr(id)+'\')">Hier aan gewerkt</button></div>');
   return '<div class="ss-waar-ik-detail">'
+    +completedBanner
+    +'<div class="ss-waar-ik-complete-row">'+completeBtn+'</div>'
     +'<div class="ss-waar-ik-detail-grid">'
     +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Waarop dit gebaseerd is</div>'
-    +'<div class="ss-waar-ik-evidence-card">'+formatAandachtspuntEvidenceLines(row.evidence,answerMap)+'</div>'
+    +'<div class="ss-waar-ik-evidence-card">'+formatAandachtspuntEvidenceLines(row.evidence,checkinMap)+'</div>'
     +'</div>'
     +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Hoe je het kan aanpakken</div>'
     +tipsHtml
@@ -2882,7 +3011,8 @@ function renderWaarIkAanWerkDetailHtml(row,answerMap){
     +'</div>'
     +'<div class="ss-waar-ik-sec ss-waar-ik-sec--movement"><div class="ss-waar-ik-sec-h">Beweging</div>'
     +'<p class="ss-waar-ik-movement" id="ssAandachtMovementLine">'+escHTML(renderAandachtspuntMovementLine(row.movement))+'</p>'
-    +'<div class="ss-waar-ik-cta-row"><button type="button" class="ss-waar-ik-cta-btn" id="ssAandachtWorkedBtn" onclick="recordAandachtspuntHierAanGewerkt(\''+escJsStr(id)+'\')">Hier aan gewerkt</button></div>'
+    +movementListHtml
+    +workedBtn
     +'</div>'
     +'</div>';
 }
@@ -2903,8 +3033,8 @@ async function renderWaarIkAanWerkInto(el){
     var pt2=document.getElementById('pgTitle');
     if(pt2)pt2.textContent=String(row.soft_name||'Mijn aandachtspunten').trim()||'Mijn aandachtspunten';
     var evIds=parseAandachtspuntEvidence(row.evidence).map(function(it){return it&&it.checkin_id;});
-    var answerMap=await fetchCheckinAnswersByIds(evIds);
-    el.innerHTML=renderWaarIkAanWerkDetailHtml(row,answerMap);
+    var checkinMap=await fetchCheckinRowsByIds(evIds);
+    el.innerHTML=renderWaarIkAanWerkDetailHtml(row,checkinMap);
     return;
   }
   el.innerHTML=renderWaarIkAanWerkListHtml(rows);
@@ -2913,32 +3043,42 @@ function rWaarIkAanWerk(el){
   return renderWaarIkAanWerkInto(el);
 }
 var _aandachtWorkedBusy=false;
+var _aandachtCompleteBusy=false;
+async function updateAandachtspuntRowLocal(id,patch){
+  id=aandachtspuntIdStr(id);
+  if(!id||!patch)return null;
+  var res=await sb.from('own_aandachtspunten').update(Object.assign({},patch,{updated_at:new Date().toISOString()}))
+    .eq('id',id)
+    .eq('user_id',S.user.id)
+    .select('*')
+    .maybeSingle();
+  if(res&&res.error)throw res.error;
+  var updated=res&&res.data?res.data:null;
+  if(!updated)throw new Error('Kon aandachtspunt niet opslaan.');
+  if(Array.isArray(S.ssBevestigdeAandachtspunten)){
+    var idx=S.ssBevestigdeAandachtspunten.findIndex(function(r){return r&&aandachtspuntIdStr(r.id)===id;});
+    if(idx>=0)S.ssBevestigdeAandachtspunten[idx]=updated;
+  }
+  return updated;
+}
 async function recordAandachtspuntHierAanGewerkt(id){
   if(_aandachtWorkedBusy)return;
   id=aandachtspuntIdStr(id);
   if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
   var row=findBevestigdAandachtspunt(id);
   if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
+  if(isAandachtspuntCompleted(row)){toast('Heropen dit aandachtspunt om verder te werken.');return;}
   var btn=document.getElementById('ssAandachtWorkedBtn');
   _aandachtWorkedBusy=true;
   if(btn){btn.disabled=true;btn.textContent='Opslaan…';}
   try{
     var items=parseAandachtspuntMovement(row.movement).slice();
     items.push({note:'Hier aan gewerkt',at:new Date().toISOString()});
-    var res=await sb.from('own_aandachtspunten').update({movement:items,updated_at:new Date().toISOString()})
-      .eq('id',id)
-      .eq('user_id',S.user.id)
-      .select('*')
-      .maybeSingle();
-    if(res&&res.error)throw res.error;
-    var updated=res&&res.data?res.data:null;
-    if(!updated)throw new Error('Kon beweging niet opslaan.');
-    if(Array.isArray(S.ssBevestigdeAandachtspunten)){
-      var idx=S.ssBevestigdeAandachtspunten.findIndex(function(r){return r&&aandachtspuntIdStr(r.id)===id;});
-      if(idx>=0)S.ssBevestigdeAandachtspunten[idx]=updated;
-    }
+    var updated=await updateAandachtspuntRowLocal(id,{movement:items});
     var moveEl=document.getElementById('ssAandachtMovementLine');
     if(moveEl)moveEl.textContent=renderAandachtspuntMovementLine(updated.movement);
+    var listEl=document.getElementById('ssAandachtMovementList');
+    if(listEl)listEl.innerHTML=formatAandachtspuntMovementListHtml(updated.movement);
     toast('Genoteerd. Mooi dat je hier aandacht voor hebt.');
     void refreshHomeWaarIkAanWerkCard();
     try{void refreshAandachtspuntenNudgeContext();}catch(_mv){}
@@ -2948,6 +3088,66 @@ async function recordAandachtspuntHierAanGewerkt(id){
   }finally{
     _aandachtWorkedBusy=false;
     if(btn){btn.disabled=false;btn.textContent='Hier aan gewerkt';}
+  }
+}
+async function markAandachtspuntAfgewerkt(id){
+  if(_aandachtCompleteBusy)return;
+  id=aandachtspuntIdStr(id);
+  if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
+  var row=findBevestigdAandachtspunt(id);
+  if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
+  if(isAandachtspuntCompleted(row)){toast('Dit aandachtspunt staat al als afgewerkt.');return;}
+  var ok=false;
+  try{ok=window.confirm('Markeer «'+String(row.soft_name||'dit aandachtspunt').trim()+'» als afgewerkt? Je vindt het terug onder afgewerkte punten.');}catch(_e){ok=false;}
+  if(!ok)return;
+  var btn=document.getElementById('ssAandachtCompleteBtn');
+  _aandachtCompleteBusy=true;
+  if(btn)btn.disabled=true;
+  try{
+    await updateAandachtspuntRowLocal(id,{completed_at:new Date().toISOString()});
+    toast('Afgewerkt. Goed bezig met je voortgang.');
+    S.viewAandachtspuntId=null;
+    var mc=document.getElementById('mainContent');
+    if(mc)void renderWaarIkAanWerkInto(mc);
+    var pt=document.getElementById('pgTitle');
+    if(pt)pt.textContent='Mijn aandachtspunten';
+    void refreshHomeWaarIkAanWerkCard();
+    try{void refreshAandachtspuntenNudgeContext();}catch(_n){}
+  }catch(e){
+    console.warn('[aandachtspunt complete]',e);
+    toast('Opslaan mislukt. Probeer opnieuw.');
+  }finally{
+    _aandachtCompleteBusy=false;
+    if(btn)btn.disabled=false;
+  }
+}
+async function reopenAandachtspunt(id){
+  if(_aandachtCompleteBusy)return;
+  id=aandachtspuntIdStr(id);
+  if(!id||!sb||!S.user||!S.user.id){toast('Log eerst in.');return;}
+  var row=findBevestigdAandachtspunt(id);
+  if(!row){toast('Aandachtspunt niet gevonden. Vernieuw het scherm.');return;}
+  if(!isAandachtspuntCompleted(row)){toast('Dit aandachtspunt is al actief.');return;}
+  var btn=document.getElementById('ssAandachtCompleteBtn');
+  _aandachtCompleteBusy=true;
+  if(btn)btn.disabled=true;
+  try{
+    var updated=await updateAandachtspuntRowLocal(id,{completed_at:null});
+    toast('Heropend. Je kunt hier weer aan werken.');
+    var mc=document.getElementById('mainContent');
+    if(mc){
+      var evIds=parseAandachtspuntEvidence(updated.evidence).map(function(it){return it&&it.checkin_id;});
+      var checkinMap=await fetchCheckinRowsByIds(evIds);
+      mc.innerHTML=renderWaarIkAanWerkDetailHtml(updated,checkinMap);
+    }
+    void refreshHomeWaarIkAanWerkCard();
+    try{void refreshAandachtspuntenNudgeContext();}catch(_n2){}
+  }catch(e){
+    console.warn('[aandachtspunt reopen]',e);
+    toast('Heropenen mislukt. Probeer opnieuw.');
+  }finally{
+    _aandachtCompleteBusy=false;
+    if(btn)btn.disabled=false;
   }
 }
 function refreshOwnAppDepthHintMounts(){
@@ -3002,6 +3202,7 @@ var S={
   viewDossier:null,viewTab:'overzicht',
   /** Fase 4: detail-id op scherm waarIkAanWerk; null = lijst. */
   viewAandachtspuntId:null,
+  showWaarIkCompleted:false,
   ssBevestigdeAandachtspunten:null,
   /** Fase 5: snapshot + eligibility voor zachte nudges in Mijn meldingen. */
   aandachtNudgeCtx:null,
@@ -5962,6 +6163,8 @@ function applySenseDeepLinkFromUrl(){
     var want=String(sp.get('screen')||sp.get('coach')||'').trim().toLowerCase();
     if(want==='notifications'||want==='meldingen'){
       goScreen('notifications');
+    }else if(want==='waarikanwerk'||want==='mijnaandachtspunten'||want==='aandachtspunten'){
+      goScreen('waarIkAanWerk');
     }
     if(sp.has('screen')||sp.has('coach')){
       sp.delete('screen');sp.delete('coach');

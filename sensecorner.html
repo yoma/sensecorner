@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="05-06-2026 09:51">
+<meta name="sc-build" content="05-06-2026 12:25">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -465,6 +465,17 @@ a.app-card{color:inherit;text-decoration:none}
 .app-coach-hint--datesense .app-coach-hint__n{color:var(--date-donker);}
 .app-coach-hint--familysense .app-coach-hint__n{color:var(--family-donker);}
 .app-coach-hint--friendsense .app-coach-hint__n{color:var(--friend-donker);}
+.app-coach-hint--selfsense .app-coach-hint__n{color:var(--self-donker);}
+.hero-coach-hint{
+  margin:10px 0 0;
+  font-size:12px;
+  line-height:1.4;
+  color:rgba(61,47,31,.62);
+  font-weight:500;
+}
+.hero-coach-hint a{color:var(--sage-donker);font-weight:700;text-decoration:none}
+.hero-coach-hint a:hover{text-decoration:underline}
+.hero-coach-hint__n{font-weight:800;font-variant-numeric:tabular-nums;margin-right:2px;color:var(--sage-donker)}
 .app-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
 .badge-live{background:color-mix(in srgb,var(--date-licht) 55%,white);color:var(--date-donker);border:1px solid color-mix(in srgb,var(--date-medium) 40%,transparent)}
@@ -648,6 +659,7 @@ a.app-card{color:inherit;text-decoration:none}
           <span class="own-status-text" id="statusText">Nog niet gestart</span>
           <span class="own-status-pct" id="statusPct"></span>
         </div>
+        <p class="hero-coach-hint" id="scCoachHintOwnsense" hidden></p>
         <div class="own-hero-bar-wrap" id="ownHeroBarWrap" style="display:none" aria-hidden="true">
           <div class="own-hero-bar-row">
             <div class="own-hero-bar-track">
@@ -800,6 +812,7 @@ a.app-card{color:inherit;text-decoration:none}
         <div class="app-name">SelfSense</div>
       </div>
       <p class="app-desc">Healing, herstel en persoonlijke groei.</p>
+      <p class="app-coach-hint app-coach-hint--selfsense" id="scCoachHintSelfsense" hidden></p>
       <div class="app-footer">
         <span class="badge badge-live-self">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -2924,6 +2937,85 @@ a.app-card{color:inherit;text-decoration:none}
     if(!uid)return'';
     return 'sc_coach_open_'+app+'::'+uid;
   }
+  function scSelfSenseCardLink(count){
+    return count>0?'selfsense.html?screen=waarIkAanWerk':'selfsense.html';
+  }
+  function scOwnReviewLink(){
+    return 'ownsense.html?openReview=1';
+  }
+  async function scFetchHubAttentionCounts(user){
+    var out={ssActiveAandacht:0,ownPendingFacts:0,ownVoorgesteldAandacht:0};
+    if(!sb||!user||!user.id)return out;
+    try{
+      var uid=user.id;
+      var bRes=await sb.from('own_aandachtspunten').select('id,status,completed_at')
+        .eq('user_id',uid).eq('status','bevestigd');
+      if(bRes.error){
+        bRes=await sb.from('own_aandachtspunten').select('id,status')
+          .eq('user_id',uid).eq('status','bevestigd');
+      }
+      if(!bRes.error){
+        var bRows=(bRes.data)||[];
+        out.ssActiveAandacht=bRows.filter(function(r){return r&&!(r.completed_at&&String(r.completed_at).trim());}).length;
+      }
+      var vRes=await sb.from('own_aandachtspunten').select('id',{count:'exact',head:true})
+        .eq('user_id',uid).eq('status','voorgesteld');
+      if(!vRes.error)out.ownVoorgesteldAandacht=parseInt(vRes.count,10)||0;
+      var fRes=await sb.from('own_facts').select('id',{count:'exact',head:true})
+        .eq('user_id',uid).eq('status','pending');
+      if(!fRes.error)out.ownPendingFacts=parseInt(fRes.count,10)||0;
+    }catch(e){
+      console.warn('[hub attention counts]',e);
+    }
+    return out;
+  }
+  function scApplySelfSenseCardHint(user,ssCount){
+    var el=document.getElementById('scCoachHintSelfsense');
+    var card=document.querySelector('.app-card.self-card[data-app-key="ss"]');
+    if(card){
+      var link=scSelfSenseCardLink(ssCount);
+      card.setAttribute('data-app-link',link);
+      card.setAttribute('href',link);
+    }
+    if(!el)return;
+    if(!user||!ssCount){
+      el.textContent='';
+      el.hidden=true;
+      el.removeAttribute('aria-label');
+      return;
+    }
+    el.hidden=false;
+    var tail=ssCount===1?'actief aandachtspunt':'actieve aandachtspunten';
+    el.innerHTML='<span class="app-coach-hint__n">'+String(ssCount)+'</span> '+tail+' in SelfSense';
+    el.setAttribute('aria-label',String(ssCount)+' '+tail+' in SelfSense');
+  }
+  function scApplyOwnHeroHint(user,ownCount){
+    var el=document.getElementById('scCoachHintOwnsense');
+    if(!el)return;
+    if(!user||!ownCount){
+      el.textContent='';
+      el.hidden=true;
+      el.removeAttribute('aria-label');
+      return;
+    }
+    el.hidden=false;
+    var tail=ownCount===1?'openstaande melding':'openstaande meldingen';
+    el.innerHTML='<span class="hero-coach-hint__n">'+String(ownCount)+'</span> '+tail+' · <a href="'+scOwnReviewLink()+'">Bekijk in OWN Sense</a>';
+    el.setAttribute('aria-label',String(ownCount)+' '+tail+' in OWN Sense');
+  }
+  async function scRefreshHubAttentionHints(user){
+    if(!user){
+      scApplySelfSenseCardHint(null,0);
+      scApplyOwnHeroHint(null,0);
+      return;
+    }
+    var counts=await scFetchHubAttentionCounts(user);
+    scApplySelfSenseCardHint(user,counts.ssActiveAandacht);
+    scApplyOwnHeroHint(user,(counts.ownPendingFacts||0)+(counts.ownVoorgesteldAandacht||0));
+    try{
+      localStorage.setItem(scCoachOpenStorageKey('selfsense',user),String(counts.ssActiveAandacht||0));
+    }catch(_e){}
+  }
   function scPersistCoachHintCache(user,dsCount,fsCount,frCount){
     try{
       var uid=String(user&&(user.id||user.email)||'').trim();
@@ -2976,11 +3068,12 @@ a.app-card{color:inherit;text-decoration:none}
     applyHint(frEl,frN,'FriendSense');
   }
   function updateAppCardCoachHints(user){
-    if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);return;}
+    if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);void scRefreshHubAttentionHints(null);return;}
     var dsv=readScCoachOpenCount('datesense',user);
     var fsv=readScCoachOpenCount('familysense',user);
     var frv=readScCoachOpenCount('friendsense',user);
     updateAppCardCoachHintsWithCounts(user,dsv==null?0:dsv,fsv==null?0:fsv,frv==null?0:frv);
+    void scRefreshHubAttentionHints(user);
   }
   function refreshCoachHintsFromCache(user){
     if(!user){updateAppCardCoachHintsWithCounts(null,0,0,0);return;}
@@ -2996,6 +3089,7 @@ a.app-card{color:inherit;text-decoration:none}
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
       scReorderAppGrid(user,_scLastCoachPack);
+      void scRefreshHubAttentionHints(user);
     }catch(_e){
       refreshCoachHintsFromServer(user);
     }
@@ -3017,10 +3111,12 @@ a.app-card{color:inherit;text-decoration:none}
       scPersistCoachHintCache(user,ds,fs,fr);
       updateAppCardCoachHintsWithCounts(user,ds,fs,fr);
       scReorderAppGrid(user,pack);
+      void scRefreshHubAttentionHints(user);
       void scRefreshMirrorStatuses(user);
     }catch(e){
       console.warn('sensecorner coach hints',e);
       updateAppCardCoachHints(user);
+      void scRefreshHubAttentionHints(user);
       void scRefreshMirrorStatuses(user);
     }
   }
