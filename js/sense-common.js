@@ -731,8 +731,8 @@
       (focus ? ' Focus: ' + focus + '.' : '') +
       ' Nederlands.';
     var text = '';
-    var apiTimeoutMs = pack.sparse ? 20000 : 45000;
-    var apiTimeoutPlainMs = pack.sparse ? 20000 : 15000;
+    var apiTimeoutMs = pack.sparse ? 15000 : 22000;
+    var apiTimeoutPlainMs = pack.sparse ? 15000 : 10000;
     if (pack.sparse) {
       try {
         text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutMs, null, {
@@ -754,9 +754,8 @@
       } catch (e1) {
         console.warn('senseFetchDailyRecoTipText search', e1);
         var msg1 = (e1 && e1.message) ? String(e1.message) : '';
-        if (senseIsRateLimitMessage(msg1)) {
-          throw e1;
-        }
+        if (senseIsRateLimitMessage(msg1)) throw e1;
+        if (/timeout|AI request timeout/i.test(msg1)) throw e1;
         text = await callAPI(sysPlain, [{ role: 'user', content: usr }], 360, apiTimeoutPlainMs, null, {
           disable_web_search: true
         });

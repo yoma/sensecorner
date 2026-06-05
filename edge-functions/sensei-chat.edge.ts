@@ -401,11 +401,19 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Anthropic aanroepen ───────────────────────────────────────────────
-    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: anthropicHeaders,
-      body: JSON.stringify(anthropicPayload),
-    });
+    const claudeAbort = new AbortController();
+    const claudeTimer = setTimeout(() => claudeAbort.abort(), 25000);
+    let claudeRes: Response;
+    try {
+      claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: anthropicHeaders,
+        body: JSON.stringify(anthropicPayload),
+        signal: claudeAbort.signal,
+      });
+    } finally {
+      clearTimeout(claudeTimer);
+    }
 
     const claudeData = await claudeRes.json();
     if (!claudeRes.ok) {

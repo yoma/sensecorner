@@ -14237,8 +14237,11 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
   var token='';
+  var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor((customTimeoutMs||30000)*0.4)));
   try{
-    token=await runSenseiAuthSerialized(function(){return getAccessTokenFresh(false);});
+    token=await runSenseiAuthSerialized(function(){
+      return withTimeout(getAccessTokenFresh(false),authBudgetMs,'Sessie timeout - probeer opnieuw in te loggen');
+    });
   }catch(e){
     throw e;
   }
