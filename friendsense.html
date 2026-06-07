@@ -3859,7 +3859,7 @@ function detectNieuweNaam(tekst){
     });
   });
   var own=getOwnNameTokens();
-  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die']);
+  var stop=new Set(['ik','hey','hallo','hoi','wat','waar','wanneer','deze','dit','daar','jij','jouw','mijn','wij','ons','met','van','voor','maar','dan','en','of','dat','die','expertise']);
 
   function isNewNameCandidate(w){
     if(!w)return false;
@@ -13514,6 +13514,7 @@ function clearChat(){
   S.vertelGesprekDossier=null;
   S.vertelFrom=null;
   S.vertelSessionStickyDossier=null;
+  S._vertelOwnSenseManualCount=0;
   clearVertelSelfNarrativeUiFlags();
   window._pendingSegmenten=null;
   var ca=document.getElementById('chatArea');
@@ -15376,6 +15377,13 @@ async function _opslaanKeuze(dossier){
   if(!data)return;
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+    if(dossier==='OWN Sense'){
+      S._vertelOwnSenseManualCount=(S._vertelOwnSenseManualCount||0)+1;
+      if(S._vertelOwnSenseManualCount>=2){
+        S.vertelAfterOwnForkSave=true;
+        S._vertelOwnSenseManualCount=0;
+      }
+    }
   }catch(e){
     console.error('_opslaanKeuze',e);
     toast(e&&e.message?String(e.message):'Opslaan mislukt.');
