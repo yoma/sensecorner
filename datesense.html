@@ -2191,6 +2191,14 @@ function isFamilyTaggedMeta(meta){
   // Strikte scheiding: elk dossier met family-scope blijft uit DateSense.
   return scopes.indexOf('fs')>=0;
 }
+function isFriendTaggedMeta(meta){
+  var m=meta||{};
+  if(String(m.friend_rol||'').trim())return true;
+  if(String(m.friend_relatie||'').trim())return true;
+  var scopes=normalizeAppScopeList(m);
+  // Strikte scheiding: elk dossier met friend-scope blijft uit DateSense.
+  return scopes.indexOf('fr')>=0;
+}
 function isSystemMirrorDossierName(name){
   var raw=String(name||'').trim();
   if(!raw||raw==='OWN Sense')return false;
@@ -2202,7 +2210,7 @@ function isDateSenseVisibleContact(name){
   // Verberg systeemdossiers uit centrale OWN Sense mirrors.
   if(isSystemMirrorDossierName(name))return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
-  return !isFamilyTaggedMeta(m);
+  return !isFamilyTaggedMeta(m)&&!isFriendTaggedMeta(m);
 }
 function getDateSenseContactNames(){
   return (S.profiles||[]).filter(function(p){return isDateSenseVisibleContact(p);});
@@ -5042,6 +5050,7 @@ async function loadAll(opts){
   try{syncOwnBasisMetaFromHub();}catch(_basisHub){}
   try{await hydrateOwnAppDepthFromOnboardingFacts();}catch(e){console.warn('hydrate app depth from onboarding',e);}
   try{await normalizeLegacyFamilyScopes();}catch(e){console.warn('normalizeLegacyFamilyScopes',e);}
+  try{await normalizeLegacyFriendScopes();}catch(e){console.warn('normalizeLegacyFriendScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   dsSaveProfilesCache();
   if(opts.deferHeavy===false){
@@ -5074,6 +5083,30 @@ async function normalizeLegacyFamilyScopes(){
     changed++;
   }
   if(changed>0)console.log('[DateSense] scope cleanup aangepast:',changed);
+}
+/** Herstelt oude gemixte scope-data: friend-dossiers horen geen ds-scope te houden. */
+async function normalizeLegacyFriendScopes(){
+  if(!S.user||!Array.isArray(S.profiles)||!S.profiles.length)return;
+  var changed=0;
+  for(var i=0;i<S.profiles.length;i++){
+    var name=S.profiles[i];
+    if(!name||name==='OWN Sense')continue;
+    var d=S.pdata[name];
+    if(!d)continue;
+    var meta=Object.assign({},d.meta||{});
+    if(!isFriendTaggedMeta(meta))continue;
+    var scopes=normalizeAppScopeList(meta);
+    var next=scopes.filter(function(s){return s!=='ds';});
+    if(next.indexOf('fr')<0)next.push('fr');
+    var same=next.length===scopes.length&&next.every(function(v,idx){return v===scopes[idx];});
+    if(same)continue;
+    meta.app_scope=next;
+    d.meta=meta;
+    S.pdata[name]=d;
+    await saveP(name,d.props,d.count,d.categories,d.summary,d.meta);
+    changed++;
+  }
+  if(changed>0)console.log('[DateSense] friend scope cleanup aangepast:',changed);
 }
 async function cleanupSystemMirrorDossiers(){
   if(!S.user||!Array.isArray(S.profiles)||!S.profiles.length)return;
@@ -5449,8 +5482,21 @@ function exportVertelThreadTxt(){
 
 async function delP(name){
   if(!S.user)return;
-  await sb.from('sense_profiles').delete().eq('user_id',S.user.id).eq('name',name);
-  await sb.from('sense_messages').delete().eq('user_id',S.user.id).eq('profile_name',name);
+  // Als het dossier ook in andere apps zit (fr/fs), verwijder alleen de ds-scope; wis nooit de hele rij.
+  var d=S.pdata[name]||{};
+  var meta=Object.assign({},d.meta||{});
+  var scopes=normalizeAppScopeList(meta);
+  var otherScopes=scopes.filter(function(s){return s!=='ds';});
+  if(otherScopes.length>0){
+    meta.app_scope=otherScopes;
+    delete meta.lifecycle_status;
+    d.meta=meta;
+    S.pdata[name]=d;
+    await saveP(name,d.props,d.count,d.categories,d.summary,meta);
+  }else{
+    await sb.from('sense_profiles').delete().eq('user_id',S.user.id).eq('name',name);
+    await sb.from('sense_messages').delete().eq('user_id',S.user.id).eq('profile_name',name);
+  }
   S.profiles=S.profiles.filter(p=>p!==name);
   delete S.pdata[name];
 }
