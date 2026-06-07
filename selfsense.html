@@ -19105,6 +19105,23 @@ async function opslaanInDossier(sid){
   if(!dossier){kiesAnderDossier(sid);return;}
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
+    if(dossier!=='OWN Sense'&&!S.vertelSessionStickyDossier){
+      var bar=sid?document.getElementById(sid):null;
+      if(bar){
+        var _d=dossier;
+        var stickyBtn=document.createElement('button');
+        stickyBtn.className='coach-save-other';
+        stickyBtn.style.cssText='font-size:12px;margin-left:8px';
+        stickyBtn.textContent='Altijd in dit gesprek';
+        stickyBtn.onclick=function(){
+          S.vertelSessionStickyDossier=_d;
+          stickyBtn.remove();
+          toast('Oké - in dit gesprek gaat alles automatisch naar '+dn(_d)+'. Tik «Ander» om te wisselen.');
+          if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+        };
+        bar.appendChild(stickyBtn);
+      }
+    }
   }catch(e){
     console.error('opslaanInDossier',e);
     toast(e&&e.message?String(e.message):'Opslaan mislukt.');
