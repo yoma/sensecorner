@@ -808,6 +808,17 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
   </div>
 </div>
 
+<script>
+(function(){
+  // OAuth callback relay: Supabase kan na Google-aanmelding doorsturen naar de rootpagina
+  // als 'onboarding.html' niet in de Redirect URLs van Supabase staat.
+  // Dit script vangt dat op en stuurt de gebruiker alsnog naar onboarding.html.
+  var h=window.location.hash||'';
+  if(h.indexOf('access_token=')>=0&&h.indexOf('token_type=')>=0){
+    window.location.replace('onboarding.html'+h);
+  }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sc-mark.js" defer></script>
 <script src="js/sense-common.js"></script>
@@ -1111,7 +1122,11 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       lip='';
     }
     var started=nFacts>0||photo||profs>1||lip===uid;
-    if(!started)return;
+    if(!started){
+      // Nieuwe gebruiker (bijv. net via Google aangemeld): stuur door naar onboarding.
+      window.location.replace('onboarding.html');
+      return;
+    }
     titleEl.textContent='Je kennismaking wacht op je';
     descEl.textContent='We hebben je antwoorden en keuzes bewaard. Tik hieronder om verder te gaan waar je gebleven was.';
     primary.textContent='Verder met mijn registratie';
