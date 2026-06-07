@@ -6310,6 +6310,23 @@ async function selectDossierFromPick(dossier){
   }else if(ctx.type==='save'){
     S.vertelSessionStickyDossier=null;
     await _doOpslaan(ctx.payload.sid,ctx.payload.text,dossier,ctx.payload.sessionUserMsgId);
+    if(dossier!=='OWN Sense'&&!S.vertelSessionStickyDossier){
+      var bar=ctx.payload.sid?document.getElementById(ctx.payload.sid):null;
+      if(bar){
+        var _d=dossier;
+        var stickyBtn=document.createElement('button');
+        stickyBtn.className='coach-save-other';
+        stickyBtn.style.cssText='font-size:12px;margin-left:8px';
+        stickyBtn.textContent='Altijd in dit gesprek';
+        stickyBtn.onclick=function(){
+          S.vertelSessionStickyDossier=_d;
+          stickyBtn.remove();
+          toast('Oké - in dit gesprek gaat alles automatisch naar '+dn(_d)+'. Tik «Ander» om te wisselen.');
+          if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();
+        };
+        bar.appendChild(stickyBtn);
+      }
+    }
   }
 }
 
