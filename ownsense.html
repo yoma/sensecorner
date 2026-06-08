@@ -2122,8 +2122,14 @@ async function autoAcceptStalePendingFacts(){
   var client=initSupabase();
   if(!client)return 0;
   try{
-    var auth=await client.auth.getUser();
-    if(!auth||!auth.data||!auth.data.user)return 0;
+    var wa=senseGetWriteAuth();
+    if(wa.blocked)return 0;
+    var uid=wa.uid;
+    if(!uid){
+      var user=await ownPromiseTimeout(ownAuthUserFast(client),6000,null);
+      uid=user&&user.id?String(user.id):'';
+    }
+    if(!uid)return 0;
     var r=await client.rpc('auto_accept_stale_own_facts',{days_old:OWN_PENDING_AUTO_ACCEPT_DAYS});
     if(r.error){
       console.warn('auto-accept rpc',r.error);
@@ -2434,6 +2440,105 @@ function ownQuoteRichCount(){
 function ownQuoteFallbackText(){
   return 'Ergens onderweg leer je elkaar kennen, beginnen kan altijd later.';
 }
+var OWN_REAL_QUOTES=[
+  /* Liefde */
+  {q:'Zoals een bloem de zon nodig heeft om bloem te worden, zo heeft een mens de liefde nodig om mens te worden.',a:'Phil Bosmans'},
+  {q:'Liefde is op weg zijn naar: jezelf te vinden in elkaar.',a:'Toon Hermans'},
+  {q:'Het allermoeilijkste in de liefde is, van de ander te leren houden om wie de ander is.',a:'Hannes Meinkema'},
+  {q:'Het beste bewijs van liefde is vertrouwen.',a:'Joyce Brothers'},
+  {q:'Alleen de liefde overwint, alleen de liefde behoudt.',a:'Lao-Tse'},
+  {q:'Vriendelijkheid in woorden schept vertrouwen, vriendelijkheid in denken schept diepzinnigheid, vriendelijkheid in geven schept liefde.',a:'Lao-Tse'},
+  {q:'Het is onzin, zegt het verstand. Het is belachelijk, zegt de trots. Het is onmogelijk, zegt de ervaring. Het is wat het is, zegt de liefde.',a:'Erich Fried'},
+  {q:'Waar liefde is, is leven.',a:'Mahatma Gandhi'},
+  {q:'Er bestaat maar één geluk op aarde: iemand liefhebben en die liefde beantwoord zien.',a:'Félix Arvers'},
+  {q:'In de dromen en in de liefde is niets onmogelijk.',a:'János Arany'},
+  {q:'Haat wordt niet door haat overwonnen; haat wordt door liefde overwonnen.',a:'Boeddha'},
+  {q:'Vriendschap is liefde zonder vleugels.',a:'Lord George Byron'},
+  {q:'Liefde is troost in droefheid, stilte in tumult, rust in onrust, hoop in wanhoop.',a:'Henry Drummond'},
+  {q:'Liefde is een door de natuur uitgevonden middel om de dood te overwinnen.',a:'Jean Guitton'},
+  {q:'Jij, jijzelf, evenzeer als wie dan ook in het hele universum, verdient jouw liefde en affectie.',a:'Boeddha'},
+  {q:'Duisternis kun je met duisternis niet bestrijden. Alleen het licht kan dat. Haat kun je met haat niet bestrijden, alleen de liefde kan dat.',a:'Phil Bosmans'},
+  {q:'Liefde is niet naar elkaar kijken, maar samen in dezelfde richting kijken.',a:'Antoine de Saint-Exupéry'},
+  {q:'Liefde is het kind van vrijheid, nooit dat van dominantie.',a:'Erich Fromm'},
+  /* Wijsheid */
+  {q:'Kennis spreekt, maar wijsheid luistert.',a:'Jimi Hendrix'},
+  {q:'Een liefhebbend hart is ware wijsheid.',a:'Charles Dickens'},
+  {q:'Geduld is de metgezel van wijsheid.',a:'Augustinus'},
+  {q:'Twijfel is het begin van wijsheid.',a:'Aristoteles'},
+  {q:'De stilte is de slaap die de wijsheid voedt.',a:'Francis Bacon'},
+  {q:'Wijsheid begint met verwondering.',a:'Socrates'},
+  {q:'Zelfkennis is het begin van alle wijsheid en het einde van illusies.',a:'Gerd de Ley'},
+  {q:'Angst overwinnen is het begin van wijsheid.',a:'Bertrand Russell'},
+  {q:'Wijsheid is een beetje minder treuren om het verleden, meer het heden liefhebben.',a:'Seneca'},
+  {q:'De enige wijsheid die echt telt is weten dat je niets weet.',a:'Socrates'},
+  {q:'Op weg naar de wijsheid is de eerste stap stilte; de tweede luisteren.',a:'Solomon Ibn Gabirol'},
+  {q:'Het zekerste teken van wijsheid is onverstoorbare vriendelijkheid.',a:'Michel de Montaigne'},
+  {q:'Pijn doet een mens nadenken, gedachten maken een mens wijs, wijsheid maakt leven draaglijk.',a:'John Patrick'},
+  /* Vriendschap */
+  {q:'Vriendschap is één ziel in twee lichamen.',a:'Aristoteles'},
+  {q:'Vriendschap vergroot het geluk en vermindert ellende, door onze vreugden te verdubbelen en ons verdriet te delen.',a:'Marcus Tullius Cicero'},
+  {q:'Lachen is zeker geen slecht begin voor een vriendschap en verreweg het beste einde ervoor.',a:'Oscar Wilde'},
+  {q:'Vriendschap met onszelf is van het hoogste belang, want zonder dat kan men geen vrienden zijn.',a:'Eleanor Roosevelt'},
+  {q:'Ware vriendschap is de liefde voor de ander, omwille van de ander.',a:'Aristoteles'},
+  {q:'Vriendschap geeft ogen aan de afstand en een stem aan de stilte.',a:'Johan Daisne'},
+  {q:'De wens om vrienden te worden is snel gedaan, maar de vriendschap is een langzaam rijpend fruit.',a:'Aristoteles'},
+  {q:'Ik denk dat gulheid het wezen van vriendschap is.',a:'Oscar Wilde'},
+  {q:'Een vriend is iemand bij wie je de volledige vrijheid krijgt jezelf te zijn.',a:'Jim Morrison'},
+  {q:'Voor vriendschap is de tijd een bondgenoot, voor liefde een gevaar.',a:'Godfried Bomans'},
+  {q:'Vriendschap eindigt vaak in liefde, maar liefde in vriendschap, nooit.',a:'Charles Caleb Colton'},
+  /* Geluk */
+  {q:'Er is geen weg naar geluk, geluk is de weg.',a:'Boeddha'},
+  {q:'Er is slechts één weg naar geluk en dat is op te houden met je zorgen maken over dingen waar je geen invloed op hebt.',a:'Epictetus'},
+  {q:'Een mens die niet zijn eigen weg durft te gaan, zal nooit het geluk kennen.',a:'Krishnamurti'},
+  {q:'Drie essentiële zaken voor geluk zijn: iets te doen, iemand lief te hebben, iets om voor te hopen.',a:'George Washington Burnap'},
+  {q:'De meeste mensen jagen zo bezeten het geluk na, dat ze eraan voorbijlopen.',a:'Søren Kierkegaard'},
+  {q:'Misschien is er geen gevoel dat groter geluk geeft dan dat men voor andere mensen iets kan betekenen.',a:'Dietrich Bonhoeffer'},
+  {q:'De voornaamste eigenschap van geluk is vrede, innerlijke vrede.',a:'Dalai Lama'},
+  {q:'Geluk is niet afhankelijk van dingen buiten ons, maar van de manier waarop wij die zien.',a:'Leo Tolstoj'},
+  {q:'Wie zich gelukkig voelt met het geluk van anderen, bezit een rijkdom zonder grenzen.',a:'Frans Daels'},
+  {q:'Geluk kun je niet kopen. Wat een geluk!',a:'Phil Bosmans'},
+  {q:'Smart en geluk hangen meer af van wat we zijn dan van wat ons overkomt.',a:'Multatuli'},
+  /* Vrijheid & moed */
+  {q:'Vrijheid betekent verantwoordelijkheid. Daarom zien de meeste mensen er tegenop.',a:'George Bernard Shaw'},
+  {q:'Alles dat werkelijk groots en inspirerend is, is gecreëerd door een individu dat kon werken in vrijheid.',a:'Albert Einstein'},
+  {q:'Een mens die een ander mens van zijn vrijheid berooft, is een gevangene van de haat.',a:'Nelson Mandela'},
+  {q:'In de beperking toont zich eerst de meester, en alleen de wet kan ons vrijheid geven.',a:'Johann Wolfgang von Goethe'},
+  {q:'Moed is weerstand tegen angst, meesterschap over angst — niet de afwezigheid ervan.',a:'Mark Twain'},
+  {q:'Alles wat je ooit wilde staat aan de andere kant van angst.',a:'George Addair'},
+  {q:'Vergeetachtigheid is een vorm van vrijheid.',a:'Kahlil Gibran'},
+  {q:'Vrijheid is niet hetzelfde als ongebondenheid.',a:'Paulo Coelho'},
+  /* Dromen */
+  {q:'Een leven zonder dromen is als een tuin zonder bloemen.',a:'Gertraude Beese'},
+  {q:'Durf te dwalen en te dromen.',a:'Friedrich von Schiller'},
+  {q:'Wie geen dromen heeft, heeft evenmin een werkelijkheid.',a:'Karel Boullart'},
+  {q:'Dromen worden werkelijkheden voor hen die sterk genoeg zijn om erin te geloven.',a:'George Bernard Shaw'},
+  {q:'Noem uzelf niet arm, omdat uw dromen niet in vervulling zijn gegaan; werkelijk arm is slechts hij die nooit gedroomd heeft.',a:'Marie von Ebner-Eschenbach'},
+  {q:'Vergeet niet te vechten voor je dromen. Je moet weten wat je wilt in het leven.',a:'Paulo Coelho'},
+  {q:'Wat mij betreft weet ik niets zeker, maar naar de sterren kijken zet me aan het dromen.',a:'Vincent van Gogh'},
+  {q:'Al de dingen die je vergeten bent, roepen om hulp in je dromen.',a:'Elias Canetti'},
+  /* Mens & verbinding */
+  {q:'Een mens heeft twee oren en één mond om twee keer zoveel te luisteren als te praten.',a:'Confucius'},
+  {q:'Het leven van een mens is wat zijn gedachten ervan maken.',a:'Marcus Aurelius'},
+  {q:'Een groot mens heeft twee harten: het ene bloedt en het andere verdraagt.',a:'Kahlil Gibran'},
+  {q:'De mens wordt vaak wat hij denkt.',a:'Mahatma Gandhi'},
+  {q:'De goedheid van een mens is een vlam die wel verborgen, maar niet gedoofd kan worden.',a:'Nelson Mandela'},
+  {q:'Het probleem vandaag de dag is niet de atoomenergie, maar het hart van de mens.',a:'Albert Einstein'},
+  {q:'Alleen een gelukkig mens kan anderen gelukkig maken.',a:'Phil Bosmans'},
+  {q:'De mens is een sociaal dier, hij is niet gemaakt om alleen te leven.',a:'Aristoteles'},
+  /* Zelfinzicht */
+  {q:'Het leven wordt begrepen van achteren, maar moet worden geleefd van voren.',a:'Søren Kierkegaard'},
+  {q:'De wonde is de plek waar het licht naar binnen komt.',a:'Rumi'},
+  {q:'Jezelf zijn in een wereld die je voortdurend wil veranderen is de grootste prestatie.',a:'Ralph Waldo Emerson'},
+  {q:'Als je weet waarom je leeft, kun je bijna elk hoe verdragen.',a:'Viktor Frankl'},
+  {q:'In de diepte van de winter ontdekte ik eindelijk dat er in mij een onverslaanbare zomer ligt.',a:'Albert Camus'},
+  {q:'Totdat je het onbewuste bewust maakt, zal het je leven besturen en je het lot noemen.',a:'Carl Jung'},
+  {q:'Wie naar buiten kijkt, droomt; wie naar binnen kijkt, wordt wakker.',a:'Carl Jung'},
+  {q:'Mensen vergeten wat je zei, maar nooit hoe je ze deed voelen.',a:'Maya Angelou'},
+  {q:'Wees jezelf; alle anderen zijn al bezet.',a:'Oscar Wilde'},
+  {q:'Wees de verandering die je in de wereld wil zien.',a:'Mahatma Gandhi'},
+  {q:'In de angst wordt de mens zich bewust van zijn vrijheid.',a:'Jean-Paul Sartre'},
+  {q:'Menselijke grootheid ligt niet in het bezit van rijkdom, maar in het vermogen anderen te dienen.',a:'Mahatma Gandhi'},
+];
 function buildOwnQuoteSource(){
   var parts=[];
   var summary=String(hubState.ai_summary_general||'').trim();
@@ -2449,37 +2554,28 @@ function buildOwnQuoteSource(){
   return parts.join('\n\n');
 }
 async function generateProfileQuote(){
-  if(ownQuoteRichCount()<2){
-    hubState.profile_quote=ownQuoteFallbackText();
-    hubState.profile_quote_updated_at=new Date().toISOString();
-    saveHubState();
-    renderMijTab();
-    return;
-  }
+  var today=ownTodayIso();
   var src=buildOwnQuoteSource();
-  if(!src){
-    hubState.profile_quote=ownQuoteFallbackText();
-    hubState.profile_quote_updated_at=new Date().toISOString();
-    saveHubState();
-    renderMijTab();
-    return;
+  var chosen=null;
+  if(src&&ownQuoteRichCount()>=2){
+    try{
+      var quotesListStr=OWN_REAL_QUOTES.map(function(x,i){return (i+1)+'. “'+x.q+'” — '+x.a;}).join('\n');
+      var sys='Je krijgt een profielsamenvatting en een genummerde lijst van echte citaten van bekende personen.'
+        +' Kies het nummer van het citaat dat het best aansluit bij dit profiel.'
+        +' Geef ALLEEN het getal terug (bijv. “3”), niets anders.';
+      var msg='Profiel:\n'+src+'\n\nCitaten:\n'+quotesListStr;
+      var out=String(await callAnthropicJson(sys,msg,5,15000)||'').trim();
+      var idx=parseInt(out,10)-1;
+      if(!isNaN(idx)&&idx>=0&&idx<OWN_REAL_QUOTES.length)chosen=OWN_REAL_QUOTES[idx];
+    }catch(_e){}
   }
-  try{
-    var sys='Je krijgt een profielsamenvatting van iemand. Genereer EEN korte, warme reflectie, max 25 woorden, die voor deze persoon resoneert.'
-      +' Niet in jij-vorm, liever derde persoon of algemeen menselijk.'
-      +' Geen aanhalingstekens, geen emoji, geen hashtags, geen bullets.'
-      +' Geen em dash, gebruik komma of punt.'
-      +' Geef alleen de reflectiezin terug.';
-    var out=String(await callAnthropicJson(sys,src,120,60000)||'').trim();
-    out=out.replace(/["“”]/g,'').replace(/\s+/g,' ').trim();
-    if(!out)out=ownQuoteFallbackText();
-    hubState.profile_quote=out;
-    hubState.profile_quote_updated_at=new Date().toISOString();
-    saveHubState();
-    renderMijTab();
-  }catch(_e){
-    flashOwnsenseMessage('Quote kon nu niet vernieuwd worden. Probeer straks opnieuw.',true);
-  }
+  if(!chosen)chosen=OWN_REAL_QUOTES[Math.floor(Math.random()*OWN_REAL_QUOTES.length)];
+  hubState.profile_quote=chosen.q;
+  hubState.profile_quote_author=chosen.a;
+  hubState.profile_quote_date=today;
+  hubState.profile_quote_updated_at=new Date().toISOString();
+  saveHubState();
+  renderMijTab();
 }
 
 function ownTodayIso(){
@@ -2720,19 +2816,19 @@ function renderMijTab(){
     +'</div><div class="pending-badge-row"><button class="pending-badge'+(staleN>0?' has-stale':'')+'" type="button" onclick="openReviewFactsModal()">'+pending+' nieuwe gegevens</button></div></div>';
   renderBasisprofielCard();
   var q=String(hubState.profile_quote||'').trim();
+  var qa=String(hubState.profile_quote_author||'').trim();
   if(!q){
-    if(ownQuoteRichCount()>=2){
-      q='Je quote wordt automatisch opgebouwd...';
-      maybeAutoGenerateProfileQuote();
-    }else{
-      q=ownQuoteFallbackText();
-    }
+    q='Je dagelijkse quote wordt zo opgehaald...';
+    maybeAutoGenerateProfileQuote();
   }
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
-  heroEl.innerHTML='<h3>Voor jou</h3><div class="mij-summary quote-text-v4" style="font-style:italic">“'+escHTML(q)+'”</div>'
-    +'<div class="quote-foot-v4">'
-    +'<span class="subtle" style="font-size:11px">'+(qAt?('bijgewerkt: '+fmtDate(qAt)):'')+'</span>'
-    +'<button class="btn btn-primary btn-small" type="button" onclick="generateProfileQuote()">Vernieuw</button></div>';
+  heroEl.innerHTML='<h3>Voor jou</h3>'
+    +'<div class=”mij-summary quote-text-v4” style=”font-style:italic”>&#8220;'+escHTML(q)+'&#8221;'
+    +(qa?'<div style=”font-style:normal;font-size:13px;margin-top:6px;color:var(--sage-donker,#4a5e52)”>&#8212; '+escHTML(qa)+'</div>':'')
+    +'</div>'
+    +'<div class=”quote-foot-v4”>'
+    +'<span class=”subtle” style=”font-size:11px”>'+(qAt?('bijgewerkt: '+fmtDate(qAt)):'')+'</span>'
+    +'<button class=”btn btn-primary btn-small” type=”button” onclick=”generateProfileQuote()”>Vernieuw</button></div>';
 
   var dims=['karakter','interesses','relatie','gevoels','algemeen'];
   var richCount=0;
@@ -2952,21 +3048,36 @@ async function submitOwnVertel(){
 }
 
 async function openReviewFactsModal(){
-  await hydrateCheckinAnswersForEvidenceLists((ownAandachtspunten||[]).map(function(a){return a&&a.evidence;}));
   var m=document.getElementById('reviewFactsModal');
   if(!m)return;
   window.__ownsenseReviewFactBusy=null;
   window.__ownsenseReviewAandachtBusy=null;
   window.__ownsenseReviewBulkBusy=false;
   initReviewFactsListDelegation();
-  try{
-    var client=initSupabase();
-    var uid=String(window.__ownSenseUid||'').trim();
-    if(client&&uid)await loadSenseProfileScopesForUser(uid);
-  }catch(_e){}
   m.classList.add('show');
   m.setAttribute('aria-hidden','false');
-  renderReviewFacts();
+  var listEl=document.getElementById('reviewFactsList');
+  if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Laden…</div>';
+  try{
+    var wa=senseGetWriteAuth();
+    var uid=wa.uid||String(window.__ownSenseUid||'').trim();
+    var client=initSupabase();
+    var prep=[
+      ownPromiseTimeout(loadOwnBrainTables(),8000,null),
+      ownPromiseTimeout(
+        hydrateCheckinAnswersForEvidenceLists((ownAandachtspunten||[]).map(function(a){return a&&a.evidence;})),
+        6000,null
+      )
+    ];
+    if(client&&uid)prep.push(ownPromiseTimeout(loadSenseProfileScopesForUser(uid),6000,null));
+    await Promise.all(prep);
+  }catch(_e){}
+  try{
+    await renderReviewFacts();
+  }catch(e){
+    console.warn('[openReviewFactsModal]',e);
+    if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Kon gegevens niet laden. Probeer opnieuw.</div>';
+  }
 }
 function closeReviewFactsModal(){
   var m=document.getElementById('reviewFactsModal');
@@ -3169,7 +3280,13 @@ async function hydrateCheckinAnswersForEvidenceLists(evidenceLists){
   if(!ids.length)return;
   var client=initSupabase();
   if(!client)return;
-  var uid=await ownReviewUidAsync(client);
+  var wa=senseGetWriteAuth();
+  if(wa.blocked)return;
+  var uid=wa.uid||String(window.__ownSenseUid||'').trim();
+  if(!uid){
+    uid=await ownPromiseTimeout(ownReviewUidAsync(client),5000,'');
+    uid=String(uid||'').trim();
+  }
   if(!uid)return;
   try{
     var res=await client.from('selfsense_checkins').select('id,answer,note').eq('user_id',uid).in('id',ids);
@@ -5068,9 +5185,23 @@ function senseAuthLock(name,acquireTimeout,fn){
       return fn();
     });
   }
-  return navigator.locks.request(name,{ifAvailable:true},function(lock){
-    if(!lock){try{console.warn('[senseAuthLock] slot bezet, draait zonder slot',{lock:name});}catch(_e){}}
+  var ms=Math.max(500,Math.min(30000,parseInt(acquireTimeout,10)||10000));
+  var ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+  var timer=null;
+  if(ctrl){
+    timer=setTimeout(function(){try{ctrl.abort();}catch(_e){}},ms);
+  }
+  return navigator.locks.request(name,ctrl?{signal:ctrl.signal}:{},function(){
+    if(timer)clearTimeout(timer);
     return fn();
+  }).catch(function(err){
+    if(timer)clearTimeout(timer);
+    var abort=!!(err&&(err.name==='AbortError'||String(err.message||'').toLowerCase().indexOf('abort')>=0));
+    if(abort||!ctrl){
+      try{console.warn('[senseAuthLock] wachttijd verstreken, draait zonder slot',{lock:name,ms:ms});}catch(_e){}
+      return fn();
+    }
+    throw err;
   });
 }
 function initSupabase(){
@@ -6814,8 +6945,10 @@ function maybeAutoGenerateProfileQuote(){
   if(__quoteAutoBusy)return;
   var now=Date.now();
   if(now-__quoteAutoLastAt<12000)return;
-  if(String(hubState.profile_quote||'').trim())return;
-  if(ownQuoteRichCount()<2)return;
+  var today=ownTodayIso();
+  var hasQuote=String(hubState.profile_quote||'').trim();
+  var quoteDate=String(hubState.profile_quote_date||'').trim();
+  if(hasQuote&&quoteDate===today)return;
   __quoteAutoBusy=true;
   __quoteAutoLastAt=now;
   generateProfileQuote().finally(function(){__quoteAutoBusy=false;});
