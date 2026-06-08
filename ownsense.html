@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="nl" data-sc-tone="sage">
 <head>
 <meta charset="UTF-8">
@@ -1879,6 +1879,30 @@ function senseGetWriteAuth(){
   }
   return {ok:false,blocked:false,token:'',uid:uid,source:'none',stale:false};
 }
+/** Verse token voor review-schrijfacties (accept/weiger/wijzig). Vermijdt 401 door verlopen JWT. */
+async function ensureReviewWriteAuth(client){
+  client=client||initSupabase();
+  var wa=senseGetWriteAuth();
+  if(wa.blocked){ownWarnAuthStorageBlockedOnce();return wa;}
+  var uid=wa.uid||String(window.__ownSenseUid||'').trim();
+  if(!uid){
+    var persisted=senseSessionFromPersisted();
+    if(persisted&&persisted.user)uid=String(persisted.user.id||'');
+  }
+  if((!wa.token||wa.stale)&&client){
+    try{
+      var refreshed=await ownPromiseTimeout(senseRefreshSessionSafe(client),12000,null);
+      if(refreshed&&refreshed.access_token&&refreshed.user){
+        _setAuthTokenFromSession(refreshed);
+        window.__ownSenseUid=String(refreshed.user.id||uid||'');
+        wa=senseGetWriteAuth();
+        uid=wa.uid||uid;
+      }
+    }catch(_e){}
+  }
+  if(uid&&!wa.uid)wa=Object.assign({},wa,{uid:uid});
+  return wa;
+}
 function senseSupabaseRestBase(){
   return String(window.SUPABASE_URL||SURL||'').replace(/\/$/,'');
 }
@@ -2256,16 +2280,22 @@ async function loadOwnBrainTables(){
   var client=initSupabase();
   if(!client)return;
   try{
-    var user=await ownAuthUserFast(client);
-    if(!user){
-      ownFacts=[];
-      ownAandachtspunten=[];
-      ownInsights=[];
-      ownPhotos=[];
-      ownGrowthEvents=[];
-      return;
+    var wa=senseGetWriteAuth();
+    var uid=wa.uid||String(window.__ownSenseUid||'').trim();
+    var user=null;
+    if(uid){
+      user={id:uid};
+    }else{
+      user=await ownAuthUserFast(client);
+      if(!user){
+        console.warn('[loadOwnBrainTables] geen sessie, behoud lokale cache');
+        return;
+      }
+      uid=user.id;
     }
-    var uid=user.id;
+    if((!wa.token||wa.stale)&&client){
+      try{await ownPromiseTimeout(senseRefreshSessionSafe(client),10000,null);}catch(_rf){}
+    }
     try{await loadSenseProfileScopesForUser(uid);}catch(_scopes){}
     var factsRes=await client.from('own_facts').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(300);
     if(factsRes&&Array.isArray(factsRes.data))ownFacts=factsRes.data;
@@ -2559,10 +2589,10 @@ async function generateProfileQuote(){
   var chosen=null;
   if(src&&ownQuoteRichCount()>=2){
     try{
-      var quotesListStr=OWN_REAL_QUOTES.map(function(x,i){return (i+1)+'. “'+x.q+'” — '+x.a;}).join('\n');
+      var quotesListStr=OWN_REAL_QUOTES.map(function(x,i){return (i+1)+'. "'+x.q+'" - '+x.a;}).join('\n');
       var sys='Je krijgt een profielsamenvatting en een genummerde lijst van echte citaten van bekende personen.'
         +' Kies het nummer van het citaat dat het best aansluit bij dit profiel.'
-        +' Geef ALLEEN het getal terug (bijv. “3”), niets anders.';
+        +' Geef ALLEEN het getal terug (bijv. "3"), niets anders.';
       var msg='Profiel:\n'+src+'\n\nCitaten:\n'+quotesListStr;
       var out=String(await callAnthropicJson(sys,msg,5,15000)||'').trim();
       var idx=parseInt(out,10)-1;
@@ -2823,12 +2853,12 @@ function renderMijTab(){
   }
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
   heroEl.innerHTML='<h3>Voor jou</h3>'
-    +'<div class=”mij-summary quote-text-v4” style=”font-style:italic”>&#8220;'+escHTML(q)+'&#8221;'
-    +(qa?'<div style=”font-style:normal;font-size:13px;margin-top:6px;color:var(--sage-donker,#4a5e52)”>&#8212; '+escHTML(qa)+'</div>':'')
+    +'<div class="mij-summary quote-text-v4" style="font-style:italic">&#8220;'+escHTML(q)+'&#8221;'
+    +(qa?'<div style="font-style:normal;font-size:13px;margin-top:6px;color:var(--sage-donker,#4a5e52)">&#8212; '+escHTML(qa)+'</div>':'')
     +'</div>'
-    +'<div class=”quote-foot-v4”>'
-    +'<span class=”subtle” style=”font-size:11px”>'+(qAt?('bijgewerkt: '+fmtDate(qAt)):'')+'</span>'
-    +'<button class=”btn btn-primary btn-small” type=”button” onclick=”generateProfileQuote()”>Vernieuw</button></div>';
+    +'<div class="quote-foot-v4">'
+    +'<span class="subtle" style="font-size:11px">'+(qAt?('bijgewerkt: '+fmtDate(qAt)):'')+'</span>'
+    +'<button class="btn btn-primary btn-small" type="button" onclick="generateProfileQuote()">Vernieuw</button></div>';
 
   var dims=['karakter','interesses','relatie','gevoels','algemeen'];
   var richCount=0;
@@ -3047,9 +3077,11 @@ async function submitOwnVertel(){
   }
 }
 
+var __ownReviewModalGen=0;
 async function openReviewFactsModal(){
   var m=document.getElementById('reviewFactsModal');
   if(!m)return;
+  var gen=++__ownReviewModalGen;
   window.__ownsenseReviewFactBusy=null;
   window.__ownsenseReviewAandachtBusy=null;
   window.__ownsenseReviewBulkBusy=false;
@@ -3059,22 +3091,24 @@ async function openReviewFactsModal(){
   var listEl=document.getElementById('reviewFactsList');
   if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Laden…</div>';
   try{
-    var wa=senseGetWriteAuth();
-    var uid=wa.uid||String(window.__ownSenseUid||'').trim();
     var client=initSupabase();
-    var prep=[
-      ownPromiseTimeout(loadOwnBrainTables(),8000,null),
-      ownPromiseTimeout(
-        hydrateCheckinAnswersForEvidenceLists((ownAandachtspunten||[]).map(function(a){return a&&a.evidence;})),
-        6000,null
-      )
-    ];
-    if(client&&uid)prep.push(ownPromiseTimeout(loadSenseProfileScopesForUser(uid),6000,null));
-    await Promise.all(prep);
-  }catch(_e){}
-  try{
+    var wa=await ensureReviewWriteAuth(client);
+    if(gen!==__ownReviewModalGen)return;
+    var uid=wa.uid||String(window.__ownSenseUid||'').trim();
+    await ownPromiseTimeout(loadOwnBrainTables(),12000,null);
+    if(gen!==__ownReviewModalGen)return;
+    await ownPromiseTimeout(
+      hydrateCheckinAnswersForEvidenceLists((ownAandachtspunten||[]).map(function(a){return a&&a.evidence;})),
+      6000,null
+    );
+    if(gen!==__ownReviewModalGen)return;
+    if(client&&uid){
+      try{await ownPromiseTimeout(loadSenseProfileScopesForUser(uid),6000,null);}catch(_sc){}
+    }
+    if(gen!==__ownReviewModalGen)return;
     await renderReviewFacts();
   }catch(e){
+    if(gen!==__ownReviewModalGen)return;
     console.warn('[openReviewFactsModal]',e);
     if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Kon gegevens niet laden. Probeer opnieuw.</div>';
   }
@@ -3781,6 +3815,7 @@ async function acceptAllPendingFacts(){
   window.__ownsenseReviewBulkBusy=true;
   setReviewBulkBarBusy(true,'Bezig met accepteren…');
   try{
+    await ensureReviewWriteAuth(initSupabase());
     pending.sort(function(a,b){
       var ta=new Date(a&&a.created_at||0).getTime();
       var tb=new Date(b&&b.created_at||0).getTime();
@@ -3931,20 +3966,24 @@ function applyUpdatedOwnFact(factId,row){
 // gepersisteerd, ook wanneer RLS de update-representation verbergt (update slaagt, maar
 // .select() geeft geen rij terug). Geeft {ok,row,error} terug; ok=false bij echte fout.
 async function ownFactReadBack(client,factId,uid,label,writeAuth){
-  writeAuth=writeAuth||senseGetWriteAuth();
+  writeAuth=writeAuth||await ensureReviewWriteAuth(client);
   try{
     if(writeAuth.ok&&writeAuth.token&&uid){
-      var rb=await withTimeout(
-        sensePostgrestSelectOwnFact({factId:factId,uid:uid,token:writeAuth.token,timeoutMs:OWN_REVIEW_FACT_WRITE_MS}),
-        OWN_REVIEW_FACT_WRITE_MS,
-        null,
-        {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId,transport:'postgrest-direct'}}
-      );
-      if(rb&&!rb.ok){
-        console.error('[ownFactReadBack] postgrest-error',{factId:factId,uid:uid,error:rb.error});
-        return {ok:false,row:null,error:rb.error};
+      for(var attempt=0;attempt<2;attempt++){
+        var rb=await withTimeout(
+          sensePostgrestSelectOwnFact({factId:factId,uid:uid,token:writeAuth.token,timeoutMs:OWN_REVIEW_FACT_WRITE_MS}),
+          OWN_REVIEW_FACT_WRITE_MS,
+          null,
+          {label:(label||'ownsense-review-fact-readback'),meta:{factId:factId,transport:'postgrest-direct',attempt:attempt}}
+        );
+        if(rb&&!rb.ok){
+          console.error('[ownFactReadBack] postgrest-error',{factId:factId,uid:uid,error:rb.error,attempt:attempt});
+          return {ok:false,row:null,error:rb.error};
+        }
+        if(rb&&rb.row)return {ok:true,row:rb.row,error:null};
+        if(attempt===0)await new Promise(function(r){setTimeout(r,350);});
       }
-      return {ok:true,row:(rb&&rb.row)||null,error:null};
+      return {ok:true,row:null,error:null};
     }
     var rb2=await withTimeout(
       client.from('own_facts').select('*').eq('id',factId).eq('user_id',uid).maybeSingle(),
@@ -3987,7 +4026,7 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
   if(!client)return null;
   factId=ownFactIdStr(factId);
   opts=opts||{};
-  var writeAuth=senseGetWriteAuth();
+  var writeAuth=await ensureReviewWriteAuth(client);
   try{console.warn('[os-review-timing] status:token-source',{factId:factId,source:writeAuth.source,hasToken:!!writeAuth.token,blocked:!!writeAuth.blocked,stale:!!writeAuth.stale});}catch(_e){}
   if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
   var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
@@ -4017,6 +4056,19 @@ async function updateOwnFactStatus(factId,newStatus,newText,opts){
       'Actie duurde te lang. Probeer opnieuw.',
       {label:'ownsense-review-fact-status',meta:{factId:factId,status:newStatus,transport:'postgrest-direct'}}
     );
+    if((!r||!r.ok)&&newStatus==='accepted'&&payload.accepted_at){
+      var errTxt=String((r&&r.error)||'');
+      if(errTxt.indexOf('accepted_at')>=0){
+        var payload2=Object.assign({},payload);
+        delete payload2.accepted_at;
+        r=await withTimeout(
+          sensePostgrestPatchOwnFact({factId:factId,uid:uid,token:writeAuth.token,body:payload2,timeoutMs:writeMs}),
+          writeMs,
+          'Actie duurde te lang. Probeer opnieuw.',
+          {label:'ownsense-review-fact-status-fallback',meta:{factId:factId,status:newStatus,transport:'postgrest-direct'}}
+        );
+      }
+    }
     var __osT1=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
     try{console.warn('[os-review-timing] status:update-done',{factId:factId,ms:Math.round(__osT1-__osT0),ok:!!(r&&r.ok),status:(r&&r.status)||null});}catch(_e){}
     if(!r||!r.ok){
@@ -4053,7 +4105,7 @@ async function updateOwnFactSourceDossier(factId,newDossier){
   factId=ownFactIdStr(factId);
   var doss=String(newDossier||'').trim();
   if(!doss)doss='OWN Sense';
-  var writeAuth=senseGetWriteAuth();
+  var writeAuth=await ensureReviewWriteAuth(client);
   if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
   var uid=writeAuth.uid||await ownReviewUidAsync(client);
   if(!uid){
@@ -4128,7 +4180,7 @@ async function updateOwnFactPendingText(factId,newText){
   factId=ownFactIdStr(factId);
   var txt=String(newText||'').trim();
   if(!txt)return null;
-  var writeAuth=senseGetWriteAuth();
+  var writeAuth=await ensureReviewWriteAuth(client);
   try{console.warn('[os-review-timing] text:token-source',{factId:factId,source:writeAuth.source,hasToken:!!writeAuth.token,blocked:!!writeAuth.blocked,stale:!!writeAuth.stale});}catch(_e){}
   if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
   var __osUid0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
@@ -4201,13 +4253,17 @@ async function acceptOwnFact(factId){
   factId=ownFactIdStr(factId);
   if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewFactBusy||window.__ownsenseReviewAandachtBusy)return;
   if(!findOwnFactById(factId)){
-    flashOwnsenseMessage('Gegeven niet gevonden. Sluit het venster en open het opnieuw.',true);
-    return;
+    try{await ownPromiseTimeout(loadOwnBrainTables(),10000,null);}catch(_rl){}
+    if(!findOwnFactById(factId)){
+      flashOwnsenseMessage('Gegeven niet gevonden. Sluit het venster en open het opnieuw.',true);
+      return;
+    }
   }
   window.__ownsenseReviewFactBusy=factId;
   setReviewFactButtonsBusy(factId,true,'accept');
   var updated=null;
   try{
+    await ensureReviewWriteAuth(initSupabase());
     // Alleen wachten als er nog een tekst-sync van een net-bewerkte fact loopt;
     // anders blijft de normale accept-flow even snel als voorheen.
     await awaitOwnFactTextSync(factId,OWN_REVIEW_FACT_DB_MS);
@@ -4431,9 +4487,47 @@ async function insertOwnFactRow(row){
       ownFacts.unshift(r.data);
       return r.data;
     }
-  }catch(_e){}
+    if(r&&r.error)console.warn('[insertOwnFactRow]',r.error);
+  }catch(e){console.warn('[insertOwnFactRow]',e);}
   return null;
 }
+
+/** Dev/test: voeg één pending own_fact toe om «nieuwe gegevens» te testen. Console: seedOwnTestPendingFact() */
+async function seedOwnTestPendingFact(opts){
+  opts=opts||{};
+  var client=initSupabase();
+  if(!client){
+    flashOwnsenseMessage('Supabase niet beschikbaar.',true);
+    return null;
+  }
+  var wa=await ensureReviewWriteAuth(client);
+  if(wa.blocked||!wa.uid){
+    flashOwnsenseMessage('Log eerst in via SenseCorner.',true);
+    return null;
+  }
+  var stamp=new Date().toLocaleString('nl-BE',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
+  var row={
+    user_id:wa.uid,
+    category:opts.category||'algemeen',
+    subcategory:opts.subcategory||'test',
+    fact_text:opts.text||('Test-gegeven voor goedkeuring ('+stamp+'). Je kunt dit accepteren of weigeren.'),
+    source_app:opts.source_app||'ownsense',
+    source_dossier:opts.source_dossier||'OWN Sense',
+    source_session_id:null,
+    confidence:0.85,
+    status:'pending'
+  };
+  var inserted=await insertOwnFactRow(row);
+  if(!inserted){
+    flashOwnsenseMessage('Test-gegeven kon niet worden aangemaakt. Probeer opnieuw.',true);
+    return null;
+  }
+  updateOwnPendingNavBadge();
+  renderMijTab();
+  flashOwnsenseMessage('Test-gegeven toegevoegd. Open «nieuwe gegevens» om te testen.',false,{durationMs:8200});
+  return inserted;
+}
+window.seedOwnTestPendingFact=seedOwnTestPendingFact;
 
 async function extractOwnFactsFromMessage(message,meta){
   var txt=String(message||'').trim();
@@ -7436,6 +7530,12 @@ Promise.all([loadOwnFromSupabase(),loadOwnBrainTables()])
     renderFotosTab();
     applyUrlTabBoot();
     runOwnAutoAcceptStaleInBackground();
+    try{
+      var qp=new URLSearchParams(window.location.search||'');
+      if(String(qp.get('osSeedTestFact')||'')==='1'){
+        void seedOwnTestPendingFact();
+      }
+    }catch(_seed){}
   })
   .then(function(){return loadOwnTimelineFromSupabase();})
   .finally(function(){
