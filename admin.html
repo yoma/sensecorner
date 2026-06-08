@@ -97,6 +97,7 @@ a{color:inherit}
 .tel-stat-sub{font-size:11px;color:var(--m);margin-top:2px}
 .tel-filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .tel-filter-row select,.tel-filter-row input{border:1px solid var(--b);border-radius:10px;background:var(--ivoor);color:var(--chocolade);padding:7px 10px;font-size:12px;font-family:inherit}
+.tel-filter-row input[type="search"]{min-width:180px;flex:1 1 200px}
 .tel-table{width:100%;border-collapse:collapse;font-size:12px}
 .tel-table th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--b);background:rgba(0,0,0,.02);font-weight:700;color:var(--chocolade);position:sticky;top:0}
 .tel-table td{padding:7px 8px;border-bottom:1px solid var(--b);color:var(--chocolade);vertical-align:top}
@@ -234,11 +235,15 @@ a{color:inherit}
         <option value="error">Error</option>
         <option value="slow">Slow</option>
       </select>
+      <select id="telFilterUser">
+        <option value="">Alle gebruikers</option>
+      </select>
       <select id="telFilterRange">
         <option value="1">Laatste 24u</option>
         <option value="7" selected>Laatste 7 dagen</option>
         <option value="30">Laatste 30 dagen</option>
       </select>
+      <input id="telFilterSearch" type="search" placeholder="Zoek in alle kolommen…" autocomplete="off" spellcheck="false">
     </div>
 
     <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:10px">
@@ -252,7 +257,7 @@ a{color:inherit}
     <div class="tel-table-wrap">
       <table class="tel-table">
         <thead><tr>
-          <th>Tijd</th><th>App</th><th>Functie</th><th>Status</th><th>Duur</th><th>Timeout</th><th>Error</th>
+          <th>Tijd</th><th>Gebruiker</th><th>App</th><th>Functie</th><th>Status</th><th>Duur</th><th>Timeout</th><th>Error</th>
         </tr></thead>
         <tbody id="telTableBody"></tbody>
       </table>
@@ -705,6 +710,149 @@ a{color:inherit}
       return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
     });
   }
+  function _telUserLabel(userId,emailMap){
+    var uid=String(userId||'').trim();
+    if(!uid)return'-';
+    var email=emailMap&&emailMap[uid]?String(emailMap[uid]).trim():'';
+    if(email)return email;
+    return 'user '+uid.slice(0,8);
+  }
+  async function _telLoadUserEmailMap(){
+    var map={};
+    try{
+      var rs=await sb.rpc('admin_list_ai_access');
+      if(rs&&rs.error)throw rs.error;
+      (Array.isArray(rs&&rs.data)?rs.data:[]).forEach(function(u){
+        var uid=String(u&&u.user_id||'').trim();
+        if(!uid)return;
+        map[uid]=String(u.email||'').trim();
+      });
+    }catch(e){
+      console.warn('telemetry user map failed',e);
+    }
+    return map;
+  }
+  var _telRowsRaw=[];
+  var _telUserEmailMap={};
+  var _telRangeDays=7;
+  var _telSearchTimer=null;
+  function _telRowHaystack(r,userEmailMap){
+    var who=_telUserLabel(r.user_id,userEmailMap);
+    var parts=[
+      _telFmtTime(r.created_at),
+      who,
+      r.user_id,
+      r.app,
+      r.fn_name,
+      r.status,
+      String(r.duration_ms||''),
+      r.timeout_ms?String(r.timeout_ms):'',
+      r.error_msg||'',
+      r.meta?JSON.stringify(r.meta):''
+    ];
+    return parts.join(' ').toLowerCase();
+  }
+  function _telApplyClientFilters(rows,userEmailMap){
+    var fu=document.getElementById('telFilterUser');
+    var fs=document.getElementById('telFilterSearch');
+    var userFilter=fu?String(fu.value||'').trim():'';
+    var q=fs?String(fs.value||'').trim().toLowerCase():'';
+    return (rows||[]).filter(function(r){
+      if(userFilter&&String(r.user_id||'')!==userFilter)return false;
+      if(q&&_telRowHaystack(r,userEmailMap).indexOf(q)<0)return false;
+      return true;
+    });
+  }
+  function _telPopulateUserFilter(rows,userEmailMap){
+    var sel=document.getElementById('telFilterUser');
+    if(!sel)return;
+    var current=String(sel.value||'');
+    var seen={};
+    var opts=[{id:'',label:'Alle gebruikers'}];
+    (rows||[]).forEach(function(r){
+      var uid=String(r.user_id||'').trim();
+      if(!uid||seen[uid])return;
+      seen[uid]=true;
+      opts.push({id:uid,label:_telUserLabel(uid,userEmailMap)});
+    });
+    var sortedUsers=opts.slice(1).sort(function(a,b){return String(a.label).localeCompare(String(b.label),'nl');});
+    opts=[opts[0]].concat(sortedUsers);
+    sel.innerHTML=opts.map(function(o){
+      return '<option value="'+_telEsc(o.id)+'">'+_telEsc(o.label)+'</option>';
+    }).join('');
+    if(current&&seen[current])sel.value=current;
+    else sel.value='';
+  }
+  function renderTelemetry(){
+    var stateEl=document.getElementById('telState');
+    var rows=_telApplyClientFilters(_telRowsRaw,_telUserEmailMap);
+    var rangeDays=_telRangeDays||7;
+    var totalRaw=_telRowsRaw.length;
+
+    var counts={timeout:0,error:0,slow:0};
+    var perFn={};
+    rows.forEach(function(r){
+      if(counts[r.status]!==undefined)counts[r.status]++;
+      var key=r.app+' · '+r.fn_name;
+      if(!perFn[key])perFn[key]={count:0,totalMs:0,maxMs:0};
+      perFn[key].count++;
+      perFn[key].totalMs+=r.duration_ms||0;
+      if((r.duration_ms||0)>perFn[key].maxMs)perFn[key].maxMs=r.duration_ms||0;
+    });
+
+    var statsSub=rows.length!==totalRaw
+      ?(rows.length+' van '+totalRaw+' · laatste '+rangeDays+' dagen')
+      :('laatste '+rangeDays+' dagen');
+    var statsHtml=''
+      +'<div class="tel-stat-card"><div class="tel-stat-label">Totaal events</div><div class="tel-stat-value">'+rows.length+'</div><div class="tel-stat-sub">'+statsSub+'</div></div>'
+      +'<div class="tel-stat-card"><div class="tel-stat-label">Timeouts</div><div class="tel-stat-value" style="color:#9F1D1D">'+counts.timeout+'</div></div>'
+      +'<div class="tel-stat-card"><div class="tel-stat-label">Errors</div><div class="tel-stat-value" style="color:var(--amber)">'+counts.error+'</div></div>'
+      +'<div class="tel-stat-card"><div class="tel-stat-label">Slow</div><div class="tel-stat-value" style="color:#92640a">'+counts.slow+'</div></div>';
+    var sg=document.getElementById('telStatsGrid');
+    if(sg)sg.innerHTML=statsHtml;
+
+    var topArr=Object.keys(perFn).map(function(k){
+      var v=perFn[k];
+      return {key:k,avg:Math.round(v.totalMs/v.count),count:v.count,max:v.maxMs};
+    }).sort(function(a,b){return b.avg-a.avg;}).slice(0,10);
+    var topHtml=topArr.length
+      ?topArr.map(function(t){
+        return '<div class="tel-top-row"><span class="tel-top-fn">'+_telEsc(t.key)+'</span><span class="tel-top-meta">avg '+t.avg+'ms · max '+t.max+'ms · '+t.count+'×</span></div>';
+      }).join('')
+      :'<div class="tel-empty">Geen events voor deze filters.</div>';
+    var tl=document.getElementById('telTopList');
+    if(tl)tl.innerHTML=topHtml;
+
+    var tbody=document.getElementById('telTableBody');
+    var tableRows=rows.slice(0,100);
+    if(!tbody){/* noop */}
+    else if(!tableRows.length){
+      tbody.innerHTML='<tr><td colspan="8" class="tel-empty">Geen events voor deze filters.</td></tr>';
+    }else{
+      tbody.innerHTML=tableRows.map(function(r){
+        var statusClass=(r.status==='timeout'||r.status==='error'||r.status==='slow')?r.status:'';
+        var who=_telUserLabel(r.user_id,_telUserEmailMap);
+        return '<tr>'
+          +'<td>'+_telEsc(_telFmtTime(r.created_at))+'</td>'
+          +'<td style="word-break:break-all;max-width:180px" title="'+_telEsc(who)+'">'+_telEsc(who)+'</td>'
+          +'<td>'+_telEsc(r.app)+'</td>'
+          +'<td style="word-break:break-all">'+_telEsc(r.fn_name)+'</td>'
+          +'<td><span class="tel-status-pill '+statusClass+'">'+_telEsc(r.status)+'</span></td>'
+          +'<td>'+(r.duration_ms||0)+'ms</td>'
+          +'<td>'+(r.timeout_ms?r.timeout_ms+'ms':'-')+'</td>'
+          +'<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+_telEsc(r.error_msg||'')+'">'+_telEsc(r.error_msg||'')+'</td>'
+          +'</tr>';
+      }).join('');
+    }
+
+    if(stateEl){
+      var parts=[];
+      if(totalRaw===500)parts.push('Database-limit: eerste 500 events. Filter strakker voor specifieker beeld.');
+      if(rows.length>100)parts.push('Tabel toont de 100 meest recente van '+rows.length+' gefilterde events.');
+      else if(rows.length!==totalRaw)parts.push(rows.length+' van '+totalRaw+' events na filter.');
+      stateEl.textContent=parts.join(' ');
+    }
+  }
   async function loadTelemetry(){
     var stateEl=document.getElementById('telState');
     if(stateEl)stateEl.textContent='Laden…';
@@ -726,69 +874,24 @@ a{color:inherit}
       if(statusFilter)q=q.eq('status',statusFilter);
 
       var res=await q;
+      var userMapPromise=_telLoadUserEmailMap();
       var data=res&&res.data;
       var error=res&&res.error;
       if(error)throw new Error(error.message||String(error.code||'')||'Query mislukt');
-      var rows=data||[];
-
-      var counts={timeout:0,error:0,slow:0};
-      var perFn={};
-      rows.forEach(function(r){
-        if(counts[r.status]!==undefined)counts[r.status]++;
-        var key=r.app+' · '+r.fn_name;
-        if(!perFn[key])perFn[key]={count:0,totalMs:0,maxMs:0};
-        perFn[key].count++;
-        perFn[key].totalMs+=r.duration_ms||0;
-        if((r.duration_ms||0)>perFn[key].maxMs)perFn[key].maxMs=r.duration_ms||0;
-      });
-
-      var statsHtml=''
-        +'<div class="tel-stat-card"><div class="tel-stat-label">Totaal events</div><div class="tel-stat-value">'+rows.length+'</div><div class="tel-stat-sub">laatste '+rangeDays+' dagen</div></div>'
-        +'<div class="tel-stat-card"><div class="tel-stat-label">Timeouts</div><div class="tel-stat-value" style="color:#9F1D1D">'+counts.timeout+'</div></div>'
-        +'<div class="tel-stat-card"><div class="tel-stat-label">Errors</div><div class="tel-stat-value" style="color:var(--amber)">'+counts.error+'</div></div>'
-        +'<div class="tel-stat-card"><div class="tel-stat-label">Slow</div><div class="tel-stat-value" style="color:#92640a">'+counts.slow+'</div></div>';
-      var sg=document.getElementById('telStatsGrid');
-      if(sg)sg.innerHTML=statsHtml;
-
-      var topArr=Object.keys(perFn).map(function(k){
-        var v=perFn[k];
-        return {key:k,avg:Math.round(v.totalMs/v.count),count:v.count,max:v.maxMs};
-      }).sort(function(a,b){return b.avg-a.avg;}).slice(0,10);
-      var topHtml=topArr.length
-        ?topArr.map(function(t){
-          return '<div class="tel-top-row"><span class="tel-top-fn">'+_telEsc(t.key)+'</span><span class="tel-top-meta">avg '+t.avg+'ms · max '+t.max+'ms · '+t.count+'×</span></div>';
-        }).join('')
-        :'<div class="tel-empty">Geen events in deze filter.</div>';
-      var tl=document.getElementById('telTopList');
-      if(tl)tl.innerHTML=topHtml;
-
-      var tbody=document.getElementById('telTableBody');
-      var tableRows=rows.slice(0,100);
-      if(!tbody){/* noop */}
-      else if(!tableRows.length){
-        tbody.innerHTML='<tr><td colspan="7" class="tel-empty">Geen events in deze filter.</td></tr>';
-      }else{
-        tbody.innerHTML=tableRows.map(function(r){
-          var statusClass=(r.status==='timeout'||r.status==='error'||r.status==='slow')?r.status:'';
-          return '<tr>'
-            +'<td>'+_telEsc(_telFmtTime(r.created_at))+'</td>'
-            +'<td>'+_telEsc(r.app)+'</td>'
-            +'<td style="word-break:break-all">'+_telEsc(r.fn_name)+'</td>'
-            +'<td><span class="tel-status-pill '+statusClass+'">'+_telEsc(r.status)+'</span></td>'
-            +'<td>'+(r.duration_ms||0)+'ms</td>'
-            +'<td>'+(r.timeout_ms?r.timeout_ms+'ms':'-')+'</td>'
-            +'<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+_telEsc(r.error_msg||'')+'">'+_telEsc(r.error_msg||'')+'</td>'
-            +'</tr>';
-        }).join('');
-      }
-
-      if(stateEl)stateEl.textContent=rows.length===500?'Toon eerste 500 events (limit). Filter strakker voor specifieker beeld.':'';
+      _telRowsRaw=data||[];
+      _telUserEmailMap=await userMapPromise;
+      _telRangeDays=rangeDays;
+      _telPopulateUserFilter(_telRowsRaw,_telUserEmailMap);
+      renderTelemetry();
     }catch(e){
+      _telRowsRaw=[];
+      renderTelemetry();
       if(stateEl)stateEl.textContent='Fout bij laden: '+(e.message||e);
       console.error('loadTelemetry failed',e);
     }
   }
   window.loadTelemetry=loadTelemetry;
+  window.renderTelemetry=renderTelemetry;
 
   function setAdminAiState(msg,isErr){
     if(!adminAiState)return;
@@ -1250,6 +1353,20 @@ a{color:inherit}
         el.addEventListener('change',function(){loadTelemetry();});
       }
     });
+    var telUserEl=document.getElementById('telFilterUser');
+    if(telUserEl&&!telUserEl._telBound){
+      telUserEl._telBound=true;
+      telUserEl.addEventListener('change',function(){renderTelemetry();});
+    }
+    var telSearchEl=document.getElementById('telFilterSearch');
+    if(telSearchEl&&!telSearchEl._telBound){
+      telSearchEl._telBound=true;
+      telSearchEl.addEventListener('input',function(){
+        if(_telSearchTimer)clearTimeout(_telSearchTimer);
+        _telSearchTimer=setTimeout(function(){renderTelemetry();},180);
+      });
+      telSearchEl.addEventListener('search',function(){renderTelemetry();});
+    }
     var legacyOverrides=readLegacyPromptOverrides(user);
     var savedDatePrompts=await loadSavedPromptSet('prompts_datesense');
     var savedFriendPrompts=await loadSavedPromptSet('prompts_friendsense');
