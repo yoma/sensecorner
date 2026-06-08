@@ -2297,16 +2297,23 @@ async function loadOwnBrainTables(){
       try{await ownPromiseTimeout(senseRefreshSessionSafe(client),10000,null);}catch(_rf){}
     }
     try{await loadSenseProfileScopesForUser(uid);}catch(_scopes){}
-    var factsRes=await client.from('own_facts').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(300);
-    if(factsRes&&Array.isArray(factsRes.data))ownFacts=factsRes.data;
-    var aandRes=await client.from('own_aandachtspunten').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(50);
-    if(aandRes&&Array.isArray(aandRes.data))ownAandachtspunten=aandRes.data;
-    var insightsRes=await client.from('own_insights').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(200);
-    if(insightsRes&&Array.isArray(insightsRes.data))ownInsights=insightsRes.data;
-    var photosRes=await client.from('own_photos').select('*').eq('user_id',uid).order('slot',{ascending:true});
-    if(photosRes&&Array.isArray(photosRes.data))ownPhotos=photosRes.data;
-    var growthRes=await client.from('own_growth_events').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(400);
-    if(growthRes&&Array.isArray(growthRes.data))ownGrowthEvents=growthRes.data;
+    var _dbResults=await Promise.allSettled([
+      client.from('own_facts').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(300),
+      client.from('own_aandachtspunten').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(50),
+      client.from('own_insights').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(200),
+      client.from('own_photos').select('*').eq('user_id',uid).order('slot',{ascending:true}),
+      client.from('own_growth_events').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(400)
+    ]);
+    var _d0=_dbResults[0].status==='fulfilled'?_dbResults[0].value:null;
+    var _d1=_dbResults[1].status==='fulfilled'?_dbResults[1].value:null;
+    var _d2=_dbResults[2].status==='fulfilled'?_dbResults[2].value:null;
+    var _d3=_dbResults[3].status==='fulfilled'?_dbResults[3].value:null;
+    var _d4=_dbResults[4].status==='fulfilled'?_dbResults[4].value:null;
+    if(_d0&&Array.isArray(_d0.data))ownFacts=_d0.data;
+    if(_d1&&Array.isArray(_d1.data))ownAandachtspunten=_d1.data;
+    if(_d2&&Array.isArray(_d2.data))ownInsights=_d2.data;
+    if(_d3&&Array.isArray(_d3.data))ownPhotos=_d3.data;
+    if(_d4&&Array.isArray(_d4.data))ownGrowthEvents=_d4.data;
   }catch(_e){}
   try{renderAandachtspuntenHistoryList();}catch(_ra){}
 }
@@ -3095,19 +3102,9 @@ async function openReviewFactsModal(){
   if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Laden…</div>';
   try{
     var client=initSupabase();
-    var wa=await ensureReviewWriteAuth(client);
+    await ensureReviewWriteAuth(client);
     if(gen!==__ownReviewModalGen)return;
-    var uid=wa.uid||String(window.__ownSenseUid||'').trim();
     await ownPromiseTimeout(loadOwnBrainTables(),12000,null);
-    if(gen!==__ownReviewModalGen)return;
-    await ownPromiseTimeout(
-      hydrateCheckinAnswersForEvidenceLists((ownAandachtspunten||[]).map(function(a){return a&&a.evidence;})),
-      6000,null
-    );
-    if(gen!==__ownReviewModalGen)return;
-    if(client&&uid){
-      try{await ownPromiseTimeout(loadSenseProfileScopesForUser(uid),6000,null);}catch(_sc){}
-    }
     if(gen!==__ownReviewModalGen)return;
     await renderReviewFacts();
   }catch(e){
