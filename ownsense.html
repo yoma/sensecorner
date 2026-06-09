@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="09-06-2026 11:00">
+<meta name="os-build" content="09-06-2026 17:00">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -881,7 +881,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
-        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26</span>
+        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26b</span>
       </a>
     </div>
     <div class="top-pills">
@@ -2457,12 +2457,33 @@ async function addGrowthEvent(eventType,summary,sourceApp,sourceDossier,refId){
   var client=initSupabase();
   if(!client)return;
   try{
-    var auth=await client.auth.getUser();
-    var user=auth&&auth.data&&auth.data.user;
-    if(!user)return;
-    var payload={user_id:user.id,event_type:eventType,summary:summary||'',source_app:sourceApp||null,source_dossier:sourceDossier||null,ref_id:refId||null};
-    var r=await client.from('own_growth_events').insert(payload).select('*').maybeSingle();
-    if(r&&r.data)ownGrowthEvents.unshift(r.data);
+    var wa=senseGetWriteAuth();
+    var uid=String(wa.uid||window.__ownSenseUid||'').trim();
+    var token=String(wa.token||'').trim();
+    if(!uid||!token){
+      var auth=await ownPromiseTimeout(client.auth.getUser(),4000,null);
+      var user=auth&&auth.data&&auth.data.user;
+      if(!user)return;
+      uid=String(user.id||'').trim();
+      token=String((auth.data.session&&auth.data.session.access_token)||'').trim();
+      if(!uid||!token)return;
+    }
+    var base=senseSupabaseRestBase();
+    var anon=senseSupabaseAnonKey();
+    if(!base||!anon)return;
+    var payload={user_id:uid,event_type:eventType,summary:summary||'',source_app:sourceApp||null,source_dossier:sourceDossier||null,ref_id:refId||null};
+    var ab=senseAbortAfter(6000);
+    try{
+      var res=await fetch(base+'/rest/v1/own_growth_events',{
+        method:'POST',
+        headers:{apikey:anon,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
+        body:JSON.stringify(payload),signal:ab.signal||undefined
+      });
+      ab.clear();
+      if(res.ok){var rows=null;try{rows=JSON.parse(await res.text());}catch(_e2){}
+        var row=Array.isArray(rows)&&rows.length?rows[0]:(rows&&rows.id?rows:null);
+        if(row)ownGrowthEvents.unshift(row);}
+    }catch(_fe){ab.clear();}
   }catch(_e){}
 }
 
@@ -3728,7 +3749,7 @@ async function acceptAandachtspunt(id){
       return;
     }
     patchOwnAandachtspuntLocal(id,updated);
-    await addGrowthEvent('aandachtspunt_bevestigd','Aandachtspunt bevestigd: '+String(updated.soft_name||'').substring(0,120),updated.source_app||'selfsense','SelfSense',updated.id);
+    void addGrowthEvent('aandachtspunt_bevestigd','Aandachtspunt bevestigd: '+String(updated.soft_name||'').substring(0,120),updated.source_app||'selfsense','SelfSense',updated.id).catch(function(){});
     renderReviewFacts();
     updateOwnPendingNavBadge();
     renderMijTab();
