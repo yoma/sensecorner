@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="05-06-2026 18:12">
+<meta name="os-build" content="09-06-2026 11:00">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -881,6 +881,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
+        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26</span>
       </a>
     </div>
     <div class="top-pills">
@@ -3679,9 +3680,9 @@ async function updateOwnAandachtspuntRow(id,patch){
   if(!client)return null;
   id=ownAandachtspuntIdStr(id);
   if(!id||!patch)return null;
-  var writeAuth=senseGetWriteAuth();
-  if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
-  var uid=writeAuth.uid||await ownPromiseTimeout(ownReviewUidAsync(client),6000,'');
+  var writeAuth=await ownPromiseTimeout(ensureReviewWriteAuth(client),10000,senseGetWriteAuth());
+  if(!writeAuth||writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
+  var uid=writeAuth.uid||await ownPromiseTimeout(ownReviewUidAsync(client),5000,'');
   uid=String(uid||'').trim();
   if(!uid||!writeAuth.token){
     flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
@@ -3690,12 +3691,12 @@ async function updateOwnAandachtspuntRow(id,patch){
   var body=Object.assign({},patch,{updated_at:new Date().toISOString()});
   try{
     var r=await withTimeout(
-      client.from('own_aandachtspunten').update(body).eq('id',id).eq('user_id',uid).select('*').maybeSingle(),
+      sensePostgrestPatchOwnAandachtspunt({rowId:id,uid:uid,token:writeAuth.token,body:body,timeoutMs:10000}),
       12000,
       'Opslaan duurde te lang. Probeer opnieuw.',
       {label:'own-aandachtspunt-update'}
     );
-    if(r.error||!r.data)return null;
+    if(!r||!r.ok||!r.data)return null;
     return r.data;
   }catch(e){
     console.warn('[updateOwnAandachtspuntRow]',id,e);
@@ -3905,6 +3906,44 @@ function senseAbortAfter(ms){
     var t=setTimeout(function(){try{ac.abort();}catch(_e){}},Math.max(1,ms||20000));
     return {signal:ac.signal,clear:function(){try{clearTimeout(t);}catch(_e){}}};
   }catch(_e){return {signal:null,clear:function(){}};}
+}
+
+// PostgREST direct voor own_aandachtspunten — zelfde bypass als sensePostgrestPatchOwnFact.
+async function sensePostgrestPatchOwnAandachtspunt(opts){
+  var base=senseSupabaseRestBase();
+  var anon=senseSupabaseAnonKey();
+  var token=String(opts.token||'');
+  var rowId=String(opts.rowId||'');
+  var uid=String(opts.uid||'');
+  if(!base||!anon||!token||!rowId||!uid)throw new Error('PostgREST schrijf niet geconfigureerd.');
+  var url=base+'/rest/v1/own_aandachtspunten?id=eq.'+encodeURIComponent(rowId)+'&user_id=eq.'+encodeURIComponent(uid);
+  var ab=senseAbortAfter(opts.timeoutMs||12000);
+  try{
+    var res=await fetch(url,{
+      method:'PATCH',
+      headers:{
+        apikey:anon,
+        Authorization:'Bearer '+token,
+        'Content-Type':'application/json',
+        Prefer:'return=representation'
+      },
+      body:JSON.stringify(opts.body||{}),
+      signal:ab.signal||undefined
+    });
+    ab.clear();
+    if(!res.ok){
+      var errBody='';
+      try{errBody=await res.text();}catch(_e){}
+      return {ok:false,status:res.status,error:errBody||('HTTP '+res.status),data:null};
+    }
+    var rows=null;
+    try{rows=JSON.parse(await res.text());}catch(_e){}
+    var row=Array.isArray(rows)&&rows.length?rows[0]:null;
+    return {ok:true,status:res.status,data:row};
+  }catch(e){
+    ab.clear();
+    throw e;
+  }
 }
 
 // PostgREST direct (fetch + Bearer), zonder supabase-js auth-pad dat getSession/refresh kan blokkeren.
