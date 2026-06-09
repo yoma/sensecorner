@@ -3700,12 +3700,12 @@ async function acceptAandachtspunt(id){
   window.__ownsenseReviewAandachtBusy=id;
   setReviewAandachtButtonsBusy(id,true,'accept');
   try{
-    var tips=await generateAandachtspuntTipsAdvice(row);
     var nowIso=new Date().toISOString();
     var enrichedEvidence=await enrichCheckinEvidenceSnapshot(row.evidence);
+    var fallbackTips='Neem dit bewust mee vandaag: '+String(row.soft_name||'').trim()+'. Kies één klein moment om er iets anders mee te doen dan je gewoonte.';
     var updated=await updateOwnAandachtspuntRow(id,{
       status:'bevestigd',
-      tips_advice:tips,
+      tips_advice:fallbackTips,
       confirmed_at:nowIso,
       evidence:enrichedEvidence
     });
@@ -3719,6 +3719,12 @@ async function acceptAandachtspunt(id){
     updateOwnPendingNavBadge();
     renderMijTab();
     flashOwnsenseMessage('Bevestigd. Je vindt dit straks in Mijn aandachtspunten in SelfSense.',false,{durationMs:7200});
+    generateAandachtspuntTipsAdvice(row).then(function(tips){
+      if(!tips||tips===fallbackTips)return;
+      updateOwnAandachtspuntRow(id,{tips_advice:tips}).then(function(r){
+        if(r)patchOwnAandachtspuntLocal(id,r);
+      }).catch(function(){});
+    }).catch(function(){});
   }catch(e){
     console.warn('[acceptAandachtspunt]',id,e);
     flashOwnsenseMessage(formatSenseiErrForUser(e,'Kon aandachtspunt niet bevestigen. Probeer opnieuw.'),true);
