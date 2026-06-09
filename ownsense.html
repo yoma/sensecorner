@@ -3096,10 +3096,12 @@ async function openReviewFactsModal(){
   window.__ownsenseReviewAandachtBusy=null;
   window.__ownsenseReviewBulkBusy=false;
   initReviewFactsListDelegation();
+  var alreadyOpen=m.classList.contains('show');
   m.classList.add('show');
   m.setAttribute('aria-hidden','false');
   var listEl=document.getElementById('reviewFactsList');
-  if(listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Laden…</div>';
+  var hasContent=alreadyOpen&&listEl&&listEl.children.length>0&&!listEl.querySelector('.review-facts-empty-msg');
+  if(!hasContent&&listEl)listEl.innerHTML='<div class="review-facts-empty-msg">Laden…</div>';
   try{
     var client=initSupabase();
     await ensureReviewWriteAuth(client);
@@ -3346,11 +3348,16 @@ async function enrichCheckinEvidenceSnapshot(evidence){
   if(!ids.length)return evidence;
   var client=initSupabase();
   if(!client)return evidence;
-  var uid=await ownReviewUidAsync(client);
+  var uid=await ownPromiseTimeout(ownReviewUidAsync(client),5000,'');
+  uid=String(uid||'').trim();
   if(!uid)return evidence;
   var map={};
   try{
-    var res=await client.from('selfsense_checkins').select('id,answer,note').eq('user_id',uid).in('id',ids);
+    var res=await ownPromiseTimeout(
+      client.from('selfsense_checkins').select('id,answer,note').eq('user_id',uid).in('id',ids),
+      8000,null
+    );
+    if(!res)return evidence;
     if(res&&res.error)console.warn('[enrich evidence snapshot]',res.error);
     if(res&&res.data){
       res.data.forEach(function(row){
@@ -3674,14 +3681,20 @@ async function updateOwnAandachtspuntRow(id,patch){
   if(!id||!patch)return null;
   var writeAuth=senseGetWriteAuth();
   if(writeAuth.blocked){ownWarnAuthStorageBlockedOnce();return null;}
-  var uid=writeAuth.uid||await ownReviewUidAsync(client);
+  var uid=writeAuth.uid||await ownPromiseTimeout(ownReviewUidAsync(client),6000,'');
+  uid=String(uid||'').trim();
   if(!uid||!writeAuth.token){
     flashOwnsenseMessage('Je sessie is verlopen. Log opnieuw in via SenseCorner.',true);
     return null;
   }
   var body=Object.assign({},patch,{updated_at:new Date().toISOString()});
   try{
-    var r=await client.from('own_aandachtspunten').update(body).eq('id',id).eq('user_id',uid).select('*').maybeSingle();
+    var r=await withTimeout(
+      client.from('own_aandachtspunten').update(body).eq('id',id).eq('user_id',uid).select('*').maybeSingle(),
+      12000,
+      'Opslaan duurde te lang. Probeer opnieuw.',
+      {label:'own-aandachtspunt-update'}
+    );
     if(r.error||!r.data)return null;
     return r.data;
   }catch(e){
@@ -5188,6 +5201,7 @@ function initOsSectionNav(){
   });
 }
 
+var __urlBootOpenReviewScheduled=false;
 function applyUrlTabBoot(){
   try{
     refreshBootFocusCatFromUrl();
@@ -5225,7 +5239,8 @@ function applyUrlTabBoot(){
         try{if(typeof openAiImportModal==='function')openAiImportModal();}catch(_e){}
       },420);
     }
-    if(String(qp.get('openReview')||'')==='1'){
+    if(!__urlBootOpenReviewScheduled&&String(qp.get('openReview')||'')==='1'){
+      __urlBootOpenReviewScheduled=true;
       setTimeout(function(){
         try{if(typeof openReviewFactsModal==='function')void openReviewFactsModal();}catch(_e){}
       },520);
