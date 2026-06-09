@@ -1302,6 +1302,10 @@ button.ss-waar-ik-complete-btn--reopen{background:color-mix(in srgb,var(--self-l
 button.ss-waar-ik-complete-btn svg{flex:0 0 auto}
 .ss-waar-ik-completed-toggle{width:100%;margin:10px 0 6px;padding:10px 12px;border-radius:10px;border:1px dashed color-mix(in srgb,var(--self-medium) 30%,#e4e6eb);background:transparent;color:var(--warm-bruin);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left}
 .ss-waar-ik-row--completed{opacity:.78}
+button.ss-waar-ik-samenvoegen-btn{display:block;width:100%;margin-top:10px;padding:0;border:none;background:transparent;color:var(--warm-bruin);font-size:11px;font-family:inherit;cursor:pointer;text-align:center;text-decoration:underline;text-underline-offset:3px;opacity:.7}
+button.ss-waar-ik-samenvoegen-btn:hover{opacity:1}
+button.ss-samenvoegen-option{width:100%;text-align:left;padding:11px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--self-medium) 32%,#e4e6eb);background:color-mix(in srgb,var(--self-licht) 14%,#fff);color:var(--self-donker);font-size:13px;font-family:inherit;cursor:pointer;line-height:1.4}
+button.ss-samenvoegen-option:hover{background:color-mix(in srgb,var(--self-licht) 28%,#fff)}
 .ss-waar-ik-row-meta{font-size:11px;color:var(--warm-bruin);margin-top:2px}
 .ss-waar-ik-tips-card{padding:10px 12px;border-radius:10px;background:#fff;border:1px solid color-mix(in srgb,var(--self-medium) 22%,#e4e6eb);font-size:13px;color:var(--self-donker);line-height:1.55;max-width:42em}
 .ss-waar-ik-tips-refresh{display:block;margin:8px 0 0;padding:0;border:none;background:transparent;color:var(--self-medium);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
@@ -1705,6 +1709,16 @@ button.ss-waar-ik-worked-cancel{border:1px solid transparent;background:transpar
       <button type="button" class="btn-r" id="btnAddAandachtspuntSave" style="padding:12px 10px" onclick="saveEigenAandachtspunt()">Opslaan</button>
       <button type="button" class="btn-g" style="padding:12px 10px" onclick="closeAddAandachtspuntModal()">Annuleer</button>
     </div>
+  </div>
+</div>
+
+<div class="save-modal-overlay" id="samenvoegenModal" role="dialog" aria-modal="true" aria-labelledby="samenvoegenModalTitle">
+  <div class="save-modal-bg" onclick="closeSamenvoegenModal()"></div>
+  <div class="save-modal-sheet">
+    <div class="save-modal-title" id="samenvoegenModalTitle">Samenvoegen met…</div>
+    <div class="save-modal-sub" id="samenvoegenModalSub" style="margin-bottom:0"></div>
+    <div id="samenvoegenModalList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
+    <button type="button" class="btn-g" style="margin-top:14px;padding:12px 10px;width:100%;box-sizing:border-box" onclick="closeSamenvoegenModal()">Annuleer</button>
   </div>
 </div>
 
@@ -3446,6 +3460,7 @@ function renderWaarIkAanWerkDetailHtml(row,checkinMap){
     +'<button type="button" class="ss-waar-ik-worked-save" onclick="submitAandachtspuntWorked(\''+escJsStr(id)+'\')">Opslaan</button>'
     +'<button type="button" class="ss-waar-ik-worked-cancel" onclick="toggleAandachtspuntWorkedForm(false)">Annuleer</button>'
     +'</div></div>');
+  var samenvoegenBtn=isDone?'':'<button type="button" class="ss-waar-ik-samenvoegen-btn" onclick="openSamenvoegenPicker(\''+escJsStr(id)+'\')">Samenvoegen met ander aandachtspunt…</button>';
   return '<div class="ss-waar-ik-detail">'
     +completedBanner
     +'<div class="ss-waar-ik-detail-grid">'
@@ -3461,7 +3476,7 @@ function renderWaarIkAanWerkDetailHtml(row,checkinMap){
     +movementListHtml
     +workedBtn
     +'</div>'
-    +'<div class="ss-waar-ik-detail-footer">'+completeBtn+'</div>'
+    +'<div class="ss-waar-ik-detail-footer">'+completeBtn+samenvoegenBtn+'</div>'
     +'</div>';
 }
 async function renderWaarIkAanWerkInto(el){
@@ -3491,6 +3506,77 @@ async function renderWaarIkAanWerkInto(el){
 }
 function rWaarIkAanWerk(el){
   return renderWaarIkAanWerkInto(el);
+}
+var _samenvoegenBusy=false;
+function openSamenvoegenPicker(keepId){
+  keepId=aandachtspuntIdStr(keepId);
+  var row=findBevestigdAandachtspunt(keepId);
+  if(!row)return;
+  var modal=document.getElementById('samenvoegenModal');
+  if(!modal)return;
+  var sub=document.getElementById('samenvoegenModalSub');
+  if(sub)sub.textContent='"'+String(row.soft_name||'').substring(0,70).trim()+'" samenvoegen met:';
+  var list=document.getElementById('samenvoegenModalList');
+  if(!list)return;
+  var rows=S.ssBevestigdeAandachtspunten||[];
+  var others=rows.filter(function(r){
+    return r&&aandachtspuntIdStr(r.id)!==keepId&&!isAandachtspuntCompleted(r);
+  });
+  if(!others.length){
+    list.innerHTML='<div style="font-size:13px;color:var(--warm-bruin);padding:6px 0">Geen andere actieve aandachtspunten gevonden.</div>';
+  }else{
+    list.innerHTML=others.map(function(r){
+      var rid=escJsStr(aandachtspuntIdStr(r.id));
+      var name=String(r.soft_name||'').trim()||'Aandachtspunt';
+      var badge=isEigenAandachtspunt(r)?'<span style="font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;opacity:.6;margin-left:6px">Eigen reflectie</span>':'';
+      return '<button type="button" class="ss-samenvoegen-option" onclick="confirmSamenvoegen(\''+escJsStr(keepId)+'\',\''+rid+'\')">'+escHTML(name)+badge+'</button>';
+    }).join('');
+  }
+  modal.style.display='flex';
+  requestAnimationFrame(function(){modal.classList.add('open');});
+}
+function closeSamenvoegenModal(){
+  var modal=document.getElementById('samenvoegenModal');
+  if(!modal)return;
+  modal.classList.remove('open');
+  setTimeout(function(){modal.style.display='';},220);
+}
+async function confirmSamenvoegen(keepId,removeId){
+  if(_samenvoegenBusy)return;
+  keepId=aandachtspuntIdStr(keepId);
+  removeId=aandachtspuntIdStr(removeId);
+  if(!keepId||!removeId||keepId===removeId)return;
+  var keepRow=findBevestigdAandachtspunt(keepId);
+  var removeRow=findBevestigdAandachtspunt(removeId);
+  if(!keepRow||!removeRow){closeSamenvoegenModal();return;}
+  _samenvoegenBusy=true;
+  closeSamenvoegenModal();
+  try{
+    var keepMov=Array.isArray(keepRow.movement)?keepRow.movement:[];
+    var removeMov=Array.isArray(removeRow.movement)?removeRow.movement:[];
+    var merged=keepMov.concat(removeMov).sort(function(a,b){
+      return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
+    });
+    await updateAandachtspuntRowLocal(keepId,{movement:merged});
+    var res=await sb.from('own_aandachtspunten')
+      .update({status:'verworpen',updated_at:new Date().toISOString()})
+      .eq('id',removeId).eq('user_id',S.user.id);
+    if(res&&res.error)throw res.error;
+    if(Array.isArray(S.ssBevestigdeAandachtspunten)){
+      S.ssBevestigdeAandachtspunten=S.ssBevestigdeAandachtspunten.filter(function(r){
+        return r&&aandachtspuntIdStr(r.id)!==removeId;
+      });
+    }
+    S.viewAandachtspuntId=keepId;
+    var mc=document.getElementById('mainContent');
+    if(mc)void renderWaarIkAanWerkInto(mc);
+    toast('Aandachtspunten samengevoegd.');
+  }catch(e){
+    console.warn('[confirmSamenvoegen]',e);
+    toast('Samenvoegen mislukt. Probeer opnieuw.');
+  }finally{
+    _samenvoegenBusy=false;
+  }
 }
 var _aandachtWorkedBusy=false;
 var _aandachtCompleteBusy=false;
