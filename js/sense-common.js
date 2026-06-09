@@ -909,6 +909,29 @@
     return 'oc-field-' + m[1];
   }
 
+  var _senseLastActivityTouchAt = 0;
+  var _senseLastActivityTouchBusy = false;
+  var SENSE_ACTIVITY_TOUCH_MS = 5 * 60 * 1000;
+
+  /** Heartbeat voor admin last_activity_at; max. eens per 5 min, fire-and-forget. */
+  function senseTouchUserActivity(sb) {
+    try {
+      if (!sb || typeof sb.rpc !== 'function') return;
+      var now = Date.now();
+      if (now - _senseLastActivityTouchAt < SENSE_ACTIVITY_TOUCH_MS) return;
+      if (_senseLastActivityTouchBusy) return;
+      _senseLastActivityTouchBusy = true;
+      sb.rpc('touch_user_activity')
+        .then(function () {
+          _senseLastActivityTouchAt = Date.now();
+        })
+        .catch(function () {})
+        .finally(function () {
+          _senseLastActivityTouchBusy = false;
+        });
+    } catch (_e) {}
+  }
+
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
@@ -960,4 +983,5 @@
   global.senseFetchDailyRecoTipText = senseFetchDailyRecoTipText;
   global.senseSetFieldSaveStatus = senseSetFieldSaveStatus;
   global.senseFieldSaveIdFromTextareaId = senseFieldSaveIdFromTextareaId;
+  global.senseTouchUserActivity = senseTouchUserActivity;
 })(typeof window !== 'undefined' ? window : this);
