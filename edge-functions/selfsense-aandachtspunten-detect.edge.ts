@@ -469,8 +469,8 @@ function isDuplicateProposal(
   const ids = new Set(evidence.map((e) => e.checkin_id));
   for (const ex of existing) {
     const nameScore = wordOverlapScore(softName, ex.soft_name);
-    if (nameScore > 0.55) return true;
-    if (evidenceIsEigen(ex.evidence) && nameScore > 0.32) return true;
+    if (nameScore > 0.42) return true;
+    if (evidenceIsEigen(ex.evidence) && nameScore > 0.28) return true;
     const exIds = (ex.evidence || []).map((e) => normStr(e.checkin_id)).filter(Boolean);
     if (exIds.length && ids.size) {
       const overlap = exIds.filter((id) => ids.has(id)).length;
@@ -486,7 +486,7 @@ function buildSystemPrompt(dunneContext: string): string {
     AANDACHTSPUNTEN_DUNNE_EXTRA,
     AANDACHTSPUNTEN_CONTEXT_RULES,
     AANDACHTSPUNTEN_EXTRACT_RULES,
-    'JSON-schema: {"insufficient":boolean,"user_message":string|null,"proposals":[{"soft_name":string,"evidence":[{"checkin_id":string,"created_at":string}]}]}',
+    'BUNDELEN: Als meerdere patronen hetzelfde onderliggende thema beschrijven (bv. "zorgen over werk" en "zorgen over sociale situaties"), stel dan EEN gecombineerd voorstel voor met de gedeelde kern — geen aparte voorstellen per context. Kies de breedste, zachte formulering die de situaties dekt.\n\nJSON-schema: {"insufficient":boolean,"user_message":string|null,"proposals":[{"soft_name":string,"evidence":[{"checkin_id":string,"created_at":string}]}]}',
   ].join("\n\n");
 }
 

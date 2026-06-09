@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="09-06-2026 17:00">
+<meta name="os-build" content="09-06-2026 18:00">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -881,7 +881,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
-        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26b</span>
+        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26c</span>
       </a>
     </div>
     <div class="top-pills">
@@ -3534,6 +3534,19 @@ async function deleteOwnAandachtspunt(id){
 function ownAandachtspuntIdStr(id){
   return String(id==null?'':id).trim();
 }
+function ownSoftNameWordOverlap(a,b){
+  var wa=String(a||'').toLowerCase().split(/[^a-z0-9À-ɏ]+/).filter(function(x){return x.length>2;});
+  var wb=String(b||'').toLowerCase().split(/[^a-z0-9À-ɏ]+/).filter(function(x){return x.length>2;});
+  if(!wa.length||!wb.length)return 0;
+  var set={};wa.forEach(function(w){set[w]=1;});
+  var hit=0;wb.forEach(function(w){if(set[w])hit++;});
+  return hit/Math.max(wa.length,wb.length);
+}
+function findSimilarBevestigdAandachtspunt(id,softName){
+  return (ownAandachtspunten||[]).find(function(a){
+    return a&&a.status==='bevestigd'&&ownAandachtspuntIdStr(a.id)!==ownAandachtspuntIdStr(id)&&ownSoftNameWordOverlap(softName,a.soft_name)>0.42;
+  })||null;
+}
 function findOwnAandachtspuntById(id){
   var want=ownAandachtspuntIdStr(id);
   if(!want)return null;
@@ -3730,6 +3743,14 @@ async function acceptAandachtspunt(id){
   var row=findOwnAandachtspuntById(id);
   if(!row||row.status!=='voorgesteld'){
     flashOwnsenseMessage('Aandachtspunt niet gevonden. Vernieuw het venster.',true);
+    return;
+  }
+  var similar=findSimilarBevestigdAandachtspunt(id,row.soft_name);
+  if(similar){
+    flashOwnsenseMessage(
+      'Let op: je hebt al een vergelijkbaar aandachtspunt bevestigd: "'+String(similar.soft_name||'').substring(0,80)+'". Overweeg het dubbele te wissen.',
+      true,{durationMs:9000}
+    );
     return;
   }
   window.__ownsenseReviewAandachtBusy=id;
