@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="09-06-2026 18:00">
+<meta name="os-build" content="09-06-2026 19:30">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -881,7 +881,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
-        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26c</span>
+        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26d</span>
       </a>
     </div>
     <div class="top-pills">
@@ -3196,6 +3196,7 @@ function initReviewFactsListDelegation(){
         else if(aact==='edit')editAandachtspunt(aid);
         else if(aact==='edit-save')void saveEditAandachtspunt(aid);
         else if(aact==='edit-cancel')cancelEditAandachtspunt(aid);
+        else if(aact==='merge-similar'){var mInto=abtn.getAttribute('data-aandacht-merge-into');if(mInto)void mergeProposalIntoExisting(aid,mInto);}
         return;
       }
     }
@@ -3611,13 +3612,25 @@ function renderReviewAandachtspuntenHtml(){
   return '<div class="review-section-label">Aandachtspunten</div>'
     +'<p class="review-aandacht-note">Alleen individueel bevestigen. Geen bulk-accept en geen auto-accept na tien dagen.</p>'
     +list.map(function(a){
+      var similar=findSimilarBevestigdAandachtspunt(a.id,a.soft_name);
+      var dupBanner=similar
+        ?'<div style="margin:8px 0 4px;padding:7px 10px;border-radius:8px;background:rgba(210,170,80,.13);border:1px solid rgba(180,140,60,.28);font-size:12px;color:var(--chocolade);line-height:1.45">'
+          +'<strong>Lijkt op bevestigd:</strong> "'+escHTML(String(similar.soft_name||'').substring(0,70))+'"<br>'
+          +'<span style="opacity:.8">Bevestig apart, of voeg samen met het bestaande.</span>'
+          +'</div>'
+        :'';
+      var mergeBtn=similar
+        ?'<button class="btn btn-muted btn-small" type="button" data-aandacht-action="merge-similar" data-aandacht-merge-into="'+escHTML(similar.id)+'">Samenvoegen</button>'
+        :'';
       return '<div class="review-aandachtspunt-card" data-review-aandacht-id="'+escHTML(a.id)+'">'
         +'<div class="insight-item-head"><span class="review-aandacht-label">Aandachtspunt</span><span class="subtle">'+fmtDate(a.created_at)+'</span></div>'
         +'<div class="review-fact-text" data-review-aandacht-text style="font-family:\'Lora\',serif;font-size:15px;line-height:1.6;margin-top:8px">'+escHTML(a.soft_name||'')+'</div>'
         +formatAandachtspuntEvidenceHtml(a.evidence)
+        +dupBanner
         +'<div class="subtle" style="margin-top:6px">uit '+escHTML(a.source_app||'selfsense')+'</div>'
         +'<div data-review-aandacht-actions style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-        +'<button class="btn btn-primary btn-small" type="button" data-aandacht-action="accept">Ja</button>'
+        +'<button class="btn btn-primary btn-small" type="button" data-aandacht-action="accept">Ja (apart)</button>'
+        +mergeBtn
         +'<button class="btn btn-muted btn-small" type="button" data-aandacht-action="edit">Aanpassen</button>'
         +'<button class="btn btn-muted btn-small" type="button" data-aandacht-action="reject">Nee</button>'
         +'</div></div>';
@@ -3745,14 +3758,6 @@ async function acceptAandachtspunt(id){
     flashOwnsenseMessage('Aandachtspunt niet gevonden. Vernieuw het venster.',true);
     return;
   }
-  var similar=findSimilarBevestigdAandachtspunt(id,row.soft_name);
-  if(similar){
-    flashOwnsenseMessage(
-      'Let op: je hebt al een vergelijkbaar aandachtspunt bevestigd: "'+String(similar.soft_name||'').substring(0,80)+'". Overweeg het dubbele te wissen.',
-      true,{durationMs:9000}
-    );
-    return;
-  }
   window.__ownsenseReviewAandachtBusy=id;
   setReviewAandachtButtonsBusy(id,true,'accept');
   try{
@@ -3810,6 +3815,43 @@ async function rejectAandachtspunt(id){
     flashOwnsenseMessage('Weigeren mislukt. Probeer opnieuw.',true);
   }finally{
     clearReviewAandachtBusy(id);
+  }
+}
+async function mergeProposalIntoExisting(proposalId,existingId){
+  proposalId=ownAandachtspuntIdStr(proposalId);
+  existingId=ownAandachtspuntIdStr(existingId);
+  if(!proposalId||!existingId)return;
+  if(window.__ownsenseReviewBulkBusy||window.__ownsenseReviewAandachtBusy)return;
+  var proposal=findOwnAandachtspuntById(proposalId);
+  var existing=findOwnAandachtspuntById(existingId);
+  if(!proposal||proposal.status!=='voorgesteld'){flashOwnsenseMessage('Voorstel niet gevonden.',true);return;}
+  if(!existing||existing.status!=='bevestigd'){flashOwnsenseMessage('Bevestigd aandachtspunt niet gevonden.',true);return;}
+  window.__ownsenseReviewAandachtBusy=proposalId;
+  setReviewAandachtButtonsBusy(proposalId,true,'merge-similar');
+  try{
+    var nowIso=new Date().toISOString();
+    var existEvidence=Array.isArray(existing.evidence)?existing.evidence:[];
+    var propEvidence=Array.isArray(proposal.evidence)?proposal.evidence:[];
+    var existIds=new Set(existEvidence.map(function(e){return String(e&&e.checkin_id||e&&e.message_id||'').trim();}));
+    var newEvidence=existEvidence.slice();
+    propEvidence.forEach(function(item){
+      var key=String(item&&item.checkin_id||item&&item.message_id||'').trim();
+      if(key&&!existIds.has(key)){newEvidence.push(item);existIds.add(key);}
+    });
+    var existMov=Array.isArray(existing.movement)?existing.movement:[];
+    existMov=existMov.concat([{note:'Aanvullend bewijs samengevoegd vanuit: "'+String(proposal.soft_name||'').trim()+'"',at:nowIso,type:'merge',merged_name:String(proposal.soft_name||'').trim()}]);
+    var updated=await updateOwnAandachtspuntRow(existingId,{evidence:newEvidence,movement:existMov});
+    if(updated)patchOwnAandachtspuntLocal(existingId,updated);
+    await updateOwnAandachtspuntRow(proposalId,{status:'verworpen',rejected_at:nowIso});
+    patchOwnAandachtspuntLocal(proposalId,{status:'verworpen',rejected_at:nowIso});
+    renderReviewFacts();
+    updateOwnPendingNavBadge();
+    flashOwnsenseMessage('Samengevoegd. Het bewijs is toegevoegd aan "'+String(existing.soft_name||'').substring(0,60)+'".',false,{durationMs:6000});
+  }catch(e){
+    console.warn('[mergeProposalIntoExisting]',e);
+    flashOwnsenseMessage('Samenvoegen mislukt. Probeer opnieuw.',true);
+  }finally{
+    clearReviewAandachtBusy(proposalId);
   }
 }
 function editAandachtspunt(id){
