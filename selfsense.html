@@ -1436,6 +1436,13 @@ button.ss-waar-ik-worked-cancel{border:1px solid transparent;background:transpar
   });
   window.addEventListener('unhandledrejection',function(ev){
     var reason=ev&&ev.reason;
+    if(window.senseIsExpiredSessionError&&senseIsExpiredSessionError(reason)){
+      if(typeof ev.preventDefault==='function')ev.preventDefault();
+      window.__senseSessionExpired=true;
+      if(window.senseClearExpiredSessionStorage)senseClearExpiredSessionStorage();
+      if(window.senseShowBootSessionExpiredBox)senseShowBootSessionExpiredBox(probe,'SelfSense','ssBootSessionExpiredBox');
+      return;
+    }
     showBootError('Promise rejection: '+(reason&&reason.message?reason.message:String(reason||'onbekend')));
   });
   document.addEventListener('DOMContentLoaded',function(){
@@ -1900,6 +1907,7 @@ window.addEventListener('error',function(ev){
   showFatalUi(m);
 });
 window.addEventListener('unhandledrejection',function(ev){
+  if(typeof senseHandleExpiredSessionRejection==='function'&&senseHandleExpiredSessionRejection(ev,{appLabel:'SelfSense',onExpired:recoverFromExpiredSession}))return;
   var reason=ev&&ev.reason;
   var m=reason&&reason.message?reason.message:String(reason||'Onbekende Promise fout');
   showFatalUi('Promise fout: '+m);
@@ -5284,6 +5292,18 @@ var _userSigningOut=false;
 function senseClearAuthStorage(){
   try{localStorage.removeItem(SENSE_AUTH_STORAGE_KEY);}catch(_e){}
 }
+function recoverFromExpiredSession(){
+  senseRecoverExpiredSession({
+    storageKey:SENSE_AUTH_STORAGE_KEY,
+    resetState:function(){
+      _setAuthTokenFromSession(null);
+      S.apiKey='';
+      applySignedOutClientState();
+    },
+    goLogin:function(){goScreen('login');},
+    toast:toast
+  });
+}
 async function senseRecoverSessionAfterSignOutEvent(authClient){
   var client=authClient||sb;
   if(!client||!client.auth)return null;
@@ -6934,6 +6954,15 @@ async function init(){
   initQuickNavBackToApp();
   initPhotoPreview();
   window.__fsBootOk=true;
+  if(window.__senseSessionExpired){
+    resetAuthenticatedBootState();
+    senseClearAuthStorage();
+    _setAuthTokenFromSession(null);
+    applySignedOutClientState();
+    goScreen('login');
+    try{toast(typeof senseExpiredSessionUserMessage==='function'?senseExpiredSessionUserMessage():'Je sessie is verlopen. Log opnieuw in.');}catch(_eSess){}
+    return;
+  }
   var mcBoot=document.getElementById('mainContent');
   if(mcBoot&&!String(mcBoot.textContent||'').replace(/\s+/g,'').trim()){
     mcBoot.innerHTML='<div style="padding:32px 20px;text-align:center;color:#666;font-size:14px;line-height:1.6">Bezig met laden…</div>';

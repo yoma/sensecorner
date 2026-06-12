@@ -913,6 +913,133 @@
   var _senseLastActivityTouchBusy = false;
   var SENSE_ACTIVITY_TOUCH_MS = 5 * 60 * 1000;
 
+  var SENSE_AUTH_STORAGE_DEFAULT = 'sensecorner-auth-v1';
+  var _senseExpiredSessionHandling = false;
+
+  function senseIsExpiredSessionError(err) {
+    var msg = String((err && err.message) || err || '').toLowerCase();
+    var code = String((err && err.code) || (err && err.error_code) || '').toLowerCase();
+    if (code === 'bad_jwt' || code === 'invalid_grant' || code === 'session_not_found') return true;
+    if (msg.indexOf('jwt expired') >= 0) return true;
+    if (msg.indexOf('invalid refresh token') >= 0) return true;
+    if (msg.indexOf('refresh token not found') >= 0) return true;
+    if (msg.indexOf('session expired') >= 0) return true;
+    if (msg.indexOf('token is expired') >= 0) return true;
+    return false;
+  }
+
+  function senseExpiredSessionUserMessage() {
+    return 'Je sessie is verlopen. Log opnieuw in om verder te gaan.';
+  }
+
+  function senseClearExpiredSessionStorage(storageKey) {
+    try {
+      localStorage.removeItem(storageKey || SENSE_AUTH_STORAGE_DEFAULT);
+    } catch (_e) {}
+  }
+
+  function senseShowBootSessionExpiredBox(probe, appLabel, boxId) {
+    var tip = 'Tip: log opnieuw in. Op Android met een snelkoppeling op je startscherm: verwijder de oude link en maak hem opnieuw na het inloggen.';
+    try {
+      if (probe) {
+        probe.textContent = 'Sessie verlopen';
+        probe.style.background = '#fff7d6';
+        probe.style.borderColor = '#f0d27a';
+        probe.style.color = '#7a5a00';
+      }
+      var id = boxId || 'senseBootSessionExpiredBox';
+      var box = document.getElementById(id);
+      if (!box) {
+        box = document.createElement('div');
+        box.id = id;
+        box.style.cssText = 'position:fixed;top:calc(56px + var(--st));right:10px;max-width:min(92vw,640px);z-index:122;background:#fffbf0;border:1px solid #f0d27a;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.45;color:#7a5a00;white-space:pre-wrap;box-shadow:0 4px 14px rgba(0,0,0,.08)';
+        document.body.appendChild(box);
+      }
+      box.textContent = String(appLabel || 'Sense') + ':\n' + senseExpiredSessionUserMessage() + '\n\n' + tip;
+    } catch (_e2) {}
+  }
+
+  function senseShowSessionExpiredScreen(appLabel) {
+    try {
+      var mc = document.getElementById('mainContent');
+      if (!mc) return;
+      mc.innerHTML = '<div style="padding:28px 20px 36px;text-align:center;color:#5C4033">'
+        + '<div style="font-size:22px;font-weight:800;margin-bottom:10px">Sessie verlopen</div>'
+        + '<p style="font-size:15px;line-height:1.6;color:#666;margin:0 0 20px">' + senseExpiredSessionUserMessage() + '</p>'
+        + '<button type="button" id="senseSessionExpiredLoginBtn" style="width:100%;max-width:280px;padding:14px 18px;border:none;border-radius:12px;background:var(--p,#7D6AAB);color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit">Opnieuw inloggen</button>'
+        + '<p style="font-size:12px;line-height:1.5;color:#888;margin-top:16px">Android-startscherm? Verwijder de oude snelkoppeling en maak hem opnieuw na het inloggen.</p>'
+        + '</div>';
+      var btn = document.getElementById('senseSessionExpiredLoginBtn');
+      if (btn) {
+        btn.addEventListener('click', function () {
+          if (typeof global.goScreen === 'function') {
+            try {
+              global.goScreen('login');
+            } catch (_e) {}
+          }
+        });
+      }
+    } catch (_e3) {
+      console.warn('senseShowSessionExpiredScreen', appLabel, _e3);
+    }
+  }
+
+  function senseRecoverExpiredSession(opts) {
+    opts = opts || {};
+    if (global.__senseRecoverExpiredDone) return;
+    global.__senseRecoverExpiredDone = true;
+    setTimeout(function () {
+      global.__senseRecoverExpiredDone = false;
+    }, 5000);
+    senseClearExpiredSessionStorage(opts.storageKey);
+    global.__senseSessionExpired = true;
+    if (typeof opts.resetState === 'function') {
+      try {
+        opts.resetState();
+      } catch (_e) {}
+    }
+    if (typeof opts.goLogin === 'function') {
+      try {
+        opts.goLogin();
+      } catch (_e2) {}
+    } else if (typeof global.goScreen === 'function') {
+      try {
+        global.goScreen('login');
+      } catch (_e3) {}
+    }
+    var toastFn = opts.toast || global.toast;
+    if (typeof toastFn === 'function') {
+      try {
+        toastFn(senseExpiredSessionUserMessage());
+      } catch (_e4) {}
+    }
+  }
+
+  function senseHandleExpiredSessionRejection(ev, opts) {
+    opts = opts || {};
+    var reason = ev && ev.reason;
+    if (!senseIsExpiredSessionError(reason)) return false;
+    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+    if (_senseExpiredSessionHandling) return true;
+    _senseExpiredSessionHandling = true;
+    senseClearExpiredSessionStorage(opts.storageKey);
+    global.__senseSessionExpired = true;
+    if (opts.probe && (opts.appLabel || opts.boxId)) {
+      senseShowBootSessionExpiredBox(opts.probe, opts.appLabel, opts.boxId);
+    }
+    if (typeof opts.onExpired === 'function') {
+      try {
+        opts.onExpired();
+      } catch (_e) {}
+    } else if (opts.showScreen !== false) {
+      senseShowSessionExpiredScreen(opts.appLabel);
+    }
+    setTimeout(function () {
+      _senseExpiredSessionHandling = false;
+    }, 3000);
+    return true;
+  }
+
   /** Heartbeat voor admin last_activity_at; max. eens per 5 min, fire-and-forget. */
   function senseTouchUserActivity(sb) {
     try {
@@ -984,4 +1111,11 @@
   global.senseSetFieldSaveStatus = senseSetFieldSaveStatus;
   global.senseFieldSaveIdFromTextareaId = senseFieldSaveIdFromTextareaId;
   global.senseTouchUserActivity = senseTouchUserActivity;
+  global.senseIsExpiredSessionError = senseIsExpiredSessionError;
+  global.senseExpiredSessionUserMessage = senseExpiredSessionUserMessage;
+  global.senseClearExpiredSessionStorage = senseClearExpiredSessionStorage;
+  global.senseShowBootSessionExpiredBox = senseShowBootSessionExpiredBox;
+  global.senseShowSessionExpiredScreen = senseShowSessionExpiredScreen;
+  global.senseRecoverExpiredSession = senseRecoverExpiredSession;
+  global.senseHandleExpiredSessionRejection = senseHandleExpiredSessionRejection;
 })(typeof window !== 'undefined' ? window : this);
