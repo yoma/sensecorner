@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="05-06-2026 17:50">
+<meta name="sc-build" content="12-06-2026 21:39">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -352,6 +352,27 @@ a{text-decoration:none;color:inherit}
 .auth-link-btn{border:none;background:transparent;color:var(--app-donker);font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;text-decoration:underline}
 .auth-msg{font-size:12px;color:var(--m);min-height:18px;margin-top:8px}
 .auth-close{border:none;background:transparent;color:var(--m);font-size:12px;font-weight:600;cursor:pointer;padding:4px 2px}
+.hub-start-intro-overlay{position:fixed;inset:0;background:rgba(15,23,42,.44);display:none;align-items:center;justify-content:center;padding:16px;z-index:998;overflow-y:auto}
+.hub-start-intro-overlay.show{display:flex}
+.hub-start-intro-modal{width:min(520px,100%);max-height:min(92vh,calc(100dvh - 32px));overflow:auto;background:linear-gradient(180deg,#fffdf8 0%,var(--ivoor) 100%);border-radius:18px;border:1px solid var(--hub-line);box-shadow:0 24px 56px rgba(74,58,42,.2);padding:20px 18px 16px}
+.hub-start-intro-kicker{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--sage-donker);margin-bottom:6px}
+.hub-start-intro-title{font-family:var(--font-serif);font-size:22px;font-weight:700;color:var(--chocolade);line-height:1.25;margin:0 0 8px}
+.hub-start-intro-lead{font-size:14px;line-height:1.62;color:var(--m);margin:0 0 14px}
+.hub-start-intro-apps{display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+.hub-start-intro-app{border-radius:14px;border:1px solid rgba(61,47,31,.1);background:rgba(255,255,255,.72);padding:11px 12px 11px 14px;border-left:4px solid var(--sage-medium)}
+.hub-start-intro-app--self{border-left-color:var(--self-medium)}
+.hub-start-intro-app--date{border-left-color:var(--date-medium)}
+.hub-start-intro-app--family{border-left-color:var(--family-medium)}
+.hub-start-intro-app--friend{border-left-color:var(--friend-medium)}
+.hub-start-intro-app-name{font-size:14px;font-weight:800;color:var(--chocolade);margin-bottom:4px}
+.hub-start-intro-app-text{font-size:13px;line-height:1.55;color:var(--m);margin:0}
+.hub-start-intro-footnote{font-size:12px;line-height:1.5;color:rgba(61,47,31,.62);margin:0 0 12px}
+.hub-start-intro-check{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:var(--chocolade);margin:0 0 14px;cursor:pointer;user-select:none}
+.hub-start-intro-check input{margin-top:2px;flex-shrink:0;width:16px;height:16px;accent-color:var(--sage-donker)}
+.hub-start-intro-actions{display:flex;flex-direction:column;gap:8px}
+.hub-start-intro-btn{width:100%;border:none;border-radius:12px;padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.hub-start-intro-btn.primary{background:var(--chocolade);color:var(--cream)}
+.hub-start-intro-btn.secondary{background:transparent;border:1px solid rgba(61,47,31,.18);color:var(--chocolade);font-size:13px;font-weight:600;padding:10px 14px}
 
 /* Section label */
 .section-label{font-size:11px;font-weight:700;color:var(--s);letter-spacing:.07em;text-transform:uppercase;margin:16px 0 10px 2px}
@@ -733,6 +754,10 @@ a.app-card{color:inherit;text-decoration:none}
               <div style="margin-top:10px">
                 <button type="button" class="hub-auth-btn primary" id="hubOpenOwnBtn">OWN Sense openen (foto &amp; profiel)</button>
               </div>
+              <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--hub-dash)">
+                <div class="hub-settings-sub" style="margin-bottom:8px">Eerste keer op de hub? Bekijk opnieuw hoe je start met je apps.</div>
+                <button type="button" class="hub-auth-btn" id="hubShowStartIntroBtn">Startintro opnieuw tonen</button>
+              </div>
             </div>
           </div>
         </section>
@@ -837,6 +862,24 @@ a.app-card{color:inherit;text-decoration:none}
 
 <!-- Screen reader announcements -->
 <div id="a11y-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
+
+<div id="hubStartIntroOverlay" class="hub-start-intro-overlay" aria-hidden="true">
+  <div class="hub-start-intro-modal" role="dialog" aria-modal="true" aria-labelledby="hubStartIntroTitle">
+    <div class="hub-start-intro-kicker">Eerste keer op SenseCorner</div>
+    <h2 class="hub-start-intro-title" id="hubStartIntroTitle">Klaar om te starten?</h2>
+    <p class="hub-start-intro-lead" id="hubStartIntroLead">SenseCorner is je startpunt. Je hoeft niet alles tegelijk. Eén app, één gesprek, dat is genoeg om te beginnen.</p>
+    <div class="hub-start-intro-apps" id="hubStartIntroApps" aria-label="Overzicht van je apps"></div>
+    <p class="hub-start-intro-footnote">Tip: OWN Sense bovenaan is jouw profiel. De apps eronder zijn je spiegels voor verschillende levensdomeinen.</p>
+    <label class="hub-start-intro-check" for="hubStartIntroSuppress">
+      <input type="checkbox" id="hubStartIntroSuppress">
+      <span>Volgende keer niet meer automatisch tonen</span>
+    </label>
+    <div class="hub-start-intro-actions">
+      <button type="button" class="hub-start-intro-btn primary" id="hubStartIntroOkBtn">Begrepen, ik start</button>
+      <button type="button" class="hub-start-intro-btn secondary" id="hubStartIntroLaterBtn">Later nog eens bekijken</button>
+    </div>
+  </div>
+</div>
 
 <div id="authOverlay" class="auth-overlay" aria-hidden="true">
   <div class="auth-modal" role="dialog" aria-modal="true" aria-label="Hub login">
@@ -1846,6 +1889,136 @@ a.app-card{color:inherit;text-decoration:none}
   var SC_QUOTE_SPIN_KEY='sc_quote_spin';
   /** Laatst getoonde quote-index vóór uitloggen; alleen om volgende login een andere quote te forceren. */
   var SC_QUOTE_PREV_KEY='sc_quote_prev_idx';
+  var SC_HUB_START_INTRO_KEY='sc_hub_start_intro_v1::';
+  function scHubStartIntroStorageKey(uid){
+    return SC_HUB_START_INTRO_KEY+String(uid||'').trim();
+  }
+  function scLoadHubStartIntroPrefs(uid){
+    try{
+      var raw=localStorage.getItem(scHubStartIntroStorageKey(uid));
+      if(!raw)return null;
+      return JSON.parse(raw);
+    }catch(_e){return null;}
+  }
+  function scSaveHubStartIntroPrefs(uid,prefs){
+    try{localStorage.setItem(scHubStartIntroStorageKey(uid),JSON.stringify(prefs||{}));}catch(_e2){}
+  }
+  function scHubStartIntroAppDefs(){
+    return [
+      {key:'own',always:true,tone:'sage',title:'OWN Sense',text:'Dit ben jij. Alles wat je deelt groeit mee in je profiel.'},
+      {key:'ss',tone:'self',title:'SelfSense',text:'Werken aan jezelf? Open SelfSense en begin in Vertel gewoon te typen.'},
+      {key:'fr',tone:'friend',title:'FriendSense',text:'Vragen over vriendschap? Vertel, of maak alvast dossiers van een paar vrienden.'},
+      {key:'ds',tone:'date',title:'DateSense',text:'Over daten of je relatie? Vertel, of leg iemand vast in een dossier.'},
+      {key:'fs',tone:'family',title:'FamilySense',text:'Over gezin of familie? Vertel, of start met dossiers van mensen thuis.'}
+    ];
+  }
+  function scHubStartIntroVisibleApps(statuses){
+    statuses=statuses||_scMirrorStatuses||{};
+    return scHubStartIntroAppDefs().filter(function(def){
+      if(def.always)return true;
+      var st=statuses[def.key]||'never_opened';
+      return st==='active'||st==='paused'||st==='setting_up';
+    });
+  }
+  function scRenderHubStartIntroApps(statuses){
+    var mount=document.getElementById('hubStartIntroApps');
+    if(!mount)return;
+    var apps=scHubStartIntroVisibleApps(statuses);
+    mount.innerHTML=apps.map(function(def){
+      var cls='hub-start-intro-app hub-start-intro-app--'+String(def.tone||'sage');
+      return '<div class="'+cls+'"><div class="hub-start-intro-app-name">'+def.title+'</div><p class="hub-start-intro-app-text">'+def.text+'</p></div>';
+    }).join('');
+  }
+  function dismissHubStartIntro(opts){
+    opts=opts||{};
+    var overlay=document.getElementById('hubStartIntroOverlay');
+    var chk=document.getElementById('hubStartIntroSuppress');
+    if(overlay){
+      overlay.classList.remove('show');
+      overlay.setAttribute('aria-hidden','true');
+    }
+    if(chk&&!opts.keepCheckbox)chk.checked=false;
+    var user=userSession;
+    if(!user||!user.id)return;
+    if(opts.suppressAuto){
+      scSaveHubStartIntroPrefs(user.id,{suppressAuto:true,closedAt:Date.now()});
+    }
+  }
+  function showHubStartIntro(user,opts){
+    opts=opts||{};
+    var overlay=document.getElementById('hubStartIntroOverlay');
+    if(!overlay||!user)return;
+    var nm=pickSenseCornerDisplayName(user);
+    var titleEl=document.getElementById('hubStartIntroTitle');
+    var leadEl=document.getElementById('hubStartIntroLead');
+    if(titleEl){
+      titleEl.textContent=nm?('We zijn er, '+nm+'. Hoe start je?'):'Klaar om te starten?';
+    }
+    if(leadEl){
+      leadEl.textContent='SenseCorner is je startpunt. Je hoeft niet alles tegelijk. Eén app, één gesprek, dat is genoeg om te beginnen.';
+    }
+    scRenderHubStartIntroApps(_scMirrorStatuses);
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden','false');
+    var okBtn=document.getElementById('hubStartIntroOkBtn');
+    if(okBtn)okBtn.focus();
+  }
+  async function maybeShowHubStartIntro(){
+    try{
+      var overlay=document.getElementById('hubStartIntroOverlay');
+      if(overlay&&overlay.classList.contains('show'))return;
+      var user=userSession||await getCurrentUser();
+      if(!user||!user.id)return;
+      if(!(await scHasOnboardingCompleted(user.id)))return;
+      var prefs=scLoadHubStartIntroPrefs(user.id);
+      if(prefs&&prefs.suppressAuto)return;
+      await scRefreshMirrorStatuses(user);
+      showHubStartIntro(user,{forced:false});
+    }catch(_intro){}
+  }
+  async function scForceShowHubStartIntro(){
+    try{
+      var user=userSession||await getCurrentUser();
+      if(!user||!user.id)return;
+      await scRefreshMirrorStatuses(user);
+      showHubStartIntro(user,{forced:true});
+    }catch(_force){}
+  }
+  window.scForceShowHubStartIntro=scForceShowHubStartIntro;
+  (function wireHubStartIntroUi(){
+    var okBtn=document.getElementById('hubStartIntroOkBtn');
+    var laterBtn=document.getElementById('hubStartIntroLaterBtn');
+    var overlay=document.getElementById('hubStartIntroOverlay');
+    var showBtn=document.getElementById('hubShowStartIntroBtn');
+    if(okBtn){
+      okBtn.addEventListener('click',function(){
+        var chk=document.getElementById('hubStartIntroSuppress');
+        dismissHubStartIntro({suppressAuto:!!(chk&&chk.checked)});
+      });
+    }
+    if(laterBtn){
+      laterBtn.addEventListener('click',function(){
+        dismissHubStartIntro({suppressAuto:false});
+      });
+    }
+    if(overlay){
+      overlay.addEventListener('click',function(ev){
+        if(ev.target===overlay)dismissHubStartIntro({suppressAuto:false});
+      });
+    }
+    if(showBtn){
+      showBtn.addEventListener('click',function(){
+        void scForceShowHubStartIntro();
+      });
+    }
+    document.addEventListener('keydown',function(ev){
+      if(!overlay||!overlay.classList.contains('show'))return;
+      if(ev.key==='Escape'){
+        ev.preventDefault();
+        dismissHubStartIntro({suppressAuto:false});
+      }
+    });
+  })();
   var SC_HUB_HELP_INTRO_KEY='sc_hub_help_intro_seen_v1';
   function dismissHubHelpIntro(mark){
     var el=document.getElementById('hubHelpIntro');
@@ -4047,7 +4220,7 @@ a.app-card{color:inherit;text-decoration:none}
       skipHubHelpIntro=true;
     }
   }
-  if(!skipHubHelpIntro)maybeShowHubHelpIntro();
+  if(!skipHubHelpIntro)void maybeShowHubStartIntro();
 })();
 </script>
 <script src="js/tester-feedback-widget.js?v=20260506a"></script>
