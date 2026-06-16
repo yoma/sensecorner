@@ -3577,14 +3577,41 @@ async function confirmSamenvoegen(keepId,removeId){
   _samenvoegenBusy=true;
   closeSamenvoegenModal();
   try{
-    var keepMov=Array.isArray(keepRow.movement)?keepRow.movement:[];
-    var removeMov=Array.isArray(removeRow.movement)?removeRow.movement:[];
+    var keepEvidence=parseAandachtspuntEvidence(keepRow.evidence).slice();
+    var removeEvidence=parseAandachtspuntEvidence(removeRow.evidence);
+    var seenEvidence={};
+    function evidenceMergeKey(item){
+      if(!item||typeof item!=='object')return'';
+      var msg=String(item.message_id||'').trim();
+      if(msg)return'msg:'+msg;
+      var chk=String(item.checkin_id||item.id||'').trim();
+      if(chk)return'checkin:'+chk.toLowerCase();
+      var typ=String(item.type||'').trim();
+      var txt=String(item.note||item.answer||item.created_at||'').trim();
+      return (typ||txt)?('inline:'+typ+':'+txt):'';
+    }
+    keepEvidence.forEach(function(item){
+      var key=evidenceMergeKey(item);
+      if(key)seenEvidence[key]=1;
+    });
+    removeEvidence.forEach(function(item){
+      var key=evidenceMergeKey(item);
+      if(!key||!seenEvidence[key]){
+        keepEvidence.push(item);
+        if(key)seenEvidence[key]=1;
+      }
+    });
+    var nowIso=new Date().toISOString();
+    var removeName=String(removeRow.soft_name||'').trim()||'aandachtspunt';
+    var keepMov=parseAandachtspuntMovement(keepRow.movement).slice();
+    var removeMov=parseAandachtspuntMovement(removeRow.movement);
     var merged=keepMov.concat(removeMov).sort(function(a,b){
       return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
     });
-    await updateAandachtspuntRowLocal(keepId,{movement:merged});
+    merged.push({note:'Samengevoegd met: "'+removeName+'"',at:nowIso,type:'merge',merged_id:removeId,merged_name:removeName});
+    await updateAandachtspuntRowLocal(keepId,{movement:merged,evidence:keepEvidence});
     var res=await sb.from('own_aandachtspunten')
-      .update({status:'verworpen',updated_at:new Date().toISOString()})
+      .update({status:'verworpen',updated_at:nowIso})
       .eq('id',removeId).eq('user_id',S.user.id);
     if(res&&res.error)throw res.error;
     if(Array.isArray(S.ssBevestigdeAandachtspunten)){
