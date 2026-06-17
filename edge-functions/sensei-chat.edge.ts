@@ -124,6 +124,23 @@ async function countAiRateLog(
   return { count: null, purposeSupported: false };
 }
 
+async function reserveAiRateLog(
+  userId: string,
+  isOwnsenseHub: boolean,
+): Promise<{ ok: boolean; purposeSupported: boolean; error?: string }> {
+  const logRow: Record<string, unknown> = { user_id: userId };
+  if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
+
+  let ins = await sb.from("ai_rate_log").insert(logRow);
+  if (ins.error && isOwnsenseHub && /purpose/i.test(String(ins.error.message || ""))) {
+    ins = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (ins.error) return { ok: false, purposeSupported: false, error: ins.error.message };
+    return { ok: true, purposeSupported: false };
+  }
+  if (ins.error) return { ok: false, purposeSupported: !isOwnsenseHub, error: ins.error.message };
+  return { ok: true, purposeSupported: true };
+}
+
 async function resolveRoepnaam(userId: string): Promise<string> {
   try {
     const authRes = await sb.auth.admin.getUserById(userId);
@@ -315,15 +332,38 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as Record<string, unknown>;
     const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
 
+    // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
+    // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
+    let system = String(body?.system || "").trim();
+    const maxTokens = Math.max(64, Math.min(2000, Number(body?.max_tokens || 800)));
+    const model = String(body?.model || "claude-sonnet-4-6");
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    if (!messages.length) return json({ error: "messages is required" }, 400);
+
     // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
+    // Reserveer voor Claude zodat parallelle requests de limiet niet voorbij schieten.
     if (!isAdmin) {
+      const reserved = await reserveAiRateLog(userId, isOwnsenseHub);
+      if (!reserved.ok) {
+        console.warn("ai_rate_log reserveren mislukt:", reserved.error || "unknown");
+        return json({
+          error: "AI-limiet kon niet veilig worden opgeslagen. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
       const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isOwnsenseHub ? "hub" : "general";
+      const mode = reserved.purposeSupported ? (isOwnsenseHub ? "hub" : "general") : "all";
       const counted = await countAiRateLog(userId, windowStart, mode);
       const maxAllowed = counted.purposeSupported
         ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
         : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
+      if (counted.count == null) {
+        return json({
+          error: "AI-limiet kon niet veilig worden gecontroleerd. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      if (counted.count > maxAllowed) {
         const label = isOwnsenseHub
           ? "OWN Sense profiel-ai (inzichten en foto's)"
           : "Sensei-berichten in DateSense, FamilySense en SelfSense";
@@ -333,14 +373,6 @@ Deno.serve(async (req: Request) => {
         }, 429);
       }
     }
-
-    // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
-    // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
-    let system = String(body?.system || "").trim();
-    const maxTokens = Math.max(64, Math.min(2000, Number(body?.max_tokens || 800)));
-    const model = String(body?.model || "claude-sonnet-4-6");
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
-    if (!messages.length) return json({ error: "messages is required" }, 400);
 
     const roep = await resolveRoepnaam(userId);
 
@@ -419,21 +451,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const logRow: Record<string, unknown> = { user_id: userId };
-      if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
-      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && isOwnsenseHub && /purpose/i.test(String(logError.message || ""))) {
-          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-            if (logError2) console.warn("Loggen mislukt:", logError2.message);
-          });
-        } else if (logError) {
-          console.warn("Loggen mislukt:", logError.message);
-        }
-      });
     }
 
     return json(claudeData, 200);
