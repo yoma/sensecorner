@@ -2884,6 +2884,61 @@ function parseAandachtspuntMovement(mv){
   }
   return[];
 }
+function aandachtspuntEvidenceMergeKey(it){
+  if(!it)return'';
+  var mid=String(it.message_id||'').trim();
+  if(mid)return'm:'+mid.toLowerCase();
+  var cid=String(it.checkin_id||it.id||'').trim();
+  if(cid)return'c:'+cid.toLowerCase();
+  var typ=String(it.type||'').trim();
+  var at=String(it.created_at||'').trim();
+  var txt=String(it.note||it.excerpt||it.answer||'').trim();
+  if(typ||at||txt)return'v:'+[typ,at,txt].join('|').toLowerCase();
+  try{return'j:'+JSON.stringify(it);}catch(_e){return'';}
+}
+function mergeAandachtspuntEvidence(keepEvidence,removeEvidence){
+  var out=parseAandachtspuntEvidence(keepEvidence).slice();
+  var seen={};
+  out.forEach(function(it){
+    var key=aandachtspuntEvidenceMergeKey(it);
+    if(key)seen[key]=1;
+  });
+  parseAandachtspuntEvidence(removeEvidence).forEach(function(it){
+    var key=aandachtspuntEvidenceMergeKey(it);
+    if(key&&seen[key])return;
+    out.push(it);
+    if(key)seen[key]=1;
+  });
+  return out;
+}
+function mergeAandachtspuntTipsAdvice(keepTips,removeRow){
+  var keep=String(keepTips||'').trim();
+  var name=String(removeRow&&removeRow.soft_name||'').trim();
+  var tips=String(removeRow&&removeRow.tips_advice||'').trim();
+  if(!name&&!tips)return keep;
+  var extra=name?('Samengevoegd aandachtspunt: '+name):'Samengevoegd aandachtspunt';
+  if(tips)extra+=' - advies: '+tips;
+  if(!keep)return extra;
+  if(keep.indexOf(extra)>=0)return keep;
+  return keep+'\n\n'+extra;
+}
+function mergeAandachtspuntMovement(keepRow,removeRow,nowIso){
+  var merged=parseAandachtspuntMovement(keepRow&&keepRow.movement)
+    .concat(parseAandachtspuntMovement(removeRow&&removeRow.movement));
+  var name=String(removeRow&&removeRow.soft_name||'').trim();
+  merged.push({
+    note:'Samengevoegd met: "'+(name||'aandachtspunt')+'"',
+    at:nowIso||new Date().toISOString(),
+    type:'merge',
+    merged_id:aandachtspuntIdStr(removeRow&&removeRow.id),
+    merged_name:name,
+    merged_tips:String(removeRow&&removeRow.tips_advice||'').trim()
+  });
+  merged.sort(function(a,b){
+    return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
+  });
+  return merged;
+}
 var SS_CHECKIN_EVIDENCE_QUESTION='Hoe is het vandaag met jou? Vergeleken met gisteren.';
 function normalizeEvidenceCheckinId(id){
   id=String(id||'').trim();
@@ -3097,6 +3152,23 @@ function formatAandachtspuntMovementNote(note){
   var n=String(note||'').trim();
   if(!n||n==='Hier aan gewerkt')return'Vandaag aan gewerkt';
   return n;
+}
+function formatMergedAandachtspuntenHtml(movement){
+  var items=parseAandachtspuntMovement(movement).filter(function(it){
+    return it&&String(it.type||'').trim()==='merge'&&String(it.merged_name||'').trim();
+  });
+  if(!items.length)return'';
+  items.sort(function(a,b){
+    return new Date(b.at||0).getTime()-new Date(a.at||0).getTime();
+  });
+  var html=items.map(function(it){
+    var when=fmtAandachtspuntMovementDate(it.at);
+    return '<div class="ss-waar-ik-merged-item">'
+      +'<span class="ss-waar-ik-merged-item-name">'+escHTML(String(it.merged_name||'').trim())+'</span>'
+      +(when?'<span class="ss-waar-ik-merged-item-when">'+escHTML(when)+'</span>':'')
+      +'</div>';
+  }).join('');
+  return '<div class="ss-waar-ik-merged-section"><div class="ss-waar-ik-merged-title">Samengevoegd met</div>'+html+'</div>';
 }
 function fmtAandachtspuntMovementDate(iso){
   if(!iso)return'';
@@ -3473,6 +3545,7 @@ function renderWaarIkAanWerkDetailHtml(row,checkinMap){
   }
   var movementList=formatAandachtspuntMovementListHtml(row.movement,!!S.showWaarIkMovementAll);
   var movementListHtml='<div class="ss-waar-ik-movement-list" id="ssAandachtMovementList">'+movementList+'</div>';
+  var mergedFromHtml=formatMergedAandachtspuntenHtml(row.movement);
   var completedBanner=isDone?('<div class="ss-waar-ik-completed-banner" id="ssAandachtCompletedBanner">In balans sinds '+escHTML(fmtAandachtspuntCompletedDate(row.completed_at)||'onbekende datum')+'. Je kan dit weer actief maken als het thema terugkomt.</div>'):'';
   var completeIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
   var completeBtn=isDone
@@ -3491,6 +3564,7 @@ function renderWaarIkAanWerkDetailHtml(row,checkinMap){
     +'<div class="ss-waar-ik-detail-grid">'
     +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Waarop dit gebaseerd is</div>'
     +'<div class="ss-waar-ik-evidence-card">'+formatAandachtspuntEvidenceLines(row.evidence,checkinMap)+'</div>'
+    +mergedFromHtml
     +'</div>'
     +'<div class="ss-waar-ik-sec"><div class="ss-waar-ik-sec-h">Hoe je het kan aanpakken</div>'
     +tipsHtml
@@ -3577,16 +3651,19 @@ async function confirmSamenvoegen(keepId,removeId){
   _samenvoegenBusy=true;
   closeSamenvoegenModal();
   try{
-    var keepMov=Array.isArray(keepRow.movement)?keepRow.movement:[];
-    var removeMov=Array.isArray(removeRow.movement)?removeRow.movement:[];
-    var merged=keepMov.concat(removeMov).sort(function(a,b){
-      return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
+    var nowIso=new Date().toISOString();
+    await updateAandachtspuntRowLocal(keepId,{
+      evidence:mergeAandachtspuntEvidence(keepRow.evidence,removeRow.evidence),
+      tips_advice:mergeAandachtspuntTipsAdvice(keepRow.tips_advice,removeRow),
+      movement:mergeAandachtspuntMovement(keepRow,removeRow,nowIso)
     });
-    await updateAandachtspuntRowLocal(keepId,{movement:merged});
     var res=await sb.from('own_aandachtspunten')
-      .update({status:'verworpen',updated_at:new Date().toISOString()})
-      .eq('id',removeId).eq('user_id',S.user.id);
+      .update({status:'verworpen',rejected_at:nowIso,updated_at:nowIso})
+      .eq('id',removeId).eq('user_id',S.user.id)
+      .select('id')
+      .maybeSingle();
     if(res&&res.error)throw res.error;
+    if(!res||!res.data)throw new Error('Samen te voegen aandachtspunt niet bijgewerkt.');
     if(Array.isArray(S.ssBevestigdeAandachtspunten)){
       S.ssBevestigdeAandachtspunten=S.ssBevestigdeAandachtspunten.filter(function(r){
         return r&&aandachtspuntIdStr(r.id)!==removeId;
