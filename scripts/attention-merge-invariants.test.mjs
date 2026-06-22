@@ -32,6 +32,10 @@ function runInContext(source, sandbox = {}){
   return ctx;
 }
 
+function plain(value){
+  return JSON.parse(JSON.stringify(value));
+}
+
 function baseHelpers(source, names){
   return names.map((name) => extractFunction(source, name)).join('\n');
 }
@@ -77,7 +81,7 @@ async function testSelfSenseConfirmedMerge(){
   ` + code);
   await ctx.confirmSamenvoegen('keep', 'remove');
   assert.equal(ctx.updateCalls.length, 1);
-  assert.deepEqual(ctx.updateCalls[0].patch.evidence.map((it) => it.checkin_id), ['one', 'two']);
+  assert.deepEqual(plain(ctx.updateCalls[0].patch.evidence.map((it) => it.checkin_id)), ['one', 'two']);
   assert.equal(ctx.rejectCalls, 1);
   assert.equal(ctx.S.ssBevestigdeAandachtspunten.length, 1);
   assert.equal(ctx.toasts.at(-1), 'Aandachtspunten samengevoegd.');
@@ -120,7 +124,7 @@ async function testOwnSenseProposalMergeFailureDoesNotPatchLocal(){
   ` + code);
   await ctx.mergeProposalIntoExisting('proposal', 'existing');
   assert.equal(ctx.updates.length, 2);
-  assert.deepEqual(ctx.updates[0].patch.evidence.map((it) => it.checkin_id), ['one', 'two']);
+  assert.deepEqual(plain(ctx.updates[0].patch.evidence.map((it) => it.checkin_id)), ['one', 'two']);
   assert.equal(ctx.patches.length, 0, 'local state must not claim success after reject failure');
   assert.equal(ctx.reloads, 1, 'failure path reloads server state');
   assert.equal(ctx.flashes.at(-1).isErr, true);
@@ -157,7 +161,7 @@ async function testOwnSenseProposalMergeSuccessPatchesAfterBothWrites(){
   ` + code);
   await ctx.mergeProposalIntoExisting('proposal', 'existing');
   assert.equal(ctx.patches.length, 2);
-  assert.deepEqual(ctx.patches[0].patch.evidence.map((it) => it.checkin_id || it.note), ['one', 'two', 'keyless']);
+  assert.deepEqual(plain(ctx.patches[0].patch.evidence.map((it) => it.checkin_id || it.note)), ['one', 'two', 'keyless']);
   assert.equal(ctx.patches[1].patch.status, 'verworpen');
   assert.equal(ctx.flashes.at(-1).isErr, false);
 }
