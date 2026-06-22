@@ -7,8 +7,10 @@ function read(path){
 }
 
 function extractFunction(source, name){
-  const marker = `function ${name}`;
-  const start = source.indexOf(marker);
+  const asyncMarker = `async function ${name}`;
+  const plainMarker = `function ${name}`;
+  let start = source.indexOf(asyncMarker);
+  if(start === -1)start = source.indexOf(plainMarker);
   assert.notEqual(start, -1, `${name} not found`);
   const braceStart = source.indexOf('{', start);
   assert.notEqual(braceStart, -1, `${name} body not found`);
