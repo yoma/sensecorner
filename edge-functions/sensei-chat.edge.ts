@@ -365,12 +365,6 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as Record<string, unknown>;
     const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
 
-    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
-    if (!isAdmin) {
-      const rateBlock = await reserveAiRateOrResponse(userId, isOwnsenseHub);
-      if (rateBlock) return rateBlock;
-    }
-
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
     let system = String(body?.system || "").trim();
@@ -378,6 +372,12 @@ Deno.serve(async (req: Request) => {
     const model = String(body?.model || "claude-sonnet-4-6");
     const messages = Array.isArray(body?.messages) ? body.messages : [];
     if (!messages.length) return json({ error: "messages is required" }, 400);
+
+    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
+    if (!isAdmin) {
+      const rateBlock = await reserveAiRateOrResponse(userId, isOwnsenseHub);
+      if (rateBlock) return rateBlock;
+    }
 
     const roep = await resolveRoepnaam(userId);
 
