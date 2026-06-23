@@ -227,12 +227,31 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function insertRate(userId: string): Promise<boolean> {
   const row: Record<string, unknown> = { user_id: userId, purpose: RATE_PURPOSE };
   const ins = await sb.from("ai_rate_log").insert(row);
   if (ins.error && /purpose/i.test(String(ins.error.message || ""))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (!fallback.error) return true;
+    console.warn("ai_rate_log reserveren mislukt:", fallback.error.message);
+    return false;
   }
+  if (ins.error) {
+    console.warn("ai_rate_log reserveren mislukt:", ins.error.message);
+    return false;
+  }
+  return true;
+}
+
+async function reserveRate(userId: string): Promise<"ok" | "limited" | "unavailable"> {
+  const counted = await countRate(userId);
+  if (counted == null) return "unavailable";
+  if (counted >= RATE_LIMIT_MAX) return "limited";
+  if (!await insertRate(userId)) return "unavailable";
+  const after = await countRate(userId);
+  if (after == null) return "unavailable";
+  if (after > RATE_LIMIT_MAX) return "limited";
+  return "ok";
 }
 
 async function loadRelevantCheckins(userId: string): Promise<CheckinRow[]> {
@@ -539,17 +558,6 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({
-          ok: false,
-          reason: "rate_limited",
-          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
-        }, 429);
-      }
-    }
-
     const relevant = await loadRelevantCheckins(userId);
     const relevantCount = relevant.length;
 
@@ -575,6 +583,24 @@ Deno.serve(async (req: Request) => {
     const factsCorpus = factsCorpusText(confirmedFacts);
     const system = buildSystemPrompt(dunne);
     const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx, bevestigdeAandacht);
+
+    if (!isAdmin) {
+      const rateStatus = await reserveRate(userId);
+      if (rateStatus === "limited") {
+        return json({
+          ok: false,
+          reason: "rate_limited",
+          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+        }, 429);
+      }
+      if (rateStatus === "unavailable") {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "De AI-limiet kon niet veilig gecontroleerd worden. Probeer het later opnieuw.",
+        }, 503);
+      }
+    }
 
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);
@@ -604,8 +630,6 @@ Deno.serve(async (req: Request) => {
       console.error("aandachtspunten Claude:", JSON.stringify(claudeData));
       return json({ error: (claudeData as { error?: { message?: string } })?.error?.message || "Claude call failed" }, claudeRes.status);
     }
-
-    if (!isAdmin) await logRate(userId);
 
     const rawText = extractAssistantText(claudeData);
     const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
