@@ -227,12 +227,18 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function reserveRate(userId: string): Promise<boolean> {
   const row: Record<string, unknown> = { user_id: userId, purpose: RATE_PURPOSE };
   const ins = await sb.from("ai_rate_log").insert(row);
+  if (!ins.error) return true;
   if (ins.error && /purpose/i.test(String(ins.error.message || ""))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (!fallback.error) return true;
+    console.warn("ai_rate_log reserve failed:", fallback.error.message);
+    return false;
   }
+  console.warn("ai_rate_log reserve failed:", ins.error.message);
+  return false;
 }
 
 async function loadRelevantCheckins(userId: string): Promise<CheckinRow[]> {
@@ -541,7 +547,14 @@ Deno.serve(async (req: Request) => {
 
     if (!isAdmin) {
       const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
+      if (counted == null) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "AI-gebruik kan nu niet veilig gecontroleerd worden. Probeer later opnieuw.",
+        }, 503);
+      }
+      if (counted >= RATE_LIMIT_MAX) {
         return json({
           ok: false,
           reason: "rate_limited",
@@ -576,6 +589,31 @@ Deno.serve(async (req: Request) => {
     const system = buildSystemPrompt(dunne);
     const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx, bevestigdeAandacht);
 
+    if (!isAdmin) {
+      if (!await reserveRate(userId)) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "AI-gebruik kan nu niet veilig geregistreerd worden. Probeer later opnieuw.",
+        }, 503);
+      }
+      const rechecked = await countRate(userId);
+      if (rechecked == null) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "AI-gebruik kan nu niet veilig gecontroleerd worden. Probeer later opnieuw.",
+        }, 503);
+      }
+      if (rechecked > RATE_LIMIT_MAX) {
+        return json({
+          ok: false,
+          reason: "rate_limited",
+          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+        }, 429);
+      }
+    }
+
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);
     let claudeRes: Response;
@@ -604,8 +642,6 @@ Deno.serve(async (req: Request) => {
       console.error("aandachtspunten Claude:", JSON.stringify(claudeData));
       return json({ error: (claudeData as { error?: { message?: string } })?.error?.message || "Claude call failed" }, claudeRes.status);
     }
-
-    if (!isAdmin) await logRate(userId);
 
     const rawText = extractAssistantText(claudeData);
     const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
