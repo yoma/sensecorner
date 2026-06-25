@@ -235,6 +235,43 @@ async function logRate(userId: string): Promise<void> {
   }
 }
 
+async function reserveRate(userId: string): Promise<Response | null> {
+  const counted = await countRate(userId);
+  if (counted == null) {
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet gecontroleerd worden." }, 503);
+  }
+  if (counted >= RATE_LIMIT_MAX) {
+    return json({
+      ok: false,
+      reason: "rate_limited",
+      user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+    }, 429);
+  }
+
+  const row: Record<string, unknown> = { user_id: userId, purpose: RATE_PURPOSE };
+  let ins = await sb.from("ai_rate_log").insert(row);
+  if (ins.error && /purpose/i.test(String(ins.error.message || ""))) {
+    ins = await sb.from("ai_rate_log").insert({ user_id: userId });
+  }
+  if (ins.error) {
+    console.warn("reserveRate", ins.error.message);
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet worden vastgelegd." }, 503);
+  }
+
+  const reserved = await countRate(userId);
+  if (reserved == null) {
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet gecontroleerd worden." }, 503);
+  }
+  if (reserved > RATE_LIMIT_MAX) {
+    return json({
+      ok: false,
+      reason: "rate_limited",
+      user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+    }, 429);
+  }
+  return null;
+}
+
 async function loadRelevantCheckins(userId: string): Promise<CheckinRow[]> {
   const cutoff = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const res = await sb
@@ -539,17 +576,6 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({
-          ok: false,
-          reason: "rate_limited",
-          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
-        }, 429);
-      }
-    }
-
     const relevant = await loadRelevantCheckins(userId);
     const relevantCount = relevant.length;
 
@@ -575,6 +601,11 @@ Deno.serve(async (req: Request) => {
     const factsCorpus = factsCorpusText(confirmedFacts);
     const system = buildSystemPrompt(dunne);
     const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx, bevestigdeAandacht);
+
+    if (!isAdmin) {
+      const rateBlocked = await reserveRate(userId);
+      if (rateBlocked) return rateBlocked;
+    }
 
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);
@@ -604,8 +635,6 @@ Deno.serve(async (req: Request) => {
       console.error("aandachtspunten Claude:", JSON.stringify(claudeData));
       return json({ error: (claudeData as { error?: { message?: string } })?.error?.message || "Claude call failed" }, claudeRes.status);
     }
-
-    if (!isAdmin) await logRate(userId);
 
     const rawText = extractAssistantText(claudeData);
     const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();

@@ -500,11 +500,28 @@
       var id = extras[i];
       var name = PROFILE_NAME_BY_MIRROR[id];
       if (!name) continue;
+      var sel = await withRetries(function () {
+        return sb
+          .from("sense_profiles")
+          .select("props")
+          .eq("user_id", userId)
+          .eq("name", name)
+          .maybeSingle();
+      }, 3);
+      if (sel && sel.error) return "Even een haperingetje. Ik probeer het opnieuw.";
+      var base =
+        sel && sel.data && sel.data.props && typeof sel.data.props === "object" ? sel.data.props : {};
+      var props = Object.assign({}, base, {
+        activated_at: base.activated_at || iso,
+        via: base.via || "onboarding",
+        mirror_status: "active"
+      });
+      delete props.paused_at;
       var payload = {
         user_id: userId,
         name: name,
         phone: null,
-        props: { activated_at: iso, via: "onboarding", mirror_status: "active" },
+        props: props,
         last_active: iso
       };
       var up = await withRetries(function () {
