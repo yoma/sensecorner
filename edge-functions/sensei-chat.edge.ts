@@ -124,6 +124,63 @@ async function countAiRateLog(
   return { count: null, purposeSupported: false };
 }
 
+async function reserveAiRateLog(userId: string, isOwnsenseHub: boolean): Promise<Response | null> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const mode = isOwnsenseHub ? "hub" : "general";
+  const label = isOwnsenseHub
+    ? "OWN Sense profiel-ai (inzichten en foto's)"
+    : "Sensei-berichten in DateSense, FamilySense en SelfSense";
+
+  const counted = await countAiRateLog(userId, windowStart, mode);
+  const maxAllowed = counted.purposeSupported
+    ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+    : RATE_LIMIT_MAX;
+  if (counted.count == null) {
+    return json({
+      error: "AI-limiet kan niet gecontroleerd worden. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    }, 503);
+  }
+  if (counted.count >= maxAllowed) {
+    return json({
+      error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+      code: "AI_RATE_LIMIT",
+    }, 429);
+  }
+
+  const logRow: Record<string, unknown> = { user_id: userId };
+  if (isOwnsenseHub && counted.purposeSupported) logRow.purpose = "ownsense_hub";
+  let insertRes = await sb.from("ai_rate_log").insert(logRow);
+  if (insertRes.error && isOwnsenseHub && counted.purposeSupported && /purpose/i.test(String(insertRes.error.message || ""))) {
+    insertRes = await sb.from("ai_rate_log").insert({ user_id: userId });
+  }
+  if (insertRes.error) {
+    console.warn("ai_rate_log reserveren mislukt:", insertRes.error.message);
+    return json({
+      error: "AI-limiet kan niet worden vastgelegd. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    }, 503);
+  }
+
+  const reserved = await countAiRateLog(userId, windowStart, mode);
+  const reservedMax = reserved.purposeSupported
+    ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+    : RATE_LIMIT_MAX;
+  if (reserved.count == null) {
+    return json({
+      error: "AI-limiet kan niet gecontroleerd worden. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    }, 503);
+  }
+  if (reserved.count > reservedMax) {
+    return json({
+      error: `Limiet bereikt: max ${reservedMax} ${label} per uur. Probeer het later opnieuw.`,
+      code: "AI_RATE_LIMIT",
+    }, 429);
+  }
+  return null;
+}
+
 async function resolveRoepnaam(userId: string): Promise<string> {
   try {
     const authRes = await sb.auth.admin.getUserById(userId);
@@ -317,21 +374,8 @@ Deno.serve(async (req: Request) => {
 
     // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
     if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isOwnsenseHub ? "hub" : "general";
-      const counted = await countAiRateLog(userId, windowStart, mode);
-      const maxAllowed = counted.purposeSupported
-        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
-        : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
-        const label = isOwnsenseHub
-          ? "OWN Sense profiel-ai (inzichten en foto's)"
-          : "Sensei-berichten in DateSense, FamilySense en SelfSense";
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
+      const rateBlocked = await reserveAiRateLog(userId, isOwnsenseHub);
+      if (rateBlocked) return rateBlocked;
     }
 
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
@@ -419,21 +463,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const logRow: Record<string, unknown> = { user_id: userId };
-      if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
-      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && isOwnsenseHub && /purpose/i.test(String(logError.message || ""))) {
-          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-            if (logError2) console.warn("Loggen mislukt:", logError2.message);
-          });
-        } else if (logError) {
-          console.warn("Loggen mislukt:", logError.message);
-        }
-      });
     }
 
     return json(claudeData, 200);

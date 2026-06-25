@@ -185,6 +185,34 @@ async function logRate(userId: string): Promise<void> {
   }
 }
 
+async function reserveRate(userId: string): Promise<Response | null> {
+  const counted = await countRate(userId);
+  if (counted == null) {
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet gecontroleerd worden." }, 503);
+  }
+  if (counted >= RATE_LIMIT_MAX) {
+    return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+  }
+
+  let ins = await sb.from("ai_rate_log").insert({ user_id: userId, purpose: RATE_PURPOSE });
+  if (ins.error && /purpose/i.test(String(ins.error.message))) {
+    ins = await sb.from("ai_rate_log").insert({ user_id: userId });
+  }
+  if (ins.error) {
+    console.warn("reserveRate", ins.error.message);
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet worden vastgelegd." }, 503);
+  }
+
+  const reserved = await countRate(userId);
+  if (reserved == null) {
+    return json({ ok: false, reason: "rate_unavailable", user_message: "AI-limiet kan niet gecontroleerd worden." }, 503);
+  }
+  if (reserved > RATE_LIMIT_MAX) {
+    return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+  }
+  return null;
+}
+
 async function loadMessages(userId: string): Promise<MessageRow[]> {
   const cutoff = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const res = await sb
@@ -443,14 +471,6 @@ Deno.serve(async (req: Request) => {
       return json({ error: "AI toegang niet geactiveerd.", code: "AI_ACCESS_PENDING" }, 403);
     }
 
-    // Rate limiting
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
-      }
-    }
-
     // Data laden
     const msgs = await loadMessages(userId);
 
@@ -478,6 +498,10 @@ Deno.serve(async (req: Request) => {
     // Pass 1: detectie
     const detectSys = buildDetectSystemPrompt();
     const detectUsr = buildDetectUserPrompt(msgs, facts, profile);
+    if (!isAdmin) {
+      const rateBlocked = await reserveRate(userId);
+      if (rateBlocked) return rateBlocked;
+    }
     const detectRaw = await callClaude(detectSys, detectUsr, 1000);
     const detectCleaned = detectRaw.replace(/```json/gi, "").replace(/```/g, "").trim();
     const detectParsed = safeJsonParse(detectCleaned) as Record<string, unknown> | null;
@@ -530,8 +554,6 @@ Deno.serve(async (req: Request) => {
     if (!validatedProposals.length) {
       return json({ ok: true, reason: "rejected_by_validation", inserted: 0, proposals: [] });
     }
-
-    if (!isAdmin) await logRate(userId);
 
     // Wegschrijven naar own_aandachtspunten
     const insertedRows: { id: string; soft_name: string }[] = [];
