@@ -72,9 +72,10 @@ const sb = makeSupabaseMock([
 
 const result = await hub.saveSelectedMirrors(sb, "user-1", new Set(["own", "date"]));
 assert.equal(result, "");
-assert.equal(sb.upserts.length, 1);
+assert.equal(sb.upserts.length, 2);
 
-const saved = sb.upserts[0];
+const saved = sb.upserts.find((row) => row.name === "DateSense");
+assert(saved, "DateSense mirror row was upserted");
 assert.equal(saved.user_id, "user-1");
 assert.equal(saved.name, "DateSense");
 assert.deepEqual(saved.props.categories, originalProps.categories);
