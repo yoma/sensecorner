@@ -178,11 +178,17 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function reserveRate(userId: string): Promise<boolean> {
   const ins = await sb.from("ai_rate_log").insert({ user_id: userId, purpose: RATE_PURPOSE });
+  if (!ins.error) return true;
   if (ins.error && /purpose/i.test(String(ins.error.message))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (!fallback.error) return true;
+    console.warn("rate reserve fallback failed:", fallback.error.message);
+    return false;
   }
+  console.warn("rate reserve failed:", ins.error.message);
+  return false;
 }
 
 async function loadMessages(userId: string): Promise<MessageRow[]> {
@@ -446,7 +452,32 @@ Deno.serve(async (req: Request) => {
     // Rate limiting
     if (!isAdmin) {
       const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
+      if (counted == null) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "Ik kan AI-gebruik nu niet veilig controleren. Probeer later opnieuw.",
+        }, 503);
+      }
+      if (counted >= RATE_LIMIT_MAX) {
+        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+      }
+      if (!await reserveRate(userId)) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "Ik kan AI-gebruik nu niet veilig registreren. Probeer later opnieuw.",
+        }, 503);
+      }
+      const rechecked = await countRate(userId);
+      if (rechecked == null) {
+        return json({
+          ok: false,
+          reason: "rate_unavailable",
+          user_message: "Ik kan AI-gebruik nu niet veilig controleren. Probeer later opnieuw.",
+        }, 503);
+      }
+      if (rechecked > RATE_LIMIT_MAX) {
         return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
       }
     }
@@ -530,8 +561,6 @@ Deno.serve(async (req: Request) => {
     if (!validatedProposals.length) {
       return json({ ok: true, reason: "rejected_by_validation", inserted: 0, proposals: [] });
     }
-
-    if (!isAdmin) await logRate(userId);
 
     // Wegschrijven naar own_aandachtspunten
     const insertedRows: { id: string; soft_name: string }[] = [];
