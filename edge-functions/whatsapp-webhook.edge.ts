@@ -888,6 +888,81 @@ async function callClaude(system: string, messages: Array<{ role: "user" | "assi
   return norm(j?.content?.[0]?.text || "") || "Ik kon je bericht even niet verwerken. Probeer nog eens.";
 }
 
+async function mayUseSenseiDuringOnboarding(userId: string): Promise<boolean> {
+  const completedRes = await sb
+    .from("own_facts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("source_app", "onboarding")
+    .eq("subcategory", "completed")
+    .maybeSingle();
+  if (completedRes.error || completedRes.data) return false;
+
+  const startedRes = await sb
+    .from("own_facts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("source_app", "onboarding")
+    .limit(1)
+    .maybeSingle();
+  if (startedRes.error) return false;
+  return !!startedRes.data;
+}
+
+async function resolveAiAccessForWhatsapp(
+  userId: string,
+): Promise<{ ok: true; isAdmin: boolean; aiEnabled: boolean } | { ok: false; message: string }> {
+  const roleRes = await sb.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (roleRes.error) {
+    console.warn("whatsapp ai role check", roleRes.error.message);
+    return { ok: false, message: "Ik kan je AI-toegang nu niet veilig controleren. Probeer het later opnieuw." };
+  }
+  const isAdmin = String(roleRes.data?.role || "").toLowerCase() === "admin";
+
+  const accessRes = await sb.from("ai_access").select("ai_enabled").eq("user_id", userId).maybeSingle();
+  if (accessRes.error) {
+    console.warn("whatsapp ai access check", accessRes.error.message);
+    return { ok: false, message: "Ik kan je AI-toegang nu niet veilig controleren. Probeer het later opnieuw." };
+  }
+  let aiEnabled = !!accessRes.data?.ai_enabled;
+  if (!isAdmin && !aiEnabled) {
+    aiEnabled = await mayUseSenseiDuringOnboarding(userId);
+  }
+  return { ok: true, isAdmin, aiEnabled };
+}
+
+async function reserveAiRateSlot(userId: string): Promise<"ok" | "limited" | "unavailable"> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const counted = await sb
+    .from("ai_rate_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", windowStart);
+  if (counted.error) {
+    console.warn("whatsapp ai_rate_log count", counted.error.message);
+    return "unavailable";
+  }
+  if ((counted.count ?? 0) >= RATE_LIMIT_MAX) return "limited";
+
+  const inserted = await sb.from("ai_rate_log").insert({ user_id: userId });
+  if (inserted.error) {
+    console.warn("whatsapp ai_rate_log reserve", inserted.error.message);
+    return "unavailable";
+  }
+
+  const reserved = await sb
+    .from("ai_rate_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", windowStart);
+  if (reserved.error) {
+    console.warn("whatsapp ai_rate_log recount", reserved.error.message);
+    return "unavailable";
+  }
+  if ((reserved.count ?? 0) > RATE_LIMIT_MAX) return "limited";
+  return "ok";
+}
+
 async function verifyTwilioSignature(req: Request, params: URLSearchParams): Promise<boolean> {
   if (!TWILIO_AUTH_TOKEN) return false;
   const signature = req.headers.get("X-Twilio-Signature") || "";
@@ -942,15 +1017,29 @@ Deno.serve(async (req: Request) => {
     }
 
     const ownUser = lookup.kind === "ok" ? lookup.row : null;
-    if (ownUser?.user_id) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const { count } = await sb
-        .from("ai_rate_log")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", ownUser.user_id)
-        .gte("created_at", windowStart);
-      if ((count ?? 0) >= RATE_LIMIT_MAX) return twilioWebhookAck();
+    if (!ownUser?.user_id) {
+      const reply =
+        "Hey, ik vind nog geen gekoppeld account-nummer op dit telefoonnummer. " +
+        "Zet je gsm optioneel in SenseCorner bij je account (WhatsApp), dan herken ik je meteen.";
+      await saveMsg(userPhone, "assistant", reply);
+      await sendTwilio(fromRaw, reply);
+      return twilioWebhookAck();
     }
+    const aiAccess = await resolveAiAccessForWhatsapp(ownUser.user_id);
+    if (!aiAccess.ok) {
+      await saveMsg(userPhone, "assistant", aiAccess.message);
+      await sendTwilio(fromRaw, aiAccess.message);
+      return twilioWebhookAck();
+    }
+    if (!aiAccess.isAdmin && !aiAccess.aiEnabled) {
+      const reply =
+        "Je SenseCorner-account is herkend, maar AI-toegang is nog niet geactiveerd. " +
+        "Vraag een admin om je te approven; daarna reageer ik hier weer inhoudelijk.";
+      await saveMsg(userPhone, "assistant", reply);
+      await sendTwilio(fromRaw, reply);
+      return twilioWebhookAck();
+    }
+
     let waMirrorDossier = "";
     let mirrorConsentHint = "";
     let consentMandatoryPrefix = "";
@@ -1086,43 +1175,53 @@ Deno.serve(async (req: Request) => {
       ? `Bekende contactdossiers voor deze gebruiker: ${knownDossiers.join(", ")}.`
       : "";
 
-    let system = "";
-    if (ownUser?.user_id) {
-      const mirrorLabel = waMirrorDossier || DEFAULT_WHATSAPP_MIRROR_DOSSIER;
-      const whatsappDossierScope =
-        `WhatsApp-kanaal: berichten komen in de app-tijdlijn onder «${mirrorLabel}» (standaard instelbaar in SenseCorner). ` +
-        "Als het duidelijk over één ander contactdossier gaat en dat nog niet jullie actieve koppeling is, volgt een warme toestemmingsvraag; bij een kort ja/nee daarop past de koppeling mee. Leg dat nooit uit als een handleiding. ";
-      const dossierBlock = dossierBrief
-        ? `\n\n--- Dossier(s) uit database (wie/summary/advies; ingekort) ---\n${dossierBrief}\n--- Einde dossier ---\n` +
-          whatsappDossierScope +
-          mirrorConsentHint +
-          "Intern: wie, samenvattingen, adviezen en vooral de onderste regels van de tijdlijn zijn het meest actueel; negeer uiterlijk/foto. " +
-          "Tegen de gebruiker: spreek nooit over «dossierblok», «database», «wat je in de app invult is wat ik zie» of vergelijkbare systeem-meta. Dat voelt kil. " +
-          (knownDossiersLine ? (knownDossiersLine + " ") : "") +
-          "Als de gebruiker een naam of dossier noemt dat in de bekende contactdossiers staat, zeg dan nooit dat je die persoon niet kent. " +
-          "Als er weinig details zijn, zeg warm dat het dossier wel bestaat maar context nog dun is, en stel precies 1 gerichte vervolgvraag. " +
-          "Als dezelfde naam mogelijk bij meerdere contexten past, vraag eerst kort om verduidelijking over wie het gaat. " +
-          "Als je iemand weinig kent uit de context: zeg het warm en nieuwsgierig (bv. dat je Pascale graag beter zou leren kennen) en nodig uit om in eigen woorden te vertellen. Eén open vraag, geen technische verantwoording. " +
-          "Verzin geen feiten over mensen; twijfel = zacht uitspreken zonder juridische of IT-toon. " +
-          "Sluit nooit af met alleen «OK» of «Ok». Geen uitroepteken direct na de roepnaam van de gebruiker (dus niet «Yourieie!» maar «Yourieie,» of zonder leesteken). " +
-          "Gebruik geen lange gedachtestreep tussen woorden; liever een komma of punt."
-        : `\n\n(Er is nog weinig dossiertekst voor dit account, wees voorzichtig met aannames.)\n${whatsappDossierScope}${mirrorConsentHint}`;
-      system =
-        consentMandatoryPrefix +
-        "Je bent Sensei. Laat je horen als een wijze, warme vriend: goed luisteren, zachte humor mag, geen helpdesk- of systeemtaal. Nederlands" +
-        (consentMandatoryPrefix ? ", maximaal 4 korte zinnen in dit antwoord (toestemming)." : ", maximaal 3 zinnen.") +
-        " " +
-        "Verzin geen feiten over mensen of situaties. " +
-        (displayName
-          ? `Primaire aanhef (roepnaam): ${displayName}.${aliasHint} ` +
-            "Gebruik die naam natuurlijk; niet dubbel in dezelfde zin forceren."
-          : "Gebruik een warme neutrale aanspreking zonder naam.") +
-        dossierBlock;
-    } else {
-      system =
-        "Je bent Sensei, warme coach in het Nederlands. Max 3 zinnen. " +
-        "Zeg vriendelijk dat er nog geen gekoppeld account-nummer is op dit telefoonnummer " +
-        "en vraag om het optioneel te zetten in SenseCorner bij het account (WhatsApp), niet in het OWN Sense-dossier.";
+    const mirrorLabel = waMirrorDossier || DEFAULT_WHATSAPP_MIRROR_DOSSIER;
+    const whatsappDossierScope =
+      `WhatsApp-kanaal: berichten komen in de app-tijdlijn onder «${mirrorLabel}» (standaard instelbaar in SenseCorner). ` +
+      "Als het duidelijk over één ander contactdossier gaat en dat nog niet jullie actieve koppeling is, volgt een warme toestemmingsvraag; bij een kort ja/nee daarop past de koppeling mee. Leg dat nooit uit als een handleiding. ";
+    const dossierBlock = dossierBrief
+      ? `\n\n--- Dossier(s) uit database (wie/summary/advies; ingekort) ---\n${dossierBrief}\n--- Einde dossier ---\n` +
+        whatsappDossierScope +
+        mirrorConsentHint +
+        "Intern: wie, samenvattingen, adviezen en vooral de onderste regels van de tijdlijn zijn het meest actueel; negeer uiterlijk/foto. " +
+        "Tegen de gebruiker: spreek nooit over «dossierblok», «database», «wat je in de app invult is wat ik zie» of vergelijkbare systeem-meta. Dat voelt kil. " +
+        (knownDossiersLine ? (knownDossiersLine + " ") : "") +
+        "Als de gebruiker een naam of dossier noemt dat in de bekende contactdossiers staat, zeg dan nooit dat je die persoon niet kent. " +
+        "Als er weinig details zijn, zeg warm dat het dossier wel bestaat maar context nog dun is, en stel precies 1 gerichte vervolgvraag. " +
+        "Als dezelfde naam mogelijk bij meerdere contexten past, vraag eerst kort om verduidelijking over wie het gaat. " +
+        "Als je iemand weinig kent uit de context: zeg het warm en nieuwsgierig (bv. dat je Pascale graag beter zou leren kennen) en nodig uit om in eigen woorden te vertellen. Eén open vraag, geen technische verantwoording. " +
+        "Verzin geen feiten over mensen; twijfel = zacht uitspreken zonder juridische of IT-toon. " +
+        "Sluit nooit af met alleen «OK» of «Ok». Geen uitroepteken direct na de roepnaam van de gebruiker (dus niet «Yourieie!» maar «Yourieie,» of zonder leesteken). " +
+        "Gebruik geen lange gedachtestreep tussen woorden; liever een komma of punt."
+      : `\n\n(Er is nog weinig dossiertekst voor dit account, wees voorzichtig met aannames.)\n${whatsappDossierScope}${mirrorConsentHint}`;
+    const system =
+      consentMandatoryPrefix +
+      "Je bent Sensei. Laat je horen als een wijze, warme vriend: goed luisteren, zachte humor mag, geen helpdesk- of systeemtaal. Nederlands" +
+      (consentMandatoryPrefix ? ", maximaal 4 korte zinnen in dit antwoord (toestemming)." : ", maximaal 3 zinnen.") +
+      " " +
+      "Verzin geen feiten over mensen of situaties. " +
+      (displayName
+        ? `Primaire aanhef (roepnaam): ${displayName}.${aliasHint} ` +
+          "Gebruik die naam natuurlijk; niet dubbel in dezelfde zin forceren."
+        : "Gebruik een warme neutrale aanspreking zonder naam.") +
+      dossierBlock;
+
+    if (!aiAccess.isAdmin) {
+      const reserved = await reserveAiRateSlot(ownUser.user_id);
+      if (reserved === "limited") {
+        const reply = "Even rustig aan: je WhatsApp AI-limiet voor dit uur is bereikt. Probeer het later opnieuw.";
+        await saveMsg(userPhone, "assistant", reply, "rate_limited", waMirrorDossier);
+        await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reply, waMirrorDossier);
+        await sendTwilio(fromRaw, reply);
+        return twilioWebhookAck();
+      }
+      if (reserved === "unavailable") {
+        const reply = "Ik kan je AI-limiet nu niet veilig controleren. Probeer het later opnieuw.";
+        await saveMsg(userPhone, "assistant", reply, "rate_limit_unavailable", waMirrorDossier);
+        await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reply, waMirrorDossier);
+        await sendTwilio(fromRaw, reply);
+        return twilioWebhookAck();
+      }
     }
 
     let reply = await callClaude(system, [...history, { role: "user", content: body }]);
@@ -1140,11 +1239,6 @@ Deno.serve(async (req: Request) => {
     await saveMsg(userPhone, "assistant", reply);
     if (ownUser?.user_id) await mirrorWhatsappToSenseTimeline(ownUser.user_id, "assistant", reply, waMirrorDossier);
     await sendTwilio(fromRaw, reply);
-    if (ownUser?.user_id) {
-      sb.from("ai_rate_log").insert({ user_id: ownUser.user_id }).then(({ error }) => {
-        if (error) console.warn("rate log failed:", error.message);
-      });
-    }
 
     return twilioWebhookAck();
   } catch (error) {
