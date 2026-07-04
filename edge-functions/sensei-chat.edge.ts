@@ -124,6 +124,24 @@ async function countAiRateLog(
   return { count: null, purposeSupported: false };
 }
 
+async function insertAiRateLog(
+  userId: string,
+  purpose: string | null,
+): Promise<{ ok: boolean; purposeSupported: boolean }> {
+  const row: Record<string, unknown> = { user_id: userId };
+  if (purpose) row.purpose = purpose;
+  const ins = await sb.from("ai_rate_log").insert(row);
+  if (!ins.error) return { ok: true, purposeSupported: !!purpose };
+  if (purpose && /purpose/i.test(String(ins.error.message || ""))) {
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (!fallback.error) return { ok: true, purposeSupported: false };
+    console.warn("ai_rate_log reserveren mislukt:", fallback.error.message);
+    return { ok: false, purposeSupported: false };
+  }
+  console.warn("ai_rate_log reserveren mislukt:", ins.error.message);
+  return { ok: false, purposeSupported: !!purpose };
+}
+
 async function resolveRoepnaam(userId: string): Promise<string> {
   try {
     const authRes = await sb.auth.admin.getUserById(userId);
@@ -315,25 +333,6 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as Record<string, unknown>;
     const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
 
-    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isOwnsenseHub ? "hub" : "general";
-      const counted = await countAiRateLog(userId, windowStart, mode);
-      const maxAllowed = counted.purposeSupported
-        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
-        : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
-        const label = isOwnsenseHub
-          ? "OWN Sense profiel-ai (inzichten en foto's)"
-          : "Sensei-berichten in DateSense, FamilySense en SelfSense";
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
-    }
-
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
     let system = String(body?.system || "").trim();
@@ -400,6 +399,52 @@ Deno.serve(async (req: Request) => {
       anthropicPayload.tools = anthropicTools;
     }
 
+    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
+    if (!isAdmin) {
+      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+      const mode = isOwnsenseHub ? "hub" : "general";
+      const purpose = isOwnsenseHub ? "ownsense_hub" : null;
+      const counted = await countAiRateLog(userId, windowStart, mode);
+      const maxAllowed = counted.purposeSupported
+        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+        : RATE_LIMIT_MAX;
+      const label = isOwnsenseHub
+        ? "OWN Sense profiel-ai (inzichten en foto's)"
+        : "Sensei-berichten in DateSense, FamilySense en SelfSense";
+      if (counted.count == null) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      if (counted.count >= maxAllowed) {
+        return json({
+          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+          code: "AI_RATE_LIMIT",
+        }, 429);
+      }
+      const reserved = await insertAiRateLog(userId, purpose);
+      if (!reserved.ok) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig geregistreerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      const rechecked = await countAiRateLog(userId, windowStart, counted.purposeSupported ? mode : "all");
+      if (rechecked.count == null) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      if (rechecked.count > maxAllowed) {
+        return json({
+          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+          code: "AI_RATE_LIMIT",
+        }, 429);
+      }
+    }
+
     // ── Anthropic aanroepen ───────────────────────────────────────────────
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 25000);
@@ -419,21 +464,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    // ── Gebruik loggen ────────────────────────────────────────────────────
-    if (!isAdmin) {
-      const logRow: Record<string, unknown> = { user_id: userId };
-      if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
-      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && isOwnsenseHub && /purpose/i.test(String(logError.message || ""))) {
-          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-            if (logError2) console.warn("Loggen mislukt:", logError2.message);
-          });
-        } else if (logError) {
-          console.warn("Loggen mislukt:", logError.message);
-        }
-      });
     }
 
     return json(claudeData, 200);
