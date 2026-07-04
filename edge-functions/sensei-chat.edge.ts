@@ -333,52 +333,6 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as Record<string, unknown>;
     const isOwnsenseHub = body?.ownsense_hub === true || body?.ownsense_insight === true;
 
-    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isOwnsenseHub ? "hub" : "general";
-      const purpose = isOwnsenseHub ? "ownsense_hub" : null;
-      const counted = await countAiRateLog(userId, windowStart, mode);
-      const maxAllowed = counted.purposeSupported
-        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
-        : RATE_LIMIT_MAX;
-      const label = isOwnsenseHub
-        ? "OWN Sense profiel-ai (inzichten en foto's)"
-        : "Sensei-berichten in DateSense, FamilySense en SelfSense";
-      if (counted.count == null) {
-        return json({
-          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
-          code: "AI_RATE_LIMIT_UNAVAILABLE",
-        }, 503);
-      }
-      if (counted.count >= maxAllowed) {
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
-      const reserved = await insertAiRateLog(userId, purpose);
-      if (!reserved.ok) {
-        return json({
-          error: "AI-verbruik kan nu niet veilig geregistreerd worden. Probeer het later opnieuw.",
-          code: "AI_RATE_LIMIT_UNAVAILABLE",
-        }, 503);
-      }
-      const rechecked = await countAiRateLog(userId, windowStart, counted.purposeSupported ? mode : "all");
-      if (rechecked.count == null) {
-        return json({
-          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
-          code: "AI_RATE_LIMIT_UNAVAILABLE",
-        }, 503);
-      }
-      if (rechecked.count > maxAllowed) {
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
-    }
-
     // Optioneel: owner_profile / target_profile (dossiernamen) + flag use_snapshots
     // → compacte tekst uit ai_dossier_snapshot (zelfde data op alle devices).
     let system = String(body?.system || "").trim();
@@ -443,6 +397,52 @@ Deno.serve(async (req: Request) => {
     };
     if (anthropicTools?.length) {
       anthropicPayload.tools = anthropicTools;
+    }
+
+    // ── Rate limiting (aparte bucket: OWN inzichten + foto-analyse) ───────
+    if (!isAdmin) {
+      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+      const mode = isOwnsenseHub ? "hub" : "general";
+      const purpose = isOwnsenseHub ? "ownsense_hub" : null;
+      const counted = await countAiRateLog(userId, windowStart, mode);
+      const maxAllowed = counted.purposeSupported
+        ? (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX)
+        : RATE_LIMIT_MAX;
+      const label = isOwnsenseHub
+        ? "OWN Sense profiel-ai (inzichten en foto's)"
+        : "Sensei-berichten in DateSense, FamilySense en SelfSense";
+      if (counted.count == null) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      if (counted.count >= maxAllowed) {
+        return json({
+          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+          code: "AI_RATE_LIMIT",
+        }, 429);
+      }
+      const reserved = await insertAiRateLog(userId, purpose);
+      if (!reserved.ok) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig geregistreerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      const rechecked = await countAiRateLog(userId, windowStart, counted.purposeSupported ? mode : "all");
+      if (rechecked.count == null) {
+        return json({
+          error: "AI-verbruik kan nu niet veilig gecontroleerd worden. Probeer het later opnieuw.",
+          code: "AI_RATE_LIMIT_UNAVAILABLE",
+        }, 503);
+      }
+      if (rechecked.count > maxAllowed) {
+        return json({
+          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+          code: "AI_RATE_LIMIT",
+        }, 429);
+      }
     }
 
     // ── Anthropic aanroepen ───────────────────────────────────────────────
