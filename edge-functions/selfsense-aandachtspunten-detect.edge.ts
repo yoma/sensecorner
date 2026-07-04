@@ -227,12 +227,22 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function reserveRate(userId: string): Promise<boolean> {
   const row: Record<string, unknown> = { user_id: userId, purpose: RATE_PURPOSE };
   const ins = await sb.from("ai_rate_log").insert(row);
   if (ins.error && /purpose/i.test(String(ins.error.message || ""))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (fallback.error) {
+      console.warn("rate reserve fallback", fallback.error.message);
+      return false;
+    }
+    return true;
   }
+  if (ins.error) {
+    console.warn("rate reserve", ins.error.message);
+    return false;
+  }
+  return true;
 }
 
 async function loadRelevantCheckins(userId: string): Promise<CheckinRow[]> {
@@ -539,17 +549,6 @@ Deno.serve(async (req: Request) => {
       }, 403);
     }
 
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({
-          ok: false,
-          reason: "rate_limited",
-          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
-        }, 429);
-      }
-    }
-
     const relevant = await loadRelevantCheckins(userId);
     const relevantCount = relevant.length;
 
@@ -563,6 +562,46 @@ Deno.serve(async (req: Request) => {
         user_message: warmInsufficientDataMessage(),
         proposals: [],
       });
+    }
+
+    if (!isAdmin) {
+      const counted = await countRate(userId);
+      if (counted == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      if (counted >= RATE_LIMIT_MAX) {
+        return json({
+          ok: false,
+          reason: "rate_limited",
+          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+        }, 429);
+      }
+      if (!await reserveRate(userId)) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig registreren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      const rechecked = await countRate(userId);
+      if (rechecked == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      if (rechecked > RATE_LIMIT_MAX) {
+        return json({
+          ok: false,
+          reason: "rate_limited",
+          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+        }, 429);
+      }
     }
 
     const checkinById = new Map(relevant.map((r) => [r.id, r]));
@@ -604,8 +643,6 @@ Deno.serve(async (req: Request) => {
       console.error("aandachtspunten Claude:", JSON.stringify(claudeData));
       return json({ error: (claudeData as { error?: { message?: string } })?.error?.message || "Claude call failed" }, claudeRes.status);
     }
-
-    if (!isAdmin) await logRate(userId);
 
     const rawText = extractAssistantText(claudeData);
     const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();

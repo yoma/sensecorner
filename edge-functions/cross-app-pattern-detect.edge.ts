@@ -178,11 +178,21 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function reserveRate(userId: string): Promise<boolean> {
   const ins = await sb.from("ai_rate_log").insert({ user_id: userId, purpose: RATE_PURPOSE });
   if (ins.error && /purpose/i.test(String(ins.error.message))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+    const fb = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (fb.error) {
+      console.warn("rate reserve fallback", fb.error.message);
+      return false;
+    }
+    return true;
   }
+  if (ins.error) {
+    console.warn("rate reserve", ins.error.message);
+    return false;
+  }
+  return true;
 }
 
 async function loadMessages(userId: string): Promise<MessageRow[]> {
@@ -443,14 +453,6 @@ Deno.serve(async (req: Request) => {
       return json({ error: "AI toegang niet geactiveerd.", code: "AI_ACCESS_PENDING" }, 403);
     }
 
-    // Rate limiting
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
-      }
-    }
-
     // Data laden
     const msgs = await loadMessages(userId);
 
@@ -466,6 +468,38 @@ Deno.serve(async (req: Request) => {
         proposals: [],
         user_message: "Er zijn nog te weinig gesprekscontexten om betrouwbare patronen te herkennen.",
       });
+    }
+
+    if (!isAdmin) {
+      const counted = await countRate(userId);
+      if (counted == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      if (counted >= RATE_LIMIT_MAX) {
+        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+      }
+      if (!await reserveRate(userId)) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig registreren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      const rechecked = await countRate(userId);
+      if (rechecked == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan AI-verbruik nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+      if (rechecked > RATE_LIMIT_MAX) {
+        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+      }
     }
 
     const msgById = new Map(msgs.map((m) => [m.id, m]));
@@ -530,8 +564,6 @@ Deno.serve(async (req: Request) => {
     if (!validatedProposals.length) {
       return json({ ok: true, reason: "rejected_by_validation", inserted: 0, proposals: [] });
     }
-
-    if (!isAdmin) await logRate(userId);
 
     // Wegschrijven naar own_aandachtspunten
     const insertedRows: { id: string; soft_name: string }[] = [];
