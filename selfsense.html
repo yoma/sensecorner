@@ -2884,6 +2884,26 @@ function parseAandachtspuntMovement(mv){
   }
   return[];
 }
+function aandachtspuntEvidenceKey(it){
+  if(!it)return'';
+  var msg=String(it.message_id||'').trim();
+  if(msg)return'msg:'+msg;
+  var cid=normalizeEvidenceCheckinId(it.checkin_id||it.id);
+  if(cid)return'checkin:'+cid;
+  try{return'raw:'+JSON.stringify(it);}catch(_e){return'raw:'+String(it);}
+}
+function mergeAandachtspuntEvidence(base,extra){
+  var merged=[];
+  var seen={};
+  parseAandachtspuntEvidence(base).concat(parseAandachtspuntEvidence(extra)).forEach(function(it){
+    if(!it)return;
+    var key=aandachtspuntEvidenceKey(it);
+    if(key&&seen[key])return;
+    if(key)seen[key]=1;
+    merged.push(it);
+  });
+  return merged;
+}
 var SS_CHECKIN_EVIDENCE_QUESTION='Hoe is het vandaag met jou? Vergeleken met gisteren.';
 function normalizeEvidenceCheckinId(id){
   id=String(id||'').trim();
@@ -3577,14 +3597,24 @@ async function confirmSamenvoegen(keepId,removeId){
   _samenvoegenBusy=true;
   closeSamenvoegenModal();
   try{
-    var keepMov=Array.isArray(keepRow.movement)?keepRow.movement:[];
-    var removeMov=Array.isArray(removeRow.movement)?removeRow.movement:[];
-    var merged=keepMov.concat(removeMov).sort(function(a,b){
+    var nowIso=new Date().toISOString();
+    var removeName=String(removeRow.soft_name||'').trim();
+    var keepMov=parseAandachtspuntMovement(keepRow.movement);
+    var removeMov=parseAandachtspuntMovement(removeRow.movement);
+    var merged=keepMov.concat(removeMov);
+    if(removeName){
+      merged.push({note:'Samengevoegd met aandachtspunt: "'+removeName+'"',at:nowIso,type:'merge',merged_name:removeName});
+    }
+    merged=merged.sort(function(a,b){
       return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
     });
-    await updateAandachtspuntRowLocal(keepId,{movement:merged});
+    var patch={movement:merged,evidence:mergeAandachtspuntEvidence(keepRow.evidence,removeRow.evidence)};
+    if(!String(keepRow.tips_advice||'').trim()&&String(removeRow.tips_advice||'').trim()){
+      patch.tips_advice=removeRow.tips_advice;
+    }
+    await updateAandachtspuntRowLocal(keepId,patch);
     var res=await sb.from('own_aandachtspunten')
-      .update({status:'verworpen',updated_at:new Date().toISOString()})
+      .update({status:'verworpen',updated_at:nowIso})
       .eq('id',removeId).eq('user_id',S.user.id);
     if(res&&res.error)throw res.error;
     if(Array.isArray(S.ssBevestigdeAandachtspunten)){
