@@ -227,12 +227,18 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
+async function reserveRate(userId: string): Promise<boolean> {
   const row: Record<string, unknown> = { user_id: userId, purpose: RATE_PURPOSE };
   const ins = await sb.from("ai_rate_log").insert(row);
-  if (ins.error && /purpose/i.test(String(ins.error.message || ""))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+  if (!ins.error) return true;
+  if (/purpose/i.test(String(ins.error.message || ""))) {
+    const fallback = await sb.from("ai_rate_log").insert({ user_id: userId });
+    if (!fallback.error) return true;
+    console.warn("aandachtspunten rate reserve fallback", fallback.error.message);
+    return false;
   }
+  console.warn("aandachtspunten rate reserve", ins.error.message);
+  return false;
 }
 
 async function loadRelevantCheckins(userId: string): Promise<CheckinRow[]> {
@@ -541,7 +547,36 @@ Deno.serve(async (req: Request) => {
 
     if (!isAdmin) {
       const counted = await countRate(userId);
+      if (counted == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "De AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.",
+        }, 503);
+      }
       if (counted != null && counted >= RATE_LIMIT_MAX) {
+        return json({
+          ok: false,
+          reason: "rate_limited",
+          user_message: "Even rustig aan: probeer de aandachtspunten-detectie over een uur opnieuw.",
+        }, 429);
+      }
+      if (!(await reserveRate(userId))) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "De AI-limiet kan nu niet gereserveerd worden. Probeer het later opnieuw.",
+        }, 503);
+      }
+      const afterReserve = await countRate(userId);
+      if (afterReserve == null) {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "De AI-limiet kan nu niet gecontroleerd worden. Probeer het later opnieuw.",
+        }, 503);
+      }
+      if (afterReserve > RATE_LIMIT_MAX) {
         return json({
           ok: false,
           reason: "rate_limited",
@@ -604,8 +639,6 @@ Deno.serve(async (req: Request) => {
       console.error("aandachtspunten Claude:", JSON.stringify(claudeData));
       return json({ error: (claudeData as { error?: { message?: string } })?.error?.message || "Claude call failed" }, claudeRes.status);
     }
-
-    if (!isAdmin) await logRate(userId);
 
     const rawText = extractAssistantText(claudeData);
     const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
