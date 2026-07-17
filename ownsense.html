@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="17-07-2026 10:08">
+<meta name="os-build" content="17-07-2026 10:40">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
@@ -849,7 +849,11 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 .btn:disabled{opacity:.55;cursor:not-allowed}
 
 /* ── Gateway-Chat (praatbalk + overlay) ── */
-.gw-talkbar-host{margin:10px 0 0}
+.gw-talkbar-host{margin:0 0 12px}
+.gw-talkbar-label{
+  font-size:11px;font-weight:700;letter-spacing:.02em;
+  color:var(--sage-donker,#4a5e52);margin:0 0 8px;
+}
 .gw-talkbar{
   display:flex;align-items:center;gap:10px;
   background:var(--white,#FFFDF8);
@@ -1075,7 +1079,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
         <span class="sensei-kanji" lang="ja" title="Sensei - begeleider">先生</span>
-        <span style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie">v09-06-26d</span>
+        <span id="osBuildBadge" style="font-size:9px;opacity:.45;font-family:monospace;vertical-align:middle;margin-left:4px" title="Build-versie"></span>
       </a>
     </div>
     <div class="top-pills">
@@ -1104,9 +1108,9 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 
   <section id="hubShell" class="os-v4-shell">
     <section id="profileHero" class="os-scroll-target">
-      <article class="card os-scroll-target" id="mijTopCard"></article>
-      <!-- Gateway praatbalk: buiten #mijTopCard zodat renderMijTab() deze niet wist -->
+      <!-- Gateway praatbalk: boven Mij-kaart, buiten #mijTopCard zodat renderMijTab() deze niet wist -->
       <div class="gw-talkbar-host card" id="gatewayTalkbarHost" style="padding:14px 16px">
+        <p class="gw-talkbar-label" id="gatewayTalkbarLabel">Praat met Sensei</p>
         <div class="gw-talkbar" id="gatewayTalkbar" role="button" tabindex="0" aria-label="Start een gesprek met Sensei">
           <div class="gw-sensei-badge" aria-hidden="true">先生</div>
           <input type="text" id="gatewayTalkbarInput" placeholder="Wat houdt je bezig?" aria-label="Wat houdt je bezig">
@@ -1115,6 +1119,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
           </button>
         </div>
       </div>
+      <article class="card os-scroll-target" id="mijTopCard"></article>
       <section id="quoteBlock" class="os-scroll-target">
         <article class="card" id="mijHeroCard"></article>
       </section>
@@ -5486,7 +5491,7 @@ function initQuickNav(){
 }
 
 var OS_SECTION_TARGETS={
-  mij:'mijTopCard',
+  mij:'gatewayTalkbarHost',
   voorjou:'quoteBlock',
   basis:'basisprofiel',
   vragen:'vragenlijstenAnchor',
@@ -5592,6 +5597,20 @@ function applyUrlTabBoot(){
       setTimeout(function(){
         try{if(typeof openReviewFactsModal==='function')void openReviewFactsModal();}catch(_e){}
       },520);
+    }
+    if(String(qp.get('openGateway')||'')==='1'){
+      setTimeout(function(){
+        try{
+          var host=document.getElementById('gatewayTalkbarHost');
+          if(host)host.scrollIntoView({behavior:'smooth',block:'start'});
+          if(typeof openGatewayChat==='function')void openGatewayChat('');
+        }catch(_e){}
+      },280);
+      setTimeout(function(){
+        try{
+          if(typeof openGatewayChat==='function'&&!(gwState&&gwState.open))void openGatewayChat('');
+        }catch(_e2){}
+      },700);
     }
   }catch(_e){}
 }
@@ -7887,6 +7906,14 @@ function renderProfileTab(){
 // Stap 2: nog zonder Supabase-check, met lokale fallback.
 var IS_NEW_USER=false;
 var __didWelcomeObSync=false;
+(function syncOsBuildBadge(){
+  var meta=document.querySelector('meta[name="os-build"]');
+  var badge=document.getElementById('osBuildBadge');
+  if(badge&&meta){
+    var v=String(meta.getAttribute('content')||'').trim();
+    if(v)badge.textContent=v;
+  }
+})();
 document.getElementById('onboardingShell').style.display=IS_NEW_USER?'block':'none';
 document.getElementById('hubShell').style.display=IS_NEW_USER?'none':'block';
 initQuickNav();
