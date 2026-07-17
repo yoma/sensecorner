@@ -312,15 +312,14 @@
     }
   }
 
-  function gwVoornaam() {
-    var n = String(typeof A().getDisplayName === 'function' ? (A().getDisplayName() || '') : '').trim();
-    if (!n) return '';
-    return n.split(/\s+/)[0];
+  /** Volledige roepnaam / weergavenaam (niet alleen eerste woord: "Mr. Youri" blijft intact). */
+  function gwDisplayName() {
+    return String(typeof A().getDisplayName === 'function' ? (A().getDisplayName() || '') : '').trim();
   }
   function updateGatewayTalkbarPlaceholder() {
     var inp = document.getElementById('gatewayTalkbarInput');
     if (!inp) return;
-    var vn = gwVoornaam();
+    var vn = gwDisplayName();
     inp.placeholder = vn ? ('Wat houdt je bezig, ' + vn + '?') : 'Wat houdt je bezig?';
     inp.setAttribute('aria-label', inp.placeholder);
   }
