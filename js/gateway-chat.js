@@ -67,6 +67,149 @@
     if (typeof A().toast === 'function') A().toast(msg, isError, opts);
     else if (isError) console.warn('[Gateway]', msg);
   }
+
+  /** Dunne push-to-talk (zelfde patroon als Vertel: indrukken = praten, loslaten = stop). */
+  var _gwRec = null;
+  var _gwMicActive = false;
+  var _gwMicStopping = false;
+  var _gwMicHeld = false;
+  var _gwMicPrefix = '';
+  var _gwMicTargetId = 'gatewayChatInput';
+  var _gwMicBtnId = '';
+
+  function gwSpeechSupported() {
+    return !!(global.SpeechRecognition || global.webkitSpeechRecognition);
+  }
+  function gwSetMicBtnOn(on) {
+    var ids = ['gatewayChatMic', 'gatewayTalkbarMic'];
+    ids.forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      var active = !!on && id === _gwMicBtnId;
+      btn.classList.toggle('gw-mic-on', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  function gwWireRecognition(rec, inp) {
+    rec.onresult = function (e) {
+      var finals = '';
+      var interim = '';
+      for (var i = 0; i < e.results.length; i++) {
+        var seg = e.results[i];
+        var t = seg[0] && seg[0].transcript ? seg[0].transcript : '';
+        if (seg.isFinal) finals += t;
+        else interim += t;
+      }
+      inp.value = _gwMicPrefix + finals + interim;
+    };
+    rec.onerror = function () { gwStopMic(); };
+    rec.onend = function () {
+      if (_gwMicStopping) return;
+      if (_gwMicHeld) {
+        setTimeout(gwRestartMicSegment, 0);
+        return;
+      }
+      gwStopMic();
+    };
+  }
+  function gwRestartMicSegment() {
+    if (!_gwMicHeld || !_gwMicActive) return;
+    var inp = document.getElementById(_gwMicTargetId);
+    if (!inp) { gwStopMic(); return; }
+    var SR = global.SpeechRecognition || global.webkitSpeechRecognition;
+    if (!SR) { gwStopMic(); return; }
+    var old = _gwRec;
+    _gwRec = null;
+    if (old) {
+      try { old.onresult = null; old.onerror = null; old.onend = null; old.stop(); } catch (_e) {}
+    }
+    _gwMicPrefix = String(inp.value || '');
+    _gwMicStopping = false;
+    try {
+      _gwRec = new SR();
+      _gwRec.lang = 'nl-NL';
+      _gwRec.continuous = true;
+      _gwRec.interimResults = true;
+      gwWireRecognition(_gwRec, inp);
+      _gwRec.start();
+    } catch (_e2) {
+      gwStopMic();
+    }
+  }
+  function gwStartMic(fieldId, btnId) {
+    var SR = global.SpeechRecognition || global.webkitSpeechRecognition;
+    var inp = document.getElementById(fieldId);
+    if (!SR || !inp) return;
+    if (_gwRec) {
+      try { _gwRec.onresult = null; _gwRec.onerror = null; _gwRec.onend = null; _gwRec.stop(); } catch (_e) {}
+      _gwRec = null;
+    }
+    _gwMicTargetId = fieldId;
+    _gwMicBtnId = btnId || '';
+    _gwMicPrefix = String(inp.value || '');
+    _gwMicStopping = false;
+    try {
+      _gwRec = new SR();
+      _gwRec.lang = 'nl-NL';
+      _gwRec.continuous = true;
+      _gwRec.interimResults = true;
+      gwWireRecognition(_gwRec, inp);
+      _gwRec.start();
+      _gwMicActive = true;
+      gwSetMicBtnOn(true);
+      try { inp.focus(); } catch (_f) {}
+    } catch (_e3) {
+      gwStopMic();
+      toast('Spraakherkenning startte niet. Probeer opnieuw of typ.', true);
+    }
+  }
+  function gwStopMic() {
+    _gwMicHeld = false;
+    _gwMicStopping = true;
+    var inp = document.getElementById(_gwMicTargetId);
+    if (_gwRec) {
+      try { _gwRec.stop(); } catch (_e) {}
+      _gwRec = null;
+    }
+    if (inp) {
+      inp.value = String(inp.value || '').trim();
+      try { inp.focus(); } catch (_f) {}
+    }
+    _gwMicActive = false;
+    gwSetMicBtnOn(false);
+    _gwMicBtnId = '';
+  }
+  function gwBindMicPtt(btn, fieldId) {
+    if (!btn) return;
+    function down(e) {
+      if (!e) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!gwSpeechSupported()) {
+        toast('Spraakherkenning niet beschikbaar in deze browser.', true);
+        return;
+      }
+      var inp = document.getElementById(fieldId);
+      if (!inp) return;
+      try { btn.setPointerCapture(e.pointerId); } catch (_c) {}
+      if (_gwMicActive) gwStopMic();
+      _gwMicHeld = true;
+      gwStartMic(fieldId, btn.id || '');
+    }
+    function up(e) {
+      _gwMicHeld = false;
+      if (e && typeof e.pointerId === 'number') {
+        try { btn.releasePointerCapture(e.pointerId); } catch (_r) {}
+      }
+      if (_gwMicActive) gwStopMic();
+    }
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('lostpointercapture', up);
+  }
+
   function formatErr(e, fallback) {
     if (typeof A().formatError === 'function') return A().formatError(e, fallback);
     var msg = String((e && e.message) || e || '').trim();
@@ -1021,11 +1164,11 @@
       talkInp.addEventListener('click', function (e) { e.stopPropagation(); });
     }
     if (mic) {
-      mic.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openFromTalkbar();
-      });
+      gwBindMicPtt(mic, 'gatewayTalkbarInput');
+    }
+    var chatMic = document.getElementById('gatewayChatMic');
+    if (chatMic) {
+      gwBindMicPtt(chatMic, 'gatewayChatInput');
     }
     if (back) back.addEventListener('click', closeGatewayChat);
     function sendComposer() {

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="17-07-2026 11:16">
+<meta name="sc-build" content="17-07-2026 11:28">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -20,8 +20,8 @@
 <script src="js/sense-common.js?v=1707261101"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script src="js/sense-auth-client.js"></script>
-<script type="module" src="js/senseiCore-loader.js"></script>
-<script src="js/gateway-chat.js?v=1707261056"></script>
+<script type="module" src="js/senseiCore-loader.js?v=1707261128"></script>
+<script src="js/gateway-chat.js?v=1707261128"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -589,10 +589,10 @@ a.app-card{color:inherit;text-decoration:none}
   border:1.5px solid var(--r,#5E7D5A);
   border-radius:28px;
   padding:6px 8px 6px 16px;
-  box-shadow:0 8px 28px rgba(61,47,31,.12),0 0 0 6px rgba(94,125,90,.16);
+  box-shadow:0 8px 28px rgba(61,47,31,.12);
   cursor:text;
 }
-.gw-talkbar:focus-within{outline:2px solid var(--r,#5E7D5A);outline-offset:2px}
+.gw-talkbar:focus-within{border-color:var(--sage-donker,#4A6347);box-shadow:0 8px 28px rgba(61,47,31,.14)}
 .gw-talkbar .gw-sensei-badge{
   width:34px;height:34px;border-radius:50%;flex:none;
   background:rgba(107,142,111,.18);color:var(--sage-donker);
@@ -602,17 +602,27 @@ a.app-card{color:inherit;text-decoration:none}
 .gw-talkbar input{
   flex:1;min-width:0;border:0;outline:0;background:transparent;
   font-family:inherit;font-size:14.5px;color:var(--chocolade);
+  -webkit-appearance:none;appearance:none;
 }
 .gw-talkbar input::placeholder{color:var(--m,#6B5B45)}
-.gw-talkbar .gw-mic{
-  width:38px;height:38px;border-radius:50%;flex:none;border:0;
-  background:var(--r,#5E7D5A);color:#fff;cursor:pointer;
+.gw-talkbar .gw-mic,
+.gw-composer .gw-mic{
+  width:38px;height:38px;border-radius:50%;flex:none;
+  border:1.5px solid #d0d8e0;background:#eceff3;color:#555;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
+  touch-action:none;-webkit-user-select:none;user-select:none;
+}
+.gw-talkbar .gw-mic.gw-mic-on,
+.gw-composer .gw-mic.gw-mic-on{
+  background:var(--r,#5E7D5A);border-color:var(--r,#5E7D5A);color:#fff;
+  box-shadow:0 4px 12px rgba(94,125,90,.28);
 }
 .gw-talkbar .gw-mic:focus-visible,
+.gw-composer .gw-mic:focus-visible,
 .gw-chat button:focus-visible,
 .gw-chat input:focus-visible{outline:2px solid var(--r,#5E7D5A);outline-offset:2px}
-.gw-talkbar .gw-mic svg{width:17px;height:17px}
+.gw-talkbar .gw-mic svg,
+.gw-composer .gw-mic svg{width:17px;height:17px;stroke:currentColor}
 .gw-chat{
   position:fixed;inset:0;z-index:960;
   width:100%;max-width:min(100%,900px);
@@ -743,27 +753,35 @@ a.app-card{color:inherit;text-decoration:none}
   font-family:var(--font-serif);font-style:italic;
 }
 .gw-composer{
-  display:flex;align-items:center;gap:10px;
+  display:flex;flex-direction:column;gap:8px;
   padding:10px 16px max(16px,env(safe-area-inset-bottom,0px));
   background:var(--cream,#F2E8D5);
+  border-top:1px solid #EADDC4;
 }
-.gw-composer .gw-field{
-  flex:1;display:flex;align-items:center;
-  background:var(--ivoor,#FFFDF8);border:1.5px solid #EADDC4;
-  border-radius:24px;padding:10px 16px;
-}
-.gw-composer .gw-field:focus-within{border-color:var(--r,#5E7D5A)}
-.gw-composer input{
-  flex:1;min-width:0;border:0;outline:0;background:transparent;
+.gw-composer input#gatewayChatInput{
+  width:100%;box-sizing:border-box;
+  background:var(--ivoor,#FFFDF8);
+  border:1.5px solid #EADDC4;border-radius:20px;
+  padding:13px 16px;outline:0;
   font-family:inherit;font-size:14px;color:var(--chocolade);
+  -webkit-appearance:none;appearance:none;
+}
+.gw-composer input#gatewayChatInput:focus{border-color:var(--r,#5E7D5A);background:#fff}
+.gw-composer input#gatewayChatInput::placeholder{color:var(--m,#6B5B45)}
+.gw-composer-toolbar{
+  display:flex;align-items:center;gap:8px;width:100%;
+}
+.gw-composer .gw-mic-hint{
+  flex:1;min-width:0;margin:0;
+  font-size:10px;font-weight:600;line-height:1.3;color:var(--sage-donker,#4A6347);
 }
 .gw-composer .gw-send{
-  width:42px;height:42px;border-radius:50%;border:0;flex:none;
+  width:40px;height:40px;border-radius:50%;border:0;flex:none;margin-left:auto;
   background:var(--r,#5E7D5A);color:#fff;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
 }
 .gw-composer .gw-send:disabled{opacity:.55;cursor:not-allowed}
-.gw-composer .gw-send svg{width:17px;height:17px}
+.gw-composer .gw-send svg{width:15px;height:15px}
 .gw-crisis-wrap{align-self:flex-start;max-width:92%;animation:gw-pop .28s ease}
 .gw-hub-toast{
   position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom,0px));
@@ -859,8 +877,8 @@ a.app-card{color:inherit;text-decoration:none}
     <div class="gw-talkbar" id="gatewayTalkbar" role="button" tabindex="0" aria-label="Start een gesprek met Sensei">
       <div class="gw-sensei-badge" aria-hidden="true">先生</div>
       <input type="text" id="gatewayTalkbarInput" placeholder="Wat houdt je bezig?" aria-label="Wat houdt je bezig">
-      <button type="button" class="gw-mic" id="gatewayTalkbarMic" aria-label="Spreek in of open chat">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+      <button type="button" class="gw-mic" id="gatewayTalkbarMic" title="Indrukken = praten, loslaten = stoppen" aria-label="Spraak invoeren" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
       </button>
     </div>
   </div>
@@ -1142,12 +1160,16 @@ a.app-card{color:inherit;text-decoration:none}
   </header>
   <div class="gw-messages" id="gatewayMessages" aria-live="polite"></div>
   <div class="gw-composer">
-    <div class="gw-field">
-      <input type="text" id="gatewayChatInput" placeholder="Schrijf verder..." aria-label="Bericht aan Sensei" autocomplete="off">
+    <input type="text" id="gatewayChatInput" placeholder="Schrijf verder..." aria-label="Bericht aan Sensei" autocomplete="off">
+    <div class="gw-composer-toolbar">
+      <button type="button" class="gw-mic" id="gatewayChatMic" title="Indrukken = praten, loslaten = stoppen" aria-label="Spraak invoeren" aria-pressed="false" aria-describedby="gatewayChatMicHint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      </button>
+      <p class="gw-mic-hint" id="gatewayChatMicHint">Micro: indrukken = praten · loslaten = stoppen</p>
+      <button type="button" class="gw-send" id="gatewayChatSend" aria-label="Verstuur">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
+      </button>
     </div>
-    <button type="button" class="gw-send" id="gatewayChatSend" aria-label="Verstuur">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-    </button>
   </div>
 </section>
 <div id="gwHubToast" class="gw-hub-toast" role="status" aria-live="polite"></div>
