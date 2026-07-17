@@ -33,7 +33,7 @@ import {
   buildGatewayAdviceCore,
   buildGatewayContextBlock,
   buildGatewaySystemPrompt
-} from './senseiCore.js';
+} from './senseiCore.js?v=2607171315';
 
 window.SenseiCore = {
   SENSEI_GRONDREGELS_DEFAULT,

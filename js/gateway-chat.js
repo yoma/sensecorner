@@ -377,8 +377,16 @@
     return s.replace(/\n{3,}/g, '\n\n').trim();
   }
   function gwParseAttr(block, name) {
-    var re = new RegExp(name + '\\s*=\\s*"([^"]*)"', 'i');
-    var m = String(block || '').match(re);
+    var src = String(block || '');
+    var reDq = new RegExp(name + '\\s*=\\s*"([^"]*)"', 'i');
+    var m = src.match(reDq);
+    if (m) return String(m[1] || '').trim();
+    var reSq = new RegExp(name + "\\s*=\\s*'([^']*)'", 'i');
+    m = src.match(reSq);
+    if (m) return String(m[1] || '').trim();
+    // Curly quotes sometimes from models
+    var reCurly = new RegExp(name + '\\s*=\\s*[\\u201c\\u201d]([^\\u201c\\u201d]*)[\\u201c\\u201d]', 'i');
+    m = src.match(reCurly);
     return m ? String(m[1] || '').trim() : '';
   }
   function gwParseMarkers(raw) {
@@ -456,7 +464,7 @@
         block = global.SenseiCore.buildGatewayContextBlock(ctx || {});
       }
     } catch (_e) {}
-    return 'Je bent Sensei, dezelfde virtuele vriend als in de Sense-apps, hier als luisterende voordeur van SenseCorner. Reageer warm, direct en eerlijk als een goede vriend. Begin met één of twee zinnen die tonen dat je hoort wat er speelt (één concreet detail). Bij relaties, familie of emoties: 1-2 oprechte vervolgvragen. Nooit afwimpelen met "dat had je al verteld" of "dat weet ik al": opnieuw noemen betekent meer willen praten; gebruik historie om te verdiepen, niet om te sluiten. Geen lege closers zoals "veel plezier", "aangename avond" of "hopelijk wordt het fijn" zonder door te vragen. Handel vroeg: bij herhaalde bekende naam of date/family + concreet feit zet [VOORSTEL] of [BRUG] in dit antwoord (max 1 voorstel per beurt, max 1 brug per gesprek; herhaal geen voorstel voor hetzelfde dossier na aanbod). Schrijf nooit zelf iets weg zonder bevestiging. Gebruik nooit Unicode U+2014.\n\n'
+    return 'Je bent Sensei, dezelfde virtuele vriend als in de Sense-apps, hier als luisterende voordeur van SenseCorner. Reageer warm, direct en eerlijk als een goede vriend. Begin met één of twee zinnen die tonen dat je hoort wat er speelt (één concreet detail). Bij relaties, familie of emoties: 1-2 oprechte vervolgvragen. Nooit afwimpelen met "dat had je al verteld" of "dat weet ik al": opnieuw noemen betekent meer willen praten; gebruik historie om te verdiepen, niet om te sluiten. Geen lege closers zoals "veel plezier", "aangename avond" of "hopelijk wordt het fijn" zonder door te vragen. VERPLICHT: bij bekende contactnaam + concreet feit, of bij herhaalde bekende naam, eindig dit antwoord met [VOORSTEL] en/of [BRUG] (max 1 voorstel per beurt, max 1 brug per gesprek; herhaal geen voorstel voor hetzelfde dossier na aanbod). Alleen steunen zonder marker is dan fout. Schrijf nooit zelf iets weg zonder bevestiging. Gebruik nooit Unicode U+2014.\n\n'
       + crisis + '\n\n' + (block || '');
   }
   function gwContactNamesByDomain() {
@@ -1041,6 +1049,107 @@
     }
   }
 
+  /** Escape for RegExp literal from a contact display name. */
+  function gwEscapeRegExp(s) {
+    return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  /** Index bekende contacten over domeinen (voorkeur: date > family > friend). */
+  function gwKnownContactIndex() {
+    var byName = {};
+    ['date', 'family', 'friend'].forEach(function (d) {
+      gwContactsForDomain(d).forEach(function (nm) {
+        nm = String(nm || '').trim();
+        if (!nm || /^own\s*sense$/i.test(nm)) return;
+        var lk = nm.toLowerCase();
+        if (!byName[lk]) byName[lk] = { name: nm, domains: [] };
+        if (byName[lk].domains.indexOf(d) < 0) byName[lk].domains.push(d);
+      });
+    });
+    return byName;
+  }
+  function gwPreferredDomain(domains) {
+    var list = Array.isArray(domains) ? domains : [];
+    if (list.indexOf('date') >= 0) return 'date';
+    if (list.indexOf('family') >= 0) return 'family';
+    if (list.indexOf('friend') >= 0) return 'friend';
+    return list[0] || '';
+  }
+  /** Tel in hoeveel user-berichten een bekende contactnaam voorkomt. */
+  function gwCountUserMsgsMentioning(name) {
+    var re = new RegExp('\\b' + gwEscapeRegExp(name) + '\\b', 'i');
+    var n = 0;
+    (gwState.messages || []).forEach(function (m) {
+      if (gwApiRole(m.role) !== 'user') return;
+      if (re.test(String(m.content || ''))) n += 1;
+    });
+    return n;
+  }
+  function gwPickSafetyNetContact() {
+    var index = gwKnownContactIndex();
+    var best = null;
+    Object.keys(index).forEach(function (lk) {
+      var entry = index[lk];
+      var msgs = gwCountUserMsgsMentioning(entry.name);
+      if (msgs < 2) return;
+      var domain = gwPreferredDomain(entry.domains);
+      if (!domain) return;
+      if (!best || msgs > best.msgs) {
+        best = { name: entry.name, domain: domain, msgs: msgs };
+      }
+    });
+    return best;
+  }
+  function gwBuildSyntheticProposalText(contactName) {
+    var re = new RegExp('\\b' + gwEscapeRegExp(contactName) + '\\b', 'i');
+    var last = '';
+    var msgs = gwState.messages || [];
+    for (var i = msgs.length - 1; i >= 0; i--) {
+      if (gwApiRole(msgs[i].role) !== 'user') continue;
+      var c = String(msgs[i].content || '').replace(/\s+/g, ' ').trim();
+      if (c && re.test(c)) { last = c; break; }
+    }
+    if (!last) last = 'Gesprek over ' + contactName;
+    if (last.length > 200) last = last.substring(0, 197) + '…';
+    return last;
+  }
+  /**
+   * Client safety net: model gaf geen bruikbare markers, maar user noemde
+   * een bekend contact in 2+ berichten zonder voorstel/brug deze sessie.
+   * Roept aan NA gwHandleParsedReply; proposedTargets/bridgeShown zijn dan bij.
+   * Injecteert propose-and-confirm kaarten (gebruiker klikt nog steeds).
+   */
+  async function gwMaybeInjectActionSafetyNet(parsed) {
+    if (!parsed || parsed.crisis) return;
+    var hit = gwPickSafetyNetContact();
+    if (!hit) return;
+    var needProposal = !gwWasProposalTargetOffered(hit.domain, hit.name);
+    var needBridge = !gwState.bridgeShown;
+    if (!needProposal && !needBridge) return;
+
+    if (needProposal) {
+      var tekst = gwBuildSyntheticProposalText(hit.name);
+      gwRememberProposalTarget(hit.domain, hit.name);
+      var pid = null;
+      try {
+        pid = await gwInsertProposalRow(hit.domain, tekst, hit.name);
+      } catch (e) { console.warn('gw safety net proposal', e); }
+      gwRenderProposalCard({
+        domain: hit.domain,
+        text: tekst,
+        proposalId: pid,
+        dossier: hit.name,
+        targetProfile: hit.name
+      });
+    }
+    if (needBridge && !gwState.bridgeShown) {
+      var meta = gwAppMeta(hit.domain);
+      gwRenderBridgeCard({
+        domain: hit.domain,
+        reason: 'Je praat al over ' + hit.name + '; in ' + meta.label + ' kun je dit rustiger uitwerken.'
+      });
+    }
+  }
+
   function gwRenderBridgeCard(bridge) {
     if (!bridge || gwState.bridgeShown) return;
     var domain = gwNormDomain(bridge.domain);
@@ -1336,6 +1445,9 @@
       gwState.messages.push({ role: 'assistant', content: parsed.text || String(raw || '') });
       await gwSaveMsg('ai', parsed.text || String(raw || ''));
       await gwHandleParsedReply(parsed, { isFirstTurn: isFirstTurn });
+      try { await gwMaybeInjectActionSafetyNet(parsed); } catch (snErr) {
+        console.warn('gwMaybeInjectActionSafetyNet', snErr);
+      }
 
       if (pendingProfile && pendingProfile.domain && !parsed.crisis) {
         var ansText = userText.substring(0, 500);
