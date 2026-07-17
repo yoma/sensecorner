@@ -66,6 +66,9 @@
     historyHydrated: false
   };
   var _gwSenseiCooldownUntil = 0;
+  var _gwResumePromise = null;
+  var _gwEnsureSessionPromise = null;
+  var _gwLastResumeFailed = false;
   var _bound = false;
 
   function A() { return adapters || {}; }
@@ -564,7 +567,7 @@
     var uid = getUidSync() || await ensureUid(client);
     var ids = Array.isArray(sessionIds) ? sessionIds.filter(Boolean) : [sessionIds];
     ids = ids.filter(Boolean);
-    if (!client || !uid || !ids.length) return;
+    if (!client || !uid || !ids.length) return false;
     try {
       var res = await client.from('sense_session_msgs')
         .select('role,content,created_at,session_id')
@@ -596,81 +599,103 @@
         });
       }
       gwState.historyHydrated = true;
+      return true;
     } catch (e) {
       console.warn('gwHydrateMessagesFromDb', e);
       gwState.messages = [];
       gwState.historyHydrated = false;
+      return false;
     }
   }
-  /** Hervat de meest recente Gateway-sessie; laadt recente sessies in AI/UI-geschiedenis. */
+  /** Hervat uitsluitend de meest recente Gateway-sessie en deel één lopende laadactie. */
   async function gwResumeLatestSession() {
     if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
-    if (gwState.sessionId && gwState.messages.length) {
-      gwState.historyHydrated = true;
-      return gwState.sessionId;
-    }
-    var client = getClient();
-    var uid = await ensureUid(client);
-    if (!client || !uid) return null;
+    if (_gwResumePromise) return _gwResumePromise;
+    _gwResumePromise = (async function () {
+      _gwLastResumeFailed = false;
+      var client = getClient();
+      var uid = await ensureUid(client);
+      if (!client || !uid) {
+        _gwLastResumeFailed = true;
+        return null;
+      }
+      try {
+        var res = await client.from('sense_sessions')
+          .select('id,bridge_shown,profile_question_asked,preview,updated_at')
+          .eq('user_id', uid)
+          .eq('vertel_app', GW_VERTEL_APP)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (res && res.error) throw res.error;
+        var rows = res && res.data ? res.data : [];
+        if (!rows.length) return null;
+        var latest = rows[0];
+        gwState.sessionId = latest.id;
+        gwState.bridgeShown = !!latest.bridge_shown;
+        gwState.profileQuestionAsked = !!latest.profile_question_asked;
+        gwState.proposedTargets = [];
+        var hydrated = await gwHydrateMessagesFromDb(latest.id);
+        if (!hydrated) {
+          _gwLastResumeFailed = true;
+          return null;
+        }
+        return gwState.sessionId;
+      } catch (e) {
+        _gwLastResumeFailed = true;
+        console.warn('gwResumeLatestSession', e);
+        return null;
+      }
+    })();
     try {
-      var res = await client.from('sense_sessions')
-        .select('id,bridge_shown,profile_question_asked,preview,updated_at')
-        .eq('user_id', uid)
-        .eq('vertel_app', GW_VERTEL_APP)
-        .order('updated_at', { ascending: false })
-        .limit(5);
-      if (res && res.error) throw res.error;
-      var rows = res && res.data ? res.data : [];
-      if (!rows.length) return null;
-      var latest = rows[0];
-      gwState.sessionId = latest.id;
-      gwState.bridgeShown = !!latest.bridge_shown;
-      gwState.profileQuestionAsked = !!latest.profile_question_asked;
-      gwState.proposedTargets = [];
-      await gwHydrateMessagesFromDb(rows.map(function (r) { return r.id; }));
-      return gwState.sessionId;
-    } catch (e) {
-      console.warn('gwResumeLatestSession', e);
-      return null;
+      return await _gwResumePromise;
+    } finally {
+      _gwResumePromise = null;
     }
   }
   async function gwEnsureSession(previewText) {
-    if (gwState.sessionId) return gwState.sessionId;
-    /* Alleen hervatten als er nog geen lokale beurt is (niet mid-send wissen). */
-    if (!(gwState.messages && gwState.messages.length)) {
+    if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
+    if (_gwEnsureSessionPromise) return _gwEnsureSessionPromise;
+    _gwEnsureSessionPromise = (async function () {
       var resumed = await gwResumeLatestSession();
       if (resumed) return resumed;
-    }
-    var client = getClient();
-    var uid = await ensureUid(client);
-    if (!client || !uid) return null;
+      /* Maak bij een leesfout nooit een concurrerende lege sessie aan. */
+      if (_gwLastResumeFailed) return null;
+      var client = getClient();
+      var uid = await ensureUid(client);
+      if (!client || !uid) return null;
+      try {
+        var preview = String(previewText || 'Gateway-gesprek').trim().substring(0, 80);
+        var res = await client.from('sense_sessions').insert({
+          user_id: uid,
+          preview: preview,
+          updated_at: new Date().toISOString(),
+          vertel_app: GW_VERTEL_APP,
+          bridge_shown: false,
+          profile_question_asked: false
+        }).select('id,bridge_shown,profile_question_asked').single();
+        if (res && res.error) throw res.error;
+        if (res && res.data && res.data.id) {
+          gwState.sessionId = res.data.id;
+          gwState.bridgeShown = !!res.data.bridge_shown;
+          gwState.profileQuestionAsked = !!res.data.profile_question_asked;
+          gwState.proposedTargets = [];
+          gwState.historyHydrated = true;
+          return gwState.sessionId;
+        }
+      } catch (e) { console.warn('gwEnsureSession', e); }
+      return null;
+    })();
     try {
-      var preview = String(previewText || 'Gateway-gesprek').trim().substring(0, 80);
-      var res = await client.from('sense_sessions').insert({
-        user_id: uid,
-        preview: preview,
-        updated_at: new Date().toISOString(),
-        vertel_app: GW_VERTEL_APP,
-        bridge_shown: false,
-        profile_question_asked: false
-      }).select('id,bridge_shown,profile_question_asked').single();
-      if (res && res.error) throw res.error;
-      if (res && res.data && res.data.id) {
-        gwState.sessionId = res.data.id;
-        gwState.bridgeShown = !!res.data.bridge_shown;
-        gwState.profileQuestionAsked = !!res.data.profile_question_asked;
-        gwState.proposedTargets = [];
-        gwState.historyHydrated = true;
-        return gwState.sessionId;
-      }
-    } catch (e) { console.warn('gwEnsureSession', e); }
-    return null;
+      return await _gwEnsureSessionPromise;
+    } finally {
+      _gwEnsureSessionPromise = null;
+    }
   }
   async function gwSaveMsg(role, content) {
-    if (!gwState.sessionId) return;
+    if (!gwState.sessionId) return false;
     var client = getClient();
     var uid = getUidSync() || await ensureUid(client);
-    if (!client || !uid) return;
+    if (!client || !uid) return false;
     try {
       var dbRole = gwDbRole(role);
       var ins = await client.from('sense_session_msgs').insert({
@@ -682,13 +707,18 @@
       });
       if (ins && ins.error) {
         console.warn('gwSaveMsg insert:', ins.error);
-        return;
+        return false;
       }
-      await client.from('sense_sessions').update({
+      var updated = await client.from('sense_sessions').update({
         updated_at: new Date().toISOString(),
         preview: String(content || '').trim().substring(0, 80)
       }).eq('id', gwState.sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
-    } catch (e) { console.warn('gwSaveMsg', e); }
+      if (updated && updated.error) console.warn('gwSaveMsg session update:', updated.error);
+      return true;
+    } catch (e) {
+      console.warn('gwSaveMsg', e);
+      return false;
+    }
   }
   async function gwSetSessionFlag(field, value) {
     if (!gwState.sessionId) return;
@@ -1313,13 +1343,15 @@
     var pendingProfile = gwState.pendingProfileQ;
     gwState.pendingProfileQ = null;
 
-    gwAddUserBubble(userText);
-    gwState.messages.push({ role: 'user', content: userText });
-    await gwEnsureSession(userText);
-    await gwSaveMsg('user', userText);
-
-    var typing = gwShowTyping();
+    var typing = null;
     try {
+      var sessionId = await gwEnsureSession(userText);
+      if (!sessionId) throw new Error('Je Gateway-gesprek kon niet veilig worden geladen. Probeer opnieuw.');
+      var userSaved = await gwSaveMsg('user', userText);
+      if (!userSaved) throw new Error('Je bericht kon niet worden opgeslagen. Probeer opnieuw.');
+      gwAddUserBubble(userText);
+      gwState.messages.push({ role: 'user', content: userText });
+      typing = gwShowTyping();
       var system = await gwBuildSystemPrompt();
       var hist = gwState.messages;
       if (hist.length > GW_HISTORY_CAP) hist = hist.slice(-GW_HISTORY_CAP);
@@ -1330,8 +1362,10 @@
       if (typing && typing.parentNode) typing.remove();
       var parsed = gwParseMarkers(raw);
       var isFirstTurn = gwState.messages.filter(function (m) { return m.role === 'assistant'; }).length === 0;
-      gwState.messages.push({ role: 'assistant', content: parsed.text || String(raw || '') });
-      await gwSaveMsg('ai', parsed.text || String(raw || ''));
+      var replyText = parsed.text || String(raw || '');
+      var replySaved = await gwSaveMsg('ai', replyText);
+      if (!replySaved) throw new Error('Sensei antwoordde, maar het antwoord kon niet worden opgeslagen. Probeer opnieuw.');
+      gwState.messages.push({ role: 'assistant', content: replyText });
       await gwHandleParsedReply(parsed, { isFirstTurn: isFirstTurn });
 
       if (pendingProfile && pendingProfile.domain && !parsed.crisis) {
