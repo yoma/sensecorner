@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="17-07-2026 12:07">
+<meta name="fr-build" content="17-07-2026 12:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707171205"></script>
@@ -642,6 +642,13 @@ a:focus-visible,
 .dossier-head-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dossier-head-actions button{min-height:38px}
 .dossier-tabs-wrap{background:#fff;position:sticky;top:0;z-index:3}
+.dossier-praat-row{padding:10px 12px 8px;background:#fff}
+.dossier-praat-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:42px;padding:10px 14px;
+  border:1px solid var(--b);border-radius:12px;background:linear-gradient(180deg,#fff 0%,var(--g) 100%);
+  color:var(--r);font:inherit;font-size:14px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent
+}
+.dossier-praat-btn:active{transform:translateY(1px);opacity:.92}
 .vertel-shell{display:flex;flex-direction:column;height:100%}
 .vertel-empty-tip{padding:0 16px 10px}
 .mobile-soft-card{border-radius:16px;box-shadow:0 4px 16px rgba(20,20,20,.05)}
@@ -4070,6 +4077,35 @@ function setSaveModeForced(dossier){
   setForcedDossier(dossier);
   closeSaveModeModal();
   toast('✅ Altijd opslaan bij '+dn(dossier));
+}
+
+/** Knoptekst boven dossier-tabs: contactnaam of «jou» voor OWN Sense. */
+function praatOverDossierBtnLabel(name){
+  var n=String(name||'').trim();
+  if(!n||n==='OWN Sense')return'Praat over jou';
+  return'Praat over '+dn(n);
+}
+
+/**
+ * Vanuit open dossier → Vertel, met dit dossier actief + opslag vergrendeld
+ * (forced «Altijd opslaan bij» voor contacten; sticky «Altijd in dit gesprek» als sessie-backup / OWN).
+ */
+function praatOverDossier(name){
+  var n=String(name||S.viewDossier||'').trim();
+  if(!n){toast('Geen dossier open.');return;}
+  var isOwn=n==='OWN Sense';
+  S.vertelFrom=n;
+  S.vertelGesprekDossier=n;
+  if(!isOwn)setForcedDossier(n);
+  goScreen('vertel');
+  setTimeout(function(){
+    S.vertelSessionStickyDossier=n;
+    try{if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();}catch(_e){}
+    try{if(typeof updateVertelSaveModeUI==='function')updateVertelSaveModeUI();}catch(_e2){}
+    try{if(typeof renderVertelInputCoachTip==='function')renderVertelInputCoachTip();}catch(_e3){}
+  },100);
+  if(isOwn)toast('Vertel staat klaar over jou. Alles in dit gesprek gaat naar OWN Sense.');
+  else toast('Vertel staat klaar over '+dn(n)+'. Alles in dit gesprek gaat naar dit dossier.');
 }
 function sortDossiersByVertelPriority(list){
   var all=Array.isArray(list)?list.slice():[];
@@ -9601,7 +9637,11 @@ async function rDossier(el){
   header+='</div>';
 
   var vt=S.viewTab;
-  var tabs='<div class="dossier-tabs-wrap dtabs-scroll"><div class="tabs-bar">'
+  var praatLbl=praatOverDossierBtnLabel(name);
+  var praatRow='<div class="dossier-praat-row">'
+    +'<button type="button" class="dossier-praat-btn" onclick="praatOverDossier(\''+escJsStr(name)+'\')">'+escHTML(praatLbl)+'</button>'
+    +'</div>';
+  var tabs='<div class="dossier-tabs-wrap dtabs-scroll">'+praatRow+'<div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" data-dtab="overzicht" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" data-dtab="tijdlijn" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
     +'<div class="dtab '+(vt==="foto"?"active":"")+'" data-dtab="foto" onclick="switchTab(\'foto\')">Foto<span class="dtab-badge" id="dtabBadgeFoto" aria-hidden="true"></span></div>'
@@ -15638,6 +15678,7 @@ try{
   window.goBack=goBack;
   window.switchTab=switchTab;
   window.viewDossier=viewDossier;
+  window.praatOverDossier=praatOverDossier;
   window.openDossierProfiel=openDossierProfiel;
   window.opslaanInDossierSticky=opslaanInDossierSticky;
   window.vertelForkChooseOwnSense=vertelForkChooseOwnSense;

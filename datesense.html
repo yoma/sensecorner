@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="17-07-2026 12:07">
+<meta name="ds-build" content="17-07-2026 12:43">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707171205"></script>
@@ -717,6 +717,13 @@ a:focus-visible,
 .dossier-head-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dossier-head-actions button{min-height:38px}
 .dossier-tabs-wrap{background:#fff;position:sticky;top:0;z-index:3}
+.dossier-praat-row{padding:10px 12px 8px;background:#fff}
+.dossier-praat-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:42px;padding:10px 14px;
+  border:1px solid var(--b);border-radius:12px;background:linear-gradient(180deg,#fff 0%,var(--g) 100%);
+  color:var(--r);font:inherit;font-size:14px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent
+}
+.dossier-praat-btn:active{transform:translateY(1px);opacity:.92}
 .dossier-tab-hint{font-size:11px;color:#8a8f97;line-height:1.4;padding:0 12px 8px;letter-spacing:.02em;display:flex;align-items:flex-start;gap:6px}
 .dth-dot{flex-shrink:0;width:7px;height:7px;border-radius:50%;background:var(--r);margin-top:3px;box-shadow:0 0 0 1px #fff}
 .vertel-shell{display:flex;flex-direction:column;height:100%}
@@ -1297,9 +1304,9 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 
   <!-- Dossier: vaste acties (Vertel + Advies) - geen dubbele knoppen in header -->
   <div id="dossierDock" class="dossier-dock" style="display:none" role="group" aria-label="Dossier acties">
-    <button type="button" class="dd-btn dd-vertel" title="Opent het aparte Vertel-scherm (chat), niet de invulvakjes hierboven" onclick="if(S.viewDossier){S.vertelFrom=S.viewDossier;S.vertelGesprekDossier=S.viewDossier;goScreen('vertel');}">
+    <button type="button" class="dd-btn dd-vertel" title="Opent Vertel met dit dossier vast gekoppeld" onclick="praatOverDossier(S.viewDossier)">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-      <span class="dd-vertel-stack"><span class="dd-vertel-main">Vrij vertellen</span><span class="dd-vertel-sub">Vertel-tab · apart scherm</span></span>
+      <span class="dd-vertel-stack"><span class="dd-vertel-main">Praat over…</span><span class="dd-vertel-sub">Vertel · vast dossier</span></span>
     </button>
     <button type="button" class="dd-btn dd-advies" onclick="switchTab('advies')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -4187,6 +4194,35 @@ function setSaveModeForced(dossier){
   setForcedDossier(dossier);
   closeSaveModeModal();
   toast('✅ Altijd opslaan bij '+dn(dossier));
+}
+
+/** Knoptekst boven dossier-tabs: contactnaam of «jou» voor OWN Sense. */
+function praatOverDossierBtnLabel(name){
+  var n=String(name||'').trim();
+  if(!n||n==='OWN Sense')return'Praat over jou';
+  return'Praat over '+dn(n);
+}
+
+/**
+ * Vanuit open dossier → Vertel, met dit dossier actief + opslag vergrendeld
+ * (forced «Altijd opslaan bij» voor contacten; sticky «Altijd in dit gesprek» als sessie-backup / OWN).
+ */
+function praatOverDossier(name){
+  var n=String(name||S.viewDossier||'').trim();
+  if(!n){toast('Geen dossier open.');return;}
+  var isOwn=n==='OWN Sense';
+  S.vertelFrom=n;
+  S.vertelGesprekDossier=n;
+  if(!isOwn)setForcedDossier(n);
+  goScreen('vertel');
+  setTimeout(function(){
+    S.vertelSessionStickyDossier=n;
+    try{if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();}catch(_e){}
+    try{if(typeof updateVertelSaveModeUI==='function')updateVertelSaveModeUI();}catch(_e2){}
+    try{if(typeof renderVertelInputCoachTip==='function')renderVertelInputCoachTip();}catch(_e3){}
+  },100);
+  if(isOwn)toast('Vertel staat klaar over jou. Alles in dit gesprek gaat naar OWN Sense.');
+  else toast('Vertel staat klaar over '+dn(n)+'. Alles in dit gesprek gaat naar dit dossier.');
 }
 function sortDossiersByVertelPriority(list){
   var all=Array.isArray(list)?list.slice():[];
@@ -10423,7 +10459,11 @@ async function rDossier(el){
   header+='</div>';
 
   var vt=S.viewTab;
-  var tabs='<div class="dossier-tabs-wrap dtabs-scroll"><div class="tabs-bar">'
+  var praatLbl=praatOverDossierBtnLabel(name);
+  var praatRow='<div class="dossier-praat-row">'
+    +'<button type="button" class="dossier-praat-btn" onclick="praatOverDossier(\''+escJsStr(name)+'\')">'+escHTML(praatLbl)+'</button>'
+    +'</div>';
+  var tabs='<div class="dossier-tabs-wrap dtabs-scroll">'+praatRow+'<div class="tabs-bar">'
     +'<div class="dtab '+(vt==="overzicht"?"active":"")+'" data-dtab="overzicht" onclick="switchTab(\'overzicht\')">Overzicht</div>'
     +'<div class="dtab '+(vt==="tijdlijn"?"active":"")+'" data-dtab="tijdlijn" onclick="switchTab(\'tijdlijn\')">Tijdlijn</div>'
     +'<div class="dtab '+(vt==="foto"?"active":"")+'" data-dtab="foto" onclick="switchTab(\'foto\')">Foto<span class="dtab-badge" id="dtabBadgeFoto" aria-hidden="true"></span></div>'
@@ -16589,6 +16629,7 @@ try{
   window.goBack=goBack;
   window.switchTab=switchTab;
   window.viewDossier=viewDossier;
+  window.praatOverDossier=praatOverDossier;
   window.openDossierProfiel=openDossierProfiel;
   window.opslaanInDossierSticky=opslaanInDossierSticky;
   window.vertelForkChooseOwnSense=vertelForkChooseOwnSense;
