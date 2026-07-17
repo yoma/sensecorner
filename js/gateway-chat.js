@@ -1053,6 +1053,42 @@
   function gwEscapeRegExp(s) {
     return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
+  /**
+   * Flexibele match-tokens voor een dossiernaam.
+   * "PascaleSense" → PascaleSense, Pascale (niet alleen exacte full-name).
+   */
+  function gwContactMatchTokens(name) {
+    var nm = String(name || '').trim();
+    if (!nm) return [];
+    var seen = {};
+    var out = [];
+    function add(t, force) {
+      t = String(t || '').trim();
+      if (!t) return;
+      if (!force && t.length < 3) return;
+      if (/^sense$/i.test(t)) return;
+      var lk = t.toLowerCase();
+      if (seen[lk]) return;
+      seen[lk] = true;
+      out.push(t);
+    }
+    add(nm, true);
+    add(nm.replace(/[\s_-]*sense$/i, ''));
+    var camel = nm.match(/[A-ZÁÉÍÓÚÄËÏÖÜÂÊÎÔÛÀÈÌÒÙ][a-záéíóúäëïöüâêîôûàèìòù]+|[a-záéíóúäëïöüâêîôûàèìòù]{3,}/g);
+    if (camel) camel.forEach(function (p) { add(p); });
+    nm.split(/[\s_-]+/).forEach(function (p) { add(p); });
+    return out;
+  }
+  /** True als tekst een contact noemt (exact of stam: Pascale ↔ PascaleSense). */
+  function gwTextMentionsContact(text, name) {
+    var blob = String(text || '');
+    if (!blob || !name) return false;
+    var tokens = gwContactMatchTokens(name);
+    for (var i = 0; i < tokens.length; i++) {
+      if (new RegExp('\\b' + gwEscapeRegExp(tokens[i]) + '\\b', 'i').test(blob)) return true;
+    }
+    return false;
+  }
   /** Index bekende contacten over domeinen (voorkeur: date > family > friend). */
   function gwKnownContactIndex() {
     var byName = {};
@@ -1074,13 +1110,12 @@
     if (list.indexOf('friend') >= 0) return 'friend';
     return list[0] || '';
   }
-  /** Tel in hoeveel user-berichten een bekende contactnaam voorkomt. */
+  /** Tel in hoeveel user-berichten een bekende contactnaam voorkomt (flexibele match). */
   function gwCountUserMsgsMentioning(name) {
-    var re = new RegExp('\\b' + gwEscapeRegExp(name) + '\\b', 'i');
     var n = 0;
     (gwState.messages || []).forEach(function (m) {
       if (gwApiRole(m.role) !== 'user') return;
-      if (re.test(String(m.content || ''))) n += 1;
+      if (gwTextMentionsContact(m.content, name)) n += 1;
     });
     return n;
   }
@@ -1100,26 +1135,26 @@
     return best;
   }
   function gwBuildSyntheticProposalText(contactName) {
-    var re = new RegExp('\\b' + gwEscapeRegExp(contactName) + '\\b', 'i');
     var last = '';
     var msgs = gwState.messages || [];
     for (var i = msgs.length - 1; i >= 0; i--) {
       if (gwApiRole(msgs[i].role) !== 'user') continue;
       var c = String(msgs[i].content || '').replace(/\s+/g, ' ').trim();
-      if (c && re.test(c)) { last = c; break; }
+      if (c && gwTextMentionsContact(c, contactName)) { last = c; break; }
     }
     if (!last) last = 'Gesprek over ' + contactName;
     if (last.length > 200) last = last.substring(0, 197) + '…';
     return last;
   }
   /**
-   * Client safety net: model gaf geen bruikbare markers, maar user noemde
-   * een bekend contact in 2+ berichten zonder voorstel/brug deze sessie.
-   * Roept aan NA gwHandleParsedReply; proposedTargets/bridgeShown zijn dan bij.
-   * Injecteert propose-and-confirm kaarten (gebruiker klikt nog steeds).
+   * Client safety net: 2+ user-berichten noemen een bekend contact, maar er is
+   * nog geen voorstel/brug deze sessie → synthetische VOORSTEL (+ BRUG) tonen.
+   * Draait na user-send (niet wachten op model) én na AI-reply.
+   * Bevestigen blijft een klik van de gebruiker.
    */
-  async function gwMaybeInjectActionSafetyNet(parsed) {
-    if (!parsed || parsed.crisis) return;
+  async function gwMaybeInjectActionSafetyNet(opts) {
+    opts = opts || {};
+    if (opts.crisis) return;
     var hit = gwPickSafetyNetContact();
     if (!hit) return;
     var needProposal = !gwWasProposalTargetOffered(hit.domain, hit.name);
@@ -1430,6 +1465,11 @@
     await gwEnsureSession(userText);
     await gwSaveMsg('user', userText);
 
+    // Safety net direct na user-send: bij 2+ mentions niet wachten op het model.
+    try { await gwMaybeInjectActionSafetyNet({}); } catch (snEarly) {
+      console.warn('gwMaybeInjectActionSafetyNet early', snEarly);
+    }
+
     var typing = gwShowTyping();
     try {
       var system = await gwBuildSystemPrompt();
@@ -1445,7 +1485,7 @@
       gwState.messages.push({ role: 'assistant', content: parsed.text || String(raw || '') });
       await gwSaveMsg('ai', parsed.text || String(raw || ''));
       await gwHandleParsedReply(parsed, { isFirstTurn: isFirstTurn });
-      try { await gwMaybeInjectActionSafetyNet(parsed); } catch (snErr) {
+      try { await gwMaybeInjectActionSafetyNet({ crisis: !!parsed.crisis }); } catch (snErr) {
         console.warn('gwMaybeInjectActionSafetyNet', snErr);
       }
 
