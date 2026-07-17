@@ -1039,20 +1039,25 @@
       await gwApplyProfileAnswer(opts.vraagId, opts.text);
     }
     if (status === 'confirmed' && !opts.isProfileUpdate && proposalId && typeof global.senseIngestConfirmedGatewayProposals === 'function') {
-      try {
-        await global.senseIngestConfirmedGatewayProposals({
-          sb: client,
-          userId: uid,
-          domain: opts.domain,
-          rows: [{
-            id: proposalId,
-            proposal_text: opts.text,
-            target_profile: targetProfile || null,
-            target_domain: opts.domain,
-            status: 'confirmed'
-          }]
-        });
-      } catch (ingErr) { console.warn('gw ingest dossier', ingErr); }
+      var landingProfile = typeof global.senseGatewayProposalLandingProfile === 'function'
+        ? global.senseGatewayProposalLandingProfile(opts.domain, targetProfile)
+        : targetProfile;
+      var ingested = await global.senseIngestConfirmedGatewayProposals({
+        sb: client,
+        userId: uid,
+        domain: opts.domain,
+        failOnWriteError: !!landingProfile,
+        rows: [{
+          id: proposalId,
+          proposal_text: opts.text,
+          target_profile: targetProfile || null,
+          target_domain: opts.domain,
+          status: 'confirmed'
+        }]
+      });
+      if (landingProfile && ingested.indexOf(proposalId) < 0) {
+        throw new Error('De notitie kon niet in ' + landingProfile + ' worden opgeslagen. Probeer opnieuw.');
+      }
     }
     if (status === 'confirmed') {
       try { await gwLoadConfirmedProposals(); } catch (_rp) {}

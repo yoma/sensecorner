@@ -1750,6 +1750,7 @@
     var userId = String(opts.userId || '').trim();
     var domain = String(opts.domain || '').trim();
     var forcedProfile = String(opts.profileName || '').trim();
+    var failOnWriteError = opts.failOnWriteError === true;
     if (!sb || !userId || !domain) return [];
     var rows = Array.isArray(opts.rows) ? opts.rows : await senseFetchConfirmedGatewayProposals(sb, userId, domain);
     var written = [];
@@ -1764,7 +1765,11 @@
       if (!profileName) continue;
       try {
         var exists = await senseProposalAlreadyInDossier(sb, userId, profileName, row.id);
-        if (exists) continue;
+        if (exists) {
+          written.push(row.id);
+          touchedProfiles[profileName] = 1;
+          continue;
+        }
         var html = senseGatewayProposalDossierHtml(row);
         var ins = await sb.from('sense_messages').insert({
           user_id: userId,
@@ -1775,8 +1780,12 @@
         if (ins && !ins.error && ins.data) {
           written.push(row.id);
           touchedProfiles[profileName] = 1;
+        } else if (failOnWriteError) {
+          throw (ins && ins.error) || new Error('Gateway-notitie kon niet in het dossier worden opgeslagen.');
         }
-      } catch (_w) {}
+      } catch (_w) {
+        if (failOnWriteError) throw _w;
+      }
     }
     if (written.length && typeof senseInvalidateProfileMsgsProbe === 'function') {
       Object.keys(touchedProfiles).forEach(function (pn) {
