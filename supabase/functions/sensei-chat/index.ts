@@ -131,6 +131,87 @@ async function countAiRateLog(
   return { count: null, purposeSupported: false };
 }
 
+type AiRateMode = "general" | "hub" | "gateway" | "gateway_summary";
+
+async function reserveAiRateSlot(
+  userId: string,
+  mode: AiRateMode,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; code: string }> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const counted = await countAiRateLog(userId, windowStart, mode);
+  const purposeSupported = counted.purposeSupported;
+  const maxAllowed = purposeSupported
+    ? (mode === "hub"
+      ? RATE_LIMIT_MAX_OWNSENSE_HUB
+      : mode === "gateway"
+      ? RATE_LIMIT_MAX_GATEWAY
+      : mode === "gateway_summary"
+      ? RATE_LIMIT_MAX_GATEWAY_SUMMARY
+      : RATE_LIMIT_MAX)
+    : RATE_LIMIT_MAX;
+  const label = mode === "hub"
+    ? "OWN Sense profiel-ai (inzichten en foto's)"
+    : mode === "gateway"
+    ? "Sensei-berichten in de centrale Gateway-chat"
+    : mode === "gateway_summary"
+    ? "Gateway-dossiersamenvattingen"
+    : "Sensei-berichten in DateSense, FamilySense en SelfSense";
+
+  if (counted.count == null) {
+    return {
+      ok: false,
+      status: 503,
+      error: "AI-gebruik kan nu niet veilig worden gecontroleerd. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    };
+  }
+  if (counted.count >= maxAllowed) {
+    return {
+      ok: false,
+      status: 429,
+      error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+      code: "AI_RATE_LIMIT",
+    };
+  }
+
+  const logRow: Record<string, unknown> = { user_id: userId };
+  if (purposeSupported) {
+    if (mode === "hub") logRow.purpose = "ownsense_hub";
+    else if (mode === "gateway") logRow.purpose = "gateway";
+    else if (mode === "gateway_summary") logRow.purpose = "gateway_summary";
+  }
+  const inserted = await sb.from("ai_rate_log").insert(logRow);
+  if (inserted.error) {
+    console.warn("ai_rate_log reserveren mislukt:", inserted.error.message);
+    return {
+      ok: false,
+      status: 503,
+      error: "AI-gebruik kan nu niet veilig worden gereserveerd. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    };
+  }
+
+  const reservedCount = await countAiRateLog(userId, windowStart, purposeSupported ? mode : "all");
+  if (reservedCount.count == null) {
+    return {
+      ok: false,
+      status: 503,
+      error: "AI-gebruik kan nu niet veilig worden gecontroleerd. Probeer het later opnieuw.",
+      code: "AI_RATE_LIMIT_UNAVAILABLE",
+    };
+  }
+  if (reservedCount.count > maxAllowed) {
+    return {
+      ok: false,
+      status: 429,
+      error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
+      code: "AI_RATE_LIMIT",
+    };
+  }
+
+  return { ok: true };
+}
+
 async function resolveRoepnaam(userId: string): Promise<string> {
   try {
     const authRes = await sb.auth.admin.getUserById(userId);
@@ -347,20 +428,6 @@ async function callAnthropicPlain(
   }
 }
 
-function logGatewaySummaryUsage(userId: string) {
-  sb.from("ai_rate_log").insert({ user_id: userId, purpose: "gateway_summary" }).then(
-    ({ error: logError }) => {
-      if (logError && /purpose/i.test(String(logError.message || ""))) {
-        sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-          if (logError2) console.warn("Loggen mislukt:", logError2.message);
-        });
-      } else if (logError) {
-        console.warn("Loggen mislukt:", logError.message);
-      }
-    },
-  );
-}
-
 async function handleGatewaySummaries(userId: string, isAdmin: boolean): Promise<Response> {
   const updated: string[] = [];
   const skipped: string[] = [];
@@ -413,18 +480,6 @@ async function handleGatewaySummaries(userId: string, isAdmin: boolean): Promise
     if (generatedThisOpen >= GATEWAY_SUMMARY_MAX_PER_OPEN) {
       skipped.push(d.domain);
       continue;
-    }
-
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const counted = await countAiRateLog(userId, windowStart, "gateway_summary");
-      const maxAllowed = counted.purposeSupported
-        ? RATE_LIMIT_MAX_GATEWAY_SUMMARY
-        : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
-        skipped.push(d.domain);
-        continue;
-      }
     }
 
     const sesRes = await sb
@@ -517,6 +572,13 @@ async function handleGatewaySummaries(userId: string, isAdmin: boolean): Promise
     }
     const transcript = lines.join("\n");
 
+    if (!isAdmin) {
+      const reserved = await reserveAiRateSlot(userId, "gateway_summary");
+      if (!reserved.ok) {
+        return json({ error: reserved.error, code: reserved.code }, reserved.status);
+      }
+    }
+
     const text = await callAnthropicPlain(
       buildDomainSummarySystem(d.label),
       `Gespreksfragmenten en bevestigde notities (chronologisch waar van toepassing):\n${transcript}`,
@@ -526,7 +588,6 @@ async function handleGatewaySummaries(userId: string, isAdmin: boolean): Promise
       skipped.push(d.domain);
       continue;
     }
-    if (!isAdmin) logGatewaySummaryUsage(userId);
 
     const upRes = await sb.from("domain_summaries").upsert({
       user_id: userId,
@@ -582,28 +643,6 @@ Deno.serve(async (req: Request) => {
 
     if (body?.gateway_summaries === true) {
       return await handleGatewaySummaries(userId, isAdmin);
-    }
-
-    if (!isAdmin) {
-      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
-      const mode = isGateway ? "gateway" : (isOwnsenseHub ? "hub" : "general");
-      const counted = await countAiRateLog(userId, windowStart, mode);
-      const maxAllowed = counted.purposeSupported
-        ? (isGateway
-          ? RATE_LIMIT_MAX_GATEWAY
-          : (isOwnsenseHub ? RATE_LIMIT_MAX_OWNSENSE_HUB : RATE_LIMIT_MAX))
-        : RATE_LIMIT_MAX;
-      if (counted.count != null && counted.count >= maxAllowed) {
-        const label = isGateway
-          ? "Sensei-berichten in de centrale Gateway-chat"
-          : isOwnsenseHub
-          ? "OWN Sense profiel-ai (inzichten en foto's)"
-          : "Sensei-berichten in DateSense, FamilySense en SelfSense";
-        return json({
-          error: `Limiet bereikt: max ${maxAllowed} ${label} per uur. Probeer het later opnieuw.`,
-          code: "AI_RATE_LIMIT",
-        }, 429);
-      }
     }
 
     let system = String(body?.system || "").trim();
@@ -699,6 +738,14 @@ Deno.serve(async (req: Request) => {
       anthropicPayload.tools = anthropicTools;
     }
 
+    if (!isAdmin) {
+      const mode: AiRateMode = isGateway ? "gateway" : (isOwnsenseHub ? "hub" : "general");
+      const reserved = await reserveAiRateSlot(userId, mode);
+      if (!reserved.ok) {
+        return json({ error: reserved.error, code: reserved.code }, reserved.status);
+      }
+    }
+
     const claudeAbort = new AbortController();
     const claudeTimer = setTimeout(() => claudeAbort.abort(), 25000);
     let claudeRes: Response;
@@ -717,21 +764,6 @@ Deno.serve(async (req: Request) => {
     if (!claudeRes.ok) {
       console.error("Claude API fout:", JSON.stringify(claudeData));
       return json({ error: claudeData?.error?.message || "Claude call failed" }, claudeRes.status);
-    }
-
-    if (!isAdmin) {
-      const logRow: Record<string, unknown> = { user_id: userId };
-      if (isGateway) logRow.purpose = "gateway";
-      else if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
-      sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && (isOwnsenseHub || isGateway) && /purpose/i.test(String(logError.message || ""))) {
-          sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
-            if (logError2) console.warn("Loggen mislukt:", logError2.message);
-          });
-        } else if (logError) {
-          console.warn("Loggen mislukt:", logError.message);
-        }
-      });
     }
 
     return json(claudeData, 200);
