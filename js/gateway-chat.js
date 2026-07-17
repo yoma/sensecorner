@@ -54,6 +54,8 @@
     sessionId: null,
     bridgeShown: false,
     profileQuestionAsked: false,
+    /** @type {{ domein: string, dossier: string, key: string }[]} */
+    proposedTargets: [],
     messages: [],
     domainSummaries: { date: '', family: '', friend: '', self: '' },
     pendingProfileQ: null,
@@ -290,6 +292,35 @@
     d = String(d || '').trim().toLowerCase();
     return GW_DOMAIN_META[d] ? d : '';
   }
+  /** Stabiele sleutel voor anti-herhaal: domein + dossier (leeg dossier = alleen domein). */
+  function gwProposalTargetKey(domain, dossier) {
+    var dom = gwNormDomain(domain);
+    if (!dom) return '';
+    var dos = String(dossier || '').trim().toLowerCase();
+    if (dom === 'self') dos = 'own sense';
+    return dom + '|' + dos;
+  }
+  function gwRememberProposalTarget(domain, dossier) {
+    var key = gwProposalTargetKey(domain, dossier);
+    if (!key) return;
+    if (!Array.isArray(gwState.proposedTargets)) gwState.proposedTargets = [];
+    for (var i = 0; i < gwState.proposedTargets.length; i++) {
+      if (gwState.proposedTargets[i].key === key) return;
+    }
+    gwState.proposedTargets.push({
+      domein: gwNormDomain(domain),
+      dossier: String(dossier || '').trim(),
+      key: key
+    });
+  }
+  function gwWasProposalTargetOffered(domain, dossier) {
+    var key = gwProposalTargetKey(domain, dossier);
+    if (!key || !Array.isArray(gwState.proposedTargets)) return false;
+    for (var i = 0; i < gwState.proposedTargets.length; i++) {
+      if (gwState.proposedTargets[i].key === key) return true;
+    }
+    return false;
+  }
   function gwAppMeta(domain) {
     return GW_DOMAIN_META[gwNormDomain(domain)] || { label: 'SenseCorner', href: 'sensecorner.html', accent: 'var(--r, #5E7D5A)', soft: 'rgba(94,125,90,.14)', icon: '先生' };
   }
@@ -418,7 +449,10 @@
       openQuestions: gwState.profileQuestionAsked ? [] : gwCollectOpenQuestions(),
       profileQuestionAsked: !!gwState.profileQuestionAsked,
       bridgeShown: !!gwState.bridgeShown,
-      isFirstTurn: gwState.messages.filter(function (m) { return m.role === 'assistant'; }).length === 0
+      isFirstTurn: gwState.messages.filter(function (m) { return m.role === 'assistant'; }).length === 0,
+      proposedTargets: (gwState.proposedTargets || []).map(function (t) {
+        return { domein: t.domein, dossier: t.dossier };
+      })
     };
     await ensureGatewaySenseiCore();
     if (senseiCoreReady()) {
@@ -474,6 +508,7 @@
         gwState.sessionId = res.data.id;
         gwState.bridgeShown = !!res.data.bridge_shown;
         gwState.profileQuestionAsked = !!res.data.profile_question_asked;
+        gwState.proposedTargets = [];
         return gwState.sessionId;
       }
     } catch (e) { console.warn('gwEnsureSession', e); }
@@ -929,17 +964,24 @@
         parsed.proposal.text
       );
       if (gwNormDomain(parsed.proposal.domain) === 'self') resolvedDos = 'OWN Sense';
-      var pid = null;
-      try {
-        pid = await gwInsertProposalRow(parsed.proposal.domain, parsed.proposal.text, resolvedDos || parsed.proposal.dossier || '');
-      } catch (e) { console.warn('gwInsertProposalRow', e); }
-      gwRenderProposalCard({
-        domain: parsed.proposal.domain,
-        text: parsed.proposal.text,
-        proposalId: pid,
-        dossier: parsed.proposal.dossier || '',
-        targetProfile: resolvedDos
-      });
+      var trackDos = resolvedDos || parsed.proposal.dossier || '';
+      if (gwWasProposalTargetOffered(parsed.proposal.domain, trackDos)) {
+        // Zelfde domein/dossier al aangeboden deze sessie: geen tweede voorstelkaart.
+        parsed.proposal = null;
+      } else {
+        gwRememberProposalTarget(parsed.proposal.domain, trackDos);
+        var pid = null;
+        try {
+          pid = await gwInsertProposalRow(parsed.proposal.domain, parsed.proposal.text, trackDos);
+        } catch (e) { console.warn('gwInsertProposalRow', e); }
+        gwRenderProposalCard({
+          domain: parsed.proposal.domain,
+          text: parsed.proposal.text,
+          proposalId: pid,
+          dossier: parsed.proposal.dossier || '',
+          targetProfile: resolvedDos
+        });
+      }
     }
     if (parsed.bridge && allowBridge) {
       gwRenderBridgeCard(parsed.bridge);
