@@ -1074,24 +1074,85 @@
     gwState.bridgeShown = true;
     gwSetSessionFlag('bridge_shown', true);
   }
-  function gwBuildHandoffSummary() {
-    var bits = [];
-    gwState.messages.slice(-8).forEach(function (m) {
-      var role = m.role === 'assistant' ? 'Sensei' : 'Jij';
-      bits.push(role + ': ' + String(m.content || '').replace(/\s+/g, ' ').trim().substring(0, 220));
+  function gwInferBridgeDossier(domain) {
+    var d = gwNormDomain(domain);
+    var hits = [];
+    (gwState.proposedTargets || []).forEach(function (t) {
+      if (!t || gwNormDomain(t.domein) !== d) return;
+      var dos = String(t.dossier || '').trim();
+      if (dos && !/^own\s*sense$/i.test(dos)) hits.push(dos);
     });
-    return bits.join('\n').substring(0, 1800) || 'Gateway-gesprek over dit domein.';
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) {
+      var counts = {};
+      hits.forEach(function (h) { counts[h] = (counts[h] || 0) + 1; });
+      var best = '';
+      var bestN = 0;
+      Object.keys(counts).forEach(function (k) {
+        if (counts[k] > bestN) { bestN = counts[k]; best = k; }
+      });
+      if (best && bestN >= 1) return best;
+    }
+    var blob = '';
+    (gwState.messages || []).slice(-12).forEach(function (m) {
+      blob += ' ' + String(m && m.content || '');
+    });
+    return gwResolveDossierName(d, '', blob) || '';
+  }
+  function gwBuildHandoffSummary(domain) {
+    var d = gwNormDomain(domain);
+    var dossier = gwInferBridgeDossier(d);
+    var parts = [];
+    if (dossier) parts.push('DOSSIER: ' + dossier);
+    else parts.push('DOSSIER: onbekend');
+    var noteLines = [];
+    var block = String(gwState.confirmedProposalsBlock || '');
+    if (block) {
+      block.split('\n').forEach(function (line) {
+        line = String(line || '').trim();
+        if (!line || line.indexOf('- [') !== 0) return;
+        var meta = gwAppMeta(d);
+        var label = meta && meta.label ? meta.label : d;
+        if (line.indexOf('[' + label) >= 0 || (dossier && line.indexOf(dossier) >= 0) || !d) {
+          noteLines.push(line.substring(0, 320));
+        }
+      });
+    }
+    if (noteLines.length) {
+      parts.push('BEVESTIGDE NOTITIES:');
+      noteLines.slice(0, 8).forEach(function (l) { parts.push(l); });
+    }
+    parts.push('RECENTE GESPREKSBEURTEN:');
+    var turns = (gwState.messages || []).slice(-10);
+    if (!turns.length) {
+      parts.push('(geen recente beurten in geheugen)');
+    } else {
+      turns.forEach(function (m) {
+        var role = m.role === 'assistant' || m.role === 'ai' ? 'Sensei' : 'Jij';
+        var txt = String(m.content || '').replace(/\s+/g, ' ').trim().substring(0, 280);
+        if (txt) parts.push(role + ': ' + txt);
+      });
+    }
+    return parts.join('\n').substring(0, 3200) || 'Gateway-gesprek over dit domein.';
   }
   async function gwOpenBridgeHandoff(domain) {
     var client = getClient();
     var uid = await ensureUid(client);
     if (!client || !uid) throw new Error('Niet ingelogd.');
     var meta = gwAppMeta(domain);
-    var res = await client.from('bridge_handoffs').insert({
+    var dossier = gwInferBridgeDossier(domain);
+    var summary = gwBuildHandoffSummary(domain);
+    var row = {
       user_id: uid,
       target_domain: domain,
-      context_summary: gwBuildHandoffSummary()
-    }).select('id').single();
+      context_summary: summary
+    };
+    if (dossier) row.target_profile = dossier;
+    var res = await client.from('bridge_handoffs').insert(row).select('id').single();
+    if (res && res.error && dossier && /target_profile|column/i.test(String(res.error.message || ''))) {
+      delete row.target_profile;
+      res = await client.from('bridge_handoffs').insert(row).select('id').single();
+    }
     if (res && res.error) throw res.error;
     var id = res && res.data && res.data.id;
     if (!id) throw new Error('Handoff aanmaken mislukt.');

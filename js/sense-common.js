@@ -1189,6 +1189,7 @@
   /* Gateway-Chat Fase 4: bridge handoff + confirmed proposals          */
   /* ------------------------------------------------------------------ */
   global._gatewayHandoffSummary = '';
+  global._gatewayHandoffTargetProfile = '';
   global._gatewayHandoffWarmPending = false;
   global._gatewayProposalsCoachContext = '';
   global._gatewayConfirmedProposals = [];
@@ -1233,6 +1234,40 @@
     } catch (_e) {}
   }
 
+  function senseParseHandoffDossierFromSummary(summary) {
+    var s = String(summary || '');
+    var m = s.match(/^\s*DOSSIER:\s*(.+)\s*$/im);
+    if (!m) return '';
+    var name = String(m[1] || '').trim().replace(/\s+/g, ' ');
+    if (!name || /^own\s*sense$/i.test(name) || /^onbekend$/i.test(name)) return '';
+    return name.substring(0, 120);
+  }
+
+  function sensePickHandoffDossierFromProposals(rows) {
+    var list = (rows || []).filter(function (r) {
+      return r && String(r.status || '') === 'confirmed' && String(r.target_profile || '').trim()
+        && !/^own\s*sense$/i.test(String(r.target_profile || ''));
+    });
+    if (!list.length) return '';
+    var counts = {};
+    var order = [];
+    list.forEach(function (r) {
+      var nm = String(r.target_profile || '').trim();
+      if (!nm) return;
+      if (!counts[nm]) {
+        counts[nm] = 0;
+        order.push(nm);
+      }
+      counts[nm] += 1;
+    });
+    order.sort(function (a, b) {
+      return (counts[b] - counts[a]) || String(a).localeCompare(String(b), 'nl', { sensitivity: 'base' });
+    });
+    return order.length === 1 || (order.length && counts[order[0]] > (counts[order[1]] || 0))
+      ? order[0]
+      : (order.length === 1 ? order[0] : '');
+  }
+
   /**
    * Haalt een open bridge_handoffs-rij op, zet consumed_at, strip URL, optioneel delete.
    * Ongeldig of al geconsumeerd: stil null. Geen toast.
@@ -1243,8 +1278,12 @@
     var userId = String(opts.userId || '').trim();
     var expectedDomain = String(opts.expectedDomain || '').trim().toLowerCase();
     var id = senseParseHandoffIdFromUrl();
-    senseStripHandoffFromUrl();
-    if (!sb || !userId || !id) return null;
+    /* URL strip pas na succesvolle consume, zodat een retry bij fout dezelfde id houdt.
+       Bij al-geconsumeerd / ontbrekende rij: wel strippen om eindeloze retries te vermijden. */
+    if (!sb || !userId || !id) {
+      if (id) senseStripHandoffFromUrl();
+      return null;
+    }
     try {
       var q = sb.from('bridge_handoffs')
         .update({ consumed_at: new Date().toISOString() })
@@ -1252,12 +1291,30 @@
         .eq('user_id', userId)
         .is('consumed_at', null);
       if (expectedDomain) q = q.eq('target_domain', expectedDomain);
-      var upd = await q.select('id,context_summary,target_domain').maybeSingle();
-      if (upd && upd.error) return null;
+      var upd = await q.select('id,context_summary,target_domain,target_profile').maybeSingle();
+      if (upd && upd.error) {
+        /* Oudere DB zonder target_profile-kolom. */
+        if (/target_profile|column/i.test(String(upd.error.message || ''))) {
+          var q2 = sb.from('bridge_handoffs')
+            .update({ consumed_at: new Date().toISOString() })
+            .eq('id', id)
+            .eq('user_id', userId)
+            .is('consumed_at', null);
+          if (expectedDomain) q2 = q2.eq('target_domain', expectedDomain);
+          upd = await q2.select('id,context_summary,target_domain').maybeSingle();
+        } else {
+          return null;
+        }
+      }
       var row = upd && upd.data;
+      senseStripHandoffFromUrl();
       if (!row || !String(row.context_summary || '').trim()) return null;
-      var summary = String(row.context_summary || '').trim().substring(0, 2000);
+      var summary = String(row.context_summary || '').trim().substring(0, 3500);
+      var targetProfile = String(row.target_profile || '').trim()
+        || senseParseHandoffDossierFromSummary(summary);
+      if (targetProfile && /^own\s*sense$/i.test(targetProfile)) targetProfile = '';
       global._gatewayHandoffSummary = summary;
+      global._gatewayHandoffTargetProfile = targetProfile;
       global._gatewayHandoffWarmPending = true;
       try {
         await sb.from('bridge_handoffs').delete().eq('id', row.id).eq('user_id', userId);
@@ -1265,28 +1322,71 @@
       return {
         id: row.id,
         summary: summary,
-        target_domain: String(row.target_domain || expectedDomain || '').trim()
+        target_domain: String(row.target_domain || expectedDomain || '').trim(),
+        target_profile: targetProfile
       };
     } catch (_e) {
       return null;
     }
   }
 
-  function senseAppendGatewayHandoffCoachContext(lines) {
-    if (!lines) return;
+  function senseBuildGatewayHandoffCoachBlock() {
     var summary = String(global._gatewayHandoffSummary || '').trim();
-    if (!summary) return;
+    if (!summary) return '';
+    var dossier = String(global._gatewayHandoffTargetProfile || '').trim()
+      || senseParseHandoffDossierFromSummary(summary);
+    var lines = [
+      'GATEWAY-HANDOFF (interne context uit de SenseCorner-hoofdchat; de gebruiker komt hier verder praten):'
+    ];
+    if (dossier) {
+      lines.push('Actief dossier na brug: ' + dossier + '. Gebruik dit dossier als gespreksfocus en lees de dossiercontext.');
+    }
+    lines.push(summary.substring(0, 2800));
     lines.push(
-      'GATEWAY-HANDOFF (interne context uit de SenseCorner Gateway-chat; de gebruiker komt hier verder praten):'
+      'HARD: Feiten in deze handoff en in het actieve dossier zijn bekende context. Zeg nooit dat je iets niet weet als het hier of in het dossier staat. Lees de samenvatting niet letterlijk voor; verwijs hoogstens kort en warm terug.'
     );
-    lines.push(summary.substring(0, 1800));
-    lines.push(
-      'Gebruik dit als achtergrond. Lees de samenvatting niet letterlijk voor. Verwijs hoogstens kort en warm terug naar het eerdere gesprek, zonder transcript te herhalen.'
-    );
+    return lines.join('\n');
   }
 
-  function senseGatewayWarmOpenText(appLabel) {
+  function senseAppendGatewayHandoffCoachContext(lines) {
+    if (!lines) return;
+    var block = senseBuildGatewayHandoffCoachBlock();
+    if (!block) return;
+    lines.push(block);
+  }
+
+  /**
+   * Zorgt dat handoff (+ proposals) in de coach-context blijven, ook na substring-afkapping.
+   * Prependt een beschermd blok als GATEWAY-HANDOFF ontbreekt.
+   */
+  function senseEnsureGatewayHandoffInCoachCtx(coachCtx, maxTotal) {
+    var base = String(coachCtx || '');
+    var handoff = senseBuildGatewayHandoffCoachBlock();
+    var proposals = String(global._gatewayProposalsCoachContext || '').trim();
+    var protectedParts = [];
+    if (handoff && base.indexOf('GATEWAY-HANDOFF') < 0) protectedParts.push(handoff);
+    if (proposals && base.indexOf('VANUIT GATEWAY GENOTEERD') < 0
+      && base.indexOf('VANUIT HOOFDCHAT GENOTEERD') < 0) {
+      protectedParts.push(proposals);
+    }
+    if (!protectedParts.length) return base;
+    var protectedBlock = protectedParts.join('\n\n');
+    var budget = Math.max(1200, (maxTotal || 4500) - protectedBlock.length - 2);
+    if (base.length > budget) base = base.substring(0, budget);
+    return (protectedBlock + '\n\n' + base).trim();
+  }
+
+  function senseGatewayWarmOpenText(appLabel, dossierName) {
     var label = String(appLabel || 'deze app').trim() || 'deze app';
+    var dos = String(dossierName || global._gatewayHandoffTargetProfile || '').trim();
+    if (dos && !/^own\s*sense$/i.test(dos)) {
+      var nice = dos.replace(/Sense$/i, '').trim() || dos;
+      return 'Welkom terug. We gaan verder over '
+        + nice
+        + ' in '
+        + label
+        + ', met wat je net in de SenseCorner-hoofdchat deelde. Waar wil je nu op inzoomen?';
+    }
     return 'Welkom terug. Ik neem mee wat je net in de SenseCorner-hoofdchat deelde, zodat je hier in '
       + label
       + ' meteen verder kunt zonder opnieuw te beginnen. Waar wil je nu op inzoomen?';
@@ -1303,7 +1403,8 @@
       global._gatewayHandoffWarmPending = false;
       return false;
     }
-    var text = senseGatewayWarmOpenText(opts.appLabel);
+    var dos = String(opts.dossierName || global._gatewayHandoffTargetProfile || '').trim();
+    var text = senseGatewayWarmOpenText(opts.appLabel, dos);
     var sender = String(opts.senderName || 'Sensei').trim() || 'Sensei';
     var ca = opts.chatAreaEl || (typeof document !== 'undefined' ? document.getElementById('chatArea') : null);
     if (!ca) return false;
@@ -1328,6 +1429,44 @@
       global._gatewayHandoffWarmPending = true;
       return false;
     }
+  }
+
+  /**
+   * Zet Vertel-gespreksfocus op het handoff-dossier (bv. EllaSense).
+   * opts.state: app-state object met vertelFrom / vertelGesprekDossier.
+   * opts.profiles: optionele allowlist; anders wordt de naam toch gezet.
+   */
+  function senseApplyHandoffDossierFocus(opts) {
+    opts = opts || {};
+    var state = opts.state;
+    var dossier = String(opts.dossierName || global._gatewayHandoffTargetProfile || '').trim();
+    if (!state || !dossier || /^own\s*sense$/i.test(dossier)) return '';
+    var profiles = opts.profiles;
+    if (Array.isArray(profiles) && profiles.length) {
+      var hit = '';
+      for (var i = 0; i < profiles.length; i++) {
+        var p = String(profiles[i] || '').trim();
+        if (!p) continue;
+        if (p.toLowerCase() === dossier.toLowerCase()) { hit = p; break; }
+      }
+      if (!hit) {
+        for (var j = 0; j < profiles.length; j++) {
+          var p2 = String(profiles[j] || '').trim();
+          if (!p2) continue;
+          var a = p2.toLowerCase();
+          var b = dossier.toLowerCase();
+          if (a.indexOf(b) === 0 || b.indexOf(a) === 0) { hit = p2; break; }
+        }
+      }
+      if (hit) dossier = hit;
+    }
+    state.vertelFrom = dossier;
+    state.vertelGesprekDossier = dossier;
+    global._gatewayHandoffTargetProfile = dossier;
+    try {
+      if (typeof opts.onApplied === 'function') opts.onApplied(dossier);
+    } catch (_cb) {}
+    return dossier;
   }
 
   /**
@@ -1578,17 +1717,34 @@
 
   async function senseApplyGatewayBridgeBoot(opts) {
     opts = opts || {};
-    var out = { handoff: null, proposals: [] };
+    var out = { handoff: null, proposals: [], dossier: '' };
     try {
-      out.handoff = await senseConsumeBridgeHandoff({
-        sb: opts.sb,
-        userId: opts.userId,
-        expectedDomain: opts.domain
-      });
+      /* Al geconsumeerd in early-boot: niet opnieuw (URL is weg). */
+      if (String(global._gatewayHandoffSummary || '').trim()) {
+        out.handoff = {
+          summary: String(global._gatewayHandoffSummary || ''),
+          target_profile: String(global._gatewayHandoffTargetProfile || '').trim(),
+          target_domain: String(opts.domain || '').trim()
+        };
+      } else {
+        out.handoff = await senseConsumeBridgeHandoff({
+          sb: opts.sb,
+          userId: opts.userId,
+          expectedDomain: opts.domain
+        });
+      }
     } catch (_h) {}
     try {
       out.proposals = await senseRefreshGatewayProposalsCoachContext(opts.sb, opts.userId, opts.domain) || [];
     } catch (_p) {}
+    if (!String(global._gatewayHandoffTargetProfile || '').trim()) {
+      var inferred = sensePickHandoffDossierFromProposals(out.proposals);
+      if (inferred) global._gatewayHandoffTargetProfile = inferred;
+    }
+    if (out.handoff && !out.handoff.target_profile) {
+      out.handoff.target_profile = String(global._gatewayHandoffTargetProfile || '').trim();
+    }
+    out.dossier = String(global._gatewayHandoffTargetProfile || '').trim();
     try {
       /* Geen geforceerd OWN Sense meer: landing per rij via target_profile / domein. */
       await senseIngestConfirmedGatewayProposals({
@@ -1598,13 +1754,25 @@
         rows: out.proposals
       });
     } catch (_i) {}
+    try {
+      if (typeof opts.applyDossierFocusFn === 'function' && out.dossier) {
+        opts.applyDossierFocusFn(out.dossier);
+      } else if (opts.state && out.dossier) {
+        senseApplyHandoffDossierFocus({
+          state: opts.state,
+          dossierName: out.dossier,
+          profiles: opts.profiles
+        });
+      }
+    } catch (_f) {}
     /* Na late consume (fastPaint): warme open als Vertel al open staat. */
-    if (out.handoff && global._gatewayHandoffWarmPending) {
+    if ((out.handoff || String(global._gatewayHandoffSummary || '').trim()) && global._gatewayHandoffWarmPending) {
       try {
         senseRenderGatewayWarmOpenIfNeeded({
           chatAreaEl: typeof document !== 'undefined' ? document.getElementById('chatArea') : null,
           senderName: opts.senderName || 'Sensei',
           appLabel: opts.appLabel || '',
+          dossierName: out.dossier,
           addMsgFn: typeof global.addMsg === 'function' ? global.addMsg : null
         });
       } catch (_w) {}
@@ -1620,9 +1788,14 @@
   global.senseHasGatewayHandoffInUrl = senseHasGatewayHandoffInUrl;
   global.senseStripHandoffFromUrl = senseStripHandoffFromUrl;
   global.senseConsumeBridgeHandoff = senseConsumeBridgeHandoff;
+  global.senseParseHandoffDossierFromSummary = senseParseHandoffDossierFromSummary;
+  global.sensePickHandoffDossierFromProposals = sensePickHandoffDossierFromProposals;
+  global.senseBuildGatewayHandoffCoachBlock = senseBuildGatewayHandoffCoachBlock;
   global.senseAppendGatewayHandoffCoachContext = senseAppendGatewayHandoffCoachContext;
+  global.senseEnsureGatewayHandoffInCoachCtx = senseEnsureGatewayHandoffInCoachCtx;
   global.senseGatewayWarmOpenText = senseGatewayWarmOpenText;
   global.senseRenderGatewayWarmOpenIfNeeded = senseRenderGatewayWarmOpenIfNeeded;
+  global.senseApplyHandoffDossierFocus = senseApplyHandoffDossierFocus;
   global.senseFormatGatewayProposalsCoachBlock = senseFormatGatewayProposalsCoachBlock;
   global.senseFetchConfirmedGatewayProposals = senseFetchConfirmedGatewayProposals;
   global.senseRefreshGatewayProposalsCoachContext = senseRefreshGatewayProposalsCoachContext;

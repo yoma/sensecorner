@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-07-2026 11:44">
+<meta name="fs-build" content="17-07-2026 11:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707261144"></script>
@@ -5520,7 +5520,13 @@ async function ssRunFullBootstrap(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'self',senderName:'SelfSensei',appLabel:'SelfSense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'self',senderName:'SelfSensei',appLabel:'SelfSense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -5552,6 +5558,18 @@ async function bootstrapAuthenticated(session,opts){
   try{if(typeof senseTouchUserActivity==='function')senseTouchUserActivity(sb);}catch(_eAct){}
   if(opts.fastPaint){
     try{updateNavTabIndicators();}catch(_e3){}
+    try{
+      if(typeof senseHasGatewayHandoffInUrl==='function'&&senseHasGatewayHandoffInUrl()&&S.user
+        &&typeof senseApplyGatewayBridgeBoot==='function'){
+        var earlyGw=await senseApplyGatewayBridgeBoot({
+          sb:sb,userId:S.user.id,domain:'self',senderName:'SelfSensei',appLabel:'SelfSense',
+          state:S,profiles:S.profiles
+        });
+        if(earlyGw&&earlyGw.dossier&&typeof updateVertelGesprekBanner==='function'){
+          try{updateVertelGesprekBanner();}catch(_eb){}
+        }
+      }
+    }catch(_eEarlyGw){}
     void ssRunFullBootstrap(session,opts);
     _authBootstrappedUserId=String(session.user.id||'');
     return true;
@@ -5565,7 +5583,13 @@ async function bootstrapAuthenticated(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'self',senderName:'SelfSensei',appLabel:'SelfSense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'self',senderName:'SelfSensei',appLabel:'SelfSense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -17148,6 +17172,9 @@ async function sendMsg(){
   var usageLine=buildUsageModeContextLine();
   var coachCtx=buildCoachContext();
   if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
+  if(typeof senseEnsureGatewayHandoffInCoachCtx==='function'){
+    coachCtx=senseEnsureGatewayHandoffInCoachCtx(coachCtx,4500);
+  }
   var coachCtxFinal=(usageLine?usageLine+'\n':'')+(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent SelfSensei, de persoonlijke herstelcoach van de gebruiker.'
     +' Je kent de gebruiker en contextpersonen via hun dossiers.'

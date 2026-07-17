@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>FamilySense - FamilySensei · jouw gezinscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-07-2026 11:44">
+<meta name="fs-build" content="17-07-2026 11:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707261144"></script>
@@ -3191,7 +3191,13 @@ async function fsRunFullBootstrap(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'family',senderName:'FamilySensei',appLabel:'FamilySense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'family',senderName:'FamilySensei',appLabel:'FamilySense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -3224,6 +3230,19 @@ async function bootstrapAuthenticated(session,opts){
         try{updateNavTabIndicators();}catch(_e3){}
       }
     }catch(_e4){}
+    /* Brug-handoff vóór achtergrond-sync: anders mist de eerste Vertel-beurt context/dossier. */
+    try{
+      if(typeof senseHasGatewayHandoffInUrl==='function'&&senseHasGatewayHandoffInUrl()&&S.user
+        &&typeof senseApplyGatewayBridgeBoot==='function'){
+        var earlyGw=await senseApplyGatewayBridgeBoot({
+          sb:sb,userId:S.user.id,domain:'family',senderName:'FamilySensei',appLabel:'FamilySense',
+          state:S,profiles:S.profiles
+        });
+        if(earlyGw&&earlyGw.dossier&&typeof updateVertelGesprekBanner==='function'){
+          try{updateVertelGesprekBanner();}catch(_eb){}
+        }
+      }
+    }catch(_eEarlyGw){}
     void fsRunFullBootstrap(session,opts);
     _authBootstrappedUserId=String(session.user.id||'');
     return true;
@@ -3237,7 +3256,13 @@ async function bootstrapAuthenticated(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'family',senderName:'FamilySensei',appLabel:'FamilySense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'family',senderName:'FamilySensei',appLabel:'FamilySense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -13204,6 +13229,9 @@ async function sendMsg(){
   var usageLine=buildUsageModeContextLine();
   var coachCtx=buildCoachContext();
   if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
+  if(typeof senseEnsureGatewayHandoffInCoachCtx==='function'){
+    coachCtx=senseEnsureGatewayHandoffInCoachCtx(coachCtx,4500);
+  }
   var coachCtxFinal=(usageLine?usageLine+'\n':'')+(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent FamilySensei, de persoonlijke gezinscoach van de gebruiker.'
     +' Je kent de gebruiker en al zijn familieleden via hun dossiers.'

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="17-07-2026 11:44">
+<meta name="fr-build" content="17-07-2026 11:57">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707261144"></script>
@@ -3206,7 +3206,13 @@ async function frRunFullBootstrap(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'friend',senderName:'FriendSensei',appLabel:'FriendSense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'friend',senderName:'FriendSensei',appLabel:'FriendSense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -3239,6 +3245,18 @@ async function bootstrapAuthenticated(session,opts){
         try{updateNavTabIndicators();}catch(_e3){}
       }
     }catch(_e4){}
+    try{
+      if(typeof senseHasGatewayHandoffInUrl==='function'&&senseHasGatewayHandoffInUrl()&&S.user
+        &&typeof senseApplyGatewayBridgeBoot==='function'){
+        var earlyGw=await senseApplyGatewayBridgeBoot({
+          sb:sb,userId:S.user.id,domain:'friend',senderName:'FriendSensei',appLabel:'FriendSense',
+          state:S,profiles:S.profiles
+        });
+        if(earlyGw&&earlyGw.dossier&&typeof updateVertelGesprekBanner==='function'){
+          try{updateVertelGesprekBanner();}catch(_eb){}
+        }
+      }
+    }catch(_eEarlyGw){}
     void frRunFullBootstrap(session,opts);
     _authBootstrappedUserId=String(session.user.id||'');
     return true;
@@ -3252,7 +3270,13 @@ async function bootstrapAuthenticated(session,opts){
       try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_eA){}
       try{
         if(typeof senseApplyGatewayBridgeBoot==='function'&&S.user){
-          await senseApplyGatewayBridgeBoot({sb:sb,userId:S.user.id,domain:'friend',senderName:'FriendSensei',appLabel:'FriendSense'});
+          var gwBoot=await senseApplyGatewayBridgeBoot({
+            sb:sb,userId:S.user.id,domain:'friend',senderName:'FriendSensei',appLabel:'FriendSense',
+            state:S,profiles:S.profiles
+          });
+          if(gwBoot&&gwBoot.dossier&&typeof updateVertelGesprekBanner==='function'){
+            try{updateVertelGesprekBanner();}catch(_b){}
+          }
         }
       }catch(_eGw){}
       try{initSessie();}catch(_e2){}
@@ -13233,6 +13257,9 @@ async function sendMsg(){
   var usageLine=buildUsageModeContextLine();
   var coachCtx=buildCoachContext();
   if(coachCtx.length>3000)coachCtx=coachCtx.substring(0,3000);
+  if(typeof senseEnsureGatewayHandoffInCoachCtx==='function'){
+    coachCtx=senseEnsureGatewayHandoffInCoachCtx(coachCtx,4500);
+  }
   var coachCtxFinal=(usageLine?usageLine+'\n':'')+(coachNamesLine?coachNamesLine+'\n':'')+coachCtx;
   var sys='Je bent FriendSensei, de persoonlijke vriendschapscoach van de gebruiker.'
     +' Je kent de gebruiker en al zijn vrienden via hun dossiers.'
