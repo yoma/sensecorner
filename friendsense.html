@@ -10,10 +10,10 @@
 <meta name="theme-color" content="#C8881F">
 <title>FriendSense - FriendSensei · jouw vriendschapscoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fr-build" content="17-07-2026 12:00">
+<meta name="fr-build" content="17-07-2026 12:07">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1707261157"></script>
+<script src="js/sense-common.js?v=1707171205"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -9811,6 +9811,28 @@ async function loadTab(name,tab,d){
       }
     }
 
+    var ovSumOpts={isOwn:isOwnDossier,appKey:'fr'};
+    var ovSumText=typeof sensePickOverviewSummaryText==='function'?sensePickOverviewSummaryText(d,ovSumOpts):String(d.summary||'').trim();
+    var ovHasSignal=((d.count||0)>0||contactFilled>0||hasData||!!ovSumText);
+    if(isOwnDossier){
+      var ownFilledOv=OWN_CATS.reduce(function(sum,cat){
+        var cd=cats[cat.id]||{};
+        return sum+cat.prompts.filter(function(_,i){return(cd['a'+i]||'').trim().length>0;}).length;
+      },0);
+      ovHasSignal=((d.count||0)>0||ownFilledOv>0||hasData||!!ovSumText);
+    }
+    var ovNeedsRefresh=typeof senseOverviewSummaryNeedsRefresh==='function'&&senseOverviewSummaryNeedsRefresh(d,{isOwn:isOwnDossier,appKey:'fr',hasSignal:ovHasSignal});
+    if(typeof senseRenderDossierOverviewSummaryHtml==='function'&&(ovSumText||ovHasSignal)){
+      html+=senseRenderDossierOverviewSummaryHtml({
+        summary:ovSumText,
+        isOwn:isOwnDossier,
+        escHtml:escHTML,
+        pending:!ovSumText&&ovNeedsRefresh,
+        showEmpty:!ovSumText&&ovHasSignal&&!ovNeedsRefresh,
+        emptyHint:isOwnDossier?'Nog geen samenvatting over jou. Vertel iets of vul OWN Sense aan.':'Nog geen samenvatting. Vertel iets of vul het profiel aan.'
+      });
+    }
+
     var openProfielCta='';
     if(isOwnDossier){
       var ownF=OWN_CATS.reduce(function(sum,cat){
@@ -9879,6 +9901,18 @@ async function loadTab(name,tab,d){
     }
 
     cont.innerHTML=html;
+    if(!isOwnDossier&&ovNeedsRefresh&&typeof scheduleDossierSummaryIfNeeded==='function'){
+      S._ovSumRefresh=S._ovSumRefresh||{};
+      var _ovNext=S._ovSumRefresh[name]||0;
+      if(!_ovNext||_ovNext<Date.now()){
+        S._ovSumRefresh[name]=Date.now()+90000;
+        void scheduleDossierSummaryIfNeeded(name,d.count||0,{force:true}).then(function(){
+          if(S.screen==='dossier'&&S.viewDossier===name&&S.viewTab==='overzicht'){
+            try{loadTab(name,'overzicht',S.pdata[name]||d);}catch(_re){}
+          }
+        });
+      }
+    }
     }catch(err){
       console.error('loadTab overzicht error:',err);
       cont.innerHTML='<div style="padding:20px;color:red;font-size:13px">Fout bij laden: '+err.message+'</div>';
@@ -14517,6 +14551,7 @@ async function refreshDossierSummaryAI(dosName){
     var raw=await callAPI(sys,[{role:'user',content:userBlock}],520,52000);
     if(raw&&String(raw).trim()){
       d.summary=String(raw).trim().substring(0,4000);
+      d.meta=Object.assign({},d.meta||{},{dossier_summary_at:new Date().toISOString()});
       S.pdata[dosName]=d;
       await saveP(dosName,d.props,d.count,d.categories,d.summary,d.meta);
       if(!S._ctxMsgs)S._ctxMsgs={};

@@ -1125,6 +1125,116 @@
   global.senseDetectCrisisKeywords = senseDetectCrisisKeywords;
   global.senseRenderCrisisCardHtml = senseRenderCrisisCardHtml;
   global.senseWrapAiCardWithCrisis = senseWrapAiCardWithCrisis;
+
+  /** Escape HTML for overview summary card (apps may pass escHTML instead). */
+  function senseEscapeHtmlBasic(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Korte weergavetekst voor Overzicht (volledige summary blijft in dossier).
+   * Max ~2–3 zinnen / maxChars; geen Unicode U+2014.
+   */
+  function senseClampOverviewSummary(text, maxChars) {
+    maxChars = maxChars || 420;
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    if (t.length <= maxChars) return t;
+    var cut = t.substring(0, maxChars);
+    var lastStop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if (lastStop > maxChars * 0.45) return cut.substring(0, lastStop + 1).trim();
+    return cut.replace(/\s+\S*$/, '').trim() + '…';
+  }
+
+  /**
+   * Kies samenvattingstekst voor Overzicht.
+   * Contact: sense_profiles.summary. OWN: hub general / per-app, anders d.summary.
+   * opts: { isOwn, appKey } appKey = ds|fs|fr|ss
+   */
+  function sensePickOverviewSummaryText(d, opts) {
+    opts = opts || {};
+    if (!d) return '';
+    if (opts.isOwn) {
+      var meta = d.meta || {};
+      var appKey = String(opts.appKey || '').toLowerCase();
+      var per = meta.own_hub_ai_summary_per_app;
+      if (per && typeof per === 'object' && appKey) {
+        var aliases = [appKey];
+        if (appKey === 'ds') aliases.push('datesense');
+        if (appKey === 'fs') aliases.push('familysense');
+        if (appKey === 'fr') aliases.push('friendsense');
+        if (appKey === 'ss') aliases.push('selfsense');
+        for (var i = 0; i < aliases.length; i++) {
+          var pt = String(per[aliases[i]] || '').trim();
+          if (pt) return pt;
+        }
+      }
+      var gen = String(meta.own_hub_ai_summary_general || '').trim();
+      if (gen) return gen;
+      return String(d.summary || '').trim();
+    }
+    return String(d.summary || '').trim();
+  }
+
+  /**
+   * Soft-refresh nodig? Lege summary bij signaal, of ouder dan maxAgeDays (meta.dossier_summary_at).
+   * opts: { isOwn, appKey, hasSignal, maxAgeDays }
+   */
+  function senseOverviewSummaryNeedsRefresh(d, opts) {
+    opts = opts || {};
+    if (opts.isOwn) return false;
+    var hasSignal = opts.hasSignal;
+    if (hasSignal === undefined) hasSignal = !!(d && ((d.count || 0) > 0));
+    if (!hasSignal) return false;
+    var text = sensePickOverviewSummaryText(d, opts);
+    if (!text) return true;
+    var at = String(((d && d.meta) || {}).dossier_summary_at || '').trim();
+    if (!at) return false;
+    var t = Date.parse(at);
+    if (!t || isNaN(t)) return false;
+    var maxAgeMs = (opts.maxAgeDays != null ? opts.maxAgeDays : 14) * 86400000;
+    return (Date.now() - t) > maxAgeMs;
+  }
+
+  /**
+   * Overzicht-kaart: korte samenvatting + microcopy dat Sensei meer weet.
+   * opts: { summary, isOwn, escHtml, pending, showEmpty, emptyHint }
+   */
+  function senseRenderDossierOverviewSummaryHtml(opts) {
+    opts = opts || {};
+    var esc = typeof opts.escHtml === 'function' ? opts.escHtml : senseEscapeHtmlBasic;
+    var raw = String(opts.summary || '').trim();
+    var pending = !!opts.pending;
+    var showEmpty = !!opts.showEmpty;
+    if (!raw && !pending && !showEmpty) return '';
+    var isOwn = !!opts.isOwn;
+    var label = isOwn
+      ? 'Samenvatting over jou · Sensei weet meer dan hier staat'
+      : 'Samenvatting · Sensei weet meer dan hier staat';
+    var body;
+    if (raw) {
+      body = esc(senseClampOverviewSummary(raw, opts.maxChars || 420));
+    } else if (pending) {
+      body = 'Sensei maakt een korte samenvatting…';
+    } else {
+      body = esc(opts.emptyHint || 'Nog geen samenvatting. Vertel iets of vul het profiel aan.');
+    }
+    return '<div class="sense-ov-summary" role="region" aria-label="Samenvatting" style="margin:0 0 12px;padding:14px 16px;border-radius:14px;border:1px solid var(--b);background:linear-gradient(135deg,rgba(255,255,255,.92) 0%,var(--g,#f7f6f4) 100%);box-shadow:0 1px 0 rgba(61,47,31,.04);border-left:3px solid var(--r)">'
+      + '<div style="font-size:11px;font-weight:700;color:#8a8f97;letter-spacing:.02em;margin-bottom:7px;line-height:1.35">' + esc(label) + '</div>'
+      + '<div class="sense-ov-summary-body" style="font-size:14px;color:#3d2f1f;line-height:1.55;font-weight:500">' + body + '</div>'
+      + '</div>';
+  }
+
+  global.senseEscapeHtmlBasic = senseEscapeHtmlBasic;
+  global.senseClampOverviewSummary = senseClampOverviewSummary;
+  global.sensePickOverviewSummaryText = sensePickOverviewSummaryText;
+  global.senseOverviewSummaryNeedsRefresh = senseOverviewSummaryNeedsRefresh;
+  global.senseRenderDossierOverviewSummaryHtml = senseRenderDossierOverviewSummaryHtml;
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
