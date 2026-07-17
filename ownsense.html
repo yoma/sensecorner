@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="09-06-2026 19:30">
+<meta name="os-build" content="17-07-2026 10:08">
 <title>OWN Sense · OWN Sensei</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js"></script>
+<script type="module" src="./js/senseiCore-loader.js"></script>
 <style>
 :root{
   /* OWN: eigen semantiek + shell; kleuren uit css/sense-theme.css */
@@ -846,6 +847,199 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
 @keyframes os-spin{to{transform:rotate(360deg)}}
 .os-spin-row{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* ── Gateway-Chat (praatbalk + overlay) ── */
+.gw-talkbar-host{margin:10px 0 0}
+.gw-talkbar{
+  display:flex;align-items:center;gap:10px;
+  background:var(--white,#FFFDF8);
+  border:1.5px solid var(--sage,#5E7D5A);
+  border-radius:28px;
+  padding:6px 8px 6px 16px;
+  box-shadow:0 8px 28px rgba(61,47,31,.12),0 0 0 6px rgba(94,125,90,.18);
+  cursor:text;
+}
+.gw-talkbar:focus-within{outline:2px solid var(--sage,#5E7D5A);outline-offset:2px}
+.gw-talkbar .gw-sensei-badge{
+  width:34px;height:34px;border-radius:50%;flex:none;
+  background:rgba(94,125,90,.16);color:var(--sage-donker,#4a5e52);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;
+}
+.gw-talkbar input{
+  flex:1;min-width:0;border:0;outline:0;background:transparent;
+  font-family:inherit;font-size:14.5px;color:var(--chocolade,#3D2F1F);
+}
+.gw-talkbar input::placeholder{color:var(--muted,#6B5B45)}
+.gw-talkbar .gw-mic{
+  width:38px;height:38px;border-radius:50%;flex:none;border:0;
+  background:var(--sage,#5E7D5A);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.gw-talkbar .gw-mic:focus-visible,
+.gw-chat button:focus-visible,
+.gw-chat input:focus-visible{outline:2px solid var(--sage,#5E7D5A);outline-offset:2px}
+.gw-talkbar .gw-mic svg{width:17px;height:17px}
+
+.gw-chat{
+  position:fixed;inset:0;z-index:70;
+  width:100%;max-width:min(100%,var(--os-shell));
+  margin:0 auto;left:0;right:0;
+  background:var(--cream,#F2E8D5);
+  display:flex;flex-direction:column;
+  opacity:0;transform:translateY(18px);pointer-events:none;
+  transition:opacity .32s ease,transform .32s ease;
+}
+.gw-chat.open{opacity:1;transform:none;pointer-events:auto}
+.gw-chat-head{
+  display:flex;align-items:center;gap:12px;
+  padding:max(14px,env(safe-area-inset-top,0px)) 16px 12px;
+  background:var(--cream,#F2E8D5);
+  border-bottom:1px solid #EADDC4;
+}
+.gw-chat-head .gw-back{
+  width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--white,#FFFDF8);box-shadow:0 4px 14px rgba(61,47,31,.08);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--chocolade,#3D2F1F);
+}
+.gw-chat-head .gw-sensei-badge{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(94,125,90,.16);color:var(--sage-donker,#4a5e52);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+  box-shadow:0 0 0 5px rgba(94,125,90,.16);
+}
+.gw-chat-head .gw-who h2{font-size:15px;margin:0}
+.gw-chat-head .gw-who p{font-size:11px;color:var(--sage-donker,#4a5e52);margin:2px 0 0}
+.gw-messages{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:18px 16px 12px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.gw-msg{max-width:82%;animation:gw-pop .28s ease}
+.gw-msg.sensei{align-self:flex-start}
+.gw-msg.user{align-self:flex-end}
+.gw-bubble{
+  padding:11px 14px;border-radius:16px;
+  font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.gw-msg.sensei .gw-bubble{
+  background:var(--white,#FFFDF8);box-shadow:0 4px 14px rgba(61,47,31,.08);
+  border-bottom-left-radius:6px;color:var(--chocolade,#3D2F1F);
+}
+.gw-msg.user .gw-bubble{
+  background:var(--sage,#5E7D5A);color:#fff;
+  border-bottom-right-radius:6px;
+}
+.gw-msg .gw-tag{
+  font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  margin:0 0 4px 4px;
+}
+.gw-typing{
+  align-self:flex-start;background:var(--white,#FFFDF8);
+  box-shadow:0 4px 14px rgba(61,47,31,.08);
+  border-radius:16px;border-bottom-left-radius:6px;
+  padding:12px 16px;display:flex;gap:5px;
+}
+.gw-typing i{
+  width:6px;height:6px;border-radius:50%;background:var(--sage,#5E7D5A);
+  animation:gw-blink 1.1s infinite;
+}
+.gw-typing i:nth-child(2){animation-delay:.18s}
+.gw-typing i:nth-child(3){animation-delay:.36s}
+@keyframes gw-blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@keyframes gw-pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.gw-proposal{
+  align-self:flex-start;max-width:86%;
+  background:var(--white,#FFFDF8);border-left:3px solid var(--gw-accent,var(--sage));
+  border-radius:14px;box-shadow:0 4px 14px rgba(61,47,31,.08);
+  padding:12px 14px;animation:gw-pop .28s ease;
+}
+.gw-proposal .gw-p-label{
+  font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gw-accent,var(--sage));margin-bottom:5px;
+}
+.gw-proposal .gw-p-text{font-size:13.5px;line-height:1.45;margin-bottom:10px;color:var(--chocolade,#3D2F1F)}
+.gw-proposal .gw-p-actions{display:flex;flex-wrap:wrap;gap:8px}
+.gw-proposal .gw-p-actions button{
+  border:0;border-radius:20px;padding:7px 14px;
+  font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+}
+.gw-proposal .gw-yes{background:var(--gw-accent,var(--sage));color:#fff}
+.gw-proposal .gw-no{background:var(--gw-soft,rgba(94,125,90,.14));color:var(--gw-accent,var(--sage))}
+.gw-proposal .gw-dossier-row{margin:0 0 10px;display:flex;flex-direction:column;gap:4px}
+.gw-proposal .gw-dossier-row label{font-size:11px;font-weight:700;color:var(--muted)}
+.gw-proposal .gw-dossier-row select{
+  font:inherit;font-size:13px;border:1px solid color-mix(in srgb,var(--gw-accent,var(--sage)) 35%,#ccc);
+  border-radius:10px;padding:8px 10px;background:#fff;color:var(--chocolade,#3D2F1F)
+}
+.gw-proposal .gw-dossier-hint{font-size:11px;line-height:1.4;color:var(--muted)}
+.gw-proposal .gw-done{
+  display:none;font-size:12.5px;font-weight:600;color:var(--gw-accent,var(--sage));
+  align-items:center;gap:6px;
+}
+.gw-proposal.confirmed .gw-p-actions{display:none}
+.gw-proposal.confirmed .gw-dossier-row{display:none}
+.gw-proposal.confirmed .gw-done{display:flex}
+.gw-proposal.declined .gw-done{display:flex}
+.gw-proposal.declined .gw-dossier-row{display:none}
+
+.gw-bridge{
+  align-self:flex-start;max-width:88%;
+  background:var(--white,#FFFDF8);
+  border-radius:14px;box-shadow:0 4px 14px rgba(61,47,31,.07);
+  padding:13px 14px;animation:gw-pop .28s ease;
+  border:1px solid rgba(61,47,31,.1);
+  border-top:3px solid var(--gw-accent,var(--sage));
+}
+.gw-bridge .gw-b-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.gw-bridge .gw-b-icon{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--gw-soft,rgba(94,125,90,.14));color:var(--gw-accent,var(--sage));
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.gw-bridge h4{font-size:14px;margin:0;color:var(--chocolade,#3D2F1F)}
+.gw-bridge .gw-b-reason{font-size:12.5px;color:var(--muted,#6B5B45);line-height:1.45;margin:0 0 10px}
+.gw-bridge .gw-b-go{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;border:0;border-radius:22px;padding:10px;
+  background:var(--gw-accent,var(--sage));color:#fff;
+  font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+}
+.gw-bridge .gw-b-note{
+  font-size:11px;color:var(--muted,#6B5B45);text-align:center;margin:8px 0 0;
+  font-family:Lora,Georgia,serif;font-style:italic;
+}
+.gw-composer{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px max(16px,env(safe-area-inset-bottom,0px));
+  background:var(--cream,#F2E8D5);
+}
+.gw-composer .gw-field{
+  flex:1;display:flex;align-items:center;
+  background:var(--white,#FFFDF8);border:1.5px solid #EADDC4;
+  border-radius:24px;padding:10px 16px;
+}
+.gw-composer .gw-field:focus-within{border-color:var(--sage,#5E7D5A)}
+.gw-composer input{
+  flex:1;min-width:0;border:0;outline:0;background:transparent;
+  font-family:inherit;font-size:14px;color:var(--chocolade,#3D2F1F);
+}
+.gw-composer .gw-send{
+  width:42px;height:42px;border-radius:50%;border:0;flex:none;
+  background:var(--sage,#5E7D5A);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.gw-composer .gw-send:disabled{opacity:.55;cursor:not-allowed}
+.gw-composer .gw-send svg{width:17px;height:17px}
+.gw-crisis-wrap{align-self:flex-start;max-width:92%;animation:gw-pop .28s ease}
+@media (prefers-reduced-motion:reduce){
+  .gw-msg,.gw-proposal,.gw-bridge,.gw-crisis-wrap{animation:none}
+  .gw-chat{transition:none}
+  .gw-typing i{animation:none;opacity:.55}
+}
 </style>
 </head>
 <body>
@@ -876,7 +1070,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   <header class="topbar">
     <div class="top-row">
       <div></div>
-      <a href="index.html" class="top-title-wrap" aria-label="SenseCorner — landingspagina">
+      <a href="index.html" class="top-title-wrap" aria-label="SenseCorner - landingspagina">
         <span data-sc-mark="ripple" data-sc-tone="sage" data-sc-size="22" data-sc-compact="1"></span>
         <h1 class="top-title">OWN Sense</h1>
         <span id="ownPendingNavBadge" class="own-pending-nav-badge" hidden aria-hidden="true"></span>
@@ -911,6 +1105,16 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
   <section id="hubShell" class="os-v4-shell">
     <section id="profileHero" class="os-scroll-target">
       <article class="card os-scroll-target" id="mijTopCard"></article>
+      <!-- Gateway praatbalk: buiten #mijTopCard zodat renderMijTab() deze niet wist -->
+      <div class="gw-talkbar-host card" id="gatewayTalkbarHost" style="padding:14px 16px">
+        <div class="gw-talkbar" id="gatewayTalkbar" role="button" tabindex="0" aria-label="Start een gesprek met Sensei">
+          <div class="gw-sensei-badge" aria-hidden="true">先生</div>
+          <input type="text" id="gatewayTalkbarInput" placeholder="Wat houdt je bezig?" aria-label="Wat houdt je bezig">
+          <button type="button" class="gw-mic" id="gatewayTalkbarMic" aria-label="Spreek in of open chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+          </button>
+        </div>
+      </div>
       <section id="quoteBlock" class="os-scroll-target">
         <article class="card" id="mijHeroCard"></article>
       </section>
@@ -1064,6 +1268,26 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
     </div>
   </div>
 </div>
+
+<section class="gw-chat" id="gatewayChat" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Gesprek met Sensei">
+  <header class="gw-chat-head">
+    <button type="button" class="gw-back" id="gatewayChatBack" aria-label="Terug naar overzicht">←</button>
+    <div class="gw-sensei-badge" aria-hidden="true">先生</div>
+    <div class="gw-who">
+      <h2>Sensei</h2>
+      <p>Luistert over alle domeinen heen</p>
+    </div>
+  </header>
+  <div class="gw-messages" id="gatewayMessages" aria-live="polite"></div>
+  <div class="gw-composer">
+    <div class="gw-field">
+      <input type="text" id="gatewayChatInput" placeholder="Schrijf verder..." aria-label="Bericht aan Sensei" autocomplete="off">
+    </div>
+    <button type="button" class="gw-send" id="gatewayChatSend" aria-label="Verstuur">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</section>
 
 <script>
 const SURL='https://ghuqjtdrkwssyqvcubcd.supabase.co';
@@ -2562,7 +2786,7 @@ var OWN_REAL_QUOTES=[
   {q:'Alles dat werkelijk groots en inspirerend is, is gecreëerd door een individu dat kon werken in vrijheid.',a:'Albert Einstein'},
   {q:'Een mens die een ander mens van zijn vrijheid berooft, is een gevangene van de haat.',a:'Nelson Mandela'},
   {q:'In de beperking toont zich eerst de meester, en alleen de wet kan ons vrijheid geven.',a:'Johann Wolfgang von Goethe'},
-  {q:'Moed is weerstand tegen angst, meesterschap over angst — niet de afwezigheid ervan.',a:'Mark Twain'},
+  {q:'Moed is weerstand tegen angst, meesterschap over angst - niet de afwezigheid ervan.',a:'Mark Twain'},
   {q:'Alles wat je ooit wilde staat aan de andere kant van angst.',a:'George Addair'},
   {q:'Vergeetachtigheid is een vorm van vrijheid.',a:'Kahlil Gibran'},
   {q:'Vrijheid is niet hetzelfde als ongebondenheid.',a:'Paulo Coelho'},
@@ -2927,6 +3151,7 @@ function renderMijTab(){
     var ban=document.getElementById('stalePendingBanner');
     if(ban){ban.innerHTML='';ban.style.display='none';}
   }
+  updateGatewayTalkbarPlaceholder();
 }
 
 /* ── OWN Vertel-modal: Web Speech push-to-talk (zelfde gedrag als DateSense Vertel) ── */
@@ -3992,7 +4217,7 @@ function senseAbortAfter(ms){
   }catch(_e){return {signal:null,clear:function(){}};}
 }
 
-// PostgREST direct voor own_aandachtspunten — zelfde bypass als sensePostgrestPatchOwnFact.
+// PostgREST direct voor own_aandachtspunten - zelfde bypass als sensePostgrestPatchOwnFact.
 async function sensePostgrestPatchOwnAandachtspunt(opts){
   var base=senseSupabaseRestBase();
   var anon=senseSupabaseAnonKey();
@@ -5828,6 +6053,7 @@ async function loadSenseProfileScopesForUser(userId){
       if(scopes.indexOf('fs')>=0&&scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='mix';
       else if(scopes.indexOf('fs')>=0)senseProfileScopeByName[lk]='fs';
       else if(scopes.indexOf('ds')>=0)senseProfileScopeByName[lk]='ds';
+      else if(scopes.indexOf('fr')>=0)senseProfileScopeByName[lk]='fr';
       else if(scopes.indexOf('ss')>=0)senseProfileScopeByName[lk]='ss';
       else senseProfileScopeByName[lk]='unknown';
     });
@@ -6611,9 +6837,11 @@ function formatSenseiErrForUser(e,fallback){
   if(/^HTTP\s+\d{3}$/i.test(msg))return fallback||'Er ging iets mis bij de AI-aanvraag. Probeer later opnieuw.';
   return msg;
 }
+var _gwSenseiCooldownUntil=0;
 async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeoutMs,opts){
   var client=initSupabase();
   if(!client)throw new Error('Supabase niet beschikbaar.');
+  opts=opts||{};
   var timeoutMs=typeof customTimeoutMs==='number'&&customTimeoutMs>0?customTimeoutMs:90000;
   var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor(timeoutMs*0.4)));
   var token=await runSenseiAuthSerialized(function(){
@@ -6624,8 +6852,16 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
   var outerTimer=setTimeout(function(){
     try{controller.abort();}catch(_e){}
   },timeoutMs);
-  var reqBody={model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt,messages:[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}]};
-  if(opts&&(opts.ownsense_hub||opts.ownsense_insight)){
+  var messages;
+  if(Array.isArray(opts.messages)&&opts.messages.length){
+    messages=opts.messages;
+  }else{
+    messages=[{role:'user',content:(typeof userPrompt==='string'||Array.isArray(userPrompt))?userPrompt:String(userPrompt||'')}];
+  }
+  var reqBody={model:'claude-sonnet-4-6',max_tokens:maxTokens||1800,system:systemPrompt||'',messages:messages};
+  if(opts.gateway){
+    reqBody.gateway=true;
+  }else if(opts.ownsense_hub||opts.ownsense_insight){
     reqBody.ownsense_hub=true;
     if(opts.ownsense_insight)reqBody.ownsense_insight=true;
   }
@@ -6668,6 +6904,9 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     if(!r.ok){
       var apiMsg=senseiApiErrorMessage(j,r.status);
       if(r.status===403)apiMsg='AI toegang nog niet geactiveerd. Vraag admin approval in SenseCorner.';
+      if(r.status===429&&opts.gateway){
+        _gwSenseiCooldownUntil=Date.now()+120000;
+      }
       throw new Error(apiMsg);
     }
     if(j&&j.error)throw new Error(senseiApiErrorMessage(j,r.status)||'AI-fout');
@@ -6678,7 +6917,7 @@ async function callAnthropicJson(systemPrompt,userPrompt,maxTokens,customTimeout
     if(!String(txt||'').trim()&&j&&j.content&&j.content[0]&&j.content[0].text)txt=String(j.content[0].text||'');
     txt=String(txt||'').trim();
     if(!txt)throw new Error('Leeg AI antwoord ontvangen.');
-    if(opts&&opts.raw)return txt;
+    if(opts.raw)return txt;
     return cleanAiProseForStore(txt);
   }catch(e){
     if(e&&e.name==='AbortError'){
@@ -7753,6 +7992,913 @@ if(insightTabBtn){
     insightTabBtn.appendChild(dot);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * Gateway-Chat (Fase 3): centrale Sensei-chat in de OwnSense hub
+ * ═══════════════════════════════════════════════════════════════════ */
+var GW_VERTEL_APP='gateway';
+var GW_DOMAIN_META={
+  date:{label:'DateSense',href:'datesense.html',accent:'var(--date-donker)',soft:'color-mix(in srgb,var(--date-licht) 70%,#fff)',icon:'♥'},
+  family:{label:'FamilySense',href:'familysense.html',accent:'var(--family-donker)',soft:'color-mix(in srgb,var(--family-licht) 70%,#fff)',icon:'⌂'},
+  friend:{label:'FriendSense',href:'friendsense.html',accent:'var(--friend-donker)',soft:'color-mix(in srgb,var(--friend-licht) 70%,#fff)',icon:'☺'},
+  self:{label:'SelfSense',href:'selfsense.html',accent:'var(--self-donker)',soft:'color-mix(in srgb,var(--self-licht) 70%,#fff)',icon:'✦'}
+};
+var gwState={
+  open:false,
+  busy:false,
+  sessionId:null,
+  bridgeShown:false,
+  profileQuestionAsked:false,
+  messages:[],
+  domainSummaries:{date:'',family:'',friend:'',self:''},
+  pendingProfileQ:null,
+  coreReady:false
+};
+
+function senseiCoreReady(){
+  return !!(window.SenseiCore&&window.SenseiCore.buildGatewaySystemPrompt);
+}
+async function loadSenseiCoreOverrides(){
+  var out={grondregels:null,dunne_context:null,crisis:null,redflags_rubriek:null};
+  var client=initSupabase();
+  var uid=String(window.__ownSenseUid||senseGetWriteAuth().uid||'').trim();
+  if(!client||!uid)return out;
+  try{
+    var rs=await client.from('sensei_core_overrides').select('key,value');
+    if(rs&&rs.error)throw rs.error;
+    (rs.data||[]).forEach(function(row){
+      var k=String(row.key||'').trim();
+      var v=String(row.value||'').trim();
+      if(k&&v&&Object.prototype.hasOwnProperty.call(out,k))out[k]=v;
+    });
+  }catch(e){console.warn('loadSenseiCoreOverrides',e);}
+  return out;
+}
+async function ensureGatewaySenseiCore(){
+  if(gwState.coreReady&&senseiCoreReady())return true;
+  var tries=0;
+  while(!senseiCoreReady()&&tries<50){
+    await new Promise(function(r){setTimeout(r,20);});
+    tries++;
+  }
+  if(!senseiCoreReady()){
+    console.warn('SenseiCore niet geladen; gateway gebruikt fallback-prompt');
+    return false;
+  }
+  try{
+    var overrides=await loadSenseiCoreOverrides();
+    window.SenseiCore.setCoreOverrides(overrides);
+    gwState.coreReady=true;
+    return true;
+  }catch(e){
+    console.warn('ensureGatewaySenseiCore',e);
+    return false;
+  }
+}
+
+function gwVoornaam(){
+  var n=String(hubState.display_name||'').trim();
+  if(!n)return'';
+  return n.split(/\s+/)[0];
+}
+function updateGatewayTalkbarPlaceholder(){
+  var inp=document.getElementById('gatewayTalkbarInput');
+  if(!inp)return;
+  var vn=gwVoornaam();
+  inp.placeholder=vn?('Wat houdt je bezig, '+vn+'?'):'Wat houdt je bezig?';
+  inp.setAttribute('aria-label',inp.placeholder);
+}
+function gwNormDomain(d){
+  d=String(d||'').trim().toLowerCase();
+  return GW_DOMAIN_META[d]?d:'';
+}
+function gwAppMeta(domain){
+  return GW_DOMAIN_META[gwNormDomain(domain)]||{label:'SenseCorner',href:'sensecorner.html',accent:'var(--sage)',soft:'rgba(94,125,90,.14)',icon:'先生'};
+}
+function gwEsc(s){
+  return typeof escHTML==='function'?escHTML(s):String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function gwScrollMessages(){
+  var el=document.getElementById('gatewayMessages');
+  if(el)el.scrollTop=el.scrollHeight;
+}
+function gwStripAttrMarkers(text){
+  var s=String(text||'');
+  s=s.replace(/\[VOORSTEL\b[^\]]*\]/gi,'');
+  s=s.replace(/\[PROFIELVRAAG\b[^\]]*\]/gi,'');
+  s=s.replace(/\[BRUG\b[^\]]*\]/gi,'');
+  s=s.replace(/\[CRISIS\]/gi,'');
+  return s.replace(/\n{3,}/g,'\n\n').trim();
+}
+function gwParseAttr(block,name){
+  var re=new RegExp(name+'\\s*=\\s*"([^"]*)"','i');
+  var m=String(block||'').match(re);
+  return m?String(m[1]||'').trim():'';
+}
+/** Parseert en stript [CRISIS]/[VOORSTEL]/[PROFIELVRAAG]/[BRUG]. Crisis wint altijd. */
+function gwParseMarkers(raw){
+  var crisisRes=typeof senseExtractCrisisFlag==='function'
+    ?senseExtractCrisisFlag(raw)
+    :{crisis:false,text:String(raw||'')};
+  var text=String(crisisRes.text||'');
+  var crisis=!!crisisRes.crisis;
+  var proposal=null;
+  var profileQ=null;
+  var bridge=null;
+  if(!crisis){
+    var mProp=text.match(/\[VOORSTEL\b([^\]]*)\]/i);
+    if(mProp){
+      var dom=gwNormDomain(gwParseAttr(mProp[1],'domein'));
+      var tekst=gwParseAttr(mProp[1],'tekst');
+      var dos=gwParseAttr(mProp[1],'dossier');
+      if(dom&&tekst)proposal={domain:dom,text:tekst,dossier:dos||''};
+    }
+    var mProf=text.match(/\[PROFIELVRAAG\b([^\]]*)\]/i);
+    if(mProf){
+      var pDom=gwNormDomain(gwParseAttr(mProf[1],'domein'));
+      var qId=gwParseAttr(mProf[1],'vraag_id');
+      if(pDom)profileQ={domain:pDom,vraagId:qId};
+    }
+    var mBrug=text.match(/\[BRUG\b([^\]]*)\]/i);
+    if(mBrug){
+      var bDom=gwNormDomain(gwParseAttr(mBrug[1],'domein'));
+      var reden=gwParseAttr(mBrug[1],'reden');
+      if(bDom)bridge={domain:bDom,reason:reden||'Hier zit meer in dan een kort gesprek aankan.'};
+    }
+  }
+  return{
+    crisis:crisis,
+    text:gwStripAttrMarkers(text),
+    proposal:crisis?null:proposal,
+    profileQuestion:crisis?null:profileQ,
+    bridge:crisis?null:bridge
+  };
+}
+
+function gwCollectOpenQuestions(){
+  var out=[];
+  var appToDomain={ds:'date',fs:'family',fr:'friend',ss:'self'};
+  (APP_CATS||[]).forEach(function(cat){
+    if(out.length>=3)return;
+    var domain=appToDomain[cat.app]||'';
+    if(!domain)return;
+    var slots=hubState.categories&&hubState.categories[cat.id]?hubState.categories[cat.id]:{};
+    for(var i=0;i<(cat.prompts||[]).length;i++){
+      if(out.length>=3)break;
+      var key='a'+i;
+      if(String(slots[key]||'').trim())continue;
+      var q=ownHubPromptQ(cat.prompts[i]);
+      if(!q)continue;
+      out.push({domein:domain,vraagId:cat.id+':'+key,vraag:q});
+    }
+  });
+  return out;
+}
+function gwOwnProfielBlock(){
+  var parts=[];
+  if(typeof senseOwnBasisContextParts==='function'){
+    var meta={
+      birthdate:hubState.birthdate||__ownSensePropsMetaCache.birthdate,
+      city:hubState.city||__ownSensePropsMetaCache.city,
+      country:hubState.country||__ownSensePropsMetaCache.country,
+      gender:hubState.gender||__ownSensePropsMetaCache.gender,
+      gender_custom:hubState.gender_custom||__ownSensePropsMetaCache.gender_custom,
+      age:__ownSensePropsMetaCache.age
+    };
+    parts=senseOwnBasisContextParts(meta,typeof calcOwnAgeFromBirthdate==='function'?calcOwnAgeFromBirthdate:null);
+  }
+  var name=String(hubState.display_name||'').trim();
+  if(name)parts.unshift('roepnaam '+name);
+  return parts.length?parts.join(', '):'';
+}
+function gwFallbackSystemPrompt(ctx){
+  var crisis=(typeof senseGetCrisisRegelText==='function')
+    ?senseGetCrisisRegelText()
+    :'CRISIS: Bij signalen van zelfdoding of acuut gevaar: start je antwoord met [CRISIS] en wijs warm door naar hulp.';
+  var block='';
+  try{
+    if(window.SenseiCore&&window.SenseiCore.buildGatewayContextBlock){
+      block=window.SenseiCore.buildGatewayContextBlock(ctx||{});
+    }
+  }catch(_e){}
+  return 'Je bent Sensei, de centrale gids van SenseCorner. Antwoord warm in het Nederlands. Schrijf nooit zelf iets weg zonder bevestiging. Gebruik nooit Unicode U+2014.\n\n'
+    +crisis+'\n\n'+(block||'');
+}
+function gwContactNamesByDomain(){
+  return{
+    date:gwContactsForDomain('date'),
+    family:gwContactsForDomain('family'),
+    friend:gwContactsForDomain('friend')
+  };
+}
+async function gwBuildSystemPrompt(){
+  var ctx={
+    ownProfielBlock:gwOwnProfielBlock(),
+    aandachtspuntenBlock:String(window._ownAandachtspuntenCoachContext||'').trim(),
+    domainSummaries:gwState.domainSummaries,
+    contactNamesByDomain:gwContactNamesByDomain(),
+    openQuestions:gwState.profileQuestionAsked?[]:gwCollectOpenQuestions(),
+    profileQuestionAsked:!!gwState.profileQuestionAsked,
+    bridgeShown:!!gwState.bridgeShown,
+    isFirstTurn:gwState.messages.filter(function(m){return m.role==='assistant';}).length===0
+  };
+  await ensureGatewaySenseiCore();
+  if(senseiCoreReady()){
+    try{return window.SenseiCore.buildGatewaySystemPrompt(ctx);}catch(_e){}
+  }
+  return gwFallbackSystemPrompt(ctx);
+}
+async function gwLoadDomainSummaries(){
+  var client=initSupabase();
+  var uid=String(window.__ownSenseUid||senseGetWriteAuth().uid||'').trim();
+  if(!client||!uid)return;
+  try{
+    var res=await client.from('domain_summaries').select('domain,summary').eq('user_id',uid);
+    if(res&&res.error)throw res.error;
+    var map={date:'',family:'',friend:'',self:''};
+    (res.data||[]).forEach(function(row){
+      var d=gwNormDomain(row.domain);
+      if(d)map[d]=String(row.summary||'').trim();
+    });
+    gwState.domainSummaries=map;
+  }catch(e){console.warn('gwLoadDomainSummaries',e);}
+}
+async function gwRequestSummariesRefresh(){
+  try{
+    var token=await getAccessTokenFresh(false);
+    if(!token)return;
+    fetch(SURL+'/functions/v1/sensei-chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body:JSON.stringify({gateway_summaries:true})
+    }).then(function(r){
+      if(r&&r.ok)return gwLoadDomainSummaries();
+    }).catch(function(){});
+  }catch(_e){}
+}
+async function gwEnsureSession(previewText){
+  if(gwState.sessionId)return gwState.sessionId;
+  var client=initSupabase();
+  var wa=await ensureReviewWriteAuth(client);
+  var uid=String(wa.uid||window.__ownSenseUid||'').trim();
+  if(!client||!uid)return null;
+  try{
+    var preview=String(previewText||'Gateway-gesprek').trim().substring(0,80);
+    var res=await client.from('sense_sessions').insert({
+      user_id:uid,
+      preview:preview,
+      updated_at:new Date().toISOString(),
+      vertel_app:GW_VERTEL_APP,
+      bridge_shown:false,
+      profile_question_asked:false
+    }).select('id,bridge_shown,profile_question_asked').single();
+    if(res&&res.error)throw res.error;
+    if(res&&res.data&&res.data.id){
+      gwState.sessionId=res.data.id;
+      gwState.bridgeShown=!!res.data.bridge_shown;
+      gwState.profileQuestionAsked=!!res.data.profile_question_asked;
+      return gwState.sessionId;
+    }
+  }catch(e){console.warn('gwEnsureSession',e);}
+  return null;
+}
+async function gwSaveMsg(role,content){
+  if(!gwState.sessionId)return;
+  var client=initSupabase();
+  var uid=String(window.__ownSenseUid||senseGetWriteAuth().uid||'').trim();
+  if(!client||!uid)return;
+  try{
+    await client.from('sense_session_msgs').insert({
+      session_id:gwState.sessionId,
+      user_id:uid,
+      role:role,
+      content:String(content||''),
+      created_at:new Date().toISOString()
+    });
+    await client.from('sense_sessions').update({
+      updated_at:new Date().toISOString(),
+      preview:String(content||'').trim().substring(0,80)
+    }).eq('id',gwState.sessionId).eq('user_id',uid).eq('vertel_app',GW_VERTEL_APP);
+  }catch(e){console.warn('gwSaveMsg',e);}
+}
+async function gwSetSessionFlag(field,value){
+  if(!gwState.sessionId)return;
+  var client=initSupabase();
+  var uid=String(window.__ownSenseUid||senseGetWriteAuth().uid||'').trim();
+  if(!client||!uid)return;
+  var patch={updated_at:new Date().toISOString()};
+  patch[field]=!!value;
+  try{
+    await client.from('sense_sessions').update(patch)
+      .eq('id',gwState.sessionId).eq('user_id',uid).eq('vertel_app',GW_VERTEL_APP);
+  }catch(e){console.warn('gwSetSessionFlag',e);}
+}
+
+function gwAddUserBubble(text){
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return;
+  var m=document.createElement('div');
+  m.className='gw-msg user';
+  m.innerHTML='<div class="gw-bubble"></div>';
+  m.querySelector('.gw-bubble').textContent=text;
+  box.appendChild(m);
+  gwScrollMessages();
+}
+function gwAddSenseiBubble(text,tagLabel,tagColor){
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return;
+  var m=document.createElement('div');
+  m.className='gw-msg sensei';
+  if(tagLabel){
+    var t=document.createElement('div');
+    t.className='gw-tag';
+    t.textContent=tagLabel;
+    if(tagColor)t.style.color=tagColor;
+    m.appendChild(t);
+  }
+  var b=document.createElement('div');
+  b.className='gw-bubble';
+  b.textContent=text;
+  m.appendChild(b);
+  box.appendChild(m);
+  gwScrollMessages();
+}
+function gwShowTyping(){
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return null;
+  var t=document.createElement('div');
+  t.className='gw-typing';
+  t.setAttribute('aria-label','Sensei typt');
+  t.innerHTML='<i></i><i></i><i></i>';
+  box.appendChild(t);
+  gwScrollMessages();
+  return t;
+}
+function gwAddCrisisCard(){
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return;
+  var wrap=document.createElement('div');
+  wrap.className='gw-crisis-wrap';
+  wrap.innerHTML=typeof senseRenderCrisisCardHtml==='function'
+    ?senseRenderCrisisCardHtml()
+    :'<div class="sense-crisis-card">Zoek hulp: Zelfmoordlijn 1813, Tele-Onthaal 106, of 112.</div>';
+  box.appendChild(wrap);
+  gwScrollMessages();
+}
+
+function gwDomainScopeKey(domain){
+  if(typeof senseGatewayDomainScopeKey==='function')return senseGatewayDomainScopeKey(domain);
+  var d=gwNormDomain(domain);
+  if(d==='date')return'ds';
+  if(d==='family')return'fs';
+  if(d==='friend')return'fr';
+  if(d==='self')return'ss';
+  return'';
+}
+function gwContactsForDomain(domain){
+  var scope=gwDomainScopeKey(domain);
+  var names=Array.isArray(ownSenseProfileNames)?ownSenseProfileNames.slice():[];
+  var out=[];
+  names.forEach(function(nm){
+    nm=String(nm||'').trim();
+    if(!nm||/^own\s*sense$/i.test(nm))return;
+    var sk=senseProfileScopeByName[nm.toLowerCase()]||'unknown';
+    if(!scope){out.push(nm);return;}
+    if(sk===scope||sk==='mix'||sk==='unknown')out.push(nm);
+  });
+  out.sort(function(a,b){return a.localeCompare(b,'nl',{sensitivity:'base'});});
+  return out;
+}
+/** Match dossiernaam uit marker of tekst tegen bestaande contacten (case-insensitive). */
+function gwResolveDossierName(domain,hint,proposalText){
+  var contacts=gwContactsForDomain(domain);
+  if(!contacts.length)return'';
+  var h=String(hint||'').trim();
+  if(h){
+    for(var i=0;i<contacts.length;i++){
+      if(contacts[i].toLowerCase()===h.toLowerCase())return contacts[i];
+    }
+    for(var j=0;j<contacts.length;j++){
+      var c=contacts[j];
+      if(c.toLowerCase().indexOf(h.toLowerCase())===0||h.toLowerCase().indexOf(c.toLowerCase())===0)return c;
+    }
+  }
+  var blob=(' '+String(proposalText||'')+' ').toLowerCase();
+  var hits=[];
+  contacts.forEach(function(c){
+    var token=c.toLowerCase();
+    if(token.length<2)return;
+    if(blob.indexOf(' '+token+' ')>=0||blob.indexOf(token)>=0)hits.push(c);
+  });
+  if(hits.length===1)return hits[0];
+  return'';
+}
+function gwLandingLabel(domain,targetProfile){
+  var meta=gwAppMeta(domain);
+  var landing=typeof senseGatewayProposalLandingProfile==='function'
+    ?senseGatewayProposalLandingProfile(domain,targetProfile)
+    :(gwNormDomain(domain)==='self'?'OWN Sense':String(targetProfile||'').trim());
+  if(landing&&!/^own\s*sense$/i.test(landing))return landing+' · '+meta.label;
+  if(landing&&/^own\s*sense$/i.test(landing)&&gwNormDomain(domain)==='self')return meta.label;
+  if(landing&&/^own\s*sense$/i.test(landing))return'OWN Sense · '+meta.label;
+  return meta.label+' (Sensei onthoudt dit)';
+}
+
+function gwRenderProposalCard(opts){
+  opts=opts||{};
+  var domain=gwNormDomain(opts.domain)||'self';
+  var meta=gwAppMeta(domain);
+  var text=String(opts.text||'').trim();
+  if(!text)return;
+  var proposalId=opts.proposalId||null;
+  var isProfile=!!opts.isProfileUpdate;
+  var targetProfile=String(opts.targetProfile||'').trim();
+  if(!targetProfile&&!isProfile){
+    targetProfile=gwResolveDossierName(domain,opts.dossier||'',text);
+  }
+  if(domain==='self'&&!isProfile)targetProfile='OWN Sense';
+  var contacts=(!isProfile&&domain!=='self')?gwContactsForDomain(domain):[];
+  var needsPicker=!isProfile&&domain!=='self'&&!targetProfile;
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return;
+  var card=document.createElement('div');
+  card.className='gw-proposal';
+  card.style.setProperty('--gw-accent',meta.accent);
+  card.style.setProperty('--gw-soft',meta.soft);
+  var dossierHtml='';
+  if(needsPicker||(contacts.length&&domain!=='self'&&!isProfile)){
+    var optsHtml='<option value="">Kies dossier…</option>';
+    contacts.forEach(function(nm){
+      var sel=targetProfile&&nm.toLowerCase()===targetProfile.toLowerCase()?' selected':'';
+      optsHtml+='<option value="'+gwEsc(nm)+'"'+sel+'>'+gwEsc(nm)+'</option>';
+    });
+    optsHtml+='<option value="__own__"'+(targetProfile&&/^own\s*sense$/i.test(targetProfile)?' selected':'')+'>OWN Sense (over mij)</option>';
+    optsHtml+='<option value="__domain__"'+(needsPicker&&!targetProfile?' selected':'')+'>Alleen Sensei in '+gwEsc(meta.label)+'</option>';
+    dossierHtml=
+      '<div class="gw-dossier-row">'+
+        '<label for="gw-dos-'+gwEsc(String(proposalId||Date.now()))+'">Waar noteren?</label>'+
+        '<select id="gw-dos-'+gwEsc(String(proposalId||Date.now()))+'" class="gw-dossier-select">'+optsHtml+'</select>'+
+        '<span class="gw-dossier-hint">Contactdossier voedt later advies over die persoon. Zonder dossier onthoudt Sensei het op domeinniveau.</span>'+
+      '</div>';
+  }else if(targetProfile&&domain!=='self'&&!isProfile){
+    dossierHtml='<div class="gw-dossier-hint" style="margin:0 0 8px">Dossier: <strong>'+gwEsc(targetProfile)+'</strong></div>';
+  }
+  var yesLabel=isProfile
+    ?('Noteer in '+meta.label)
+    :(targetProfile&&!/^own\s*sense$/i.test(targetProfile)
+      ?('Noteer bij '+targetProfile)
+      :('Noteer in '+meta.label));
+  card.innerHTML=
+    '<div class="gw-p-label">'+(isProfile?'Profielupdate · ':'Voorstel · ')+gwEsc(meta.label)+'</div>'+
+    '<div class="gw-p-text"></div>'+
+    dossierHtml+
+    '<div class="gw-p-actions">'+
+      '<button type="button" class="gw-yes">'+gwEsc(yesLabel)+'</button>'+
+      '<button type="button" class="gw-no">Liever niet</button>'+
+    '</div>'+
+    '<div class="gw-done">✓ Genoteerd · jij houdt de regie</div>';
+  card.querySelector('.gw-p-text').textContent=text;
+  var yesBtn=card.querySelector('.gw-yes');
+  var noBtn=card.querySelector('.gw-no');
+  var dosSel=card.querySelector('.gw-dossier-select');
+  function readChosenProfile(){
+    if(isProfile||domain==='self')return domain==='self'?'OWN Sense':'';
+    if(dosSel){
+      var v=String(dosSel.value||'').trim();
+      if(v==='__domain__')return'';
+      if(v==='__own__')return'OWN Sense';
+      return v;
+    }
+    return targetProfile||'';
+  }
+  if(dosSel){
+    dosSel.addEventListener('change',function(){
+      var chosen=readChosenProfile();
+      yesBtn.textContent=chosen&&!/^own\s*sense$/i.test(chosen)
+        ?('Noteer bij '+chosen)
+        :('Noteer in '+meta.label);
+    });
+  }
+  yesBtn.addEventListener('click',async function(){
+    if(card.classList.contains('confirmed')||card.classList.contains('declined'))return;
+    var chosen=readChosenProfile();
+    if(needsPicker&&dosSel&&!String(dosSel.value||'').trim()){
+      flashOwnsenseMessage('Kies eerst waar dit genoteerd mag worden.',true);
+      return;
+    }
+    yesBtn.disabled=true;noBtn.disabled=true;
+    if(dosSel)dosSel.disabled=true;
+    try{
+      await gwResolveProposal({
+        proposalId:proposalId,
+        domain:domain,
+        text:text,
+        status:'confirmed',
+        targetProfile:chosen,
+        isProfileUpdate:isProfile,
+        vraagId:opts.vraagId||''
+      });
+      card.classList.add('confirmed');
+      var done=card.querySelector('.gw-done');
+      if(done)done.textContent='✓ Genoteerd in '+gwLandingLabel(domain,chosen)+' · jij houdt de regie';
+      flashOwnsenseMessage('Genoteerd in '+gwLandingLabel(domain,chosen),false,{durationMs:3200});
+    }catch(e){
+      yesBtn.disabled=false;noBtn.disabled=false;
+      if(dosSel)dosSel.disabled=false;
+      flashOwnsenseMessage(formatSenseiErrForUser(e,'Kon voorstel niet bevestigen.'),true);
+    }
+  });
+  noBtn.addEventListener('click',async function(){
+    if(card.classList.contains('confirmed')||card.classList.contains('declined'))return;
+    yesBtn.disabled=true;noBtn.disabled=true;
+    if(dosSel)dosSel.disabled=true;
+    try{
+      await gwResolveProposal({
+        proposalId:proposalId,
+        domain:domain,
+        text:text,
+        status:'declined',
+        targetProfile:readChosenProfile(),
+        isProfileUpdate:isProfile
+      });
+      card.classList.add('declined');
+      card.querySelector('.gw-done').textContent='Niet genoteerd · jij houdt de regie';
+    }catch(e){
+      yesBtn.disabled=false;noBtn.disabled=false;
+      if(dosSel)dosSel.disabled=false;
+      flashOwnsenseMessage(formatSenseiErrForUser(e,'Kon voorstel niet afwijzen.'),true);
+    }
+  });
+  box.appendChild(card);
+  gwScrollMessages();
+}
+async function gwInsertProposalRow(domain,text,targetProfile){
+  var client=initSupabase();
+  var wa=await ensureReviewWriteAuth(client);
+  var uid=String(wa.uid||window.__ownSenseUid||'').trim();
+  if(!client||!uid)throw new Error('Niet ingelogd.');
+  var row={
+    user_id:uid,
+    conversation_id:gwState.sessionId||null,
+    target_domain:domain,
+    proposal_text:String(text||'').substring(0,1000),
+    status:'proposed'
+  };
+  var tp=String(targetProfile||'').trim().substring(0,120);
+  if(tp)row.target_profile=tp;
+  var res=await client.from('gateway_proposals').insert(row).select('id').single();
+  if(res&&res.error){
+    if(tp&&/target_profile|column/i.test(String(res.error.message||''))){
+      delete row.target_profile;
+      res=await client.from('gateway_proposals').insert(row).select('id').single();
+    }
+    if(res&&res.error)throw res.error;
+  }
+  return res&&res.data&&res.data.id?res.data.id:null;
+}
+async function gwResolveProposal(opts){
+  opts=opts||{};
+  var client=initSupabase();
+  var wa=await ensureReviewWriteAuth(client);
+  var uid=String(wa.uid||window.__ownSenseUid||'').trim();
+  if(!client||!uid)throw new Error('Niet ingelogd.');
+  var status=opts.status==='confirmed'?'confirmed':'declined';
+  var proposalId=opts.proposalId;
+  var targetProfile=String(opts.targetProfile||'').trim().substring(0,120);
+  if(gwNormDomain(opts.domain)==='self'&&status==='confirmed'&&!opts.isProfileUpdate){
+    targetProfile='OWN Sense';
+  }
+  var patch={
+    status:status,
+    resolved_at:new Date().toISOString()
+  };
+  if(targetProfile)patch.target_profile=targetProfile;
+  else if(status==='confirmed')patch.target_profile=null;
+  if(!proposalId){
+    var insRow={
+      user_id:uid,
+      conversation_id:gwState.sessionId||null,
+      target_domain:opts.domain,
+      proposal_text:String(opts.text||'').substring(0,1000),
+      status:status,
+      resolved_at:patch.resolved_at
+    };
+    if(targetProfile)insRow.target_profile=targetProfile;
+    var ins=await client.from('gateway_proposals').insert(insRow).select('id').single();
+    if(ins&&ins.error){
+      if(insRow.target_profile&&/target_profile|column/i.test(String(ins.error.message||''))){
+        delete insRow.target_profile;
+        ins=await client.from('gateway_proposals').insert(insRow).select('id').single();
+      }
+      if(ins&&ins.error)throw ins.error;
+    }
+    proposalId=ins&&ins.data&&ins.data.id;
+  }else{
+    var up=await client.from('gateway_proposals').update(patch)
+      .eq('id',proposalId).eq('user_id',uid);
+    if(up&&up.error){
+      if(Object.prototype.hasOwnProperty.call(patch,'target_profile')&&/target_profile|column/i.test(String(up.error.message||''))){
+        delete patch.target_profile;
+        up=await client.from('gateway_proposals').update(patch)
+          .eq('id',proposalId).eq('user_id',uid);
+      }
+      if(up&&up.error)throw up.error;
+    }
+  }
+  if(status==='confirmed'&&opts.isProfileUpdate&&opts.vraagId){
+    gwApplyProfileAnswer(opts.vraagId,opts.text);
+  }
+  if(status==='confirmed'&&!opts.isProfileUpdate&&proposalId&&typeof senseIngestConfirmedGatewayProposals==='function'){
+    try{
+      await senseIngestConfirmedGatewayProposals({
+        sb:client,
+        userId:uid,
+        domain:opts.domain,
+        rows:[{
+          id:proposalId,
+          proposal_text:opts.text,
+          target_profile:targetProfile||null,
+          target_domain:opts.domain,
+          status:'confirmed'
+        }]
+      });
+    }catch(ingErr){console.warn('gw ingest dossier',ingErr);}
+  }
+  return proposalId;
+}
+function gwApplyProfileAnswer(vraagId,answer){
+  var parts=String(vraagId||'').split(':');
+  if(parts.length<2)return;
+  var catId=parts[0];
+  var key=parts[1];
+  if(!/^a\d+$/.test(key))return;
+  if(!hubState.categories)hubState.categories={};
+  if(!hubState.categories[catId])hubState.categories[catId]={};
+  if(String(hubState.categories[catId][key]||'').trim())return;
+  hubState.categories[catId][key]=String(answer||'').trim().substring(0,2000);
+  try{if(typeof saveHubState==='function')saveHubState();}catch(_e){}
+  try{
+    if(typeof saveOwnToSupabase==='function'){
+      Promise.resolve(saveOwnToSupabase()).catch(function(err){console.warn('gw profile save',err);});
+    }
+  }catch(_e2){}
+}
+
+function gwRenderBridgeCard(bridge){
+  if(!bridge||gwState.bridgeShown)return;
+  var domain=gwNormDomain(bridge.domain);
+  if(!domain)return;
+  var meta=gwAppMeta(domain);
+  var box=document.getElementById('gatewayMessages');
+  if(!box)return;
+  var card=document.createElement('div');
+  card.className='gw-bridge';
+  card.style.setProperty('--gw-accent',meta.accent);
+  card.style.setProperty('--gw-soft',meta.soft);
+  card.innerHTML=
+    '<div class="gw-b-top"><div class="gw-b-icon" aria-hidden="true">'+gwEsc(meta.icon)+'</div><h4>Hier zit meer in</h4></div>'+
+    '<p class="gw-b-reason"></p>'+
+    '<button type="button" class="gw-b-go">Verdiepen in '+gwEsc(meta.label)+'</button>'+
+    '<p class="gw-b-note">Je gesprek gaat mee, je hoeft niets te herhalen.</p>';
+  card.querySelector('.gw-b-reason').textContent=String(bridge.reason||'').trim()||('In '+meta.label+' kunnen we dit rustiger uitwerken.');
+  var goBtn=card.querySelector('.gw-b-go');
+  goBtn.addEventListener('click',async function(){
+    goBtn.disabled=true;
+    try{
+      await gwOpenBridgeHandoff(domain);
+    }catch(e){
+      goBtn.disabled=false;
+      flashOwnsenseMessage(formatSenseiErrForUser(e,'Kon de brug niet openen.'),true);
+    }
+  });
+  box.appendChild(card);
+  gwScrollMessages();
+  gwState.bridgeShown=true;
+  gwSetSessionFlag('bridge_shown',true);
+}
+function gwBuildHandoffSummary(){
+  var bits=[];
+  gwState.messages.slice(-8).forEach(function(m){
+    var role=m.role==='assistant'?'Sensei':'Jij';
+    bits.push(role+': '+String(m.content||'').replace(/\s+/g,' ').trim().substring(0,220));
+  });
+  return bits.join('\n').substring(0,1800)||'Gateway-gesprek over dit domein.';
+}
+async function gwOpenBridgeHandoff(domain){
+  var client=initSupabase();
+  var wa=await ensureReviewWriteAuth(client);
+  var uid=String(wa.uid||window.__ownSenseUid||'').trim();
+  if(!client||!uid)throw new Error('Niet ingelogd.');
+  var meta=gwAppMeta(domain);
+  var res=await client.from('bridge_handoffs').insert({
+    user_id:uid,
+    target_domain:domain,
+    context_summary:gwBuildHandoffSummary()
+  }).select('id').single();
+  if(res&&res.error)throw res.error;
+  var id=res&&res.data&&res.data.id;
+  if(!id)throw new Error('Handoff aanmaken mislukt.');
+  window.location.href=meta.href+'?handoff='+encodeURIComponent(id);
+}
+
+async function gwHandleParsedReply(parsed,opts){
+  opts=opts||{};
+  if(parsed.crisis){
+    gwAddCrisisCard();
+    if(parsed.text)gwAddSenseiBubble(parsed.text);
+    return;
+  }
+  var allowProfile=!opts.isFirstTurn&&!gwState.profileQuestionAsked;
+  var allowBridge=!opts.isFirstTurn&&!gwState.bridgeShown;
+  var tag=null;
+  var tagColor=null;
+  if(parsed.profileQuestion&&allowProfile){
+    var pMeta=gwAppMeta(parsed.profileQuestion.domain);
+    tag='Profielvraag · '+pMeta.label;
+    tagColor=pMeta.accent;
+    gwState.pendingProfileQ=parsed.profileQuestion;
+    gwState.profileQuestionAsked=true;
+    gwSetSessionFlag('profile_question_asked',true);
+  }
+  if(parsed.text)gwAddSenseiBubble(parsed.text,tag,tagColor);
+  if(parsed.proposal){
+    var resolvedDos=gwResolveDossierName(
+      parsed.proposal.domain,
+      parsed.proposal.dossier||'',
+      parsed.proposal.text
+    );
+    if(gwNormDomain(parsed.proposal.domain)==='self')resolvedDos='OWN Sense';
+    var pid=null;
+    try{
+      pid=await gwInsertProposalRow(parsed.proposal.domain,parsed.proposal.text,resolvedDos||parsed.proposal.dossier||'');
+    }catch(e){console.warn('gwInsertProposalRow',e);}
+    gwRenderProposalCard({
+      domain:parsed.proposal.domain,
+      text:parsed.proposal.text,
+      proposalId:pid,
+      dossier:parsed.proposal.dossier||'',
+      targetProfile:resolvedDos
+    });
+  }
+  if(parsed.bridge&&allowBridge){
+    gwRenderBridgeCard(parsed.bridge);
+  }
+}
+
+async function gwSendMessage(userText){
+  userText=String(userText||'').trim();
+  if(!userText||gwState.busy)return;
+  if(_gwSenseiCooldownUntil&&Date.now()<_gwSenseiCooldownUntil){
+    flashOwnsenseMessage('Even geduld: de AI-limiet is net bereikt. Probeer over een paar minuten opnieuw.',true);
+    return;
+  }
+  gwState.busy=true;
+  var sendBtn=document.getElementById('gatewayChatSend');
+  if(sendBtn)sendBtn.disabled=true;
+  var pendingProfile=gwState.pendingProfileQ;
+  gwState.pendingProfileQ=null;
+
+  gwAddUserBubble(userText);
+  gwState.messages.push({role:'user',content:userText});
+  await gwEnsureSession(userText);
+  await gwSaveMsg('user',userText);
+
+  var typing=gwShowTyping();
+  try{
+    if(typeof refreshOwnAandachtspuntenCoachContextAuto==='function'){
+      try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_a){}
+    }
+    var system=await gwBuildSystemPrompt();
+    var apiMsgs=gwState.messages.map(function(m){
+      return{role:m.role==='assistant'?'assistant':'user',content:m.content};
+    });
+    var raw=await callAnthropicJson(system,'',700,90000,{
+      gateway:true,
+      raw:true,
+      messages:apiMsgs
+    });
+    if(typing&&typing.parentNode)typing.remove();
+    var parsed=gwParseMarkers(raw);
+    var isFirstTurn=gwState.messages.filter(function(m){return m.role==='assistant';}).length===0;
+    gwState.messages.push({role:'assistant',content:parsed.text||String(raw||'')});
+    await gwSaveMsg('assistant',parsed.text||String(raw||''));
+    await gwHandleParsedReply(parsed,{isFirstTurn:isFirstTurn});
+
+    if(pendingProfile&&pendingProfile.domain&&!parsed.crisis){
+      var ansText=userText.substring(0,500);
+      var labelQ=pendingProfile.vraagId?'Antwoord op profielvraag: '+ansText:ansText;
+      var pid2=null;
+      try{pid2=await gwInsertProposalRow(pendingProfile.domain,labelQ);}catch(_e2){}
+      gwRenderProposalCard({
+        domain:pendingProfile.domain,
+        text:labelQ,
+        proposalId:pid2,
+        isProfileUpdate:true,
+        vraagId:pendingProfile.vraagId||''
+      });
+    }
+  }catch(e){
+    if(typing&&typing.parentNode)typing.remove();
+    flashOwnsenseMessage(formatSenseiErrForUser(e,'Sensei kon nu niet antwoorden. Probeer opnieuw.'),true);
+  }finally{
+    gwState.busy=false;
+    if(sendBtn)sendBtn.disabled=false;
+  }
+}
+
+async function openGatewayChat(prefill){
+  var chat=document.getElementById('gatewayChat');
+  if(!chat)return;
+  var firstOpen=!gwState.open;
+  gwState.open=true;
+  chat.classList.add('open');
+  chat.setAttribute('aria-hidden','false');
+  updateGatewayTalkbarPlaceholder();
+  if(firstOpen||!gwState.sessionId){
+    await ensureGatewaySenseiCore();
+    try{
+      var uid=String(window.__ownSenseUid||senseGetWriteAuth().uid||'').trim();
+      if(uid)await loadSenseProfileScopesForUser(uid);
+    }catch(_sc){}
+    gwRequestSummariesRefresh();
+    await gwLoadDomainSummaries();
+    if(typeof refreshOwnAandachtspuntenCoachContextAuto==='function'){
+      try{await refreshOwnAandachtspuntenCoachContextAuto();}catch(_a){}
+    }
+  }
+  var start=String(prefill||'').trim();
+  var talkInp=document.getElementById('gatewayTalkbarInput');
+  if(talkInp)talkInp.value='';
+  setTimeout(function(){
+    var ci=document.getElementById('gatewayChatInput');
+    if(ci){try{ci.focus();}catch(_e){}}
+  },80);
+  if(start){
+    await gwSendMessage(start);
+  }
+}
+function closeGatewayChat(){
+  var chat=document.getElementById('gatewayChat');
+  if(!chat)return;
+  gwState.open=false;
+  chat.classList.remove('open');
+  chat.setAttribute('aria-hidden','true');
+  var talkInp=document.getElementById('gatewayTalkbarInput');
+  if(talkInp){try{talkInp.focus();}catch(_e){}}
+}
+function gwBindUi(){
+  var talkbar=document.getElementById('gatewayTalkbar');
+  var talkInp=document.getElementById('gatewayTalkbarInput');
+  var mic=document.getElementById('gatewayTalkbarMic');
+  var back=document.getElementById('gatewayChatBack');
+  var send=document.getElementById('gatewayChatSend');
+  var chatInp=document.getElementById('gatewayChatInput');
+  updateGatewayTalkbarPlaceholder();
+  function openFromTalkbar(){
+    openGatewayChat(talkInp?talkInp.value:'');
+  }
+  if(talkbar){
+    talkbar.addEventListener('click',function(e){
+      if(e.target&&e.target.closest&&e.target.closest('.gw-mic'))return;
+      openFromTalkbar();
+    });
+    talkbar.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();openFromTalkbar();}
+    });
+  }
+  if(talkInp){
+    talkInp.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();openFromTalkbar();}
+      e.stopPropagation();
+    });
+    talkInp.addEventListener('click',function(e){e.stopPropagation();});
+  }
+  if(mic){
+    mic.addEventListener('click',function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      openFromTalkbar();
+    });
+  }
+  if(back)back.addEventListener('click',closeGatewayChat);
+  function sendComposer(){
+    var v=chatInp?String(chatInp.value||'').trim():'';
+    if(!v)return;
+    if(chatInp)chatInp.value='';
+    gwSendMessage(v);
+  }
+  if(send)send.addEventListener('click',sendComposer);
+  if(chatInp){
+    chatInp.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();sendComposer();}
+    });
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&gwState.open){e.preventDefault();closeGatewayChat();}
+  });
+}
+gwBindUi();
 </script>
 <script src="js/sc-mark.js" defer></script>
 <script src="js/tester-feedback-widget.js?v=20260506a"></script>

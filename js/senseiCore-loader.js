@@ -23,7 +23,16 @@ import {
   renderAdviceDepthCompactHtml,
   sanitizeExpertiseOutput,
   sentenceLooksLikeBookRecommendation,
-  EXPERTISE_FALLBACK_NO_RECO
+  EXPERTISE_FALLBACK_NO_RECO,
+  GATEWAY_DOMAIN_LABELS,
+  GATEWAY_PERSONA,
+  GATEWAY_GEDRAGSREGELS,
+  GATEWAY_MARKER_RULES,
+  GATEWAY_FORMAT_RULES,
+  GATEWAY_ADVICE_CORE_OPTS,
+  buildGatewayAdviceCore,
+  buildGatewayContextBlock,
+  buildGatewaySystemPrompt
 } from './senseiCore.js';
 
 window.SenseiCore = {
@@ -51,5 +60,14 @@ window.SenseiCore = {
   renderAdviceDepthCompactHtml,
   sanitizeExpertiseOutput,
   sentenceLooksLikeBookRecommendation,
-  EXPERTISE_FALLBACK_NO_RECO
+  EXPERTISE_FALLBACK_NO_RECO,
+  GATEWAY_DOMAIN_LABELS,
+  GATEWAY_PERSONA,
+  GATEWAY_GEDRAGSREGELS,
+  GATEWAY_MARKER_RULES,
+  GATEWAY_FORMAT_RULES,
+  GATEWAY_ADVICE_CORE_OPTS,
+  buildGatewayAdviceCore,
+  buildGatewayContextBlock,
+  buildGatewaySystemPrompt
 };

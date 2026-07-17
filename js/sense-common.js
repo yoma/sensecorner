@@ -1059,6 +1059,72 @@
     } catch (_e) {}
   }
 
+  /** Compacte crisisregel voor losse AI-prompts (fallback als SenseiCore niet geladen is). */
+  function senseGetCrisisRegelText() {
+    try {
+      if (window.SenseiCore && typeof window.SenseiCore.getCrisisRegel === 'function') {
+        return window.SenseiCore.getCrisisRegel();
+      }
+    } catch (_e) {}
+    return 'CRISIS: Bij signalen van zelfdoding, zichzelf iets aandoen, niet meer kunnen of willen, acuut gevaar, ernstige zelfbeschadiging, of acuut huiselijk geweld (subtiel of expliciet): antwoord niet met gewone adviezen. Start je antwoord met [CRISIS] en wijs de gebruiker warm door naar professionele hulp of een crisislijn in hun regio.';
+  }
+
+  /** Detecteert en stript de [CRISIS]-marker uit AI-output. */
+  function senseExtractCrisisFlag(text) {
+    var s = String(text || '');
+    var m = s.match(/^\s*\[CRISIS\]\s*/i);
+    if (!m) return { crisis: false, text: s };
+    return { crisis: true, text: s.slice(m[0].length).trim() };
+  }
+
+  var _SENSE_CRISIS_KEYWORD_PATTERNS = [
+    /\bzelfmoord/i,
+    /\bzelfdod/i,
+    /\been\s+eind(e)?\s+(aan\s+)?(mijn|m'n|me|mn)?\s*leven/i,
+    /\bniet\s+meer\s+(willen\s+)?leven/i,
+    /\buit\s+het\s+leven\s+stappen/i,
+    /\bmezelf\s+(iets|wat)\s+aandoen/i,
+    /\bmezelf\s+(pijn(igen)?|kwetsen)/i,
+    /\bdood\s+(wil(len)?|gaan)/i,
+    /\bsterven\s+wil/i,
+    /\bvan\s+de\s+(brug|toren|trap)/i,
+    /\bsuicid/i,
+    /\bsuïcid/i
+  ];
+
+  /** Client-side crisis-keywords (SelfSense). */
+  function senseDetectCrisisKeywords(text) {
+    var t = String(text || '').toLowerCase();
+    return _SENSE_CRISIS_KEYWORD_PATTERNS.some(function (re) { return re.test(t); });
+  }
+
+  /** Statische crisiskaart voor Date/Family/Friend (geen volledige hulplijnenlijst). */
+  function senseRenderCrisisCardHtml() {
+    return '<div class="sense-crisis-card" style="margin:0 0 12px;padding:14px 14px;border-radius:14px;background:#FFF4F2;border:1px solid #E8BBB9;color:#3D2F1F;font-size:14px;line-height:1.55">'
+      + '<div style="font-weight:800;margin-bottom:6px">Je hoeft dit niet alleen te dragen</div>'
+      + '<div style="margin-bottom:8px">Wat je deelt klinkt zwaar. Sensei is geen vervanging voor echte hulp. Praat met iemand die er nu voor je kan zijn:</div>'
+      + '<div>Zelfmoordlijn 1813: bel gratis <strong>1813</strong> of chat via <strong>zelfmoord1813.be</strong></div>'
+      + '<div>Tele-Onthaal: bel <strong>106</strong> (24/7, anoniem)</div>'
+      + '<div>Bij acuut gevaar: bel <strong>112</strong></div>'
+      + '<div style="margin-top:10px;font-size:13px"><a href="selfsense.html" style="color:#8E2B20;font-weight:700;text-decoration:underline">Open SelfSense</a> voor het volledige overzicht van hulplijnen.</div>'
+      + '</div>';
+  }
+
+  /** Stript [CRISIS], optioneel crisiskaart, formatteert AI-tekst via app-specifieke formatAiCard. */
+  function senseWrapAiCardWithCrisis(formatAiCardFn, raw) {
+    var crisisRes = senseExtractCrisisFlag(raw);
+    var block = crisisRes.crisis ? senseRenderCrisisCardHtml() : '';
+    var card = typeof formatAiCardFn === 'function'
+      ? formatAiCardFn(crisisRes.text)
+      : String(crisisRes.text || '');
+    return { html: block + card, text: crisisRes.text, crisis: crisisRes.crisis };
+  }
+
+  global.senseGetCrisisRegelText = senseGetCrisisRegelText;
+  global.senseExtractCrisisFlag = senseExtractCrisisFlag;
+  global.senseDetectCrisisKeywords = senseDetectCrisisKeywords;
+  global.senseRenderCrisisCardHtml = senseRenderCrisisCardHtml;
+  global.senseWrapAiCardWithCrisis = senseWrapAiCardWithCrisis;
   global.senseIsUnsafePhotoUrl = senseIsUnsafePhotoUrl;
   global.senseIsAllowedReturnTo = senseIsAllowedReturnTo;
   global.senseNormalizeReturnTo = senseNormalizeReturnTo;
@@ -1118,4 +1184,416 @@
   global.senseShowSessionExpiredScreen = senseShowSessionExpiredScreen;
   global.senseRecoverExpiredSession = senseRecoverExpiredSession;
   global.senseHandleExpiredSessionRejection = senseHandleExpiredSessionRejection;
+
+  /* ------------------------------------------------------------------ */
+  /* Gateway-Chat Fase 4: bridge handoff + confirmed proposals          */
+  /* ------------------------------------------------------------------ */
+  global._gatewayHandoffSummary = '';
+  global._gatewayHandoffWarmPending = false;
+  global._gatewayProposalsCoachContext = '';
+  global._gatewayConfirmedProposals = [];
+
+  function senseIsUuidLike(v) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+  }
+
+  function senseGatewayDomainFromAppKey(appKey) {
+    var k = String(appKey || '').trim().toLowerCase();
+    if (k === 'ds' || k === 'date' || k === 'datesense') return 'date';
+    if (k === 'fs' || k === 'family' || k === 'familysense') return 'family';
+    if (k === 'fr' || k === 'friend' || k === 'friendsense') return 'friend';
+    if (k === 'ss' || k === 'self' || k === 'selfsense') return 'self';
+    return '';
+  }
+
+  function senseParseHandoffIdFromUrl() {
+    try {
+      var sp = new URLSearchParams(global.location && global.location.search ? global.location.search : '');
+      var id = String(sp.get('handoff') || '').trim();
+      return senseIsUuidLike(id) ? id : '';
+    } catch (_e) {
+      return '';
+    }
+  }
+
+  function senseHasGatewayHandoffInUrl() {
+    return !!senseParseHandoffIdFromUrl();
+  }
+
+  function senseStripHandoffFromUrl() {
+    try {
+      var sp = new URLSearchParams(global.location && global.location.search ? global.location.search : '');
+      if (!sp.has('handoff')) return;
+      sp.delete('handoff');
+      var rest = sp.toString();
+      var path = (global.location && global.location.pathname) || '';
+      if (typeof global.history !== 'undefined' && global.history.replaceState) {
+        global.history.replaceState(null, '', path + (rest ? '?' + rest : ''));
+      }
+    } catch (_e) {}
+  }
+
+  /**
+   * Haalt een open bridge_handoffs-rij op, zet consumed_at, strip URL, optioneel delete.
+   * Ongeldig of al geconsumeerd: stil null. Geen toast.
+   */
+  async function senseConsumeBridgeHandoff(opts) {
+    opts = opts || {};
+    var sb = opts.sb;
+    var userId = String(opts.userId || '').trim();
+    var expectedDomain = String(opts.expectedDomain || '').trim().toLowerCase();
+    var id = senseParseHandoffIdFromUrl();
+    senseStripHandoffFromUrl();
+    if (!sb || !userId || !id) return null;
+    try {
+      var q = sb.from('bridge_handoffs')
+        .update({ consumed_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', userId)
+        .is('consumed_at', null);
+      if (expectedDomain) q = q.eq('target_domain', expectedDomain);
+      var upd = await q.select('id,context_summary,target_domain').maybeSingle();
+      if (upd && upd.error) return null;
+      var row = upd && upd.data;
+      if (!row || !String(row.context_summary || '').trim()) return null;
+      var summary = String(row.context_summary || '').trim().substring(0, 2000);
+      global._gatewayHandoffSummary = summary;
+      global._gatewayHandoffWarmPending = true;
+      try {
+        await sb.from('bridge_handoffs').delete().eq('id', row.id).eq('user_id', userId);
+      } catch (_del) {}
+      return {
+        id: row.id,
+        summary: summary,
+        target_domain: String(row.target_domain || expectedDomain || '').trim()
+      };
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function senseAppendGatewayHandoffCoachContext(lines) {
+    if (!lines) return;
+    var summary = String(global._gatewayHandoffSummary || '').trim();
+    if (!summary) return;
+    lines.push(
+      'GATEWAY-HANDOFF (interne context uit OwnSense Gateway-chat; de gebruiker komt hier verder praten):'
+    );
+    lines.push(summary.substring(0, 1800));
+    lines.push(
+      'Gebruik dit als achtergrond. Lees de samenvatting niet letterlijk voor. Verwijs hoogstens kort en warm terug naar het eerdere gesprek, zonder transcript te herhalen.'
+    );
+  }
+
+  function senseGatewayWarmOpenText(appLabel) {
+    var label = String(appLabel || 'deze app').trim() || 'deze app';
+    return 'Welkom terug. Ik neem mee wat je net in de Gateway deelde, zodat je hier in '
+      + label
+      + ' meteen verder kunt zonder opnieuw te beginnen. Waar wil je nu op inzoomen?';
+  }
+
+  /**
+   * Toont een korte warme Sensei-bubbel na handoff (geen transcript-dump).
+   * opts: { chatAreaEl, senderName, appLabel, addMsgFn }
+   */
+  function senseRenderGatewayWarmOpenIfNeeded(opts) {
+    opts = opts || {};
+    if (!global._gatewayHandoffWarmPending) return false;
+    if (!String(global._gatewayHandoffSummary || '').trim()) {
+      global._gatewayHandoffWarmPending = false;
+      return false;
+    }
+    var text = senseGatewayWarmOpenText(opts.appLabel);
+    var sender = String(opts.senderName || 'Sensei').trim() || 'Sensei';
+    var ca = opts.chatAreaEl || (typeof document !== 'undefined' ? document.getElementById('chatArea') : null);
+    if (!ca) return false;
+    global._gatewayHandoffWarmPending = false;
+    try {
+      if (typeof opts.addMsgFn === 'function') {
+        opts.addMsgFn('ai', '<div>' + senseEscHtml(text) + '</div>', { importedFrom: 'Gateway' });
+        return true;
+      }
+    } catch (_add) {}
+    try {
+      var wrap = document.createElement('div');
+      wrap.className = 'msg-ai';
+      wrap.innerHTML = '<div class="bbl-ai" style="opacity:0.92"><div class="sndr">'
+        + senseEscHtml(sender)
+        + '</div><div style="line-height:1.55">'
+        + senseEscHtml(text)
+        + '</div></div>';
+      ca.appendChild(wrap);
+      return true;
+    } catch (_e) {
+      global._gatewayHandoffWarmPending = true;
+      return false;
+    }
+  }
+
+  /**
+   * Bepaalt waar een bevestigd Gateway-voorstel in sense_messages landt.
+   * - self: altijd OWN Sense (SelfSense / hub-tijdlijn)
+   * - date/family/friend + bekend contactdossier: dat dossier (Sensei leest buildDossierContextForAI)
+   * - date/family/friend zonder dossier: '' = geen sense_messages-write;
+   *   Sensei ziet het via coach-context uit gateway_proposals (geen orphan OWN-only notitie)
+   */
+  function senseGatewayProposalLandingProfile(domain, targetProfile) {
+    var d = String(domain || '').trim().toLowerCase();
+    var tp = String(targetProfile || '').trim();
+    if (d === 'self') return 'OWN Sense';
+    if (tp && !/^own\s*sense$/i.test(tp)) return tp.substring(0, 120);
+    if (tp && /^own\s*sense$/i.test(tp) && (d === 'date' || d === 'family' || d === 'friend')) {
+      /* Expliciet OWN Sense: feit over de gebruiker zelf binnen dat domein. */
+      return 'OWN Sense';
+    }
+    return '';
+  }
+
+  function senseGatewayDomainScopeKey(domain) {
+    var d = String(domain || '').trim().toLowerCase();
+    if (d === 'date') return 'ds';
+    if (d === 'family') return 'fs';
+    if (d === 'friend') return 'fr';
+    if (d === 'self') return 'ss';
+    return '';
+  }
+
+  function senseFormatGatewayProposalsCoachBlock(rows) {
+    var list = (rows || []).filter(function (r) {
+      return r && String(r.proposal_text || '').trim() && String(r.status || '') === 'confirmed';
+    });
+    if (!list.length) return '';
+    var lines = [
+      'VANUIT GATEWAY GENOTEERD (gebruiker bevestigde dit eerder in OwnSense; behandel als bekende context, niet opnieuw als voorstel):'
+    ];
+    list.slice(0, 12).forEach(function (r) {
+      var txt = String(r.proposal_text || '').trim().substring(0, 280);
+      var dos = String(r.target_profile || '').trim();
+      if (dos && !/^own\s*sense$/i.test(dos)) {
+        lines.push('- [' + dos + '] ' + txt);
+      } else {
+        lines.push('- ' + txt);
+      }
+    });
+    return lines.join('\n');
+  }
+
+  async function senseFetchConfirmedGatewayProposals(sb, userId, domain) {
+    if (!sb || !userId || !domain) return [];
+    try {
+      var res = await sb.from('gateway_proposals')
+        .select('id,proposal_text,status,target_domain,target_profile,resolved_at,created_at')
+        .eq('user_id', userId)
+        .eq('target_domain', domain)
+        .eq('status', 'confirmed')
+        .order('resolved_at', { ascending: false })
+        .limit(20);
+      if (res && res.error) {
+        /* Oudere DB zonder target_profile: gracefully degrade. */
+        var res2 = await sb.from('gateway_proposals')
+          .select('id,proposal_text,status,target_domain,resolved_at,created_at')
+          .eq('user_id', userId)
+          .eq('target_domain', domain)
+          .eq('status', 'confirmed')
+          .order('resolved_at', { ascending: false })
+          .limit(20);
+        if (res2 && res2.error) return [];
+        return (res2 && res2.data) || [];
+      }
+      return (res && res.data) || [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  async function senseRefreshGatewayProposalsCoachContext(sb, userId, domain) {
+    global._gatewayProposalsCoachContext = '';
+    global._gatewayConfirmedProposals = [];
+    var rows = await senseFetchConfirmedGatewayProposals(sb, userId, domain);
+    global._gatewayConfirmedProposals = rows || [];
+    var block = senseFormatGatewayProposalsCoachBlock(rows);
+    if (block) global._gatewayProposalsCoachContext = block;
+    return rows;
+  }
+
+  function senseAppendGatewayProposalsCoachContext(lines) {
+    if (!lines) return;
+    var block = String(global._gatewayProposalsCoachContext || '').trim();
+    if (block) lines.push(block);
+  }
+
+  function senseGatewayProposalMsgMarker(id) {
+    return 'gwprop:' + String(id || '').trim();
+  }
+
+  function senseGatewayProposalDossierHtml(row) {
+    var id = String((row && row.id) || '').trim();
+    var text = String((row && row.proposal_text) || '').trim().substring(0, 1000);
+    return '<div class="gw-dossier-note" data-gw-proposal-id="'
+      + senseEscHtml(id)
+      + '">'
+      + senseGatewayProposalMsgMarker(id)
+      + ' Vanuit Gateway (bevestigd): '
+      + senseEscHtml(text)
+      + '</div>';
+  }
+
+  async function senseProposalAlreadyInDossier(sb, userId, profileName, proposalId) {
+    if (!sb || !userId || !proposalId || !profileName) return false;
+    var marker = senseGatewayProposalMsgMarker(proposalId);
+    try {
+      var res = await sb.from('sense_messages')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('profile_name', profileName)
+        .ilike('html', '%' + marker + '%')
+        .limit(1);
+      if (res && res.error) return false;
+      return !!(res && res.data && res.data.length);
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  /**
+   * Schrijft bevestigde gateway_proposals naar sense_messages in het juiste dossier,
+   * idempotent via gwprop:-marker. Gebruiker bevestigde al in Gateway.
+   * Zonder landing-profiel (date/family/friend zonder contact): skip write;
+   * coach-context uit gateway_proposals blijft de Sensei-bron.
+   */
+  async function senseIngestConfirmedGatewayProposals(opts) {
+    opts = opts || {};
+    var sb = opts.sb;
+    var userId = String(opts.userId || '').trim();
+    var domain = String(opts.domain || '').trim();
+    var forcedProfile = String(opts.profileName || '').trim();
+    if (!sb || !userId || !domain) return [];
+    var rows = Array.isArray(opts.rows) ? opts.rows : await senseFetchConfirmedGatewayProposals(sb, userId, domain);
+    var written = [];
+    var touchedProfiles = {};
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row.id) continue;
+      var text = String(row.proposal_text || '').trim();
+      if (!text) continue;
+      var profileName = forcedProfile
+        || senseGatewayProposalLandingProfile(domain, row.target_profile);
+      if (!profileName) continue;
+      try {
+        var exists = await senseProposalAlreadyInDossier(sb, userId, profileName, row.id);
+        if (exists) continue;
+        var html = senseGatewayProposalDossierHtml(row);
+        var ins = await sb.from('sense_messages').insert({
+          user_id: userId,
+          profile_name: profileName,
+          role: 'user',
+          html: html
+        }).select('id').maybeSingle();
+        if (ins && !ins.error && ins.data) {
+          written.push(row.id);
+          touchedProfiles[profileName] = 1;
+        }
+      } catch (_w) {}
+    }
+    if (written.length && typeof senseInvalidateProfileMsgsProbe === 'function') {
+      Object.keys(touchedProfiles).forEach(function (pn) {
+        try { senseInvalidateProfileMsgsProbe(userId, pn); } catch (_inv) {}
+      });
+    }
+    return written;
+  }
+
+  /**
+   * Coach-taken voor Home/Meldingen: bevestigde Gateway-notities (informatief).
+   * opts: { escHtmlFn, escJsStrFn, openOwnAction, openDossierActionFn(name) }
+   */
+  function senseBuildGatewayProposalCoachTasks(opts) {
+    opts = opts || {};
+    var esc = typeof opts.escHtmlFn === 'function' ? opts.escHtmlFn : senseEscHtml;
+    var openOwnAction = String(opts.openOwnAction || "viewDossier('OWN Sense')").trim();
+    var openDosFn = typeof opts.openDossierActionFn === 'function' ? opts.openDossierActionFn : null;
+    var rows = global._gatewayConfirmedProposals || [];
+    var tasks = [];
+    rows.slice(0, 5).forEach(function (r) {
+      if (!r || !r.id) return;
+      var txt = String(r.proposal_text || '').trim();
+      if (!txt) return;
+      var short = txt.length > 140 ? txt.substring(0, 140) + '…' : txt;
+      var domain = String(r.target_domain || '').trim();
+      var landing = senseGatewayProposalLandingProfile(domain, r.target_profile);
+      var dossier = landing || 'OWN Sense';
+      var action = openDosFn ? openDosFn(dossier) : (
+        dossier === 'OWN Sense' ? openOwnAction : ("viewDossier('" + String(dossier).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "')")
+      );
+      var where = landing && !/^own\s*sense$/i.test(landing)
+        ? (' bij <strong>' + esc(landing) + '</strong>')
+        : '';
+      tasks.push({
+        id: 'gw-proposal-' + String(r.id),
+        type: 's',
+        prio: 'low',
+        dossier: dossier,
+        msg: 'Vanuit Gateway genoteerd' + where + ': <strong>' + esc(short) + '</strong>',
+        openMsg: 'Nog openstaand: Gateway-notitie bekijken.',
+        link: landing && !/^own\s*sense$/i.test(landing) ? ('Open ' + landing + ' →') : 'Open dossier →',
+        action: action
+      });
+    });
+    return tasks;
+  }
+
+  async function senseApplyGatewayBridgeBoot(opts) {
+    opts = opts || {};
+    var out = { handoff: null, proposals: [] };
+    try {
+      out.handoff = await senseConsumeBridgeHandoff({
+        sb: opts.sb,
+        userId: opts.userId,
+        expectedDomain: opts.domain
+      });
+    } catch (_h) {}
+    try {
+      out.proposals = await senseRefreshGatewayProposalsCoachContext(opts.sb, opts.userId, opts.domain) || [];
+    } catch (_p) {}
+    try {
+      /* Geen geforceerd OWN Sense meer: landing per rij via target_profile / domein. */
+      await senseIngestConfirmedGatewayProposals({
+        sb: opts.sb,
+        userId: opts.userId,
+        domain: opts.domain,
+        rows: out.proposals
+      });
+    } catch (_i) {}
+    /* Na late consume (fastPaint): warme open als Vertel al open staat. */
+    if (out.handoff && global._gatewayHandoffWarmPending) {
+      try {
+        senseRenderGatewayWarmOpenIfNeeded({
+          chatAreaEl: typeof document !== 'undefined' ? document.getElementById('chatArea') : null,
+          senderName: opts.senderName || 'Sensei',
+          appLabel: opts.appLabel || '',
+          addMsgFn: typeof global.addMsg === 'function' ? global.addMsg : null
+        });
+      } catch (_w) {}
+    }
+    return out;
+  }
+
+  global.senseIsUuidLike = senseIsUuidLike;
+  global.senseGatewayDomainFromAppKey = senseGatewayDomainFromAppKey;
+  global.senseGatewayDomainScopeKey = senseGatewayDomainScopeKey;
+  global.senseGatewayProposalLandingProfile = senseGatewayProposalLandingProfile;
+  global.senseParseHandoffIdFromUrl = senseParseHandoffIdFromUrl;
+  global.senseHasGatewayHandoffInUrl = senseHasGatewayHandoffInUrl;
+  global.senseStripHandoffFromUrl = senseStripHandoffFromUrl;
+  global.senseConsumeBridgeHandoff = senseConsumeBridgeHandoff;
+  global.senseAppendGatewayHandoffCoachContext = senseAppendGatewayHandoffCoachContext;
+  global.senseGatewayWarmOpenText = senseGatewayWarmOpenText;
+  global.senseRenderGatewayWarmOpenIfNeeded = senseRenderGatewayWarmOpenIfNeeded;
+  global.senseFormatGatewayProposalsCoachBlock = senseFormatGatewayProposalsCoachBlock;
+  global.senseFetchConfirmedGatewayProposals = senseFetchConfirmedGatewayProposals;
+  global.senseRefreshGatewayProposalsCoachContext = senseRefreshGatewayProposalsCoachContext;
+  global.senseAppendGatewayProposalsCoachContext = senseAppendGatewayProposalsCoachContext;
+  global.senseIngestConfirmedGatewayProposals = senseIngestConfirmedGatewayProposals;
+  global.senseBuildGatewayProposalCoachTasks = senseBuildGatewayProposalCoachTasks;
+  global.senseApplyGatewayBridgeBoot = senseApplyGatewayBridgeBoot;
 })(typeof window !== 'undefined' ? window : this);
