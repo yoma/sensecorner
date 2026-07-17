@@ -232,7 +232,7 @@ export function sanitizeExpertiseOutput(text) {
 }
 
 /* ============================================================================
- * GATEWAY-PROFIEL (centrale Sensei-chat in de OwnSense hub)
+ * GATEWAY-PROFIEL (centrale Sensei-chat op de SenseCorner-hub)
  *
  * MARKERPROTOCOL GATEWAY (zelfde patroon als [CRISIS]: client parseert en stript
  * voordat tekst gerenderd wordt; zie design/CenterChat/cursor-brief-gateway-chat.md):
@@ -248,7 +248,7 @@ export function sanitizeExpertiseOutput(text) {
  *   [PROFIELVRAAG domein="..." vraag_id="..."]
  *     Markeert dat de laatste vraag in de antwoordtekst een profielvraag is.
  *     vraag_id-formaat: "{catId}:a{slotIndex}", bv. "familysense_focus:a2"
- *     (de categorie-arrays OWN_CATS/APP_CATS in ownsense.html zijn de bron;
+ *     (de categorie-arrays in ownsense.html / GW_OPEN_CATS in gateway-chat.js zijn de bron;
  *     er bestaan geen andere stabiele vraag-id's). Maximaal 1 per gesprek.
  *   [BRUG domein="..." reden="..."]
  *     Signaal voor de brugkaart naar de doel-app (context-handoff via tabel

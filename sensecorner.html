@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="12-06-2026 21:39">
+<meta name="sc-build" content="17-07-2026 11:00">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -17,9 +17,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2905261707"></script>
+<script src="js/sense-common.js?v=1707261101"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script src="js/sense-auth-client.js"></script>
+<script type="module" src="js/senseiCore-loader.js"></script>
+<script src="js/gateway-chat.js?v=1707261056"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -572,6 +574,217 @@ a.app-card{color:inherit;text-decoration:none}
   .hero-sub{margin-bottom:10px}
   .own-status-row{margin-bottom:10px}
   .section-label{margin:10px 0 8px 2px}
+}
+
+/* ── Gateway-Chat (praatbalk + overlay op hub) ── */
+.gw-talkbar-host{margin:0 0 14px}
+.gw-talkbar-host[hidden]{display:none!important}
+.gw-talkbar-label{
+  font-size:11px;font-weight:700;letter-spacing:.02em;
+  color:var(--sage-donker);margin:0 0 8px;
+}
+.gw-talkbar{
+  display:flex;align-items:center;gap:10px;
+  background:var(--ivoor,#FFFDF8);
+  border:1.5px solid var(--r,#5E7D5A);
+  border-radius:28px;
+  padding:6px 8px 6px 16px;
+  box-shadow:0 8px 28px rgba(61,47,31,.12),0 0 0 6px rgba(94,125,90,.16);
+  cursor:text;
+}
+.gw-talkbar:focus-within{outline:2px solid var(--r,#5E7D5A);outline-offset:2px}
+.gw-talkbar .gw-sensei-badge{
+  width:34px;height:34px;border-radius:50%;flex:none;
+  background:rgba(107,142,111,.18);color:var(--sage-donker);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;
+}
+.gw-talkbar input{
+  flex:1;min-width:0;border:0;outline:0;background:transparent;
+  font-family:inherit;font-size:14.5px;color:var(--chocolade);
+}
+.gw-talkbar input::placeholder{color:var(--m,#6B5B45)}
+.gw-talkbar .gw-mic{
+  width:38px;height:38px;border-radius:50%;flex:none;border:0;
+  background:var(--r,#5E7D5A);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.gw-talkbar .gw-mic:focus-visible,
+.gw-chat button:focus-visible,
+.gw-chat input:focus-visible{outline:2px solid var(--r,#5E7D5A);outline-offset:2px}
+.gw-talkbar .gw-mic svg{width:17px;height:17px}
+.gw-chat{
+  position:fixed;inset:0;z-index:960;
+  width:100%;max-width:min(100%,900px);
+  margin:0 auto;left:0;right:0;
+  background:var(--cream,#F2E8D5);
+  display:flex;flex-direction:column;
+  opacity:0;transform:translateY(18px);pointer-events:none;
+  transition:opacity .32s ease,transform .32s ease;
+}
+.gw-chat.open{opacity:1;transform:none;pointer-events:auto}
+.gw-chat-head{
+  display:flex;align-items:center;gap:12px;
+  padding:max(14px,env(safe-area-inset-top,0px)) 16px 12px;
+  background:var(--cream,#F2E8D5);
+  border-bottom:1px solid #EADDC4;
+}
+.gw-chat-head .gw-back{
+  width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--ivoor,#FFFDF8);box-shadow:0 4px 14px rgba(61,47,31,.08);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--chocolade);
+}
+.gw-chat-head .gw-sensei-badge{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(107,142,111,.18);color:var(--sage-donker);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+  box-shadow:0 0 0 5px rgba(107,142,111,.14);
+}
+.gw-chat-head .gw-who h2{font-size:15px;margin:0}
+.gw-chat-head .gw-who p{font-size:11px;color:var(--sage-donker);margin:2px 0 0}
+.gw-messages{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:18px 16px 12px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.gw-msg{max-width:82%;animation:gw-pop .28s ease}
+.gw-msg.sensei{align-self:flex-start}
+.gw-msg.user{align-self:flex-end}
+.gw-bubble{
+  padding:11px 14px;border-radius:16px;
+  font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.gw-msg.sensei .gw-bubble{
+  background:var(--ivoor,#FFFDF8);box-shadow:0 4px 14px rgba(61,47,31,.08);
+  border-bottom-left-radius:6px;color:var(--chocolade);
+}
+.gw-msg.user .gw-bubble{
+  background:var(--r,#5E7D5A);color:#fff;
+  border-bottom-right-radius:6px;
+}
+.gw-msg .gw-tag{
+  font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  margin:0 0 4px 4px;
+}
+.gw-typing{
+  align-self:flex-start;background:var(--ivoor,#FFFDF8);
+  box-shadow:0 4px 14px rgba(61,47,31,.08);
+  border-radius:16px;border-bottom-left-radius:6px;
+  padding:12px 16px;display:flex;gap:5px;
+}
+.gw-typing i{
+  width:6px;height:6px;border-radius:50%;background:var(--r,#5E7D5A);
+  animation:gw-blink 1.1s infinite;
+}
+.gw-typing i:nth-child(2){animation-delay:.18s}
+.gw-typing i:nth-child(3){animation-delay:.36s}
+@keyframes gw-blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@keyframes gw-pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.gw-proposal{
+  align-self:flex-start;max-width:86%;
+  background:var(--ivoor,#FFFDF8);border-left:3px solid var(--gw-accent,var(--r,#5E7D5A));
+  border-radius:14px;box-shadow:0 4px 14px rgba(61,47,31,.08);
+  padding:12px 14px;animation:gw-pop .28s ease;
+}
+.gw-proposal .gw-p-label{
+  font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gw-accent,var(--r,#5E7D5A));margin-bottom:5px;
+}
+.gw-proposal .gw-p-text{font-size:13.5px;line-height:1.45;margin-bottom:10px;color:var(--chocolade)}
+.gw-proposal .gw-p-actions{display:flex;flex-wrap:wrap;gap:8px}
+.gw-proposal .gw-p-actions button{
+  border:0;border-radius:20px;padding:7px 14px;
+  font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+}
+.gw-proposal .gw-yes{background:var(--gw-accent,var(--r,#5E7D5A));color:#fff}
+.gw-proposal .gw-no{background:var(--gw-soft,rgba(94,125,90,.14));color:var(--gw-accent,var(--r,#5E7D5A))}
+.gw-proposal .gw-dossier-row{margin:0 0 10px;display:flex;flex-direction:column;gap:4px}
+.gw-proposal .gw-dossier-row label{font-size:11px;font-weight:700;color:var(--m)}
+.gw-proposal .gw-dossier-row select{
+  font:inherit;font-size:13px;border:1px solid color-mix(in srgb,var(--gw-accent,var(--r,#5E7D5A)) 35%,#ccc);
+  border-radius:10px;padding:8px 10px;background:#fff;color:var(--chocolade)
+}
+.gw-proposal .gw-dossier-hint{font-size:11px;line-height:1.4;color:var(--m)}
+.gw-proposal .gw-done{
+  display:none;font-size:12.5px;font-weight:600;color:var(--gw-accent,var(--r,#5E7D5A));
+  align-items:center;gap:6px;
+}
+.gw-proposal.confirmed .gw-p-actions{display:none}
+.gw-proposal.confirmed .gw-dossier-row{display:none}
+.gw-proposal.confirmed .gw-done{display:flex}
+.gw-proposal.declined .gw-done{display:flex}
+.gw-proposal.declined .gw-dossier-row{display:none}
+.gw-bridge{
+  align-self:flex-start;max-width:88%;
+  background:var(--ivoor,#FFFDF8);
+  border-radius:14px;box-shadow:0 4px 14px rgba(61,47,31,.07);
+  padding:13px 14px;animation:gw-pop .28s ease;
+  border:1px solid rgba(61,47,31,.1);
+  border-top:3px solid var(--gw-accent,var(--r,#5E7D5A));
+}
+.gw-bridge .gw-b-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.gw-bridge .gw-b-icon{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--gw-soft,rgba(94,125,90,.14));color:var(--gw-accent,var(--r,#5E7D5A));
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.gw-bridge h4{font-size:14px;margin:0;color:var(--chocolade)}
+.gw-bridge .gw-b-reason{font-size:12.5px;color:var(--m);line-height:1.45;margin:0 0 10px}
+.gw-bridge .gw-b-go{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;border:0;border-radius:22px;padding:10px;
+  background:var(--gw-accent,var(--r,#5E7D5A));color:#fff;
+  font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+}
+.gw-bridge .gw-b-note{
+  font-size:11px;color:var(--m);text-align:center;margin:8px 0 0;
+  font-family:var(--font-serif);font-style:italic;
+}
+.gw-composer{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px max(16px,env(safe-area-inset-bottom,0px));
+  background:var(--cream,#F2E8D5);
+}
+.gw-composer .gw-field{
+  flex:1;display:flex;align-items:center;
+  background:var(--ivoor,#FFFDF8);border:1.5px solid #EADDC4;
+  border-radius:24px;padding:10px 16px;
+}
+.gw-composer .gw-field:focus-within{border-color:var(--r,#5E7D5A)}
+.gw-composer input{
+  flex:1;min-width:0;border:0;outline:0;background:transparent;
+  font-family:inherit;font-size:14px;color:var(--chocolade);
+}
+.gw-composer .gw-send{
+  width:42px;height:42px;border-radius:50%;border:0;flex:none;
+  background:var(--r,#5E7D5A);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.gw-composer .gw-send:disabled{opacity:.55;cursor:not-allowed}
+.gw-composer .gw-send svg{width:17px;height:17px}
+.gw-crisis-wrap{align-self:flex-start;max-width:92%;animation:gw-pop .28s ease}
+.gw-hub-toast{
+  position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom,0px));
+  transform:translateX(-50%) translateY(12px);
+  z-index:980;max-width:min(92vw,420px);
+  padding:12px 16px;border-radius:14px;
+  background:var(--chocolade);color:var(--cream);
+  font-size:13px;font-weight:600;line-height:1.4;
+  box-shadow:0 10px 28px rgba(61,47,31,.22);
+  opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease;
+}
+.gw-hub-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.gw-hub-toast.err{background:#5C2A2A;color:#fff}
+@media (prefers-reduced-motion:reduce){
+  .gw-msg,.gw-proposal,.gw-bridge,.gw-crisis-wrap{animation:none}
+  .gw-chat{transition:none}
+  .gw-typing i{animation:none;opacity:.55}
+  .gw-hub-toast{transition:none}
+}
+@media(max-width:520px){
+  .section-label{margin:10px 0 8px 2px}
   /* Eén kolom op mobiel: alle apps (incl. DateSense) duidelijk onder elkaar */
   .grid{grid-template-columns:1fr}
 }
@@ -666,9 +879,9 @@ a.app-card{color:inherit;text-decoration:none}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             Open OWN Sense
           </a>
-          <a class="hero-own-shortcut" href="ownsense.html?openGateway=1" id="btnGatewayTalk" data-app-link="ownsense.html?openGateway=1" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:8px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--r,#5E7D5A);background:rgba(94,125,90,.10);color:var(--chocolade,#3D2F1F);font-weight:700;font-size:13px;text-decoration:none">
+          <button type="button" class="hero-own-shortcut" id="btnGatewayTalk" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:8px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--r,#5E7D5A);background:rgba(94,125,90,.10);color:var(--chocolade,#3D2F1F);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">
             <span aria-hidden="true">先生</span> Praat met Sensei
-          </a>
+          </button>
           <nav class="hero-own-shortcuts" aria-label="Snel naar OWN Sense">
             <a class="hero-own-shortcut" href="ownsense.html?tab=inzichten" data-app-link="ownsense.html?tab=inzichten">Inzichten</a>
             <a class="hero-own-shortcut" href="ownsense.html?tab=fotos" data-app-link="ownsense.html?tab=fotos">Foto's</a>
@@ -684,6 +897,16 @@ a.app-card{color:inherit;text-decoration:none}
         <div id="scBasisNudgeMount" aria-live="polite"></div>
         <div id="scBasisNudgeDebug" hidden style="display:none;font-size:11px;color:#7A6F66;margin:0 0 10px;line-height:1.4"></div>
         <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
+        <div class="gw-talkbar-host" id="gatewayTalkbarHost" hidden>
+          <p class="gw-talkbar-label" id="gatewayTalkbarLabel">Praat met Sensei</p>
+          <div class="gw-talkbar" id="gatewayTalkbar" role="button" tabindex="0" aria-label="Start een gesprek met Sensei">
+            <div class="gw-sensei-badge" aria-hidden="true">先生</div>
+            <input type="text" id="gatewayTalkbarInput" placeholder="Wat houdt je bezig?" aria-label="Wat houdt je bezig">
+            <button type="button" class="gw-mic" id="gatewayTalkbarMic" aria-label="Spreek in of open chat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+            </button>
+          </div>
+        </div>
         <p class="hero-quote" id="heroQuote" hidden aria-live="polite"></p>
 
         <div class="own-status-row">
@@ -908,6 +1131,27 @@ a.app-card{color:inherit;text-decoration:none}
     <div id="authMsg" class="auth-msg"></div>
   </div>
 </div>
+
+<section class="gw-chat" id="gatewayChat" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Gesprek met Sensei">
+  <header class="gw-chat-head">
+    <button type="button" class="gw-back" id="gatewayChatBack" aria-label="Terug naar overzicht">←</button>
+    <div class="gw-sensei-badge" aria-hidden="true">先生</div>
+    <div class="gw-who">
+      <h2>Sensei</h2>
+      <p>Luistert over alle domeinen heen</p>
+    </div>
+  </header>
+  <div class="gw-messages" id="gatewayMessages" aria-live="polite"></div>
+  <div class="gw-composer">
+    <div class="gw-field">
+      <input type="text" id="gatewayChatInput" placeholder="Schrijf verder..." aria-label="Bericht aan Sensei" autocomplete="off">
+    </div>
+    <button type="button" class="gw-send" id="gatewayChatSend" aria-label="Verstuur">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</section>
+<div id="gwHubToast" class="gw-hub-toast" role="status" aria-live="polite"></div>
 
 <script>
 (async function(){
@@ -4188,10 +4432,184 @@ a.app-card{color:inherit;text-decoration:none}
       scHandleAuthStateEvent(event);
     });
   }
+
+  /* ── Gateway-Chat op hub (adapters naar auth/profiel/contacten) ── */
+  var _gwContactNames=[];
+  var _gwContactScopeByName={};
+  var _gwToastTimer=null;
+  function scGwFlashToast(msg,isError,opts){
+    var el=document.getElementById('gwHubToast');
+    if(!el){if(isError)console.warn(msg);return;}
+    el.textContent=String(msg||'');
+    el.classList.toggle('err',!!isError);
+    el.classList.add('show');
+    if(_gwToastTimer)clearTimeout(_gwToastTimer);
+    var ms=(opts&&opts.durationMs)||(isError?5200:3200);
+    _gwToastTimer=setTimeout(function(){el.classList.remove('show');},ms);
+  }
+  function scGwFormatError(e,fallback){
+    var msg=String((e&&e.message)||e||'').trim();
+    if(!msg)return fallback||'Onbekende fout.';
+    if(/Limiet bereikt|AI-verzoeken per uur|rate limit|too many|429/i.test(msg)){
+      if(/^HTTP\s+429$/i.test(msg))return'Je uurlimiet voor AI is bereikt. Probeer over een uur opnieuw.';
+      return msg.indexOf('Limiet')>=0||msg.indexOf('uur')>=0?msg:'De AI-service was tijdelijk overbelast. Probeer over een paar minuten opnieuw.';
+    }
+    if(/^HTTP\s+\d{3}$/i.test(msg))return fallback||'Er ging iets mis bij de AI-aanvraag. Probeer later opnieuw.';
+    return msg;
+  }
+  async function scGwGetAccessToken(forceRefresh){
+    if(!sb)return'';
+    var sess=null;
+    try{
+      if(forceRefresh)sess=await scRefreshSessionSafe(true);
+      else{
+        var gs=await scTimeoutFallback(sb.auth.getSession(),12000,null);
+        sess=gs&&gs.data&&gs.data.session;
+        if(!sess||scSessionNeedsRefresh(sess))sess=await scRefreshSessionSafe(false);
+      }
+    }catch(_e){}
+    if(!sess)sess=scSessionFromPersisted();
+    return sess&&sess.access_token?String(sess.access_token):'';
+  }
+  async function scGwLoadProfileScopes(uid){
+    _gwContactNames=[];
+    _gwContactScopeByName={};
+    if(!sb||!uid)return;
+    try{
+      var res=await sb.from('sense_profiles').select('name,props').eq('user_id',uid);
+      if(res&&res.error)return;
+      (res.data||[]).forEach(function(row){
+        var nm=String(row.name||'').trim();
+        if(!nm)return;
+        var lk=nm.toLowerCase();
+        if(lk==='own sense'){
+          _gwContactScopeByName[lk]='gen';
+          return;
+        }
+        if(_gwContactNames.indexOf(nm)<0)_gwContactNames.push(nm);
+        var props=row.props&&typeof row.props==='object'?row.props:{};
+        var meta=props.meta&&typeof props.meta==='object'?props.meta:{};
+        var scopes=Array.isArray(meta.app_scope)?meta.app_scope.map(function(s){return String(s||'').toLowerCase();}):[];
+        if(scopes.indexOf('fs')>=0&&scopes.indexOf('ds')>=0)_gwContactScopeByName[lk]='mix';
+        else if(scopes.indexOf('fs')>=0)_gwContactScopeByName[lk]='fs';
+        else if(scopes.indexOf('ds')>=0)_gwContactScopeByName[lk]='ds';
+        else if(scopes.indexOf('fr')>=0)_gwContactScopeByName[lk]='fr';
+        else if(scopes.indexOf('ss')>=0)_gwContactScopeByName[lk]='ss';
+        else _gwContactScopeByName[lk]='unknown';
+      });
+    }catch(_e){}
+  }
+  function scGwContactsForDomain(domain){
+    var scope='';
+    if(typeof senseGatewayDomainScopeKey==='function')scope=senseGatewayDomainScopeKey(domain);
+    else{
+      var d=String(domain||'').toLowerCase();
+      if(d==='date')scope='ds';
+      else if(d==='family')scope='fs';
+      else if(d==='friend')scope='fr';
+      else if(d==='self')scope='ss';
+    }
+    var out=[];
+    _gwContactNames.forEach(function(nm){
+      nm=String(nm||'').trim();
+      if(!nm||/^own\s*sense$/i.test(nm))return;
+      var sk=_gwContactScopeByName[nm.toLowerCase()]||'unknown';
+      if(!scope){out.push(nm);return;}
+      if(sk===scope||sk==='mix'||sk==='unknown')out.push(nm);
+    });
+    out.sort(function(a,b){return a.localeCompare(b,'nl',{sensitivity:'base'});});
+    return out;
+  }
+  function scGwOwnProfielBlock(){
+    var parts=[];
+    if(typeof senseOwnBasisContextParts==='function'){
+      parts=senseOwnBasisContextParts(scOwnBasisMeta||{},typeof senseCalcAgeFromBirthdate==='function'?senseCalcAgeFromBirthdate:null);
+    }
+    var name='';
+    if(userSession)name=pickSenseCornerDisplayName(userSession);
+    if(!name&&hubProfile)name=scTrimName(hubProfile.display_name);
+    if(name)parts.unshift('roepnaam '+name);
+    return parts.length?parts.join(', '):'';
+  }
+  async function scGwSaveProfileAnswer(catId,key,answer){
+    if(!sb||!userSession||!userSession.id)return;
+    var uid=String(userSession.id);
+    var val=String(answer||'').trim().substring(0,2000);
+    if(!val||!catId||!/^a\d+$/.test(key))return;
+    try{
+      var row=await sb.from('sense_profiles').select('props').eq('user_id',uid).eq('name','OWN Sense').maybeSingle();
+      var props=(row&&row.data&&row.data.props&&typeof row.data.props==='object')?Object.assign({},row.data.props):{};
+      if(!props.categories||typeof props.categories!=='object')props.categories={};
+      if(!props.categories[catId]||typeof props.categories[catId]!=='object')props.categories[catId]={};
+      if(String(props.categories[catId][key]||'').trim())return;
+      props.categories[catId][key]=val;
+      scOwnProfileProps=props;
+      scServerCategories=props.categories;
+      var iso=new Date().toISOString();
+      var up=await sb.from('sense_profiles').update({props:props,last_active:iso}).eq('user_id',uid).eq('name','OWN Sense');
+      if(up&&up.error)throw up.error;
+      try{await scReloadOwnProfileBasisMeta();}catch(_r){}
+    }catch(e){console.warn('scGwSaveProfileAnswer',e);throw e;}
+  }
+  function scInitGatewayChat(){
+    if(!window.GatewayChat||typeof window.GatewayChat.init!=='function')return;
+    var host=document.getElementById('gatewayTalkbarHost');
+    if(host)host.hidden=!userSession;
+    window.GatewayChat.init({
+      getSupabase:function(){return sb;},
+      getUid:function(){return userSession&&userSession.id?String(userSession.id):'';},
+      ensureWriteAuth:async function(){
+        var uid=userSession&&userSession.id?String(userSession.id):'';
+        if(!uid){
+          var u=await getCurrentUser();
+          if(u&&u.id){userSession=u;uid=String(u.id);}
+        }
+        return{uid:uid};
+      },
+      getAccessToken:scGwGetAccessToken,
+      getEdgeBaseUrl:function(){return SURL;},
+      toast:scGwFlashToast,
+      formatError:scGwFormatError,
+      getDisplayName:function(){
+        if(userSession)return pickSenseCornerDisplayName(userSession)||'';
+        return hubProfile?scTrimName(hubProfile.display_name):'';
+      },
+      getOwnProfielBlock:scGwOwnProfielBlock,
+      refreshAandachtspunten:async function(){
+        if(typeof refreshOwnAandachtspuntenCoachContext==='function'&&userSession&&sb){
+          await refreshOwnAandachtspuntenCoachContext(sb,userSession.id);
+        }
+      },
+      getAandachtspuntenBlock:function(){return String(window._ownAandachtspuntenCoachContext||'');},
+      getCategorySlots:function(catId){
+        var cats=scServerCategories||(scOwnProfileProps&&scOwnProfileProps.categories)||{};
+        return cats[catId]||{};
+      },
+      saveProfileAnswer:scGwSaveProfileAnswer,
+      getContactsForDomain:scGwContactsForDomain,
+      loadProfileScopes:scGwLoadProfileScopes,
+      requireLogin:function(){
+        scGwFlashToast('Log eerst in om met Sensei te praten.',true);
+        goToIndexLogin('login','sensecorner.html?openGateway=1');
+      }
+    });
+    var btnGw=document.getElementById('btnGatewayTalk');
+    if(btnGw){
+      btnGw.addEventListener('click',function(e){
+        e.preventDefault();
+        if(window.GatewayChat)void window.GatewayChat.open('');
+      });
+    }
+    if(typeof window.GatewayChat.updatePlaceholder==='function')window.GatewayChat.updatePlaceholder();
+  }
+  scInitGatewayChat();
+
   var openedReturnToModal=false;
   var skipHubHelpIntro=false;
+  var openGatewayRequested=false;
   try{
     var params=new URLSearchParams(window.location.search||'');
+    openGatewayRequested=String(params.get('openGateway')||'')==='1';
     var returnTo=String(params.get('returnTo')||'').trim();
     if(returnTo){
       var target=decodeURIComponent(returnTo);
@@ -4219,9 +4637,29 @@ a.app-card{color:inherit;text-decoration:none}
     if(!guestFinal){
       var hx=String(window.location.hash||'');
       if(hx.indexOf('access_token')>=0||hx.indexOf('type=recovery')>=0)return;
-      window.location.replace('index.html?login=1');
+      window.location.replace(openGatewayRequested?'index.html?login=1&returnTo='+encodeURIComponent('sensecorner.html?openGateway=1'):'index.html?login=1');
       skipHubHelpIntro=true;
     }
+  }
+  if(openGatewayRequested&&userSession&&window.GatewayChat){
+    skipHubHelpIntro=true;
+    setTimeout(function(){
+      try{
+        var host=document.getElementById('gatewayTalkbarHost');
+        if(host){host.hidden=false;host.scrollIntoView({behavior:'smooth',block:'center'});}
+        void window.GatewayChat.open('');
+      }catch(_og){}
+    },280);
+    setTimeout(function(){
+      try{
+        if(window.GatewayChat&&!window.GatewayChat.isOpen())void window.GatewayChat.open('');
+      }catch(_og2){}
+    },700);
+    try{
+      var clean=new URL(window.location.href);
+      clean.searchParams.delete('openGateway');
+      window.history.replaceState({},'',clean.pathname+(clean.search||'')+(clean.hash||''));
+    }catch(_h){}
   }
   if(!skipHubHelpIntro)void maybeShowHubStartIntro();
 })();

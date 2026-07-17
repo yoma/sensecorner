@@ -1277,7 +1277,7 @@
     var summary = String(global._gatewayHandoffSummary || '').trim();
     if (!summary) return;
     lines.push(
-      'GATEWAY-HANDOFF (interne context uit OwnSense Gateway-chat; de gebruiker komt hier verder praten):'
+      'GATEWAY-HANDOFF (interne context uit de SenseCorner Gateway-chat; de gebruiker komt hier verder praten):'
     );
     lines.push(summary.substring(0, 1800));
     lines.push(
