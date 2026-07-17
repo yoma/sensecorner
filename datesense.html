@@ -10,10 +10,10 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="17-07-2026 10:28">
+<meta name="ds-build" content="17-07-2026 11:44">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js"></script>
+<script src="js/sense-common.js?v=1707261144"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -5380,6 +5380,7 @@ async function saveMsg(pn,role,html){
 }
 
 function normalizeLoadedMsgHtml(v){
+  var out='';
   if(typeof v==='string'){
     var s=v.trim();
     if(!s)return '';
@@ -5387,15 +5388,16 @@ function normalizeLoadedMsgHtml(v){
     if(maybeJson){
       try{
         var parsed=JSON.parse(s);
-        if(typeof parsed==='string')return parsed;
-        if(parsed&&typeof parsed==='object'&&typeof parsed.html==='string')return parsed.html;
-      }catch(_e){}
-    }
-    return v;
-  }
-  if(v&&typeof v==='object'&&typeof v.html==='string')return v.html;
-  if(v==null)return '';
-  return String(v);
+        if(typeof parsed==='string')out=parsed;
+        else if(parsed&&typeof parsed==='object'&&typeof parsed.html==='string')out=parsed.html;
+        else out=v;
+      }catch(_e){out=v;}
+    }else out=v;
+  }else if(v&&typeof v==='object'&&typeof v.html==='string')out=v.html;
+  else if(v==null)out='';
+  else out=String(v);
+  if(typeof senseSanitizeGwProposalUserFacing==='function')out=senseSanitizeGwProposalUserFacing(out);
+  return out;
 }
 
 var _loadMsgsInflightByKey={};

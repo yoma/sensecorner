@@ -1287,7 +1287,7 @@
 
   function senseGatewayWarmOpenText(appLabel) {
     var label = String(appLabel || 'deze app').trim() || 'deze app';
-    return 'Welkom terug. Ik neem mee wat je net in de Gateway deelde, zodat je hier in '
+    return 'Welkom terug. Ik neem mee wat je net in de SenseCorner-hoofdchat deelde, zodat je hier in '
       + label
       + ' meteen verder kunt zonder opnieuw te beginnen. Waar wil je nu op inzoomen?';
   }
@@ -1310,7 +1310,7 @@
     global._gatewayHandoffWarmPending = false;
     try {
       if (typeof opts.addMsgFn === 'function') {
-        opts.addMsgFn('ai', '<div>' + senseEscHtml(text) + '</div>', { importedFrom: 'Gateway' });
+        opts.addMsgFn('ai', '<div>' + senseEscHtml(text) + '</div>', { importedFrom: 'hoofdchat' });
         return true;
       }
     } catch (_add) {}
@@ -1426,14 +1426,30 @@
     return 'gwprop:' + String(id || '').trim();
   }
 
+  /**
+   * Maakt notities uit de SenseCorner-hoofdchat gebruikersvriendelijk:
+   * verwijdert interne gwprop:-codes en hernoemt "Gateway" naar "hoofdchat".
+   * Werkt op HTML én platte tekst (tijdlijn na stripHtml).
+   */
+  function senseSanitizeGwProposalUserFacing(htmlOrText) {
+    var s = String(htmlOrText == null ? '' : htmlOrText);
+    if (!s) return s;
+    s = s.replace(/\bgwprop:[0-9a-fA-F-]{8,}\b\s*/g, '');
+    s = s.replace(/Vanuit Gateway \(bevestigd\)/gi, 'Vanuit hoofdchat (bevestigd)');
+    s = s.replace(/Vanuit Gateway genoteerd/gi, 'Vanuit hoofdchat genoteerd');
+    s = s.replace(/Vanuit Gateway/gi, 'Vanuit hoofdchat');
+    s = s.replace(/\bGateway-notitie\b/gi, 'Hoofdchat-notitie');
+    s = s.replace(/\s{2,}/g, ' ');
+    return s;
+  }
+
   function senseGatewayProposalDossierHtml(row) {
     var id = String((row && row.id) || '').trim();
     var text = String((row && row.proposal_text) || '').trim().substring(0, 1000);
+    /* Interne id alleen in data-attribuut (idempotentie); nooit zichtbaar in tijdlijn. */
     return '<div class="gw-dossier-note" data-gw-proposal-id="'
       + senseEscHtml(id)
-      + '">'
-      + senseGatewayProposalMsgMarker(id)
-      + ' Vanuit Gateway (bevestigd): '
+      + '">Vanuit hoofdchat (bevestigd): '
       + senseEscHtml(text)
       + '</div>';
   }
@@ -1441,14 +1457,31 @@
   async function senseProposalAlreadyInDossier(sb, userId, profileName, proposalId) {
     if (!sb || !userId || !proposalId || !profileName) return false;
     var marker = senseGatewayProposalMsgMarker(proposalId);
+    var attrNeedle = 'data-gw-proposal-id="' + String(proposalId).trim() + '"';
     try {
       var res = await sb.from('sense_messages')
         .select('id')
         .eq('user_id', userId)
         .eq('profile_name', profileName)
-        .ilike('html', '%' + marker + '%')
+        .or('html.ilike.%' + marker + '%,html.ilike.%' + attrNeedle + '%')
         .limit(1);
-      if (res && res.error) return false;
+      if (res && res.error) {
+        /* Fallback als .or filter faalt: oude marker of nieuw data-attribuut apart. */
+        var a = await sb.from('sense_messages')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('profile_name', profileName)
+          .ilike('html', '%' + marker + '%')
+          .limit(1);
+        if (a && !a.error && a.data && a.data.length) return true;
+        var b = await sb.from('sense_messages')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('profile_name', profileName)
+          .ilike('html', '%' + attrNeedle + '%')
+          .limit(1);
+        return !!(b && !b.error && b.data && b.data.length);
+      }
       return !!(res && res.data && res.data.length);
     } catch (_e) {
       return false;
@@ -1457,7 +1490,8 @@
 
   /**
    * Schrijft bevestigde gateway_proposals naar sense_messages in het juiste dossier,
-   * idempotent via gwprop:-marker. Gebruiker bevestigde al in Gateway.
+   * idempotent via data-gw-proposal-id (en legacy gwprop:-marker).
+   * Gebruiker bevestigde al in de SenseCorner-hoofdchat.
    * Zonder landing-profiel (date/family/friend zonder contact): skip write;
    * coach-context uit gateway_proposals blijft de Sensei-bron.
    */
@@ -1533,8 +1567,8 @@
         type: 's',
         prio: 'low',
         dossier: dossier,
-        msg: 'Vanuit Gateway genoteerd' + where + ': <strong>' + esc(short) + '</strong>',
-        openMsg: 'Nog openstaand: Gateway-notitie bekijken.',
+        msg: 'Vanuit hoofdchat genoteerd' + where + ': <strong>' + esc(short) + '</strong>',
+        openMsg: 'Nog openstaand: hoofdchat-notitie bekijken.',
         link: landing && !/^own\s*sense$/i.test(landing) ? ('Open ' + landing + ' →') : 'Open dossier →',
         action: action
       });
@@ -1596,4 +1630,5 @@
   global.senseIngestConfirmedGatewayProposals = senseIngestConfirmedGatewayProposals;
   global.senseBuildGatewayProposalCoachTasks = senseBuildGatewayProposalCoachTasks;
   global.senseApplyGatewayBridgeBoot = senseApplyGatewayBridgeBoot;
+  global.senseSanitizeGwProposalUserFacing = senseSanitizeGwProposalUserFacing;
 })(typeof window !== 'undefined' ? window : this);
