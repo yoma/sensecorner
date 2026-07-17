@@ -324,6 +324,7 @@ export function buildGatewayAdviceCore() {
  * @param {boolean} [ctx.bridgeShown] - brug al getoond in dit gesprek
  * @param {boolean} [ctx.isFirstTurn] - dit is de eerste antwoordbeurt van het gesprek
  * @param {Array}  [ctx.proposedTargets] - al aangeboden voorstellen deze sessie: [{ domein, dossier }]
+ * @param {string} [ctx.confirmedProposalsBlock] - bevestigde gateway_proposals (alle domeinen)
  */
 export function buildGatewayContextBlock(ctx) {
   const c = ctx || {};
@@ -333,6 +334,9 @@ export function buildGatewayContextBlock(ctx) {
   }
   if (c.aandachtspuntenBlock) {
     parts.push(String(c.aandachtspuntenBlock).trim());
+  }
+  if (c.confirmedProposalsBlock) {
+    parts.push(String(c.confirmedProposalsBlock).trim());
   }
   const sums = c.domainSummaries || {};
   const sumLines = [];

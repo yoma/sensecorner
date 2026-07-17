@@ -7,6 +7,8 @@
   'use strict';
 
   var GW_VERTEL_APP = 'gateway';
+  /** Max berichten die we hervatten / meesturen naar het model. */
+  var GW_HISTORY_CAP = 40;
   var GW_DOMAIN_META = {
     date: { label: 'DateSense', href: 'datesense.html', accent: 'var(--date-donker)', soft: 'color-mix(in srgb,var(--date-licht) 70%,#fff)', icon: '♥' },
     family: { label: 'FamilySense', href: 'familysense.html', accent: 'var(--family-donker)', soft: 'color-mix(in srgb,var(--family-licht) 70%,#fff)', icon: '⌂' },
@@ -58,8 +60,10 @@
     proposedTargets: [],
     messages: [],
     domainSummaries: { date: '', family: '', friend: '', self: '' },
+    confirmedProposalsBlock: '',
     pendingProfileQ: null,
-    coreReady: false
+    coreReady: false,
+    historyHydrated: false
   };
   var _gwSenseiCooldownUntil = 0;
   var _bound = false;
@@ -68,6 +72,38 @@
   function toast(msg, isError, opts) {
     if (typeof A().toast === 'function') A().toast(msg, isError, opts);
     else if (isError) console.warn('[Gateway]', msg);
+  }
+  /** DB CHECK staat alleen 'user' / 'ai' toe; UI/API gebruikt 'assistant'. */
+  function gwDbRole(role) {
+    var r = String(role || '').toLowerCase();
+    if (r === 'assistant' || r === 'ai' || r === 'sensei') return 'ai';
+    return 'user';
+  }
+  function gwApiRole(role) {
+    var r = String(role || '').toLowerCase();
+    if (r === 'ai' || r === 'assistant' || r === 'sensei') return 'assistant';
+    return 'user';
+  }
+  function gwFormatConfirmedProposalsBlock(rows) {
+    var list = (rows || []).filter(function (r) {
+      return r && String(r.proposal_text || '').trim() && String(r.status || 'confirmed') === 'confirmed';
+    });
+    if (!list.length) return '';
+    var lines = [
+      'BEVESTIGDE NOTITIES UIT EERDERE GATEWAY-GESPREKKEN (gebruiker bevestigde dit; behandel als bekende context, presenteer niet als nieuw feit, bied niet opnieuw als [VOORSTEL] aan):'
+    ];
+    list.slice(0, 16).forEach(function (r) {
+      var dom = gwNormDomain(r.target_domain) || String(r.target_domain || '').trim();
+      var label = dom && GW_DOMAIN_META[dom] ? GW_DOMAIN_META[dom].label : (dom || 'Gateway');
+      var dos = String(r.target_profile || '').trim();
+      var txt = String(r.proposal_text || '').trim().substring(0, 280);
+      if (dos && !/^own\s*sense$/i.test(dos)) {
+        lines.push('- [' + label + ' / ' + dos + '] ' + txt);
+      } else {
+        lines.push('- [' + label + '] ' + txt);
+      }
+    });
+    return lines.join('\n');
   }
 
   /** Dunne push-to-talk (zelfde patroon als Vertel: indrukken = praten, loslaten = stop). */
@@ -441,9 +477,13 @@
     } else {
       aandacht = String(global._ownAandachtspuntenCoachContext || '').trim();
     }
+    if (!gwState.confirmedProposalsBlock) {
+      try { await gwLoadConfirmedProposals(); } catch (_p) {}
+    }
     var ctx = {
       ownProfielBlock: gwOwnProfielBlock(),
       aandachtspuntenBlock: aandacht,
+      confirmedProposalsBlock: String(gwState.confirmedProposalsBlock || '').trim(),
       domainSummaries: gwState.domainSummaries,
       contactNamesByDomain: gwContactNamesByDomain(),
       openQuestions: gwState.profileQuestionAsked ? [] : gwCollectOpenQuestions(),
@@ -459,6 +499,38 @@
       try { return global.SenseiCore.buildGatewaySystemPrompt(ctx); } catch (_e) {}
     }
     return gwFallbackSystemPrompt(ctx);
+  }
+  async function gwLoadConfirmedProposals() {
+    var client = getClient();
+    var uid = getUidSync() || await ensureUid(client);
+    if (!client || !uid) {
+      gwState.confirmedProposalsBlock = '';
+      return;
+    }
+    var domains = ['date', 'family', 'friend', 'self'];
+    var all = [];
+    try {
+      for (var i = 0; i < domains.length; i++) {
+        var rows = [];
+        if (typeof global.senseFetchConfirmedGatewayProposals === 'function') {
+          rows = await global.senseFetchConfirmedGatewayProposals(client, uid, domains[i]);
+        }
+        (rows || []).forEach(function (r) {
+          if (!r) return;
+          if (!r.target_domain) r.target_domain = domains[i];
+          all.push(r);
+        });
+      }
+      all.sort(function (a, b) {
+        var ta = Date.parse(String(a.resolved_at || a.created_at || '')) || 0;
+        var tb = Date.parse(String(b.resolved_at || b.created_at || '')) || 0;
+        return tb - ta;
+      });
+      gwState.confirmedProposalsBlock = gwFormatConfirmedProposalsBlock(all);
+    } catch (e) {
+      console.warn('gwLoadConfirmedProposals', e);
+      gwState.confirmedProposalsBlock = '';
+    }
   }
   async function gwLoadDomainSummaries() {
     var client = getClient();
@@ -488,8 +560,88 @@
       }).catch(function () {});
     } catch (_e) {}
   }
+  async function gwHydrateMessagesFromDb(sessionIds) {
+    var client = getClient();
+    var uid = getUidSync() || await ensureUid(client);
+    var ids = Array.isArray(sessionIds) ? sessionIds.filter(Boolean) : [sessionIds];
+    ids = ids.filter(Boolean);
+    if (!client || !uid || !ids.length) return;
+    try {
+      var res = await client.from('sense_session_msgs')
+        .select('role,content,created_at,session_id')
+        .in('session_id', ids)
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(GW_HISTORY_CAP);
+      if (res && res.error) {
+        res = await client.from('sense_session_msgs')
+          .select('role,content,created_at,session_id')
+          .in('session_id', ids)
+          .order('created_at', { ascending: false })
+          .limit(GW_HISTORY_CAP);
+      }
+      if (res && res.error) throw res.error;
+      var chron = (res.data || []).slice().reverse();
+      gwState.messages = chron.map(function (m) {
+        return {
+          role: gwApiRole(m.role),
+          content: String(m.content || '')
+        };
+      }).filter(function (m) { return !!String(m.content || '').trim(); });
+      var box = document.getElementById('gatewayMessages');
+      if (box) {
+        box.innerHTML = '';
+        gwState.messages.forEach(function (m) {
+          if (m.role === 'user') gwAddUserBubble(m.content);
+          else gwAddSenseiBubble(m.content);
+        });
+      }
+      gwState.historyHydrated = true;
+    } catch (e) {
+      console.warn('gwHydrateMessagesFromDb', e);
+      gwState.messages = [];
+      gwState.historyHydrated = false;
+    }
+  }
+  /** Hervat de meest recente Gateway-sessie; laadt recente sessies in AI/UI-geschiedenis. */
+  async function gwResumeLatestSession() {
+    if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
+    if (gwState.sessionId && gwState.messages.length) {
+      gwState.historyHydrated = true;
+      return gwState.sessionId;
+    }
+    var client = getClient();
+    var uid = await ensureUid(client);
+    if (!client || !uid) return null;
+    try {
+      var res = await client.from('sense_sessions')
+        .select('id,bridge_shown,profile_question_asked,preview,updated_at')
+        .eq('user_id', uid)
+        .eq('vertel_app', GW_VERTEL_APP)
+        .order('updated_at', { ascending: false })
+        .limit(5);
+      if (res && res.error) throw res.error;
+      var rows = res && res.data ? res.data : [];
+      if (!rows.length) return null;
+      var latest = rows[0];
+      gwState.sessionId = latest.id;
+      gwState.bridgeShown = !!latest.bridge_shown;
+      gwState.profileQuestionAsked = !!latest.profile_question_asked;
+      gwState.proposedTargets = [];
+      await gwHydrateMessagesFromDb(rows.map(function (r) { return r.id; }));
+      return gwState.sessionId;
+    } catch (e) {
+      console.warn('gwResumeLatestSession', e);
+      return null;
+    }
+  }
   async function gwEnsureSession(previewText) {
     if (gwState.sessionId) return gwState.sessionId;
+    /* Alleen hervatten als er nog geen lokale beurt is (niet mid-send wissen). */
+    if (!(gwState.messages && gwState.messages.length)) {
+      var resumed = await gwResumeLatestSession();
+      if (resumed) return resumed;
+    }
     var client = getClient();
     var uid = await ensureUid(client);
     if (!client || !uid) return null;
@@ -509,6 +661,7 @@
         gwState.bridgeShown = !!res.data.bridge_shown;
         gwState.profileQuestionAsked = !!res.data.profile_question_asked;
         gwState.proposedTargets = [];
+        gwState.historyHydrated = true;
         return gwState.sessionId;
       }
     } catch (e) { console.warn('gwEnsureSession', e); }
@@ -520,13 +673,18 @@
     var uid = getUidSync() || await ensureUid(client);
     if (!client || !uid) return;
     try {
-      await client.from('sense_session_msgs').insert({
+      var dbRole = gwDbRole(role);
+      var ins = await client.from('sense_session_msgs').insert({
         session_id: gwState.sessionId,
         user_id: uid,
-        role: role,
+        role: dbRole,
         content: String(content || ''),
         created_at: new Date().toISOString()
       });
+      if (ins && ins.error) {
+        console.warn('gwSaveMsg insert:', ins.error);
+        return;
+      }
       await client.from('sense_sessions').update({
         updated_at: new Date().toISOString(),
         preview: String(content || '').trim().substring(0, 80)
@@ -867,6 +1025,9 @@
         });
       } catch (ingErr) { console.warn('gw ingest dossier', ingErr); }
     }
+    if (status === 'confirmed') {
+      try { await gwLoadConfirmedProposals(); } catch (_rp) {}
+    }
     return proposalId;
   }
   async function gwApplyProfileAnswer(vraagId, answer) {
@@ -1100,15 +1261,17 @@
     var typing = gwShowTyping();
     try {
       var system = await gwBuildSystemPrompt();
-      var apiMsgs = gwState.messages.map(function (m) {
-        return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
+      var hist = gwState.messages;
+      if (hist.length > GW_HISTORY_CAP) hist = hist.slice(-GW_HISTORY_CAP);
+      var apiMsgs = hist.map(function (m) {
+        return { role: gwApiRole(m.role), content: m.content };
       });
       var raw = await callGatewayAi(system, apiMsgs, 700);
       if (typing && typing.parentNode) typing.remove();
       var parsed = gwParseMarkers(raw);
       var isFirstTurn = gwState.messages.filter(function (m) { return m.role === 'assistant'; }).length === 0;
       gwState.messages.push({ role: 'assistant', content: parsed.text || String(raw || '') });
-      await gwSaveMsg('assistant', parsed.text || String(raw || ''));
+      await gwSaveMsg('ai', parsed.text || String(raw || ''));
       await gwHandleParsedReply(parsed, { isFirstTurn: isFirstTurn });
 
       if (pendingProfile && pendingProfile.domain && !parsed.crisis) {
@@ -1146,14 +1309,20 @@
     chat.classList.add('open');
     chat.setAttribute('aria-hidden', 'false');
     updateGatewayTalkbarPlaceholder();
-    if (firstOpen || !gwState.sessionId) {
+    if (firstOpen || !gwState.sessionId || !gwState.historyHydrated) {
       await ensureGatewaySenseiCore();
       try {
         var uid = getUidSync();
         if (uid && typeof A().loadProfileScopes === 'function') await A().loadProfileScopes(uid);
       } catch (_sc) {}
+      if (!gwState.sessionId || !gwState.historyHydrated) {
+        await gwResumeLatestSession();
+      }
       gwRequestSummariesRefresh();
-      await gwLoadDomainSummaries();
+      await Promise.all([
+        gwLoadDomainSummaries(),
+        gwLoadConfirmedProposals()
+      ]);
       if (typeof A().refreshAandachtspunten === 'function') {
         try { await A().refreshAandachtspunten(); } catch (_a) {}
       }
