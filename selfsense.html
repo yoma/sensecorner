@@ -2943,6 +2943,38 @@ function collectEvidenceCheckinIds(evidence){
   });
   return ids;
 }
+function aandachtspuntEvidenceKey(it){
+  if(!it)return'';
+  var mid=String(it.message_id||'').trim().toLowerCase();
+  if(mid)return'm:'+mid;
+  var cid=evidenceItemCheckinId(it);
+  if(cid)return'c:'+cid;
+  var own=String(it.type||'').trim().toLowerCase();
+  if(own==='eigen'){
+    return'e:'+String(it.text||it.excerpt||it.note||'').trim().toLowerCase()+'|'+String(it.created_at||'').trim();
+  }
+  try{return'j:'+JSON.stringify(it);}catch(_e){return'';}
+}
+function mergeAandachtspuntEvidence(a,b){
+  var merged=[];
+  var seen={};
+  parseAandachtspuntEvidence(a).concat(parseAandachtspuntEvidence(b)).forEach(function(it){
+    if(!it)return;
+    var key=aandachtspuntEvidenceKey(it);
+    if(key&&seen[key])return;
+    if(key)seen[key]=true;
+    merged.push(it);
+  });
+  return merged;
+}
+function mergeAandachtspuntTips(keepTips,removeTips,removeName){
+  var a=String(keepTips||'').trim();
+  var b=String(removeTips||'').trim();
+  if(!b)return a||null;
+  if(!a)return b;
+  if(a.indexOf(b)>=0)return a;
+  return a+'\n\nSamengevoegd vanuit "'+String(removeName||'aandachtspunt').trim()+'":\n'+b;
+}
 function readEvidenceInlineCheckin(it){
   if(!it)return{answer:'',note:'',answerLabel:''};
   var rawAns=String(it.answer||'').trim();
@@ -3610,14 +3642,27 @@ async function confirmSamenvoegen(keepId,removeId){
   _samenvoegenBusy=true;
   closeSamenvoegenModal();
   try{
-    var keepMov=Array.isArray(keepRow.movement)?keepRow.movement:[];
-    var removeMov=Array.isArray(removeRow.movement)?removeRow.movement:[];
-    var merged=keepMov.concat(removeMov).sort(function(a,b){
+    var keepMov=parseAandachtspuntMovement(keepRow.movement);
+    var removeMov=parseAandachtspuntMovement(removeRow.movement);
+    var mergedEvidence=mergeAandachtspuntEvidence(keepRow.evidence,removeRow.evidence);
+    var nowIso=new Date().toISOString();
+    var removeName=String(removeRow.soft_name||'').trim()||'aandachtspunt';
+    var merged=keepMov.concat(removeMov).concat([{
+      note:'Samengevoegd met: "'+removeName+'"',
+      at:nowIso,
+      type:'merge',
+      merged_id:removeId,
+      merged_name:removeName
+    }]).sort(function(a,b){
       return new Date(a&&a.at||0).getTime()-new Date(b&&b.at||0).getTime();
     });
-    await updateAandachtspuntRowLocal(keepId,{movement:merged});
+    await updateAandachtspuntRowLocal(keepId,{
+      evidence:mergedEvidence,
+      tips_advice:mergeAandachtspuntTips(keepRow.tips_advice,removeRow.tips_advice,removeName),
+      movement:merged
+    });
     var res=await sb.from('own_aandachtspunten')
-      .update({status:'verworpen',updated_at:new Date().toISOString()})
+      .update({status:'verworpen',updated_at:nowIso})
       .eq('id',removeId).eq('user_id',S.user.id);
     if(res&&res.error)throw res.error;
     if(Array.isArray(S.ssBevestigdeAandachtspunten)){
