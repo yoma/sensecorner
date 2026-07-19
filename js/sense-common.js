@@ -1546,6 +1546,10 @@
    * opts.state: app-state object met vertelFrom / vertelGesprekDossier.
    * opts.profiles: optionele allowlist; anders wordt de naam toch gezet.
    */
+  function senseHandoffDossierKey(name) {
+    return String(name || '').trim().toLowerCase().replace(/\s*sense$/, '').trim();
+  }
+
   function senseApplyHandoffDossierFocus(opts) {
     opts = opts || {};
     var state = opts.state;
@@ -1560,12 +1564,11 @@
         if (p.toLowerCase() === dossier.toLowerCase()) { hit = p; break; }
       }
       if (!hit) {
+        var dossierKey = senseHandoffDossierKey(dossier);
         for (var j = 0; j < profiles.length; j++) {
           var p2 = String(profiles[j] || '').trim();
           if (!p2) continue;
-          var a = p2.toLowerCase();
-          var b = dossier.toLowerCase();
-          if (a.indexOf(b) === 0 || b.indexOf(a) === 0) { hit = p2; break; }
+          if (senseHandoffDossierKey(p2) === dossierKey) { hit = p2; break; }
         }
       }
       if (hit) dossier = hit;
