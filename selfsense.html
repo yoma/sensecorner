@@ -10,10 +10,10 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="20-07-2026 12:30">
+<meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1707171205"></script>
+<script src="js/sense-common.js?v=2007261245"></script>
 <script src="js/selfsense-aandachtspunten-detect.js"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
@@ -15399,6 +15399,12 @@ async function getTodaySenseiSearchCount(userId){
 async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   // Centrale server-side gateway: auth + ai_access check + Claude call.
   if(!sb)throw new Error('Supabase is niet beschikbaar.');
+  if(typeof senseSanitizeClaudeMessages==='function'){
+    msgs=senseSanitizeClaudeMessages(msgs);
+  }
+  if(!Array.isArray(msgs)||!msgs.length){
+    throw new Error('Geen geldige berichten om naar Sensei te sturen.');
+  }
   var token='';
   var authBudgetMs=Math.min(10000,Math.max(3000,Math.floor((customTimeoutMs||30000)*0.4)));
   try{
@@ -15489,7 +15495,9 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
       throw new Error('Ongeldig antwoord van API (geen JSON).');
     }
     if(!res.ok){
-      var apiMsg=(data&&data.error&&data.error.message)||('HTTP '+res.status);
+      var apiMsg=(typeof senseFormatSenseiApiError==='function')
+        ?senseFormatSenseiApiError(data,res.status)
+        :((data&&data.error&&data.error.message)||('HTTP '+res.status));
       if(res.status===403){
         apiMsg='AI toegang nog niet geactiveerd. Vraag admin approval in SenseCorner.';
       }
@@ -15499,7 +15507,9 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
       }
       throw new Error(apiMsg);
     }
-    if(data.error)throw new Error(data.error.message);
+    if(data&&data.error){
+      throw new Error((typeof senseFormatSenseiApiError==='function')?senseFormatSenseiApiError(data,res.status):(data.error.message||String(data.error)));
+    }
     await logSenseiWebSearchIfPresent(data,sessionUserId,'selfsense');
     var txt=extractSenseiChatAssistantText(data)||'';
     try{
@@ -17235,7 +17245,12 @@ async function sendMsg(){
 
   // Bouw gespreksgeschiedenis - strip HTML tags en beperk lengte
   var history=[];
-  (S.vertelMsgs||[]).slice(-12).forEach(function(m){
+  var histSrc=(S.vertelMsgs||[]).slice(-12);
+  // addMsg() zette het huidige user-bericht al in vertelMsgs; dat voegen we hieronder opnieuw toe als txtForAI.
+  if(histSrc.length&&histSrc[histSrc.length-1]&&histSrc[histSrc.length-1].role==='user'){
+    histSrc=histSrc.slice(0,-1);
+  }
+  histSrc.forEach(function(m){
     var tekst=m.role==='user'
       ?vertelUserTurnPlainForAi(m)
       :String(m.html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();

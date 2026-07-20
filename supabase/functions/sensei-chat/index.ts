@@ -609,7 +609,36 @@ Deno.serve(async (req: Request) => {
     let system = String(body?.system || "").trim();
     const maxTokens = Math.max(64, Math.min(2000, Number(body?.max_tokens || 800)));
     const model = String(body?.model || "claude-sonnet-4-6");
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const messagesRaw = Array.isArray(body?.messages) ? body.messages : [];
+    if (!messagesRaw.length) return json({ error: "messages is required" }, 400);
+    const messages: { role: string; content: unknown }[] = [];
+    for (const m of messagesRaw) {
+      if (!m || typeof m !== "object") continue;
+      const rawRole = String((m as { role?: unknown }).role || "").toLowerCase();
+      const role = rawRole === "user"
+        ? "user"
+        : (rawRole === "assistant" || rawRole === "ai" ? "assistant" : "");
+      if (!role) continue;
+      let content = (m as { content?: unknown }).content;
+      if (content == null) continue;
+      if (typeof content === "string") {
+        content = content.replace(/\s+/g, " ").trim();
+        if (!content) continue;
+      } else if (Array.isArray(content)) {
+        if (!content.length) continue;
+      } else {
+        content = String(content).replace(/\s+/g, " ").trim();
+        if (!content) continue;
+      }
+      const prev = messages.length ? messages[messages.length - 1] : null;
+      if (prev && prev.role === role && typeof prev.content === "string" && typeof content === "string") {
+        if (prev.content === content) continue;
+        prev.content = prev.content + "\n\n" + content;
+        continue;
+      }
+      messages.push({ role, content });
+    }
+    while (messages.length && messages[0].role !== "user") messages.shift();
     if (!messages.length) return json({ error: "messages is required" }, 400);
 
     const roep = await resolveRoepnaam(userId);
