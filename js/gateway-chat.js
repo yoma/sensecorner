@@ -804,7 +804,10 @@
     return [];
   }
   function gwDossierAlias(name) {
-    return String(name || '').trim().replace(/\s*sense$/i, '').trim().toLowerCase();
+    var display = typeof global.senseContactDossierDisplayName === 'function'
+      ? global.senseContactDossierDisplayName(name)
+      : String(name || '').trim().replace(/[\s_-]*sense$/i, '').trim();
+    return String(display || '').trim().toLowerCase();
   }
   function gwResolveDossierName(domain, hint, proposalText) {
     var contacts = gwContactsForDomain(domain);

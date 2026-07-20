@@ -11,6 +11,16 @@ const resolver = source.slice(resolverStart, resolverEnd);
 
 assert.match(
   resolver,
+  /global\.senseContactDossierDisplayName\(name\)/,
+  'alias normalization must follow the shared dossier display convention'
+);
+assert.match(
+  resolver,
+  /replace\(\/\[\\s_-\]\*sense\$\/i/,
+  'legacy separator variants must retain a safe fallback alias'
+);
+assert.match(
+  resolver,
   /gwDossierAlias\(c\) === hintAlias/,
   'dossier hints must match an exact normalized alias'
 );
