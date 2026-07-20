@@ -1890,6 +1890,196 @@
     return out;
   }
 
+  /**
+   * Contactdossier-naam: "Tim" → "TimSense" (zelfde conventie als Vertel in de apps).
+   * Generieke labels zoals "iemand" geven '' (nooit stil aanmaken).
+   */
+  function senseNormalizeContactDossierName(raw) {
+    var base = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (!base) return '';
+    if (/^own\s*sense$/i.test(base)) return 'OWN Sense';
+    if (senseIsBlockedNewDossierLabel(base)) return '';
+    if (/sense$/i.test(base)) {
+      var withSense = base.replace(/\s+/g, '');
+      return withSense.charAt(0).toUpperCase() + withSense.slice(1);
+    }
+    var clean = base.replace(/\s+/g, '');
+    if (!clean) return '';
+    var titled = clean.charAt(0).toUpperCase() + clean.slice(1);
+    return titled + 'Sense';
+  }
+
+  function senseContactDossierDisplayName(dossierName) {
+    var n = String(dossierName || '').trim();
+    if (!n) return '';
+    if (/^own\s*sense$/i.test(n)) return 'OWN Sense';
+    return n.replace(/[\s_-]*sense$/i, '').trim() || n;
+  }
+
+  function senseIsBlockedNewDossierLabel(raw) {
+    var t = String(raw || '').trim().toLowerCase().replace(/sense$/i, '');
+    if (!t) return true;
+    var blocked = {
+      iemand: 1, someone: 1, somebody: 1, persoon: 1, persoonlijk: 1,
+      hij: 1, zij: 1, hem: 1, haar: 1, die: 1, deze: 1, dit: 1,
+      date: 1, datesense: 1, family: 1, familysense: 1,
+      friend: 1, friendsense: 1, self: 1, selfsense: 1,
+      sense: 1, sensei: 1, sensecorner: 1, own: 1
+    };
+    return !!blocked[t];
+  }
+
+  /** Stopwoorden / niet-namen bij detectie van een nieuwe voornaam. */
+  function senseNewPersonNameStopwords() {
+    return {
+      ik: 1, hey: 1, hallo: 1, hoi: 1, wat: 1, waar: 1, wanneer: 1, deze: 1, dit: 1, daar: 1,
+      jij: 1, jouw: 1, mijn: 1, wij: 1, ons: 1, met: 1, van: 1, voor: 1, maar: 1, dan: 1,
+      en: 1, of: 1, dat: 1, die: 1, date: 1, datesense: 1, familysense: 1, friendsense: 1,
+      selfsense: 1, sensecorner: 1, sensei: 1, expertise: 1, iemand: 1, persoon: 1,
+      vandaag: 1, gisteren: 1, morgen: 1, maandag: 1, dinsdag: 1, woensdag: 1,
+      donderdag: 1, vrijdag: 1, zaterdag: 1, zondag: 1, januari: 1, februari: 1,
+      maart: 1, april: 1, mei: 1, juni: 1, juli: 1, augustus: 1, september: 1,
+      oktober: 1, november: 1, december: 1, belgie: 1, belgië: 1, nederland: 1
+    };
+  }
+
+  /**
+   * Zoekt een nieuwe voornaam in tekst die nog niet in knownNames zit.
+   * @param {string} text
+   * @param {string[]} knownNames - dossiernamen of weergavenamen
+   * @param {Object} [opts]
+   * @param {string[]} [opts.ownTokens] - tokens van de gebruiker zelf (niet als nieuw contact)
+   * @returns {string} weergavenaam zonder Sense-suffix, of ''
+   */
+  function senseDetectNewPersonName(text, knownNames, opts) {
+    opts = opts || {};
+    var existingLow = {};
+    (knownNames || []).forEach(function (p) {
+      var nm = String(p || '').trim();
+      if (!nm || /^own\s*sense$/i.test(nm)) return;
+      existingLow[nm.toLowerCase()] = true;
+      var bare = senseContactDossierDisplayName(nm);
+      if (bare) existingLow[bare.toLowerCase()] = true;
+    });
+    var own = {};
+    (opts.ownTokens || []).forEach(function (t) {
+      t = String(t || '').trim().toLowerCase();
+      if (t) own[t] = true;
+    });
+    var stop = senseNewPersonNameStopwords();
+
+    function isNewNameCandidate(w) {
+      if (!w || w.length < 2) return false;
+      var low = w.toLowerCase();
+      if (stop[low] || own[low] || existingLow[low]) return false;
+      if (senseIsBlockedNewDossierLabel(w)) return false;
+      if (!senseNormalizeContactDossierName(w)) return false;
+      return true;
+    }
+
+    var blob = String(text || '');
+    var labelHits = (blob.match(/\b([A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{1,})\s*:/g) || [])
+      .map(function (m) { return m.replace(':', '').trim(); })
+      .filter(isNewNameCandidate);
+    if (labelHits.length) {
+      var lc = {};
+      labelHits.forEach(function (h) { lc[h] = (lc[h] || 0) + 1; });
+      var bestLabel = Object.keys(lc).sort(function (a, b) { return lc[b] - lc[a]; })[0];
+      if (bestLabel) return bestLabel;
+    }
+
+    var hits = (blob.match(/\b[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]{2,}\b/g) || [])
+      .map(function (w) { return w.trim(); })
+      .filter(isNewNameCandidate);
+    if (!hits.length) return '';
+    var counts = {};
+    hits.forEach(function (h) { counts[h] = (counts[h] || 0) + 1; });
+    var best = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; })[0];
+    return best || '';
+  }
+
+  /** True als tekst "iemand" (of vergelijkbaar) noemt zonder bruikbare voornaam. */
+  function senseTextMentionsNamelessSomeone(text) {
+    var t = String(text || '');
+    if (!/\b(iemand|een\s+persoon|die\s+persoon)\b/i.test(t)) return false;
+    var name = senseDetectNewPersonName(t, [], {});
+    return !name;
+  }
+
+  /**
+   * Maakt (of hergebruikt) een contactdossier in sense_profiles met juiste app_scope.
+   * Nooit stil: aanroeper moet eerst UI-bevestiging hebben.
+   * @returns {Promise<{name:string,displayName:string,domain:string,created:boolean}>}
+   */
+  async function senseCreateContactProfile(opts) {
+    opts = opts || {};
+    var sb = opts.sb;
+    var userId = String(opts.userId || '').trim();
+    var domain = String(opts.domain || '').trim().toLowerCase();
+    if (domain === 'ds') domain = 'date';
+    if (domain === 'fs') domain = 'family';
+    if (domain === 'fr') domain = 'friend';
+    if (domain !== 'date' && domain !== 'family' && domain !== 'friend') {
+      throw new Error('Kies DateSense, FamilySense of FriendSense voor een nieuw contactdossier.');
+    }
+    var scope = senseGatewayDomainScopeKey(domain);
+    if (!scope) throw new Error('Onbekend domein.');
+    var displayRaw = String(opts.displayName || opts.name || '').trim();
+    var dossierName = senseNormalizeContactDossierName(displayRaw);
+    if (!dossierName) {
+      throw new Error('Geef eerst een echte naam (niet "iemand").');
+    }
+    if (!sb || !userId) throw new Error('Niet ingelogd.');
+
+    var seedTraits = {
+      gevoeligheid: 0, openheid: 0, humor: 0, directheid: 0, avontuur: 0,
+      stabiliteit: 0, vertrouwen: 0, communicatie: 0, onafhankelijkheid: 0
+    };
+    var created = false;
+    var existing = await sb.from('sense_profiles')
+      .select('name,props')
+      .eq('user_id', userId)
+      .eq('name', dossierName)
+      .maybeSingle();
+    if (existing && existing.error) throw existing.error;
+
+    if (existing && existing.data && existing.data.name) {
+      var props = (existing.data.props && typeof existing.data.props === 'object')
+        ? Object.assign({}, existing.data.props)
+        : Object.assign({}, seedTraits);
+      var meta = (props.meta && typeof props.meta === 'object') ? Object.assign({}, props.meta) : {};
+      var scopes = Array.isArray(meta.app_scope)
+        ? meta.app_scope.map(function (s) { return String(s || '').toLowerCase(); }).filter(Boolean)
+        : [];
+      if (domain === 'friend') {
+        scopes = scopes.filter(function (s) { return s !== 'fs' && s !== 'ds'; });
+      }
+      if (scopes.indexOf(scope) < 0) scopes.push(scope);
+      meta.app_scope = scopes;
+      props.meta = meta;
+      var up = await sb.from('sense_profiles')
+        .update({ props: props, last_active: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('name', dossierName);
+      if (up && up.error) throw up.error;
+    } else {
+      var seedProps = Object.assign({}, seedTraits, { meta: { app_scope: [scope] } });
+      var ins = await sb.from('sense_profiles').upsert(
+        { user_id: userId, name: dossierName, props: seedProps, bericht_count: 0 },
+        { onConflict: 'user_id,name' }
+      );
+      if (ins && ins.error) throw new Error(ins.error.message || 'Dossier aanmaken mislukt');
+      created = true;
+    }
+
+    return {
+      name: dossierName,
+      displayName: senseContactDossierDisplayName(dossierName),
+      domain: domain,
+      created: created
+    };
+  }
+
   global.senseIsUuidLike = senseIsUuidLike;
   global.senseGatewayDomainFromAppKey = senseGatewayDomainFromAppKey;
   global.senseGatewayDomainScopeKey = senseGatewayDomainScopeKey;
@@ -1914,4 +2104,10 @@
   global.senseBuildGatewayProposalCoachTasks = senseBuildGatewayProposalCoachTasks;
   global.senseApplyGatewayBridgeBoot = senseApplyGatewayBridgeBoot;
   global.senseSanitizeGwProposalUserFacing = senseSanitizeGwProposalUserFacing;
+  global.senseNormalizeContactDossierName = senseNormalizeContactDossierName;
+  global.senseContactDossierDisplayName = senseContactDossierDisplayName;
+  global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
+  global.senseDetectNewPersonName = senseDetectNewPersonName;
+  global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
+  global.senseCreateContactProfile = senseCreateContactProfile;
 })(typeof window !== 'undefined' ? window : this);

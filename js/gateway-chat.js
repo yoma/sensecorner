@@ -58,6 +58,10 @@
     profileQuestionAsked: false,
     /** @type {{ domein: string, dossier: string, key: string }[]} */
     proposedTargets: [],
+    /** @type {Object.<string, boolean>} lowercase display names already offered this session */
+    newDossierOffered: {},
+    /** Nameless "iemand" ask-card already shown this session */
+    namelessAskShown: false,
     messages: [],
     domainSummaries: { date: '', family: '', friend: '', self: '' },
     confirmedProposalsBlock: '',
@@ -635,6 +639,8 @@
       gwState.bridgeShown = !!latest.bridge_shown;
       gwState.profileQuestionAsked = !!latest.profile_question_asked;
       gwState.proposedTargets = [];
+      gwState.newDossierOffered = {};
+      gwState.namelessAskShown = false;
       await gwHydrateMessagesFromDb(rows.map(function (r) { return r.id; }));
       return gwState.sessionId;
     } catch (e) {
@@ -668,6 +674,8 @@
         gwState.bridgeShown = !!res.data.bridge_shown;
         gwState.profileQuestionAsked = !!res.data.profile_question_asked;
         gwState.proposedTargets = [];
+        gwState.newDossierOffered = {};
+        gwState.namelessAskShown = false;
         gwState.historyHydrated = true;
         return gwState.sessionId;
       }
@@ -828,6 +836,12 @@
     if (domain === 'self' && !isProfile) targetProfile = 'OWN Sense';
     var contacts = (!isProfile && domain !== 'self') ? gwContactsForDomain(domain) : [];
     var needsPicker = !isProfile && domain !== 'self' && !targetProfile;
+    var suggestedNew = '';
+    if (!isProfile && domain !== 'self' && !targetProfile) {
+      suggestedNew = String(opts.suggestedNewName || '').trim()
+        || gwDetectUnknownPersonName(text)
+        || gwDetectUnknownPersonName(gwRecentUserBlob());
+    }
     var box = document.getElementById('gatewayMessages');
     if (!box) return;
     var card = document.createElement('div');
@@ -841,8 +855,12 @@
         var sel = targetProfile && nm.toLowerCase() === targetProfile.toLowerCase() ? ' selected' : '';
         optsHtml += '<option value="' + gwEsc(nm) + '"' + sel + '>' + gwEsc(nm) + '</option>';
       });
+      if (suggestedNew) {
+        optsHtml += '<option value="__new__"' + (needsPicker && !targetProfile ? ' selected' : '') + '>Nieuw dossier: '
+          + gwEsc(suggestedNew) + '</option>';
+      }
       optsHtml += '<option value="__own__"' + (targetProfile && /^own\s*sense$/i.test(targetProfile) ? ' selected' : '') + '>OWN Sense (over mij)</option>';
-      optsHtml += '<option value="__domain__"' + (needsPicker && !targetProfile ? ' selected' : '') + '>Alleen Sensei in ' + gwEsc(meta.label) + '</option>';
+      optsHtml += '<option value="__domain__"' + (needsPicker && !targetProfile && !suggestedNew ? ' selected' : '') + '>Alleen Sensei in ' + gwEsc(meta.label) + '</option>';
       dossierHtml =
         '<div class="gw-dossier-row">' +
           '<label for="gw-dos-' + gwEsc(String(proposalId || Date.now())) + '">Waar noteren?</label>' +
@@ -854,9 +872,11 @@
     }
     var yesLabel = isProfile
       ? ('Noteer in ' + meta.label)
-      : (targetProfile && !/^own\s*sense$/i.test(targetProfile)
-        ? ('Noteer bij ' + targetProfile)
-        : ('Noteer in ' + meta.label));
+      : (suggestedNew && needsPicker
+        ? ('Nieuw dossier · ' + suggestedNew)
+        : (targetProfile && !/^own\s*sense$/i.test(targetProfile)
+          ? ('Noteer bij ' + targetProfile)
+          : ('Noteer in ' + meta.label)));
     card.innerHTML =
       '<div class="gw-p-label">' + (isProfile ? 'Profielupdate · ' : 'Voorstel · ') + gwEsc(meta.label) + '</div>' +
       '<div class="gw-p-text"></div>' +
@@ -876,6 +896,7 @@
         var v = String(dosSel.value || '').trim();
         if (v === '__domain__') return '';
         if (v === '__own__') return 'OWN Sense';
+        if (v === '__new__') return '__new__';
         return v;
       }
       return targetProfile || '';
@@ -883,9 +904,13 @@
     if (dosSel) {
       dosSel.addEventListener('change', function () {
         var chosen = readChosenProfile();
-        yesBtn.textContent = chosen && !/^own\s*sense$/i.test(chosen)
-          ? ('Noteer bij ' + chosen)
-          : ('Noteer in ' + meta.label);
+        if (chosen === '__new__' && suggestedNew) {
+          yesBtn.textContent = 'Nieuw dossier · ' + suggestedNew;
+        } else if (chosen && !/^own\s*sense$/i.test(chosen)) {
+          yesBtn.textContent = 'Noteer bij ' + chosen;
+        } else {
+          yesBtn.textContent = 'Noteer in ' + meta.label;
+        }
       });
     }
     yesBtn.addEventListener('click', async function () {
@@ -898,6 +923,12 @@
       yesBtn.disabled = true; noBtn.disabled = true;
       if (dosSel) dosSel.disabled = true;
       try {
+        if (chosen === '__new__') {
+          if (!suggestedNew) throw new Error('Geen naam voor nieuw dossier.');
+          var created = await gwCreateContactDossier(suggestedNew, domain);
+          chosen = created.name;
+          gwMarkNewDossierOffered(suggestedNew);
+        }
         await gwResolveProposal({
           proposalId: proposalId,
           domain: domain,
@@ -927,7 +958,7 @@
           domain: domain,
           text: text,
           status: 'declined',
-          targetProfile: readChosenProfile(),
+          targetProfile: readChosenProfile() === '__new__' ? '' : readChosenProfile(),
           isProfileUpdate: isProfile
         });
         card.classList.add('declined');
@@ -1146,6 +1177,248 @@
     if (last.length > 200) last = last.substring(0, 197) + '…';
     return last;
   }
+
+  function gwAllKnownContactNames() {
+    var seen = {};
+    var out = [];
+    ['date', 'family', 'friend'].forEach(function (d) {
+      gwContactsForDomain(d).forEach(function (nm) {
+        nm = String(nm || '').trim();
+        if (!nm || /^own\s*sense$/i.test(nm)) return;
+        var lk = nm.toLowerCase();
+        if (seen[lk]) return;
+        seen[lk] = true;
+        out.push(nm);
+      });
+    });
+    return out;
+  }
+  function gwOwnNameTokens() {
+    var vn = gwDisplayName();
+    if (!vn) return [];
+    return String(vn).split(/[\s_-]+/).map(function (t) { return t.trim(); }).filter(function (t) { return t.length >= 2; });
+  }
+  function gwRecentUserBlob(maxMsgs) {
+    var n = maxMsgs || 6;
+    var parts = [];
+    var msgs = gwState.messages || [];
+    for (var i = msgs.length - 1; i >= 0 && parts.length < n; i--) {
+      if (gwApiRole(msgs[i].role) !== 'user') continue;
+      parts.unshift(String(msgs[i].content || ''));
+    }
+    return parts.join(' ');
+  }
+  function gwDetectUnknownPersonName(text) {
+    var blob = String(text || '').trim();
+    if (!blob) return '';
+    if (typeof global.senseDetectNewPersonName === 'function') {
+      return global.senseDetectNewPersonName(blob, gwAllKnownContactNames(), { ownTokens: gwOwnNameTokens() }) || '';
+    }
+    return '';
+  }
+  function gwMarkNewDossierOffered(displayName) {
+    var key = String(displayName || '').trim().toLowerCase();
+    if (!key) return;
+    if (!gwState.newDossierOffered || typeof gwState.newDossierOffered !== 'object') {
+      gwState.newDossierOffered = {};
+    }
+    gwState.newDossierOffered[key] = true;
+  }
+  function gwWasNewDossierOffered(displayName) {
+    var key = String(displayName || '').trim().toLowerCase();
+    if (!key || !gwState.newDossierOffered) return false;
+    return !!gwState.newDossierOffered[key];
+  }
+  function gwInferDomainFromText(text) {
+    var t = String(text || '').toLowerCase();
+    if (/\b(date|daten|dating|afspraakje|uitgaan|verkering|crush)\b/.test(t)) return 'date';
+    if (/\b(familie|mama|papa|moeder|vader|zus|broer|oom|tante|oma|opa|schoonfamilie)\b/.test(t)) return 'family';
+    if (/\b(vriend|vriendin|vrienden|vriendschap|mate|buddy)\b/.test(t)) return 'friend';
+    return '';
+  }
+  async function gwReloadContactScopes() {
+    var uid = getUidSync();
+    if (uid && typeof A().loadProfileScopes === 'function') {
+      try { await A().loadProfileScopes(uid); } catch (_e) {}
+    }
+  }
+  async function gwCreateContactDossier(displayName, domain) {
+    var client = getClient();
+    var uid = await ensureUid(client);
+    if (!client || !uid) throw new Error('Niet ingelogd.');
+    if (typeof global.senseCreateContactProfile !== 'function') {
+      throw new Error('Dossier-aanmaak helper ontbreekt.');
+    }
+    var result = await global.senseCreateContactProfile({
+      sb: client,
+      userId: uid,
+      displayName: displayName,
+      domain: domain
+    });
+    await gwReloadContactScopes();
+    gwRememberProposalTarget(result.domain, result.name);
+    return result;
+  }
+
+  /**
+   * Kaart: nieuw contactdossier met appkeuze (Date/Family/Friend).
+   * Nooit stil aanmaken. "iemand" zonder naam → askName-modus.
+   */
+  function gwRenderNewDossierCard(opts) {
+    opts = opts || {};
+    var askName = !!opts.askName;
+    var displayName = String(opts.displayName || '').trim();
+    if (!askName) {
+      if (!displayName) return;
+      if (typeof global.senseIsBlockedNewDossierLabel === 'function'
+        && global.senseIsBlockedNewDossierLabel(displayName)) return;
+      if (gwWasNewDossierOffered(displayName)) return;
+      gwMarkNewDossierOffered(displayName);
+    } else {
+      if (gwState.namelessAskShown) return;
+      gwState.namelessAskShown = true;
+    }
+    var inferred = gwNormDomain(opts.domainHint) || gwInferDomainFromText(gwRecentUserBlob()) || '';
+    var pending = opts.pendingProposal || null;
+    var box = document.getElementById('gatewayMessages');
+    if (!box) return;
+    var card = document.createElement('div');
+    card.className = 'gw-proposal gw-new-dossier';
+    card.style.setProperty('--gw-accent', 'var(--r,#5E7D5A)');
+    card.style.setProperty('--gw-soft', 'rgba(94,125,90,.14)');
+    var title = askName
+      ? 'Nieuw dossier? Hoe heet die persoon?'
+      : ('Nieuw dossier voor ' + displayName + '?');
+    var nameField = askName
+      ? ('<div class="gw-dossier-row">' +
+          '<label for="gw-new-name">Naam</label>' +
+          '<input id="gw-new-name" class="gw-new-name-input" type="text" maxlength="40" placeholder="bijv. Tim" autocomplete="off">' +
+        '</div>')
+      : '';
+    var domainOpts =
+      '<option value="">Kies app…</option>' +
+      '<option value="date"' + (inferred === 'date' ? ' selected' : '') + '>DateSense</option>' +
+      '<option value="family"' + (inferred === 'family' ? ' selected' : '') + '>FamilySense</option>' +
+      '<option value="friend"' + (inferred === 'friend' ? ' selected' : '') + '>FriendSense</option>';
+    card.innerHTML =
+      '<div class="gw-p-label">Nieuw dossier</div>' +
+      '<div class="gw-p-text"></div>' +
+      nameField +
+      '<div class="gw-dossier-row">' +
+        '<label for="gw-new-dom">In welke app?</label>' +
+        '<select id="gw-new-dom" class="gw-dossier-select">' + domainOpts + '</select>' +
+        '<span class="gw-dossier-hint">SelfSense is voor over jou. Contacten horen in Date, Family of Friend.</span>' +
+      '</div>' +
+      '<div class="gw-p-actions">' +
+        '<button type="button" class="gw-yes">Aanmaken</button>' +
+        '<button type="button" class="gw-no">Liever niet</button>' +
+      '</div>' +
+      '<div class="gw-done">✓ Dossier klaar · jij houdt de regie</div>';
+    card.querySelector('.gw-p-text').textContent = title;
+    var yesBtn = card.querySelector('.gw-yes');
+    var noBtn = card.querySelector('.gw-no');
+    var domSel = card.querySelector('#gw-new-dom');
+    var nameInp = card.querySelector('#gw-new-name');
+    yesBtn.addEventListener('click', async function () {
+      if (card.classList.contains('confirmed') || card.classList.contains('declined')) return;
+      var name = askName
+        ? String(nameInp && nameInp.value || '').trim()
+        : displayName;
+      var domain = gwNormDomain(domSel && domSel.value);
+      if (!name) {
+        toast('Vul eerst een naam in (niet "iemand").', true);
+        if (nameInp) try { nameInp.focus(); } catch (_f) {}
+        return;
+      }
+      if (typeof global.senseIsBlockedNewDossierLabel === 'function'
+        && global.senseIsBlockedNewDossierLabel(name)) {
+        toast('Gebruik een echte voornaam, niet "iemand".', true);
+        return;
+      }
+      if (!domain) {
+        toast('Kies eerst DateSense, FamilySense of FriendSense.', true);
+        return;
+      }
+      yesBtn.disabled = true; noBtn.disabled = true;
+      if (domSel) domSel.disabled = true;
+      if (nameInp) nameInp.disabled = true;
+      try {
+        var created = await gwCreateContactDossier(name, domain);
+        gwMarkNewDossierOffered(created.displayName || name);
+        if (pending && pending.text) {
+          await gwResolveProposal({
+            proposalId: pending.proposalId || null,
+            domain: created.domain,
+            text: pending.text,
+            status: 'confirmed',
+            targetProfile: created.name
+          });
+        }
+        card.classList.add('confirmed');
+        var done = card.querySelector('.gw-done');
+        var label = gwLandingLabel(created.domain, created.name);
+        if (done) {
+          done.textContent = pending && pending.text
+            ? ('✓ ' + label + ' · notitie bewaard')
+            : ('✓ ' + label + ' aangemaakt');
+        }
+        toast(created.created
+          ? (created.displayName + ' aangemaakt in ' + gwAppMeta(created.domain).label)
+          : (created.displayName + ' staat klaar in ' + gwAppMeta(created.domain).label),
+          false, { durationMs: 3600 });
+      } catch (e) {
+        yesBtn.disabled = false; noBtn.disabled = false;
+        if (domSel) domSel.disabled = false;
+        if (nameInp) nameInp.disabled = false;
+        toast(formatErr(e, 'Kon dossier niet aanmaken.'), true);
+      }
+    });
+    noBtn.addEventListener('click', function () {
+      if (card.classList.contains('confirmed') || card.classList.contains('declined')) return;
+      card.classList.add('declined');
+      yesBtn.disabled = true; noBtn.disabled = true;
+      if (domSel) domSel.disabled = true;
+      if (nameInp) nameInp.disabled = true;
+      card.querySelector('.gw-done').textContent = 'Geen nieuw dossier · jij houdt de regie';
+    });
+    box.appendChild(card);
+    gwScrollMessages();
+    if (nameInp) setTimeout(function () { try { nameInp.focus(); } catch (_e) {} }, 40);
+  }
+
+  /**
+   * Client safety net voor NIEUWE personen: onbekende voornaam → dossierkaart,
+   * of "iemand" zonder naam → eerst naam vragen. Nooit stil aanmaken.
+   */
+  function gwMaybeOfferNewDossier(opts) {
+    opts = opts || {};
+    if (opts.crisis) return;
+    var blob = gwRecentUserBlob(8);
+    if (!blob) return;
+    var unknown = gwDetectUnknownPersonName(blob);
+    if (unknown) {
+      if (gwWasNewDossierOffered(unknown)) return;
+      var knownHit = null;
+      var index = gwKnownContactIndex();
+      Object.keys(index).forEach(function (lk) {
+        if (gwTextMentionsContact(blob, index[lk].name)) knownHit = index[lk];
+      });
+      if (knownHit) return;
+      gwRenderNewDossierCard({
+        displayName: unknown,
+        domainHint: opts.domainHint || gwInferDomainFromText(blob),
+        pendingProposal: opts.pendingProposal || null
+      });
+      return;
+    }
+    var nameless = typeof global.senseTextMentionsNamelessSomeone === 'function'
+      ? global.senseTextMentionsNamelessSomeone(blob)
+      : /\biemand\b/i.test(blob);
+    if (nameless) {
+      gwRenderNewDossierCard({ askName: true, domainHint: opts.domainHint || gwInferDomainFromText(blob) });
+    }
+  }
+
   /**
    * Client safety net: 2+ user-berichten noemen een bekend contact, maar er is
    * nog geen voorstel/brug deze sessie → synthetische VOORSTEL (+ BRUG) tonen.
@@ -1333,11 +1606,17 @@
       );
       if (gwNormDomain(parsed.proposal.domain) === 'self') resolvedDos = 'OWN Sense';
       var trackDos = resolvedDos || parsed.proposal.dossier || '';
-      if (gwWasProposalTargetOffered(parsed.proposal.domain, trackDos)) {
+      var suggestedNew = '';
+      if (!resolvedDos && gwNormDomain(parsed.proposal.domain) !== 'self') {
+        suggestedNew = gwDetectUnknownPersonName(parsed.proposal.text)
+          || gwDetectUnknownPersonName(parsed.proposal.dossier || '')
+          || gwDetectUnknownPersonName(gwRecentUserBlob());
+      }
+      if (gwWasProposalTargetOffered(parsed.proposal.domain, trackDos || (suggestedNew ? ('new:' + suggestedNew) : ''))) {
         // Zelfde domein/dossier al aangeboden deze sessie: geen tweede voorstelkaart.
         parsed.proposal = null;
       } else {
-        gwRememberProposalTarget(parsed.proposal.domain, trackDos);
+        gwRememberProposalTarget(parsed.proposal.domain, trackDos || (suggestedNew ? ('new:' + suggestedNew) : ''));
         var pid = null;
         try {
           pid = await gwInsertProposalRow(parsed.proposal.domain, parsed.proposal.text, trackDos);
@@ -1347,8 +1626,16 @@
           text: parsed.proposal.text,
           proposalId: pid,
           dossier: parsed.proposal.dossier || '',
-          targetProfile: resolvedDos
+          targetProfile: resolvedDos,
+          suggestedNewName: suggestedNew
         });
+        if (suggestedNew && !gwWasNewDossierOffered(suggestedNew)) {
+          gwRenderNewDossierCard({
+            displayName: suggestedNew,
+            domainHint: parsed.proposal.domain,
+            pendingProposal: { proposalId: pid, text: parsed.proposal.text }
+          });
+        }
       }
     }
     if (parsed.bridge && allowBridge) {
@@ -1469,6 +1756,9 @@
     try { await gwMaybeInjectActionSafetyNet({}); } catch (snEarly) {
       console.warn('gwMaybeInjectActionSafetyNet early', snEarly);
     }
+    try { gwMaybeOfferNewDossier({}); } catch (ndEarly) {
+      console.warn('gwMaybeOfferNewDossier early', ndEarly);
+    }
 
     var typing = gwShowTyping();
     try {
@@ -1487,6 +1777,14 @@
       await gwHandleParsedReply(parsed, { isFirstTurn: isFirstTurn });
       try { await gwMaybeInjectActionSafetyNet({ crisis: !!parsed.crisis }); } catch (snErr) {
         console.warn('gwMaybeInjectActionSafetyNet', snErr);
+      }
+      try {
+        gwMaybeOfferNewDossier({
+          crisis: !!parsed.crisis,
+          domainHint: parsed.proposal ? parsed.proposal.domain : ''
+        });
+      } catch (ndErr) {
+        console.warn('gwMaybeOfferNewDossier', ndErr);
       }
 
       if (pendingProfile && pendingProfile.domain && !parsed.crisis) {
