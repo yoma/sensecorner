@@ -661,6 +661,15 @@
   async function gwEnsureSession(previewText) {
     var resumed = await gwResumeLatestSession();
     if (resumed) return resumed;
+    if (_gwResumePromise) return await _gwResumePromise;
+    _gwResumePromise = gwCreateSession(previewText);
+    try {
+      return await _gwResumePromise;
+    } finally {
+      _gwResumePromise = null;
+    }
+  }
+  async function gwCreateSession(previewText) {
     if (gwState.sessionId) return gwState.sessionId;
     var client = getClient();
     var uid = await ensureUid(client);

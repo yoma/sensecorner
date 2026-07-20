@@ -22,21 +22,32 @@ assert.ok(
   'an in-flight resume must finish before session fast paths'
 );
 
-const ensure = functionBody('gwEnsureSession', 'gwSaveMsg');
+const ensure = functionBody('gwEnsureSession', 'gwCreateSession');
 assert.match(
   ensure,
   /var resumed = await gwResumeLatestSession\(\);/,
   'session creation must wait for history resume'
 );
+const resumeIndex = ensure.indexOf('await gwResumeLatestSession();');
+const inFlightIndex = ensure.indexOf('if (_gwResumePromise)');
+const createIndex = ensure.indexOf('_gwResumePromise = gwCreateSession(previewText);');
 assert.ok(
-  ensure.indexOf('await gwResumeLatestSession();') < ensure.indexOf('if (gwState.sessionId)'),
-  'send must await hydration even after resume assigns the session id'
+  resumeIndex >= 0 && resumeIndex < inFlightIndex && inFlightIndex < createIndex,
+  'resume and session creation must share one serialized promise'
+);
+assert.match(
+  ensure,
+  /finally\s*\{\s*_gwResumePromise = null;/,
+  'the session lock must be released after creation'
 );
 assert.doesNotMatch(
   ensure,
   /gwState\.messages\s*&&\s*gwState\.messages\.length/,
   'local messages must never bypass history resume'
 );
+
+const create = functionBody('gwCreateSession', 'gwSaveMsg');
+assert.match(create, /from\('sense_sessions'\)\.insert\(/, 'session insertion must stay inside the lock');
 
 const send = functionBody('gwSendMessage', 'openGatewayChat');
 const ensureIndex = send.indexOf('await gwEnsureSession(userText);');
