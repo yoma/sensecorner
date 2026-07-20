@@ -554,6 +554,54 @@
     return /overbevraagd|\b429\b|rate.?limit|too many requests/i.test(String(msg || ''));
   }
 
+  /** Claude Messages API: first message must be user; roles must alternate. */
+  function senseSanitizeClaudeMessages(msgs) {
+    var out = [];
+    (Array.isArray(msgs) ? msgs : []).forEach(function (m) {
+      if (!m || typeof m !== 'object') return;
+      var rawRole = String(m.role || '').toLowerCase();
+      var role =
+        rawRole === 'user' ? 'user' : rawRole === 'assistant' || rawRole === 'ai' ? 'assistant' : '';
+      if (!role) return;
+      var content = m.content;
+      if (content == null) return;
+      if (typeof content === 'string') {
+        content = content.replace(/\s+/g, ' ').trim();
+        if (!content) return;
+      } else if (Array.isArray(content)) {
+        if (!content.length) return;
+      } else {
+        content = String(content).replace(/\s+/g, ' ').trim();
+        if (!content) return;
+      }
+      if (out.length && out[out.length - 1].role === role) {
+        var prev = out[out.length - 1];
+        if (typeof prev.content === 'string' && typeof content === 'string') {
+          if (prev.content === content) return;
+          prev.content = prev.content + '\n\n' + content;
+          return;
+        }
+      }
+      out.push({ role: role, content: content });
+    });
+    while (out.length && out[0].role !== 'user') out.shift();
+    return out;
+  }
+
+  function senseFormatSenseiApiError(data, status) {
+    var err = data && data.error;
+    if (typeof err === 'string' && err.trim()) return err.trim();
+    if (err && typeof err === 'object') {
+      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
+      try {
+        var s = JSON.stringify(err);
+        if (s && s !== '{}') return s;
+      } catch (_e) {}
+    }
+    if (typeof data === 'string' && data.trim()) return data.trim();
+    return 'HTTP ' + String(status || '');
+  }
+
   function senseRecoStatusNoticeHtml(msg) {
     var esc = function (s) {
       return String(s == null ? '' : s)
@@ -1275,6 +1323,8 @@
   global.refreshOwnAandachtspuntenCoachContextAuto = refreshOwnAandachtspuntenCoachContextAuto;
   global.senseRecoNoFabricationRules = senseRecoNoFabricationRules;
   global.senseIsRateLimitMessage = senseIsRateLimitMessage;
+  global.senseSanitizeClaudeMessages = senseSanitizeClaudeMessages;
+  global.senseFormatSenseiApiError = senseFormatSenseiApiError;
   global.senseRecoStatusNoticeHtml = senseRecoStatusNoticeHtml;
   global.senseSparseDailyRecoFallback = senseSparseDailyRecoFallback;
   global.senseSparseDagAdviesFallback = senseSparseDagAdviesFallback;

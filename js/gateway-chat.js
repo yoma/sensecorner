@@ -1699,9 +1699,14 @@
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens || 700,
       system: systemPrompt || '',
-      messages: apiMsgs,
+      messages: (typeof senseSanitizeClaudeMessages === 'function'
+        ? senseSanitizeClaudeMessages(apiMsgs)
+        : apiMsgs),
       gateway: true
     };
+    if (!reqBody.messages || !reqBody.messages.length) {
+      throw new Error('Geen geldige berichten om naar Sensei te sturen.');
+    }
     try {
       var r = await fetch(edgeBase() + '/functions/v1/sensei-chat', {
         method: 'POST',
