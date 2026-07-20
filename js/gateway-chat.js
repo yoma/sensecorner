@@ -803,17 +803,21 @@
     }
     return [];
   }
+  function gwDossierAlias(name) {
+    return String(name || '').trim().replace(/\s*sense$/i, '').trim().toLowerCase();
+  }
   function gwResolveDossierName(domain, hint, proposalText) {
     var contacts = gwContactsForDomain(domain);
     if (!contacts.length) return '';
     var h = String(hint || '').trim();
     if (h) {
+      var hintAlias = gwDossierAlias(h);
       for (var i = 0; i < contacts.length; i++) {
         if (contacts[i].toLowerCase() === h.toLowerCase()) return contacts[i];
       }
       for (var j = 0; j < contacts.length; j++) {
         var c = contacts[j];
-        if (c.toLowerCase().indexOf(h.toLowerCase()) === 0 || h.toLowerCase().indexOf(c.toLowerCase()) === 0) return c;
+        if (hintAlias && gwDossierAlias(c) === hintAlias) return c;
       }
     }
     var blob = (' ' + String(proposalText || '') + ' ').toLowerCase();
@@ -856,7 +860,7 @@
     if (!isProfile && domain !== 'self' && !targetProfile) {
       suggestedNew = String(opts.suggestedNewName || '').trim()
         || gwDetectUnknownPersonName(text)
-        || gwDetectUnknownPersonName(gwRecentUserBlob());
+        || gwDetectUnknownPersonName(gwRecentUserBlob(1));
     }
     var box = document.getElementById('gatewayMessages');
     if (!box) return;
@@ -1659,7 +1663,7 @@
       if (!resolvedDos && gwNormDomain(parsed.proposal.domain) !== 'self') {
         suggestedNew = gwDetectUnknownPersonName(parsed.proposal.text)
           || gwDetectUnknownPersonName(parsed.proposal.dossier || '')
-          || gwDetectUnknownPersonName(gwRecentUserBlob());
+          || gwDetectUnknownPersonName(gwRecentUserBlob(1));
       }
       if (gwWasProposalTargetOffered(parsed.proposal.domain, trackDos || (suggestedNew ? ('new:' + suggestedNew) : ''))) {
         // Zelfde domein/dossier al aangeboden deze sessie: geen tweede voorstelkaart.
