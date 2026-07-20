@@ -3,19 +3,22 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../js/gateway-chat.js', import.meta.url), 'utf8');
 
-const resolverStart = source.indexOf('function gwResolveDossierName(');
+const aliasStart = source.indexOf('function gwDossierAlias(');
+const resolverStart = source.indexOf('function gwResolveDossierName(', aliasStart);
 const resolverEnd = source.indexOf('function gwLandingLabel(', resolverStart);
+assert.notEqual(aliasStart, -1, 'gwDossierAlias must exist');
 assert.notEqual(resolverStart, -1, 'gwResolveDossierName must exist');
 assert.notEqual(resolverEnd, -1, 'gwLandingLabel must follow dossier resolution');
+const aliasAndResolver = source.slice(aliasStart, resolverEnd);
 const resolver = source.slice(resolverStart, resolverEnd);
 
 assert.match(
-  resolver,
+  aliasAndResolver,
   /global\.senseContactDossierDisplayName\(name\)/,
   'alias normalization must follow the shared dossier display convention'
 );
 assert.match(
-  resolver,
+  aliasAndResolver,
   /replace\(\/\[\\s_-\]\*sense\$\/i/,
   'legacy separator variants must retain a safe fallback alias'
 );
