@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="20-07-2026 09:40">
+<meta name="sc-build" content="20-07-2026 12:05">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -17,11 +17,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2007260940"></script>
-<script src="js/sense-mirror-hub.js?v=2007260940"></script>
+<script src="js/sense-common.js?v=2007261205"></script>
+<script src="js/sense-mirror-hub.js?v=2007261205"></script>
 <script src="js/sense-auth-client.js"></script>
-<script type="module" src="js/senseiCore-loader.js?v=2007260940"></script>
-<script src="js/gateway-chat.js?v=2007260940"></script>
+<script type="module" src="js/senseiCore-loader.js?v=2007261205"></script>
+<script src="js/gateway-chat.js?v=2007261205"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -1167,14 +1167,14 @@ a.app-card{color:inherit;text-decoration:none}
 
 <div id="hubStartIntroOverlay" class="hub-start-intro-overlay" aria-hidden="true">
   <div class="hub-start-intro-modal" role="dialog" aria-modal="true" aria-labelledby="hubStartIntroTitle">
-    <div class="hub-start-intro-kicker">Eerste keer op SenseCorner</div>
+    <div class="hub-start-intro-kicker">Welkom op SenseCorner</div>
     <h2 class="hub-start-intro-title" id="hubStartIntroTitle">Klaar om te starten?</h2>
-    <p class="hub-start-intro-lead" id="hubStartIntroLead">SenseCorner is je startpunt. Je hoeft niet alles tegelijk. Eén app, één gesprek, dat is genoeg om te beginnen.</p>
+    <p class="hub-start-intro-lead" id="hubStartIntroLead">SenseCorner is je startpunt. Praat met Sensei bovenaan, of open één app. Je hoeft niet alles tegelijk.</p>
     <div class="hub-start-intro-apps" id="hubStartIntroApps" aria-label="Overzicht van je apps"></div>
-    <p class="hub-start-intro-footnote">Tip: OWN Sense bovenaan is jouw profiel. De apps eronder zijn je spiegels voor verschillende levensdomeinen.</p>
+    <p class="hub-start-intro-footnote">Tip: bovenaan praat je met Sensei. OWN Sense is jouw profiel. De apps eronder zijn spiegels voor verschillende levensdomeinen. Kennismakingsvragen kun je later per app inhalen.</p>
     <label class="hub-start-intro-check" for="hubStartIntroSuppress">
-      <input type="checkbox" id="hubStartIntroSuppress">
-      <span>Volgende keer niet meer automatisch tonen</span>
+      <input type="checkbox" id="hubStartIntroSuppress" checked>
+      <span>Niet meer automatisch tonen</span>
     </label>
     <div class="hub-start-intro-actions">
       <button type="button" class="hub-start-intro-btn primary" id="hubStartIntroOkBtn">Begrepen, ik start</button>
@@ -2359,15 +2359,19 @@ a.app-card{color:inherit;text-decoration:none}
     try{
       var raw=localStorage.getItem(scHubStartIntroStorageKey(uid));
       if(!raw)return null;
-      return JSON.parse(raw);
+      var prefs=JSON.parse(raw);
+      return prefs&&typeof prefs==='object'?prefs:null;
     }catch(_e){return null;}
   }
   function scSaveHubStartIntroPrefs(uid,prefs){
-    try{localStorage.setItem(scHubStartIntroStorageKey(uid),JSON.stringify(prefs||{}));}catch(_e2){}
+    try{
+      if(!uid)return;
+      localStorage.setItem(scHubStartIntroStorageKey(uid),JSON.stringify(prefs||{}));
+    }catch(_e2){}
   }
   function scHubStartIntroAppDefs(){
     return [
-      {key:'own',always:true,tone:'sage',title:'OWN Sense',text:'Dit ben jij. Alles wat je deelt groeit mee in je profiel.'},
+      {key:'own',always:true,tone:'sage',title:'OWN Sense',text:'Dit ben jij. Vul Over jou aan wanneer je wilt; hoe rijker je profiel, hoe gerichter Sensei meedenkt.'},
       {key:'ss',tone:'self',title:'SelfSense',text:'Werken aan jezelf? Open SelfSense en begin in Vertel gewoon te typen.'},
       {key:'fr',tone:'friend',title:'FriendSense',text:'Vragen over vriendschap? Vertel, of maak alvast dossiers van een paar vrienden.'},
       {key:'ds',tone:'date',title:'DateSense',text:'Over daten of je relatie? Vertel, of leg iemand vast in een dossier.'},
@@ -2391,7 +2395,7 @@ a.app-card{color:inherit;text-decoration:none}
       return '<div class="'+cls+'"><div class="hub-start-intro-app-name">'+def.title+'</div><p class="hub-start-intro-app-text">'+def.text+'</p></div>';
     }).join('');
   }
-  function dismissHubStartIntro(opts){
+  async function dismissHubStartIntro(opts){
     opts=opts||{};
     var overlay=document.getElementById('hubStartIntroOverlay');
     var chk=document.getElementById('hubStartIntroSuppress');
@@ -2399,10 +2403,16 @@ a.app-card{color:inherit;text-decoration:none}
       overlay.classList.remove('show');
       overlay.setAttribute('aria-hidden','true');
     }
-    if(chk&&!opts.keepCheckbox)chk.checked=false;
-    var user=userSession;
+    var wantSuppress=!!opts.suppressAuto;
+    if(!wantSuppress&&chk&&chk.checked)wantSuppress=true;
+    if(chk&&!opts.keepCheckbox)chk.checked=true;
+    var user=opts.user||userSession;
+    if((!user||!user.id)&&typeof getCurrentUser==='function'){
+      try{user=await getCurrentUser();}catch(_gu){user=null;}
+    }
+    if(user&&user.id)userSession=user;
     if(!user||!user.id)return;
-    if(opts.suppressAuto){
+    if(wantSuppress){
       scSaveHubStartIntroPrefs(user.id,{suppressAuto:true,closedAt:Date.now()});
     }
   }
@@ -2410,15 +2420,18 @@ a.app-card{color:inherit;text-decoration:none}
     opts=opts||{};
     var overlay=document.getElementById('hubStartIntroOverlay');
     if(!overlay||!user)return;
+    if(user&&user.id)userSession=user;
     var nm=pickSenseCornerDisplayName(user);
     var titleEl=document.getElementById('hubStartIntroTitle');
     var leadEl=document.getElementById('hubStartIntroLead');
+    var chk=document.getElementById('hubStartIntroSuppress');
     if(titleEl){
       titleEl.textContent=nm?('We zijn er, '+nm+'. Hoe start je?'):'Klaar om te starten?';
     }
     if(leadEl){
-      leadEl.textContent='SenseCorner is je startpunt. Je hoeft niet alles tegelijk. Eén app, één gesprek, dat is genoeg om te beginnen.';
+      leadEl.textContent='SenseCorner is je startpunt. Praat met Sensei bovenaan, of open één app. Je hoeft niet alles tegelijk.';
     }
+    if(chk)chk.checked=true;
     scRenderHubStartIntroApps(_scMirrorStatuses);
     overlay.classList.add('show');
     overlay.setAttribute('aria-hidden','false');
@@ -2431,6 +2444,7 @@ a.app-card{color:inherit;text-decoration:none}
       if(overlay&&overlay.classList.contains('show'))return;
       var user=userSession||await getCurrentUser();
       if(!user||!user.id)return;
+      userSession=user;
       if(!(await scHasOnboardingCompleted(user.id)))return;
       var prefs=scLoadHubStartIntroPrefs(user.id);
       if(prefs&&prefs.suppressAuto)return;
@@ -2442,6 +2456,7 @@ a.app-card{color:inherit;text-decoration:none}
     try{
       var user=userSession||await getCurrentUser();
       if(!user||!user.id)return;
+      userSession=user;
       await scRefreshMirrorStatuses(user);
       showHubStartIntro(user,{forced:true});
     }catch(_force){}
@@ -2454,18 +2469,21 @@ a.app-card{color:inherit;text-decoration:none}
     var showBtn=document.getElementById('hubShowStartIntroBtn');
     if(okBtn){
       okBtn.addEventListener('click',function(){
-        var chk=document.getElementById('hubStartIntroSuppress');
-        dismissHubStartIntro({suppressAuto:!!(chk&&chk.checked)});
+        /* Begrepen = intro gezien: altijd niet meer automatisch tonen. */
+        void dismissHubStartIntro({suppressAuto:true});
       });
     }
     if(laterBtn){
       laterBtn.addEventListener('click',function(){
-        dismissHubStartIntro({suppressAuto:false});
+        var chk=document.getElementById('hubStartIntroSuppress');
+        void dismissHubStartIntro({suppressAuto:!!(chk&&chk.checked)});
       });
     }
     if(overlay){
       overlay.addEventListener('click',function(ev){
-        if(ev.target===overlay)dismissHubStartIntro({suppressAuto:false});
+        if(ev.target!==overlay)return;
+        var chk=document.getElementById('hubStartIntroSuppress');
+        void dismissHubStartIntro({suppressAuto:!!(chk&&chk.checked)});
       });
     }
     if(showBtn){
@@ -2477,7 +2495,8 @@ a.app-card{color:inherit;text-decoration:none}
       if(!overlay||!overlay.classList.contains('show'))return;
       if(ev.key==='Escape'){
         ev.preventDefault();
-        dismissHubStartIntro({suppressAuto:false});
+        var chk=document.getElementById('hubStartIntroSuppress');
+        void dismissHubStartIntro({suppressAuto:!!(chk&&chk.checked)});
       }
     });
   })();
