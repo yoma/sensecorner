@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#BA5654">
 <title>DateSense - DateSensei · jouw dating coach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="ds-build" content="17-07-2026 12:43">
+<meta name="ds-build" content="20-07-2026 12:30">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707171205"></script>
@@ -919,9 +919,27 @@ a:focus-visible,
 .save-modal-overlay{position:fixed;inset:0;z-index:320;display:none;align-items:flex-end;justify-content:center}
 .save-modal-overlay.show{display:flex}
 .save-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
-.save-modal-sheet{position:relative;z-index:2;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + var(--sb));max-height:78vh;overflow:auto;box-shadow:0 -8px 24px rgba(0,0,0,.16);pointer-events:auto}
-.save-modal-title{font-size:16px;font-weight:800;color:var(--t);margin-bottom:4px}
-.save-modal-sub{font-size:13px;color:#666;line-height:1.5;margin-bottom:12px}
+.save-modal-sheet{
+  position:relative;z-index:2;width:min(520px,100%);background:#fff;border-radius:18px 18px 0 0;
+  padding:14px 16px calc(16px + var(--sb));max-height:min(78vh,78dvh);overflow:auto;
+  box-shadow:0 -8px 24px rgba(0,0,0,.16);pointer-events:auto;
+}
+.save-modal-sheet.save-modal-sheet--split{
+  padding-bottom:0;overflow:hidden;display:flex;flex-direction:column;
+}
+.save-modal-sheet-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.save-modal-sheet-foot{
+  flex-shrink:0;display:none;gap:8px;padding:10px 0 calc(14px + var(--sb));
+  border-top:1px solid var(--b);background:#fff;
+}
+.save-modal-sheet-foot.show{display:flex}
+.save-modal-sheet-foot .btn-r,.save-modal-sheet-foot .btn-g{flex:1;min-width:0;padding:12px 10px}
+.save-modal-title{font-size:16px;font-weight:800;color:var(--t);margin-bottom:4px;flex-shrink:0}
+.save-modal-sub{font-size:13px;color:#666;line-height:1.5;margin-bottom:12px;flex-shrink:0}
+.save-modal-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.save-modal-opt:active{opacity:.75}
+.save-modal-opt.is-selected{border-color:#BA5654;background:#FFF6F6;box-shadow:inset 0 0 0 1px rgba(186,86,84,.25)}
+.save-modal-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0;background:#ccc}
 .ai-import-tabs{display:flex;gap:6px;margin-bottom:12px}
 .ai-import-tab{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--b);background:#fafbfc;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#555}
 .ai-import-tab.active{background:var(--rl);border-color:#F0C4C4;color:var(--r)}
@@ -932,9 +950,6 @@ a:focus-visible,
 .ai-import-review-ta{width:100%;min-height:52px;padding:10px 12px;border:1px solid var(--b);border-radius:10px;font-size:13px;font-family:inherit;resize:vertical}
 .ai-import-loading{text-align:center;padding:20px 12px}
 .ai-import-loading .photo-loading-spinner{margin:0 auto 12px}
-.save-modal-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.save-modal-opt:active{opacity:.75}
-.save-modal-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0;background:#ccc}
 
 /* Profielgegevens modal */
 .profile-modal-overlay{position:fixed;inset:0;z-index:330;display:none;align-items:flex-end;justify-content:center}
@@ -1416,10 +1431,16 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
 <!-- ══ DOSSIER KEUZE MODAL (voor sessie-koppeling) ══ -->
 <div class="save-modal-overlay" id="dossierPickModal" role="dialog" aria-modal="true" aria-labelledby="dossierPickTitle">
   <div class="save-modal-bg" onclick="closeDossierPickModal()"></div>
-  <div class="save-modal-sheet">
+  <div class="save-modal-sheet save-modal-sheet--split">
     <div class="save-modal-title" id="dossierPickTitle">Kies dossier</div>
     <div class="save-modal-sub" id="dossierPickSub">Selecteer een dossier.</div>
-    <div id="dossierPickOpts"></div>
+    <div class="save-modal-sheet-body" id="dossierPickBody">
+      <div id="dossierPickOpts"></div>
+    </div>
+    <div class="save-modal-sheet-foot" id="dossierPickFoot">
+      <button type="button" class="btn-g" id="dossierPickCancelBtn" onclick="closeDossierPickModal()">Annuleren</button>
+      <button type="button" class="btn-r" id="dossierPickConfirmBtn" onclick="confirmDossierPickSelection()">Bevestigen</button>
+    </div>
   </div>
 </div>
 
@@ -2232,6 +2253,23 @@ function isFriendTaggedMeta(meta){
   // Strikte scheiding: elk dossier met friend-scope blijft uit DateSense.
   return scopes.indexOf('fr')>=0;
 }
+function isSelfTaggedMeta(meta){
+  var m=meta||{};
+  var scopes=normalizeAppScopeList(m);
+  return scopes.indexOf('ss')>=0;
+}
+/** Alleen-SelfSense dossier: mag niet via DateSense zichtbaar zijn of on hold gezet worden. */
+function isSelfOnlyTaggedMeta(meta){
+  var m=meta||{};
+  var scopes=normalizeAppScopeList(m);
+  if(scopes.indexOf('ds')>=0||scopes.indexOf('fs')>=0||scopes.indexOf('fr')>=0)return false;
+  if(isFamilyTaggedMeta(m)||isFriendTaggedMeta(m))return false;
+  if(String(m.dating_stage||'').trim())return false;
+  if(String(m.intent||'').trim())return false;
+  var rt=String(m.relationship_type||'').toLowerCase().trim();
+  if(rt==='exclusief daten'||rt==='prille relatie'||rt==='vaste relatie')return false;
+  return scopes.indexOf('ss')>=0;
+}
 function isSystemMirrorDossierName(name){
   var raw=String(name||'').trim();
   if(!raw||raw==='OWN Sense')return false;
@@ -2243,7 +2281,7 @@ function isDateSenseVisibleContact(name){
   // Verberg systeemdossiers uit centrale OWN Sense mirrors.
   if(isSystemMirrorDossierName(name))return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
-  return !isFamilyTaggedMeta(m)&&!isFriendTaggedMeta(m);
+  return !isFamilyTaggedMeta(m)&&!isFriendTaggedMeta(m)&&!isSelfOnlyTaggedMeta(m);
 }
 function getDateSenseContactNames(){
   return (S.profiles||[]).filter(function(p){return isDateSenseVisibleContact(p);});
@@ -4264,10 +4302,14 @@ function openDossierPickModal(title,sub,type,payload){
   var titleEl=document.getElementById('dossierPickTitle');
   var subEl=document.getElementById('dossierPickSub');
   var opts=document.getElementById('dossierPickOpts');
+  var foot=document.getElementById('dossierPickFoot');
+  var confirmBtn=document.getElementById('dossierPickConfirmBtn');
   if(!modal||!titleEl||!subEl||!opts)return;
   titleEl.textContent=title||'Kies dossier';
   subEl.textContent=sub||'Selecteer een dossier.';
   window._dossierPickCtx={type:type,payload:payload||null};
+  window._dossierPickSelectedIdx=null;
+  var needsConfirm=type==='relationship_focus';
   var all;
   if(type==='relationship_focus'&&payload&&Array.isArray(payload.contacts)&&payload.contacts.length){
     all=payload.contacts.filter(function(p){return !!p&&p!=='OWN Sense';});
@@ -4287,12 +4329,49 @@ function openDossierPickModal(title,sub,type,payload){
   }
   all.forEach(function(p,i){
     var col=SEG_DOT_COLORS[i%SEG_DOT_COLORS.length];
-    html+='<button type="button" class="save-modal-opt" onclick="selectDossierFromPickFromModal('+i+')">'
-      +'<span class="save-modal-dot" style="background:'+col+'"></span>'
-      +'<span style="flex:1">'+dn(p)+'</span></button>';
+    if(needsConfirm){
+      html+='<button type="button" class="save-modal-opt" data-pick-idx="'+i+'" onclick="highlightDossierPickSelection('+i+')">'
+        +'<span class="save-modal-dot" style="background:'+col+'"></span>'
+        +'<span style="flex:1">'+dn(p)+'</span></button>';
+    }else{
+      html+='<button type="button" class="save-modal-opt" onclick="selectDossierFromPickFromModal('+i+')">'
+        +'<span class="save-modal-dot" style="background:'+col+'"></span>'
+        +'<span style="flex:1">'+dn(p)+'</span></button>';
+    }
   });
   opts.innerHTML=html;
+  if(foot){
+    if(needsConfirm)foot.classList.add('show');
+    else foot.classList.remove('show');
+  }
+  if(confirmBtn){
+    confirmBtn.disabled=!!needsConfirm;
+    confirmBtn.textContent='Bevestigen';
+  }
   modal.classList.add('show');
+}
+function highlightDossierPickSelection(idx){
+  var list=window._modalPickDossiers;
+  var i=parseInt(idx,10);
+  if(!list||isNaN(i)||i<0||i>=list.length)return;
+  window._dossierPickSelectedIdx=i;
+  var opts=document.getElementById('dossierPickOpts');
+  if(opts){
+    Array.prototype.slice.call(opts.querySelectorAll('.save-modal-opt[data-pick-idx]')).forEach(function(btn){
+      var bi=parseInt(btn.getAttribute('data-pick-idx'),10);
+      btn.classList.toggle('is-selected',bi===i);
+    });
+  }
+  var confirmBtn=document.getElementById('dossierPickConfirmBtn');
+  if(confirmBtn)confirmBtn.disabled=false;
+}
+function confirmDossierPickSelection(){
+  var i=window._dossierPickSelectedIdx;
+  if(i==null||i===''||isNaN(parseInt(i,10))){
+    toast('Kies eerst een dossier');
+    return;
+  }
+  selectDossierFromPickFromModal(i);
 }
 /** Dossierkeuze via index: werkt op mobiel / enterprise waar delegated click + closest() faalt. */
 function selectDossierFromPickFromModal(idx){
@@ -4306,6 +4385,11 @@ function selectDossierFromPickFromModal(idx){
 function closeDossierPickModal(){
   var modal=document.getElementById('dossierPickModal');
   if(modal)modal.classList.remove('show');
+  window._dossierPickSelectedIdx=null;
+  var foot=document.getElementById('dossierPickFoot');
+  if(foot)foot.classList.remove('show');
+  var confirmBtn=document.getElementById('dossierPickConfirmBtn');
+  if(confirmBtn)confirmBtn.disabled=true;
 }
 
 async function selectDossierFromPick(dossier){
@@ -6900,7 +6984,7 @@ function openRelationshipFocusPicker(activeContacts){
   }
   openDossierPickModal(
     'Kies focusdossier',
-    'Kies eerst je actieve dossier voor Relatie Focus. Let op: andere dossiers worden on hold gezet.',
+    'Kies je actieve dossier voor Relatie Focus. Andere DateSense-dossiers gaan op on hold. FamilySense- en FriendSense-dossiers blijven onaangeroerd.',
     'relationship_focus',
     {contacts:contacts}
   );
@@ -6930,6 +7014,10 @@ async function applyFocusFromHome(){
 }
 async function activateRelationshipFocus(name){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
+  if(!isDateSenseVisibleContact(name)){
+    toast('Kies een DateSense-dossier als focus.');
+    return;
+  }
   // Alleen DateSense-eigen dossiers op on hold zetten; nooit dossiers van andere apps (familie/vriend/self) raken.
   var targets=getActiveContactNames().filter(function(p){
     return p!==name;
@@ -6939,7 +7027,7 @@ async function activateRelationshipFocus(name){
   for(var i=0;i<targets.length;i++){
     await setDossierLifecycle(targets[i],'on_hold');
   }
-  if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
+  if(targets.length)toast('🎯 Relatie-focus op '+dn(name)+' · '+targets.length+' ander(e) DateSense-dossier(s) op on hold');
   else toast('🎯 Relatie-focus op '+dn(name));
   if(S.screen==='home')goScreen('home',{preserveScroll:true});
 }
@@ -7485,6 +7573,7 @@ async function ensureSingleModeHolds(silent){
   if(!S.user||getUsageMode()!=='single')return;
   var focus=String(getFocusDossier()||'').trim();
   if(!focus||focus==='OWN Sense')return;
+  if(!isDateSenseVisibleContact(focus))return;
   // Alleen DateSense-eigen dossiers op on hold zetten; nooit dossiers van andere apps (familie/vriend/self) raken.
   var others=getActiveContactNames().filter(function(p){
     return p!==focus;
@@ -7497,7 +7586,7 @@ async function ensureSingleModeHolds(silent){
       console.warn('ensureSingleModeHolds',e);
     }
   }
-  if(!silent)toast('📌 Relatie-modus: '+others.length+' ander(e) dossier(s) automatisch op on hold');
+  if(!silent)toast('📌 Relatie-modus: '+others.length+' ander(e) DateSense-dossier(s) automatisch op on hold');
   rDrawer();
 }
 
@@ -12130,7 +12219,10 @@ function renderSettingsTile(icon,title,sub,action){
 
 function rSettings(el){
   var usageMode=getUsageMode();
-  var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+  var contacts=getDateSenseContactNames().filter(function(p){
+    var st=getDossierLifecycle(p);
+    return st==='active'||st==='on_hold';
+  });
   var focusName=getFocusDossier();
   var focusRelType=getFocusRelationType();
   var boostPrefs=getBoostPrefs();
@@ -12170,7 +12262,7 @@ function rSettings(el){
   <option value="single" ${usageMode==='single'?'selected':''}>Relatie-focus (1 dossier)</option>
 </select>
 <div id="focusConfigBox" style="margin-top:10px;${usageMode==='single'?'':'display:none;'}">
-  <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve dossiers kunnen automatisch op on hold gezet worden.</div>
+  <div style="font-size:12px;color:#777;line-height:1.5;margin-bottom:8px">Kies met wie je nu verdergaat. Andere actieve DateSense-dossiers gaan automatisch op on hold. FamilySense- en FriendSense-dossiers blijven onaangeroerd.</div>
   <select class="form-input" id="focusDossierField" aria-label="Focus dossier">${contacts.map(function(p){return'<option value="'+p+'" '+(focusName===p?'selected':'')+'>'+dn(p)+'</option>';}).join('')}</select>
   <input class="form-input" id="focusBoostRegionField" type="text" placeholder="Regio / afstand" aria-label="Regio of afstand" value="${escHTML(boostPrefs.region||'')}"/>
   <select class="form-input" id="focusBoostBudgetField" aria-label="Budget">
@@ -12195,7 +12287,7 @@ function rSettings(el){
   </select>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
     <button class="coach-save-other" onclick="activateRelationshipFocusFromSettings()">Relatie-focus activeren</button>
-    <span style="font-size:11px;color:#8a8f97;align-self:center;line-height:1.4">Alle andere contactdossiers gaan automatisch op on hold (OWN Sense blijft actief).</span>
+    <span style="font-size:11px;color:#8a8f97;align-self:center;line-height:1.4">Alleen andere DateSense-dossiers gaan op on hold (OWN Sense + andere apps blijven actief).</span>
   </div>
 </div>
 <button type="button" class="form-btn" id="btnSaveSettings" onclick="saveSettings()">Opslaan instellingen</button>

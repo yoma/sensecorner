@@ -7135,8 +7135,9 @@ async function ensureSingleModeHolds(silent){
   if(!S.user||getUsageMode()!=='single')return;
   var focus=String(getFocusDossier()||'').trim();
   if(!focus||focus==='OWN Sense')return;
-  var others=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==focus&&getDossierLifecycle(p)==='active';
+  // Alleen FamilySense-eigen dossiers; nooit andere apps massaal on hold.
+  var others=getActiveContactNames().filter(function(p){
+    return p!==focus;
   });
   if(!others.length)return;
   for(var i=0;i<others.length;i++){
@@ -7146,7 +7147,7 @@ async function ensureSingleModeHolds(silent){
       console.warn('ensureSingleModeHolds',e);
     }
   }
-  if(!silent)toast('📌 Gezins-modus: '+others.length+' ander(e) dossier(s) automatisch op on hold');
+  if(!silent)toast('📌 Gezins-modus: '+others.length+' ander(e) FamilySense-dossier(s) automatisch op on hold');
   rDrawer();
 }
 

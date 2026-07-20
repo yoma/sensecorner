@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#7D6AAB">
 <title>SelfSense - SelfSensei · jouw herstelcoach</title>
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="fs-build" content="17-07-2026 12:43">
+<meta name="fs-build" content="20-07-2026 12:30">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1707171205"></script>
@@ -9037,15 +9037,16 @@ async function applyFocusFromHome(){
 }
 async function activateRelationshipFocus(name){
   if(!name||name==='OWN Sense'){toast('Kies eerst een dossier');return;}
-  var targets=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==name&&getDossierLifecycle(p)==='active';
+  // Alleen SelfSense-eigen dossiers op on hold zetten; nooit dossiers van andere apps raken.
+  var targets=getActiveContactNames().filter(function(p){
+    return p!==name;
   });
   setUsageMode('single');
   setFocusDossier(name);
   for(var i=0;i<targets.length;i++){
     await setDossierLifecycle(targets[i],'on_hold');
   }
-  if(targets.length)toast('🎯 Zelf-focus op '+dn(name)+' · '+targets.length+' ander(e) dossier(s) op on hold');
+  if(targets.length)toast('🎯 Zelf-focus op '+dn(name)+' · '+targets.length+' ander(e) SelfSense-dossier(s) op on hold');
   else toast('🎯 Zelf-focus op '+dn(name));
   goScreen('senses');
 }
@@ -9644,8 +9645,9 @@ async function ensureSingleModeHolds(silent){
   if(!S.user||getUsageMode()!=='single')return;
   var focus=String(getFocusDossier()||'').trim();
   if(!focus||focus==='OWN Sense')return;
-  var others=(S.profiles||[]).filter(function(p){
-    return p!=='OWN Sense'&&p!==focus&&getDossierLifecycle(p)==='active';
+  // Alleen SelfSense-eigen dossiers; nooit DateSense/Family/Friend massaal on hold.
+  var others=getActiveContactNames().filter(function(p){
+    return p!==focus;
   });
   if(!others.length)return;
   for(var i=0;i<others.length;i++){
@@ -9655,7 +9657,7 @@ async function ensureSingleModeHolds(silent){
       console.warn('ensureSingleModeHolds',e);
     }
   }
-  if(!silent)toast('📌 Gezins-modus: '+others.length+' ander(e) dossier(s) automatisch op on hold');
+  if(!silent)toast('📌 Self-modus: '+others.length+' ander(e) SelfSense-dossier(s) automatisch op on hold');
   rDrawer();
 }
 
