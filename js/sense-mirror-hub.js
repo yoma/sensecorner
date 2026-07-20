@@ -126,6 +126,8 @@
     self: ["self_1", "self_2", "self_3", "self_4", "self_5", "self_6"]
   };
 
+  var OWN_CORE_ANSWER_KEYS = ["core_1", "core_2", "core_3", "core_4", "core_5"];
+
   var STATUS_LABELS = {
     active: "Actief",
     never_opened: "Nog niet gestart",
@@ -381,6 +383,21 @@
     return !!(res && res.data && res.data.length);
   }
 
+  async function ownCoreHasOnboardingFacts(sb, userId) {
+    if (!sb || !userId) return false;
+    var subs = OWN_CORE_ANSWER_KEYS.map(function (k) {
+      return ANSWER_KEY_TO_SUB[k];
+    }).filter(Boolean);
+    if (!subs.length) return false;
+    var res = await sb
+      .from("own_facts")
+      .select("id")
+      .eq("user_id", userId)
+      .in("subcategory", subs)
+      .limit(1);
+    return !!(res && res.data && res.data.length);
+  }
+
   async function insertOnboardingFact(sb, userId, subcategory, factText) {
     if (!sb || !userId || !subcategory) return { error: new Error("Geen verbinding") };
     var row = {
@@ -609,6 +626,8 @@
         body =
           '<textarea class="sc-mirror-input" id="scMirrorIntakeInput" rows="4" placeholder="Typ je antwoord…"></textarea>';
       }
+      var introMsg = String(opts.introMessage || MIRROR_INTAKE_ACTIVATE_MSG).trim() || MIRROR_INTAKE_ACTIVATE_MSG;
+      var finishLabel = opts.stayOnPage ? "Opslaan" : "Activeer en open";
       overlay.innerHTML =
         '<div class="sc-mirror-modal" role="dialog" aria-modal="true" aria-labelledby="scMirrorIntakeTitle">' +
         '<div class="sc-mirror-kicker">' +
@@ -619,7 +638,7 @@
         questions.length +
         "</div>" +
         (step === 0
-          ? '<p class="sc-mirror-intro">' + escapeHtml(MIRROR_INTAKE_ACTIVATE_MSG) + "</p>"
+          ? '<p class="sc-mirror-intro">' + escapeHtml(introMsg) + "</p>"
           : "") +
         '<h2 id="scMirrorIntakeTitle" class="sc-mirror-title">' +
         escapeHtml((q && q.q) || "") +
@@ -632,19 +651,23 @@
         '<div class="sc-mirror-actions">' +
         '<button type="button" class="sc-mirror-btn ghost" id="scMirrorIntakeLater">Later</button>' +
         '<button type="button" class="sc-mirror-btn primary" id="scMirrorIntakeNext">' +
-        (step >= questions.length - 1 ? "Activeer en open" : "Volgende") +
+        (step >= questions.length - 1 ? finishLabel : "Volgende") +
         "</button>" +
         "</div></div>";
     }
 
     function finishNavigate() {
       closeIntakeModal();
+      if (typeof opts.onComplete === "function") {
+        try {
+          opts.onComplete();
+        } catch (_oc) {}
+      }
+      if (opts.stayOnPage) return;
       var href = opts.navigateTo || appHrefForKey(opts.appKey);
       if (href) {
         var url = href + (href.indexOf("?") >= 0 ? "&" : "?") + "sc_mirror_ok=" + encodeURIComponent(opts.appKey || "");
         window.location.href = url;
-      } else if (typeof opts.onComplete === "function") {
-        opts.onComplete();
       }
     }
 
@@ -863,12 +886,14 @@
     ANSWER_KEY_TO_SUB: ANSWER_KEY_TO_SUB,
     MIRROR_META: MIRROR_META,
     ANSWER_KEYS_BY_MIRROR: ANSWER_KEYS_BY_MIRROR,
+    OWN_CORE_ANSWER_KEYS: OWN_CORE_ANSWER_KEYS,
     STATUS_LABELS: STATUS_LABELS,
     getMirrorQuestions: getMirrorQuestions,
     normalizeOnboardingMirrors: normalizeOnboardingMirrors,
     countOptionalMirrors: countOptionalMirrors,
     getMirrorStatuses: getMirrorStatuses,
     mirrorHasOnboardingFacts: mirrorHasOnboardingFacts,
+    ownCoreHasOnboardingFacts: ownCoreHasOnboardingFacts,
     activateMirror: activateMirror,
     pauseMirror: pauseMirror,
     resumeMirror: resumeMirror,
