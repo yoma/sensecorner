@@ -17,12 +17,20 @@ assert.match(
   /if \(_gwResumePromise\) return await _gwResumePromise;/,
   'concurrent history loads must share the in-flight resume'
 );
+assert.ok(
+  resume.indexOf('if (_gwResumePromise)') < resume.indexOf('if (gwState.sessionId'),
+  'an in-flight resume must finish before session fast paths'
+);
 
 const ensure = functionBody('gwEnsureSession', 'gwSaveMsg');
 assert.match(
   ensure,
   /var resumed = await gwResumeLatestSession\(\);/,
   'session creation must wait for history resume'
+);
+assert.ok(
+  ensure.indexOf('await gwResumeLatestSession();') < ensure.indexOf('if (gwState.sessionId)'),
+  'send must await hydration even after resume assigns the session id'
 );
 assert.doesNotMatch(
   ensure,

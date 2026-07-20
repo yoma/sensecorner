@@ -617,12 +617,12 @@
   }
   /** Hervat de meest recente Gateway-sessie; laadt recente sessies in AI/UI-geschiedenis. */
   async function gwResumeLatestSession() {
+    if (_gwResumePromise) return await _gwResumePromise;
     if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
     if (gwState.sessionId && gwState.messages.length) {
       gwState.historyHydrated = true;
       return gwState.sessionId;
     }
-    if (_gwResumePromise) return await _gwResumePromise;
     _gwResumePromise = gwResumeLatestSessionOnce();
     try {
       return await _gwResumePromise;
@@ -659,7 +659,6 @@
     }
   }
   async function gwEnsureSession(previewText) {
-    if (gwState.sessionId) return gwState.sessionId;
     var resumed = await gwResumeLatestSession();
     if (resumed) return resumed;
     if (gwState.sessionId) return gwState.sessionId;
