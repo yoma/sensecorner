@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SenseCorner - Kennismaking</title>
-  <meta name="ob-build" content="04-06-2026 19:01">
+  <meta name="ob-build" content="20-07-2026 09:40">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -435,6 +435,22 @@
       cursor: pointer;
     }
     .ob-cta-secondary:hover { color: var(--chocolade); }
+    .ob-cta-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ob-skip-warn {
+      margin: 14px 0 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(61, 47, 31, 0.12);
+      background: rgba(255, 255, 255, 0.55);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ob-muted);
+      text-align: left;
+    }
+    .ob-skip-warn strong {
+      color: var(--chocolade);
+      font-weight: 600;
+    }
     .ob-cta-oauth {
       background: rgba(255, 255, 255, 0.8);
       color: var(--chocolade);
@@ -1106,8 +1122,14 @@
         <div class="ob-ripple pulsing"><div class="ob-ripple-inner"></div></div>
         <div class="ob-reaction-selected" id="obChips"></div>
         <p class="ob-sensei" id="obReactionMsg"></p>
+        <p class="ob-skip-warn" id="obSkipWarn">
+          <strong>Aanbevolen:</strong> een korte kennismaking (een paar vragen).
+          Overslaan mag, maar Sensei kent je dan nog weinig en antwoorden blijven algemener.
+          Je kunt de vragen later per app afronden via SenseCorner.
+        </p>
         <div class="ob-cta-wrap" id="obCtaMir1">
-          <button type="button" class="ob-cta-primary" id="obBtnMir1">Laten we beginnen</button>
+          <button type="button" class="ob-cta-primary" id="obBtnMir1">Kennismaken (aanbevolen)</button>
+          <button type="button" class="ob-cta-secondary" id="obBtnSkipQuestions">Vragen overslaan en naar SenseCorner</button>
         </div>
       </section>
     </div>
@@ -3579,6 +3601,57 @@
     renderRouteStep();
   }
 
+  async function completeSetupSkippingQuestions() {
+    if (!sb) {
+      showToast("Geen verbinding. Vernieuw de pagina.");
+      return;
+    }
+    var skipBtn = document.getElementById("obBtnSkipQuestions");
+    var startBtn = document.getElementById("obBtnMir1");
+    if (skipBtn) skipBtn.disabled = true;
+    if (startBtn) startBtn.disabled = true;
+    try {
+      var gu = await sb.auth.getUser();
+      var uid = gu && gu.data && gu.data.user && gu.data.user.id;
+      if (!uid) {
+        showToast("Je sessie is verlopen. Vernieuw de pagina.");
+        return;
+      }
+      __obUserId = uid;
+      normalizeSelectedMirrors();
+      var mirErr = await saveMirrorProfilesForUser(uid);
+      if (mirErr && mirErr !== "db_reserved_name_guard") {
+        showToast(mirErr);
+        return;
+      }
+      if (!(await hasOnboardingCompleted(uid))) {
+        var done = await insertOnboardingFact(uid, "completed", "Onboarding voltooid");
+        if (done && done.error) {
+          showToast("Even een haperingetje. Probeer opnieuw.");
+          return;
+        }
+      }
+      try {
+        await insertOnboardingFact(
+          uid,
+          "questions_skipped",
+          "Kennismakingsvragen overgeslagen; later afronden via SenseCorner"
+        );
+      } catch (_qs) {}
+      clearOnboardingProgressMarkers();
+      try {
+        sessionStorage.removeItem(photoSkipStorageKey());
+      } catch (_p) {}
+      try {
+        localStorage.removeItem(LP_OB_PROGRESS_KEY);
+      } catch (_lp) {}
+      window.location.href = "sensecorner.html";
+    } finally {
+      if (skipBtn) skipBtn.disabled = false;
+      if (startBtn) startBtn.disabled = false;
+    }
+  }
+
   function goToStatic(key) {
     showStatic(key);
     animateStaticScreen(key);
@@ -4105,6 +4178,13 @@
 
   document.getElementById("obBtnMir1").addEventListener("click", function () {
     startQuestionsFromMirror();
+  });
+
+  document.getElementById("obBtnSkipQuestions").addEventListener("click", function () {
+    completeSetupSkippingQuestions().catch(function (err) {
+      console.warn("onboarding skip questions", err);
+      showToast("Even een haperingetje. Probeer opnieuw.");
+    });
   });
 
   document.addEventListener("DOMContentLoaded", function () {

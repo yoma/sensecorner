@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="20-07-2026 07:17">
+<meta name="sc-build" content="20-07-2026 09:40">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -17,11 +17,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa/icons/favicon-16.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/sense-common.js?v=2007260717"></script>
-<script src="js/sense-mirror-hub.js"></script>
+<script src="js/sense-common.js?v=2007260940"></script>
+<script src="js/sense-mirror-hub.js?v=2007260940"></script>
 <script src="js/sense-auth-client.js"></script>
-<script type="module" src="js/senseiCore-loader.js?v=2007260717"></script>
-<script src="js/gateway-chat.js?v=2007260717"></script>
+<script type="module" src="js/senseiCore-loader.js?v=2007260940"></script>
+<script src="js/gateway-chat.js?v=2007260940"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -497,6 +497,43 @@ a.app-card{color:inherit;text-decoration:none}
 .app-coach-hint--familysense .app-coach-hint__n{color:var(--family-donker);}
 .app-coach-hint--friendsense .app-coach-hint__n{color:var(--friend-donker);}
 .app-coach-hint--selfsense .app-coach-hint__n{color:var(--self-donker);}
+.app-know-promo{
+  position:relative;z-index:1;margin:10px 0 0;padding:10px 11px;
+  border-radius:12px;border:1px dashed rgba(61,47,31,.16);
+  background:rgba(255,255,255,.55);
+}
+.app-know-promo[hidden]{display:none!important}
+.app-know-promo__text{font-size:12px;line-height:1.5;color:rgba(61,47,31,.72);margin:0 0 8px}
+.app-know-promo__btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  border:none;border-radius:10px;padding:7px 12px;font:inherit;font-size:12px;font-weight:700;
+  cursor:pointer;background:var(--chocolade);color:var(--cream);
+}
+.app-know-promo__btn:hover{background:var(--chocolade-diep)}
+.date-card .app-know-promo{border-color:color-mix(in srgb,var(--date-medium) 35%,transparent)}
+.people-card .app-know-promo{border-color:color-mix(in srgb,var(--friend-medium) 35%,transparent)}
+.career-card .app-know-promo{border-color:color-mix(in srgb,var(--family-medium) 35%,transparent)}
+.self-card .app-know-promo{border-color:color-mix(in srgb,var(--self-medium) 35%,transparent)}
+.sc-know-nudge{
+  margin:0 0 14px;padding:12px 14px;border-radius:14px;
+  border:1px solid rgba(61,47,31,.12);background:rgba(255,255,255,.62);
+}
+.sc-know-nudge[hidden]{display:none!important}
+.sc-know-nudge__title{font-size:13px;font-weight:700;color:var(--chocolade);margin:0 0 4px}
+.sc-know-nudge__text{font-size:13px;line-height:1.55;color:rgba(61,47,31,.72);margin:0 0 10px}
+.sc-know-nudge__actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.sc-know-nudge__primary{
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:600;padding:8px 14px;border-radius:10px;
+  text-decoration:none;font-family:inherit;cursor:pointer;border:none;
+  background:var(--chocolade);color:var(--cream);
+}
+.sc-know-nudge__primary:hover{background:var(--chocolade-diep);color:var(--cream)}
+.sc-know-nudge__secondary{
+  display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:6px 4px;
+  border:none;background:transparent;color:#7A6F66;text-decoration:underline;
+  text-underline-offset:2px;cursor:pointer;font-family:inherit;
+}
 .hero-coach-hint{
   margin:10px 0 0;
   font-size:12px;
@@ -927,6 +964,7 @@ a.app-card{color:inherit;text-decoration:none}
         <h1 class="hero-title">Één profiel over jou.<br>Jouw leven. Jouw tempo.</h1>
         <p class="hero-sub">OWN Sense bundelt wie je bent. Hoe rijker jouw profiel, hoe gerichter Sensei met je meedenkt in elke Sense-app.</p>
         <div id="scBasisNudgeMount" aria-live="polite"></div>
+        <div id="scKnowNudgeOwn" class="sc-know-nudge" hidden aria-live="polite"></div>
         <div id="scBasisNudgeDebug" hidden style="display:none;font-size:11px;color:#7A6F66;margin:0 0 10px;line-height:1.4"></div>
         <p class="hero-welcome" id="heroWelcome" hidden aria-live="polite"></p>
         <p class="hero-quote" id="heroQuote" hidden aria-live="polite"></p>
@@ -1034,6 +1072,10 @@ a.app-card{color:inherit;text-decoration:none}
       </div>
       <p class="app-desc">Bewuster daten, of advies in een vaste relatie.</p>
       <p class="app-coach-hint app-coach-hint--datesense" id="scCoachHintDatesense" hidden></p>
+      <div class="app-know-promo" id="scKnowPromoDs" hidden>
+        <p class="app-know-promo__text">Aanbevolen: korte kennismaking. Sensei kent DateSense dan beter.</p>
+        <button type="button" class="app-know-promo__btn" data-know-app="ds">Kennismaken</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1054,6 +1096,10 @@ a.app-card{color:inherit;text-decoration:none}
       </div>
       <p class="app-desc">Inzicht in vriendschappen, grenzen en sociale dynamieken.</p>
       <p class="app-coach-hint app-coach-hint--friendsense" id="scCoachHintFriendsense" hidden></p>
+      <div class="app-know-promo" id="scKnowPromoFr" hidden>
+        <p class="app-know-promo__text">Aanbevolen: korte kennismaking. Sensei kent FriendSense dan beter.</p>
+        <button type="button" class="app-know-promo__btn" data-know-app="fr">Kennismaken</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live-fr">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1074,6 +1120,10 @@ a.app-card{color:inherit;text-decoration:none}
       </div>
       <p class="app-desc">Ondersteuning bij gezin, communicatie en opvoedvragen in je thuissituatie.</p>
       <p class="app-coach-hint app-coach-hint--familysense" id="scCoachHintFamilysense" hidden></p>
+      <div class="app-know-promo" id="scKnowPromoFs" hidden>
+        <p class="app-know-promo__text">Aanbevolen: korte kennismaking. Sensei kent FamilySense dan beter.</p>
+        <button type="button" class="app-know-promo__btn" data-know-app="fs">Kennismaken</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live-fs">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1094,6 +1144,10 @@ a.app-card{color:inherit;text-decoration:none}
       </div>
       <p class="app-desc">Healing, herstel en persoonlijke groei.</p>
       <p class="app-coach-hint app-coach-hint--selfsense" id="scCoachHintSelfsense" hidden></p>
+      <div class="app-know-promo" id="scKnowPromoSs" hidden>
+        <p class="app-know-promo__text">Aanbevolen: korte kennismaking. Sensei kent SelfSense dan beter.</p>
+        <button type="button" class="app-know-promo__btn" data-know-app="ss">Kennismaken</button>
+      </div>
       <div class="app-footer">
         <span class="badge badge-live-self">Actief</span>
         <svg class="app-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1671,7 +1725,141 @@ a.app-card{color:inherit;text-decoration:none}
       });
       scOnboardingCatsOverlay=overlay;
       renderOwnCompletionDashboard();
+      try{scRenderKnowPromos(user);}catch(_kp){}
     }catch(_facts){}
+  }
+  function scKnowCoreSlotMaps(){
+    return [
+      {cat:'karakter',idx:0},
+      {cat:'interesses',idx:0},
+      {cat:'interesses',idx:2},
+      {cat:'gevoels',idx:0},
+      {cat:'karakter',idx:1}
+    ];
+  }
+  function scKnowCatForApp(appKey){
+    if(appKey==='ds')return'datesense_focus';
+    if(appKey==='fs')return'familysense_focus';
+    if(appKey==='fr')return'friendsense_focus';
+    if(appKey==='ss')return'selfsense_focus';
+    return'';
+  }
+  function scKnowExpectedSlots(appKey){
+    if(appKey==='ss')return 6;
+    if(appKey==='ds'||appKey==='fs'||appKey==='fr')return 2;
+    return 0;
+  }
+  function scKnowHasAnyFilled(appKey){
+    var cats=scGetMergedStatsCategories();
+    if(appKey==='own'){
+      return scKnowCoreSlotMaps().some(function(m){
+        return !!(cats[m.cat]&&String(cats[m.cat]['a'+m.idx]||'').trim());
+      });
+    }
+    var cat=scKnowCatForApp(appKey);
+    if(!cat)return true;
+    var data=cats[cat]||{};
+    var n=scKnowExpectedSlots(appKey);
+    for(var i=0;i<n;i++){
+      if(String(data['a'+i]||'').trim())return true;
+    }
+    return false;
+  }
+  function scKnowDismissKey(uid,appKey){
+    return 'sc_know_promo_hide_v1::'+String(uid||'')+'::'+String(appKey||'');
+  }
+  function scKnowIsDismissed(uid,appKey){
+    try{return sessionStorage.getItem(scKnowDismissKey(uid,appKey))==='1';}catch(_e){return false;}
+  }
+  function scKnowDismiss(uid,appKey){
+    try{sessionStorage.setItem(scKnowDismissKey(uid,appKey),'1');}catch(_e){}
+  }
+  function scSetKnowPromoVisible(el,on){
+    if(!el)return;
+    if(on){
+      el.hidden=false;
+      el.removeAttribute('hidden');
+    }else{
+      el.hidden=true;
+      el.setAttribute('hidden','');
+    }
+  }
+  function scRenderKnowPromos(user){
+    var ownMount=document.getElementById('scKnowNudgeOwn');
+    var promoMap={
+      ds:document.getElementById('scKnowPromoDs'),
+      fr:document.getElementById('scKnowPromoFr'),
+      fs:document.getElementById('scKnowPromoFs'),
+      ss:document.getElementById('scKnowPromoSs')
+    };
+    if(!user||!user.id){
+      if(ownMount){
+        ownMount.innerHTML='';
+        scSetKnowPromoVisible(ownMount,false);
+      }
+      Object.keys(promoMap).forEach(function(k){scSetKnowPromoVisible(promoMap[k],false);});
+      return;
+    }
+    var uid=String(user.id);
+    var showOwn=!scKnowHasAnyFilled('own')&&!scKnowIsDismissed(uid,'own');
+    if(ownMount){
+      if(showOwn){
+        ownMount.innerHTML=
+          '<div class="sc-know-nudge__title">Kennismaking Over jou</div>'+
+          '<p class="sc-know-nudge__text">Aanbevolen. Een paar vragen over jou maken Sensei persoonlijker in elke app.</p>'+
+          '<div class="sc-know-nudge__actions">'+
+          '<a class="sc-know-nudge__primary" href="ownsense.html?tab=bron" data-app-link="ownsense.html?tab=bron">Nu invullen</a>'+
+          '<button type="button" class="sc-know-nudge__secondary" id="scKnowOwnLater">Later</button>'+
+          '</div>';
+        scSetKnowPromoVisible(ownMount,true);
+        var later=document.getElementById('scKnowOwnLater');
+        if(later){
+          later.onclick=function(e){
+            if(e){e.preventDefault();e.stopPropagation();}
+            scKnowDismiss(uid,'own');
+            scSetKnowPromoVisible(ownMount,false);
+          };
+        }
+        var link=ownMount.querySelector('[data-app-link]');
+        if(link&&link.getAttribute('data-sc-know-bound')!=='1'){
+          link.setAttribute('data-sc-know-bound','1');
+          link.addEventListener('click',function(e){
+            e.preventDefault();
+            openAppWithAuth('ownsense.html?tab=bron');
+          });
+        }
+      }else{
+        ownMount.innerHTML='';
+        scSetKnowPromoVisible(ownMount,false);
+      }
+    }
+    Object.keys(promoMap).forEach(function(appKey){
+      var el=promoMap[appKey];
+      if(!el)return;
+      var status=_scMirrorStatuses[appKey]||'never_opened';
+      var eligible=status==='active'||status==='setting_up';
+      var show=eligible&&!scKnowHasAnyFilled(appKey)&&!scKnowIsDismissed(uid,appKey);
+      scSetKnowPromoVisible(el,show);
+    });
+  }
+  function scOpenKnowIntake(appKey){
+    if(!userSession||!sb||!SMH||typeof SMH.showMirrorIntakeModal!=='function')return;
+    var names={ds:'DateSense',fr:'FriendSense',fs:'FamilySense',ss:'SelfSense'};
+    var label=names[appKey]||'deze app';
+    if(SMH.injectMirrorOverlayStyles)SMH.injectMirrorOverlayStyles();
+    SMH.showMirrorIntakeModal({
+      sb:sb,
+      userId:userSession.id,
+      appKey:appKey,
+      via:'hub_know_promo',
+      stayOnPage:true,
+      introMessage:'Aanbevolen: een korte kennismaking voor '+label+'. Sensei geeft dan scherpere antwoorden.',
+      onError:function(err){alert(String((err&&err.message)||'Opslaan mislukt'));},
+      onComplete:function(){
+        void scRefreshOwnScopeFromFacts(userSession);
+        void scRefreshMirrorStatuses(userSession);
+      }
+    });
   }
   function renderOwnCompletionDashboard(){
     var scopes=calcOwnScopeStats();
@@ -1731,6 +1919,7 @@ a.app-card{color:inherit;text-decoration:none}
       }
     }
     if(userSession)scRenderBasisNudge();
+    try{scRenderKnowPromos(userSession);}catch(_kp3){}
   }
   function setHubSettingsCollapsed(collapsed){
     if(!hubSettingsCard||!hubSettingsToggle)return;
@@ -2900,6 +3089,7 @@ a.app-card{color:inherit;text-decoration:none}
     });
     try{scReorderAppGrid(userSession,_scLastCoachPack);}catch(_sort){}
     scRenderHubMirrorManage(statuses);
+    try{scRenderKnowPromos(userSession);}catch(_kp2){}
   }
   async function scRefreshMirrorStatuses(user){
     var uid=user&&String(user.id||'');
@@ -4047,6 +4237,14 @@ a.app-card{color:inherit;text-decoration:none}
   }
   var scAppGrid=document.querySelector('section.grid[aria-label="Beschikbare apps"]');
   async function scOnAppGridClick(e){
+    var knowBtn=e.target&&e.target.closest?e.target.closest('.app-know-promo__btn[data-know-app]'):null;
+    if(knowBtn&&scAppGrid&&scAppGrid.contains(knowBtn)){
+      e.preventDefault();
+      e.stopPropagation();
+      var knowApp=String(knowBtn.getAttribute('data-know-app')||'').trim();
+      if(knowApp)scOpenKnowIntake(knowApp);
+      return;
+    }
     var card=e.target&&e.target.closest?e.target.closest('.app-card[data-app-link]'):null;
     if(!card||!scAppGrid||!scAppGrid.contains(card))return;
     var target=String(card.getAttribute('data-app-link')||'').trim();
