@@ -942,6 +942,10 @@
         var done = card.querySelector('.gw-done');
         if (done) done.textContent = '✓ Genoteerd in ' + gwLandingLabel(domain, chosen) + ' · jij houdt de regie';
         toast('Genoteerd in ' + gwLandingLabel(domain, chosen), false, { durationMs: 3200 });
+        if (chosen && !/^own\s*sense$/i.test(chosen) && !isProfile) {
+          gwRememberProposalTarget(domain, chosen);
+          gwOfferBridgeSoon(domain, chosen);
+        }
       } catch (e) {
         yesBtn.disabled = false; noBtn.disabled = false;
         if (dosSel) dosSel.disabled = false;
@@ -1366,6 +1370,8 @@
           ? (created.displayName + ' aangemaakt in ' + gwAppMeta(created.domain).label)
           : (created.displayName + ' staat klaar in ' + gwAppMeta(created.domain).label),
           false, { durationMs: 3600 });
+        gwRememberProposalTarget(created.domain, created.name);
+        gwOfferBridgeSoon(created.domain, created.name || created.displayName);
       } catch (e) {
         yesBtn.disabled = false; noBtn.disabled = false;
         if (domSel) domSel.disabled = false;
@@ -1465,17 +1471,25 @@
     var meta = gwAppMeta(domain);
     var box = document.getElementById('gatewayMessages');
     if (!box) return;
+    var dossierHint = String(bridge.dossier || '').trim();
     var card = document.createElement('div');
     card.className = 'gw-bridge';
     card.style.setProperty('--gw-accent', meta.accent);
     card.style.setProperty('--gw-soft', meta.soft);
+    var goLabel = dossierHint
+      ? ('Verder praten over ' + dossierHint.replace(/Sense$/i, '') + ' in ' + meta.label)
+      : ('Verdiepen in ' + meta.label);
     card.innerHTML =
       '<div class="gw-b-top"><div class="gw-b-icon" aria-hidden="true">' + gwEsc(meta.icon) + '</div><h4>Hier zit meer in</h4></div>' +
       '<p class="gw-b-reason"></p>' +
-      '<button type="button" class="gw-b-go">Verdiepen in ' + gwEsc(meta.label) + '</button>' +
-      '<p class="gw-b-note">Je gesprek gaat mee, je hoeft niets te herhalen.</p>';
-    card.querySelector('.gw-b-reason').textContent = String(bridge.reason || '').trim() || ('In ' + meta.label + ' kunnen we dit rustiger uitwerken.');
+      '<button type="button" class="gw-b-go"></button>' +
+      '<p class="gw-b-note">Je gesprek gaat mee, je hoeft niets te herhalen. In de app wordt alles standaard bij dit dossier genoteerd.</p>';
+    var defaultReason = dossierHint
+      ? ('Dossier ' + dossierHint.replace(/Sense$/i, '') + ' staat klaar. In ' + meta.label + ' kun je meteen verderpraten.')
+      : ('In ' + meta.label + ' kunnen we dit rustiger uitwerken.');
+    card.querySelector('.gw-b-reason').textContent = String(bridge.reason || '').trim() || defaultReason;
     var goBtn = card.querySelector('.gw-b-go');
+    goBtn.textContent = goLabel;
     goBtn.addEventListener('click', async function () {
       goBtn.disabled = true;
       try {
@@ -1489,6 +1503,25 @@
     gwScrollMessages();
     gwState.bridgeShown = true;
     gwSetSessionFlag('bridge_shown', true);
+  }
+
+  /** Direct na dossier-aanmaak of bevestigd voorstel: toon brugkaart (1× per gesprek). */
+  function gwOfferBridgeSoon(domain, dossierName) {
+    if (gwState.bridgeShown) return;
+    var d = gwNormDomain(domain);
+    if (!d || d === 'self') return;
+    var dos = String(dossierName || '').trim();
+    if (dos) gwRememberProposalTarget(d, dos);
+    var meta = gwAppMeta(d);
+    var short = dos.replace(/Sense$/i, '') || dos;
+    var reason = short
+      ? ('Je hebt ' + short + ' net vastgelegd. Wil je meteen verderpraten in ' + meta.label + '? Daar hoort alles standaard bij dit dossier.')
+      : ('Wil je dit verder uitwerken in ' + meta.label + '?');
+    // Korte delay zodat de bevestiging eerst zichtbaar is, daarna de brug.
+    setTimeout(function () {
+      if (gwState.bridgeShown) return;
+      gwRenderBridgeCard({ domain: d, dossier: dos, reason: reason });
+    }, 350);
   }
   function gwInferBridgeDossier(domain) {
     var d = gwNormDomain(domain);
