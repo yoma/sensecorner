@@ -614,7 +614,201 @@
       gwState.historyHydrated = false;
     }
   }
-  /** Hervat de meest recente Gateway-sessie; laadt recente sessies in AI/UI-geschiedenis. */
+  function gwSetChatSubtitle(text) {
+    var el = document.getElementById('gatewayChatSub');
+    if (!el) return;
+    var t = String(text || '').trim();
+    el.textContent = t || 'Luistert over alle domeinen heen';
+  }
+  function gwClearMessageBox() {
+    var box = document.getElementById('gatewayMessages');
+    if (box) box.innerHTML = '';
+  }
+  function gwResetSessionLocalFlags() {
+    gwState.bridgeShown = false;
+    gwState.profileQuestionAsked = false;
+    gwState.proposedTargets = [];
+    gwState.newDossierOffered = {};
+    gwState.namelessAskShown = false;
+    gwState.pendingProfileQ = null;
+  }
+  function gwIsSidebarOpen() {
+    var sb = document.getElementById('gatewaySidebar');
+    return !!(sb && sb.classList.contains('open'));
+  }
+  function gwCloseSidebar() {
+    var sb = document.getElementById('gatewaySidebar');
+    var ov = document.getElementById('gatewaySidebarOverlay');
+    if (sb) {
+      sb.classList.remove('open');
+      sb.setAttribute('aria-hidden', 'true');
+    }
+    if (ov) {
+      ov.classList.remove('open');
+      ov.hidden = true;
+    }
+  }
+  function gwOpenSidebar() {
+    var sb = document.getElementById('gatewaySidebar');
+    var ov = document.getElementById('gatewaySidebarOverlay');
+    if (sb) {
+      sb.classList.add('open');
+      sb.setAttribute('aria-hidden', 'false');
+    }
+    if (ov) {
+      ov.hidden = false;
+      ov.classList.add('open');
+    }
+    gwLaadSessies();
+  }
+  async function gwLaadSessies() {
+    var el = document.getElementById('gatewaySidebarSessions');
+    if (!el) return;
+    var client = getClient();
+    var uid = getUidSync() || await ensureUid(client);
+    if (!client || !uid) {
+      el.innerHTML = '<div style="padding:20px 10px;font-size:13px;color:var(--m);text-align:center">Log in om geschiedenis te zien.</div>';
+      return;
+    }
+    el.innerHTML = '<div style="padding:16px 10px;font-size:12px;color:var(--m);text-align:center">Laden…</div>';
+    try {
+      var res = await client.from('sense_sessions')
+        .select('id,preview,updated_at,created_at,bridge_shown')
+        .eq('user_id', uid)
+        .eq('vertel_app', GW_VERTEL_APP)
+        .order('updated_at', { ascending: false })
+        .limit(30);
+      if (res && res.error) throw res.error;
+      var data = res && res.data ? res.data : [];
+      if (!data.length) {
+        el.innerHTML = '<div style="padding:20px 10px;font-size:13px;color:var(--m);text-align:center">Nog geen gesprekken</div>';
+        return;
+      }
+      global._gwSessieIds = data.map(function (s) { return s.id; });
+      el.innerHTML = data.map(function (s, si) {
+        var isActive = gwState.sessionId === s.id;
+        var ts = s.updated_at || s.created_at || new Date().toISOString();
+        var date = new Date(ts).toLocaleDateString('nl-BE', { day: 'numeric', month: 'short' });
+        var time = new Date(ts).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+        var preview = String(s.preview || 'Nieuw gesprek').trim() || 'Nieuw gesprek';
+        return '<div class="gw-sess-row">'
+          + '<button type="button" class="gw-sess-item' + (isActive ? ' active' : '') + '" data-si="' + si + '">'
+          + '<div class="gw-sess-date">' + gwEsc(date + ' · ' + time) + '</div>'
+          + '<div class="gw-sess-preview">' + gwEsc(preview) + '</div>'
+          + '</button>'
+          + '<button type="button" class="gw-sess-del" title="Verwijderen" data-si="' + si + '" aria-label="Gesprek verwijderen">✕</button>'
+          + '</div>';
+      }).join('');
+      el.querySelectorAll('.gw-sess-item').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var ids = global._gwSessieIds || [];
+          var id = ids[parseInt(btn.getAttribute('data-si'), 10)];
+          if (id) gwLoadSession(id);
+        });
+      });
+      el.querySelectorAll('.gw-sess-del').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var ids = global._gwSessieIds || [];
+          var id = ids[parseInt(btn.getAttribute('data-si'), 10)];
+          if (id) gwVerwijderSessie(id);
+        });
+      });
+    } catch (e) {
+      console.warn('gwLaadSessies', e);
+      el.innerHTML = '<div style="padding:16px 10px;font-size:12px;color:#7A2A2A;text-align:center;line-height:1.45">Geschiedenis laden mislukt.</div>';
+    }
+  }
+  async function gwLoadSession(sessionId) {
+    if (!sessionId || gwState.busy) return;
+    if (gwState.sessionId === sessionId && gwState.historyHydrated) {
+      gwCloseSidebar();
+      return;
+    }
+    var client = getClient();
+    var uid = getUidSync() || await ensureUid(client);
+    if (!client || !uid) return;
+    try {
+      var res = await client.from('sense_sessions')
+        .select('id,bridge_shown,profile_question_asked,preview,updated_at')
+        .eq('id', sessionId)
+        .eq('user_id', uid)
+        .eq('vertel_app', GW_VERTEL_APP)
+        .limit(1);
+      if (res && res.error) throw res.error;
+      var row = res && res.data && res.data[0];
+      if (!row) {
+        toast('Gesprek niet gevonden.', true);
+        return;
+      }
+      gwState.sessionId = row.id;
+      gwState.bridgeShown = !!row.bridge_shown;
+      gwState.profileQuestionAsked = !!row.profile_question_asked;
+      gwState.proposedTargets = [];
+      gwState.newDossierOffered = {};
+      gwState.namelessAskShown = false;
+      gwState.pendingProfileQ = null;
+      gwState.messages = [];
+      gwState.historyHydrated = false;
+      gwClearMessageBox();
+      await gwHydrateMessagesFromDb([row.id]);
+      gwSetChatSubtitle(String(row.preview || '').trim() || 'Eerder gesprek');
+      gwCloseSidebar();
+      setTimeout(function () {
+        var ci = document.getElementById('gatewayChatInput');
+        if (ci) { try { ci.focus(); } catch (_e) {} }
+      }, 40);
+    } catch (e) {
+      console.warn('gwLoadSession', e);
+      toast('Kon gesprek niet laden.', true);
+    }
+  }
+  async function gwVerwijderSessie(sessionId) {
+    if (!sessionId) return;
+    if (!global.confirm('Dit gesprek verwijderen uit je overzicht?')) return;
+    var client = getClient();
+    var uid = getUidSync() || await ensureUid(client);
+    if (!client || !uid) return;
+    try {
+      await client.from('sense_session_msgs').delete().eq('session_id', sessionId).eq('user_id', uid);
+      await client.from('sense_sessions').delete()
+        .eq('id', sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
+      if (gwState.sessionId === sessionId) {
+        await gwNieuwGesprek({ skipConfirm: true, quiet: true });
+      }
+      toast('Gesprek verwijderd');
+      gwLaadSessies();
+    } catch (e) {
+      console.warn('gwVerwijderSessie', e);
+      toast('Kon gesprek niet verwijderen.', true);
+    }
+  }
+  async function gwNieuwGesprek(opts) {
+    opts = opts || {};
+    if (gwState.busy) {
+      toast('Even wachten tot Sensei klaar is…', true);
+      return;
+    }
+    var hasUser = (gwState.messages || []).some(function (m) { return m.role === 'user'; });
+    if (hasUser && !opts.skipConfirm) {
+      if (!global.confirm('Nieuw gesprek starten? Dit scherm wordt leeggemaakt. Oudere gesprekken blijven in de geschiedenis.')) {
+        return;
+      }
+    }
+    gwCloseSidebar();
+    gwState.sessionId = null;
+    gwState.messages = [];
+    gwState.historyHydrated = true;
+    gwResetSessionLocalFlags();
+    gwClearMessageBox();
+    gwSetChatSubtitle('Nieuw gesprek');
+    if (!opts.quiet) toast('Nieuw gesprek gestart');
+    setTimeout(function () {
+      var ci = document.getElementById('gatewayChatInput');
+      if (ci) { try { ci.focus(); } catch (_e) {} }
+    }, 40);
+  }
+  /** Hervat alleen de meest recente Gateway-sessie (één transcript, geen merge). */
   async function gwResumeLatestSession() {
     if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
     if (gwState.sessionId && gwState.messages.length) {
@@ -630,7 +824,7 @@
         .eq('user_id', uid)
         .eq('vertel_app', GW_VERTEL_APP)
         .order('updated_at', { ascending: false })
-        .limit(5);
+        .limit(1);
       if (res && res.error) throw res.error;
       var rows = res && res.data ? res.data : [];
       if (!rows.length) return null;
@@ -641,7 +835,8 @@
       gwState.proposedTargets = [];
       gwState.newDossierOffered = {};
       gwState.namelessAskShown = false;
-      await gwHydrateMessagesFromDb(rows.map(function (r) { return r.id; }));
+      await gwHydrateMessagesFromDb([latest.id]);
+      gwSetChatSubtitle(String(latest.preview || '').trim() || 'Eerder gesprek');
       return gwState.sessionId;
     } catch (e) {
       console.warn('gwResumeLatestSession', e);
@@ -677,6 +872,7 @@
         gwState.newDossierOffered = {};
         gwState.namelessAskShown = false;
         gwState.historyHydrated = true;
+        gwSetChatSubtitle(preview);
         return gwState.sessionId;
       }
     } catch (e) { console.warn('gwEnsureSession', e); }
@@ -704,6 +900,9 @@
         updated_at: new Date().toISOString(),
         preview: String(content || '').trim().substring(0, 80)
       }).eq('id', gwState.sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
+      if (gwDbRole(role) === 'user') {
+        gwSetChatSubtitle(String(content || '').trim().substring(0, 80) || 'Gateway-gesprek');
+      }
     } catch (e) { console.warn('gwSaveMsg', e); }
   }
   async function gwSetSessionFlag(field, value) {
@@ -1459,7 +1658,8 @@
       var meta = gwAppMeta(hit.domain);
       gwRenderBridgeCard({
         domain: hit.domain,
-        reason: 'Je praat al over ' + hit.name + '; in ' + meta.label + ' kun je dit rustiger uitwerken.'
+        dossier: hit.name,
+        reason: 'Je praat al over ' + hit.name + '. Open ' + meta.label + ' om gericht verder te gaan.'
       });
     }
   }
@@ -1472,24 +1672,29 @@
     var box = document.getElementById('gatewayMessages');
     if (!box) return;
     var dossierHint = String(bridge.dossier || '').trim();
+    var shortDos = dossierHint.replace(/Sense$/i, '').trim();
     var card = document.createElement('div');
     card.className = 'gw-bridge';
     card.style.setProperty('--gw-accent', meta.accent);
     card.style.setProperty('--gw-soft', meta.soft);
-    var goLabel = dossierHint
-      ? ('Verder praten over ' + dossierHint.replace(/Sense$/i, '') + ' in ' + meta.label)
-      : ('Verdiepen in ' + meta.label);
+    var title = shortDos
+      ? ('Verder over ' + shortDos + ' in ' + meta.label)
+      : ('Ga verder in ' + meta.label);
+    var goLabel = shortDos
+      ? ('Open ' + meta.label + ' · ' + shortDos)
+      : ('Open ' + meta.label);
     card.innerHTML =
-      '<div class="gw-b-top"><div class="gw-b-icon" aria-hidden="true">' + gwEsc(meta.icon) + '</div><h4>Hier zit meer in</h4></div>' +
+      '<div class="gw-b-top"><div class="gw-b-icon" aria-hidden="true">' + gwEsc(meta.icon) + '</div><h4></h4></div>' +
       '<p class="gw-b-reason"></p>' +
       '<button type="button" class="gw-b-go"></button>' +
-      '<p class="gw-b-note">Je gesprek gaat mee, je hoeft niets te herhalen. In de app wordt alles standaard bij dit dossier genoteerd.</p>';
-    var defaultReason = dossierHint
-      ? ('Dossier ' + dossierHint.replace(/Sense$/i, '') + ' staat klaar. In ' + meta.label + ' kun je meteen verderpraten.')
-      : ('In ' + meta.label + ' kunnen we dit rustiger uitwerken.');
+      '<p class="gw-b-note">Je context gaat mee. In die app wordt verder standaard bij dit dossier genoteerd.</p>';
+    card.querySelector('h4').textContent = title;
+    var defaultReason = shortDos
+      ? ('Dit past beter in ' + meta.label + '. Open de app om gericht verder te praten over ' + shortDos + '.')
+      : ('Dit past beter in ' + meta.label + '. Open de app om gericht verder te werken.');
     card.querySelector('.gw-b-reason').textContent = String(bridge.reason || '').trim() || defaultReason;
     var goBtn = card.querySelector('.gw-b-go');
-    goBtn.textContent = goLabel;
+    goBtn.textContent = goLabel + ' →';
     goBtn.addEventListener('click', async function () {
       goBtn.disabled = true;
       try {
@@ -1515,8 +1720,8 @@
     var meta = gwAppMeta(d);
     var short = dos.replace(/Sense$/i, '') || dos;
     var reason = short
-      ? ('Je hebt ' + short + ' net vastgelegd. Wil je meteen verderpraten in ' + meta.label + '? Daar hoort alles standaard bij dit dossier.')
-      : ('Wil je dit verder uitwerken in ' + meta.label + '?');
+      ? ('Je hebt ' + short + ' net vastgelegd. Open ' + meta.label + ' om meteen verder te praten; alles hoort daar standaard bij dit dossier.')
+      : ('Open ' + meta.label + ' om dit gericht verder uit te werken.');
     // Korte delay zodat de bevestiging eerst zichtbaar is, daarna de brug.
     setTimeout(function () {
       if (gwState.bridgeShown) return;
@@ -1888,6 +2093,7 @@
     if (start) await gwSendMessage(start);
   }
   function closeGatewayChat() {
+    gwCloseSidebar();
     var chat = document.getElementById('gatewayChat');
     if (!chat) return;
     gwState.open = false;
@@ -1905,6 +2111,10 @@
     var back = document.getElementById('gatewayChatBack');
     var send = document.getElementById('gatewayChatSend');
     var chatInp = document.getElementById('gatewayChatInput');
+    var btnNew = document.getElementById('gatewayChatNew');
+    var btnHist = document.getElementById('gatewayChatHistory');
+    var sideNew = document.getElementById('gatewaySidebarNew');
+    var sideOv = document.getElementById('gatewaySidebarOverlay');
     updateGatewayTalkbarPlaceholder();
     function openFromTalkbar() {
       openGatewayChat(talkInp ? talkInp.value : '');
@@ -1933,6 +2143,13 @@
       gwBindMicPtt(chatMic, 'gatewayChatInput');
     }
     if (back) back.addEventListener('click', closeGatewayChat);
+    if (btnNew) btnNew.addEventListener('click', function () { gwNieuwGesprek(); });
+    if (btnHist) btnHist.addEventListener('click', function () {
+      if (gwIsSidebarOpen()) gwCloseSidebar();
+      else gwOpenSidebar();
+    });
+    if (sideNew) sideNew.addEventListener('click', function () { gwNieuwGesprek(); });
+    if (sideOv) sideOv.addEventListener('click', gwCloseSidebar);
     function sendComposer() {
       var v = chatInp ? String(chatInp.value || '').trim() : '';
       if (!v) return;
@@ -1946,7 +2163,13 @@
       });
     }
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && gwState.open) { e.preventDefault(); closeGatewayChat(); }
+      if (e.key !== 'Escape') return;
+      if (gwIsSidebarOpen()) {
+        e.preventDefault();
+        gwCloseSidebar();
+        return;
+      }
+      if (gwState.open) { e.preventDefault(); closeGatewayChat(); }
     });
   }
 
