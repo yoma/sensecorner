@@ -943,19 +943,6 @@
     try {
       var dbRole = gwDbRole(role);
       var sessionId = gwState.sessionId;
-      var updated = await client.from('sense_sessions').update({
-        updated_at: new Date().toISOString(),
-        preview: String(content || '').trim().substring(0, 80)
-      }).eq('id', sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP)
-        .select('id').maybeSingle();
-      if (updated && updated.error) {
-        console.warn('gwSaveMsg session update:', updated.error);
-        return false;
-      }
-      if (!updated || !updated.data || updated.data.id !== sessionId) {
-        console.warn('gwSaveMsg session update: sessie niet gevonden');
-        return false;
-      }
       var ins = await client.from('sense_session_msgs').insert({
         session_id: sessionId,
         user_id: uid,
@@ -967,6 +954,12 @@
         console.warn('gwSaveMsg insert:', ins.error);
         return false;
       }
+      /* Het bericht is de duurzame bron; metadata mag een geslaagd bericht nooit terugdraaien. */
+      var updated = await client.from('sense_sessions').update({
+        updated_at: new Date().toISOString(),
+        preview: String(content || '').trim().substring(0, 80)
+      }).eq('id', sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
+      if (updated && updated.error) console.warn('gwSaveMsg session update:', updated.error);
       if (gwDbRole(role) === 'user') {
         gwSetChatSubtitle(String(content || '').trim().substring(0, 80) || 'Gateway-gesprek');
       }
