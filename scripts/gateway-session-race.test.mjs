@@ -57,6 +57,14 @@ const ensure = section(
   'async function gwCreateSession',
 );
 assert.match(ensure, /await gwResumeLatestSession\(\)/);
+assertOrder(
+  ensure,
+  [
+    'if (gwState.sessionId && !gwState.historyHydrated) return null;',
+    'await gwResumeLatestSession()',
+  ],
+  'failed explicit history load',
+);
 assert.match(ensure, /if \(_gwLastResumeFailed\) return null;/);
 assert.match(ensure, /_gwSessionPromise = gwCreateSession\(previewText\);/);
 assert.doesNotMatch(
@@ -78,6 +86,29 @@ assertOrder(
     "gwState.messages.push({ role: 'assistant'",
   ],
   'durable Gateway turn',
+);
+
+const save = section('async function gwSaveMsg', 'async function gwSetSessionFlag');
+assertOrder(
+  save,
+  [
+    "client.from('sense_sessions').update",
+    ".select('id').maybeSingle()",
+    'if (updated && updated.error)',
+    'if (!updated || !updated.data || updated.data.id !== sessionId)',
+    "client.from('sense_session_msgs').insert",
+  ],
+  'session metadata and message save',
+);
+
+const open = section('async function openGatewayChat', 'function closeGatewayChat');
+assertOrder(
+  open,
+  [
+    'if (gwState.busy) return;',
+    'await gwResumeLatestSession()',
+  ],
+  'open during session transition',
 );
 
 console.log('Gateway session race invariants passed.');
