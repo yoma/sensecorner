@@ -92,13 +92,11 @@ const save = section('async function gwSaveMsg', 'async function gwSetSessionFla
 assertOrder(
   save,
   [
-    "client.from('sense_sessions').update",
-    ".select('id').maybeSingle()",
-    'if (updated && updated.error)',
-    'if (!updated || !updated.data || updated.data.id !== sessionId)',
     "client.from('sense_session_msgs').insert",
+    'if (ins && ins.error)',
+    "client.from('sense_sessions').update",
   ],
-  'session metadata and message save',
+  'durable message before session metadata',
 );
 
 const open = section('async function openGatewayChat', 'function closeGatewayChat');
