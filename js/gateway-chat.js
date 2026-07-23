@@ -888,6 +888,8 @@
   async function gwEnsureSession(previewText) {
     if (_gwSessionPromise) await _gwSessionPromise;
     if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
+    /* Een expliciet gekozen sessie met mislukte hydratatie nooit vervangen door de nieuwste sessie. */
+    if (gwState.sessionId && !gwState.historyHydrated) return null;
     if (!_gwStartFresh) {
       var resumed = await gwResumeLatestSession();
       if (resumed) return resumed;
@@ -940,8 +942,22 @@
     if (!client || !uid) return false;
     try {
       var dbRole = gwDbRole(role);
+      var sessionId = gwState.sessionId;
+      var updated = await client.from('sense_sessions').update({
+        updated_at: new Date().toISOString(),
+        preview: String(content || '').trim().substring(0, 80)
+      }).eq('id', sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP)
+        .select('id').maybeSingle();
+      if (updated && updated.error) {
+        console.warn('gwSaveMsg session update:', updated.error);
+        return false;
+      }
+      if (!updated || !updated.data || updated.data.id !== sessionId) {
+        console.warn('gwSaveMsg session update: sessie niet gevonden');
+        return false;
+      }
       var ins = await client.from('sense_session_msgs').insert({
-        session_id: gwState.sessionId,
+        session_id: sessionId,
         user_id: uid,
         role: dbRole,
         content: String(content || ''),
@@ -951,11 +967,6 @@
         console.warn('gwSaveMsg insert:', ins.error);
         return false;
       }
-      var updated = await client.from('sense_sessions').update({
-        updated_at: new Date().toISOString(),
-        preview: String(content || '').trim().substring(0, 80)
-      }).eq('id', gwState.sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
-      if (updated && updated.error) console.warn('gwSaveMsg session update:', updated.error);
       if (gwDbRole(role) === 'user') {
         gwSetChatSubtitle(String(content || '').trim().substring(0, 80) || 'Gateway-gesprek');
       }
@@ -2130,6 +2141,8 @@
     chat.classList.add('open');
     chat.setAttribute('aria-hidden', 'false');
     updateGatewayTalkbarPlaceholder();
+    /* Een lopende send/load/new-transitie bezit de sessiestaat en mag niet worden overschreven. */
+    if (gwState.busy) return;
     if (firstOpen || !gwState.sessionId || !gwState.historyHydrated) {
       await ensureGatewaySenseiCore();
       try {
