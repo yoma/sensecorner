@@ -178,11 +178,24 @@ async function countRate(userId: string): Promise<number | null> {
   return null;
 }
 
-async function logRate(userId: string): Promise<void> {
-  const ins = await sb.from("ai_rate_log").insert({ user_id: userId, purpose: RATE_PURPOSE });
-  if (ins.error && /purpose/i.test(String(ins.error.message))) {
-    await sb.from("ai_rate_log").insert({ user_id: userId });
+async function reserveRateSlot(userId: string): Promise<"ok" | "limited" | "unavailable"> {
+  const counted = await countRate(userId);
+  if (counted == null) return "unavailable";
+  if (counted >= RATE_LIMIT_MAX) return "limited";
+
+  let inserted = await sb.from("ai_rate_log").insert({ user_id: userId, purpose: RATE_PURPOSE });
+  if (inserted.error && /purpose/i.test(String(inserted.error.message))) {
+    inserted = await sb.from("ai_rate_log").insert({ user_id: userId });
   }
+  if (inserted.error) {
+    console.warn("ai_rate_log reserve", inserted.error.message);
+    return "unavailable";
+  }
+
+  const reservedCount = await countRate(userId);
+  if (reservedCount == null) return "unavailable";
+  if (reservedCount > RATE_LIMIT_MAX) return "limited";
+  return "ok";
 }
 
 async function loadMessages(userId: string): Promise<MessageRow[]> {
@@ -443,14 +456,6 @@ Deno.serve(async (req: Request) => {
       return json({ error: "AI toegang niet geactiveerd.", code: "AI_ACCESS_PENDING" }, 403);
     }
 
-    // Rate limiting
-    if (!isAdmin) {
-      const counted = await countRate(userId);
-      if (counted != null && counted >= RATE_LIMIT_MAX) {
-        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
-      }
-    }
-
     // Data laden
     const msgs = await loadMessages(userId);
 
@@ -476,6 +481,19 @@ Deno.serve(async (req: Request) => {
     ]);
 
     // Pass 1: detectie
+    if (!isAdmin) {
+      const reserved = await reserveRateSlot(userId);
+      if (reserved === "limited") {
+        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+      }
+      if (reserved === "unavailable") {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan je AI-limiet nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+    }
     const detectSys = buildDetectSystemPrompt();
     const detectUsr = buildDetectUserPrompt(msgs, facts, profile);
     const detectRaw = await callClaude(detectSys, detectUsr, 1000);
@@ -508,6 +526,19 @@ Deno.serve(async (req: Request) => {
     }
 
     // Pass 2: validatie — is het patroon echt over de gebruiker?
+    if (!isAdmin) {
+      const reserved = await reserveRateSlot(userId);
+      if (reserved === "limited") {
+        return json({ ok: false, reason: "rate_limited", user_message: "Probeer de patroondetectie over een uur opnieuw." }, 429);
+      }
+      if (reserved === "unavailable") {
+        return json({
+          ok: false,
+          reason: "rate_limit_unavailable",
+          user_message: "Ik kan je AI-limiet nu niet veilig controleren. Probeer het later opnieuw.",
+        }, 503);
+      }
+    }
     const validateSys = buildValidateSystemPrompt();
     const validateUsr = buildValidateUserPrompt(filteredProposals, msgById);
     const validateRaw = await callClaude(validateSys, validateUsr, 600);
@@ -530,8 +561,6 @@ Deno.serve(async (req: Request) => {
     if (!validatedProposals.length) {
       return json({ ok: true, reason: "rejected_by_validation", inserted: 0, proposals: [] });
     }
-
-    if (!isAdmin) await logRate(userId);
 
     // Wegschrijven naar own_aandachtspunten
     const insertedRows: { id: string; soft_name: string }[] = [];
