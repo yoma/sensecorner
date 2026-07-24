@@ -3438,6 +3438,26 @@ function parseAandachtspuntEvidence(ev){
   }
   return[];
 }
+function aandachtspuntEvidenceKey(it){
+  if(!it)return'';
+  var mid=String(it.message_id||'').trim().toLowerCase();
+  if(mid)return'm:'+mid;
+  var cid=String(it.checkin_id||it.id||'').trim().toLowerCase();
+  if(cid)return'c:'+cid;
+  try{return'j:'+JSON.stringify(it);}catch(_e){return'';}
+}
+function mergeAandachtspuntEvidence(existing,addition){
+  var out=[];
+  var seen={};
+  parseAandachtspuntEvidence(existing).concat(parseAandachtspuntEvidence(addition)).forEach(function(it){
+    if(!it)return;
+    var key=aandachtspuntEvidenceKey(it);
+    if(key&&seen[key])return;
+    if(key)seen[key]=true;
+    out.push(it);
+  });
+  return out;
+}
 function formatAandachtspuntEvidenceHtml(evidence){
   var items=parseAandachtspuntEvidence(evidence);
   if(!items.length)return'<div class="subtle">Geen bewijs gekoppeld.</div>';
@@ -3840,20 +3860,15 @@ async function mergeProposalIntoExisting(proposalId,existingId){
   setReviewAandachtButtonsBusy(proposalId,true,'merge-similar');
   try{
     var nowIso=new Date().toISOString();
-    var existEvidence=Array.isArray(existing.evidence)?existing.evidence:[];
-    var propEvidence=Array.isArray(proposal.evidence)?proposal.evidence:[];
-    var existIds=new Set(existEvidence.map(function(e){return String(e&&e.checkin_id||e&&e.message_id||'').trim();}));
-    var newEvidence=existEvidence.slice();
-    propEvidence.forEach(function(item){
-      var key=String(item&&item.checkin_id||item&&item.message_id||'').trim();
-      if(key&&!existIds.has(key)){newEvidence.push(item);existIds.add(key);}
-    });
+    var newEvidence=mergeAandachtspuntEvidence(existing.evidence,proposal.evidence);
     var existMov=Array.isArray(existing.movement)?existing.movement:[];
     existMov=existMov.concat([{note:'Aanvullend bewijs samengevoegd vanuit: "'+String(proposal.soft_name||'').trim()+'"',at:nowIso,type:'merge',merged_name:String(proposal.soft_name||'').trim()}]);
     var updated=await updateOwnAandachtspuntRow(existingId,{evidence:newEvidence,movement:existMov});
-    if(updated)patchOwnAandachtspuntLocal(existingId,updated);
-    await updateOwnAandachtspuntRow(proposalId,{status:'verworpen',rejected_at:nowIso});
-    patchOwnAandachtspuntLocal(proposalId,{status:'verworpen',rejected_at:nowIso});
+    if(!updated)throw new Error('Bestemming is niet bijgewerkt.');
+    patchOwnAandachtspuntLocal(existingId,updated);
+    var rejected=await updateOwnAandachtspuntRow(proposalId,{status:'verworpen',rejected_at:nowIso});
+    if(!rejected)throw new Error('Voorstel is niet verworpen.');
+    patchOwnAandachtspuntLocal(proposalId,rejected);
     renderReviewFacts();
     updateOwnPendingNavBadge();
     flashOwnsenseMessage('Samengevoegd. Het bewijs is toegevoegd aan "'+String(existing.soft_name||'').substring(0,60)+'".',false,{durationMs:6000});
