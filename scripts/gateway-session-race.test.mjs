@@ -109,4 +109,16 @@ assertOrder(
   'open during session transition',
 );
 
+const remove = section('async function gwVerwijderSessie', 'async function gwNieuwGesprek');
+assertOrder(
+  remove,
+  [
+    "client.from('sense_sessions').delete()",
+    'if (sesDel && sesDel.error)',
+    "client.from('sense_session_msgs').delete()",
+    'if (msgDel && msgDel.error)',
+  ],
+  'session delete before message wipe',
+);
+
 console.log('Gateway session race invariants passed.');
