@@ -785,9 +785,14 @@
     var uid = getUidSync() || await ensureUid(client);
     if (!client || !uid) return;
     try {
-      await client.from('sense_session_msgs').delete().eq('session_id', sessionId).eq('user_id', uid);
-      await client.from('sense_sessions').delete()
+      /* Session first: if this fails, messages stay intact. Message wipe after
+         avoids an empty ghost session when the second delete previously failed. */
+      var sesDel = await client.from('sense_sessions').delete()
         .eq('id', sessionId).eq('user_id', uid).eq('vertel_app', GW_VERTEL_APP);
+      if (sesDel && sesDel.error) throw sesDel.error;
+      var msgDel = await client.from('sense_session_msgs').delete()
+        .eq('session_id', sessionId).eq('user_id', uid);
+      if (msgDel && msgDel.error) throw msgDel.error;
       if (gwState.sessionId === sessionId) {
         await gwNieuwGesprek({ skipConfirm: true, quiet: true });
       }
