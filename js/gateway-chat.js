@@ -71,6 +71,7 @@
   };
   var _gwSenseiCooldownUntil = 0;
   var _bound = false;
+  var _gwResumePromise = null;
 
   function A() { return adapters || {}; }
   function toast(msg, isError, opts) {
@@ -810,11 +811,20 @@
   }
   /** Hervat alleen de meest recente Gateway-sessie (één transcript, geen merge). */
   async function gwResumeLatestSession() {
+    if (_gwResumePromise) return await _gwResumePromise;
     if (gwState.sessionId && gwState.historyHydrated) return gwState.sessionId;
     if (gwState.sessionId && gwState.messages.length) {
       gwState.historyHydrated = true;
       return gwState.sessionId;
     }
+    _gwResumePromise = gwResumeLatestSessionOnce();
+    try {
+      return await _gwResumePromise;
+    } finally {
+      _gwResumePromise = null;
+    }
+  }
+  async function gwResumeLatestSessionOnce() {
     var client = getClient();
     var uid = await ensureUid(client);
     if (!client || !uid) return null;
@@ -844,12 +854,18 @@
     }
   }
   async function gwEnsureSession(previewText) {
-    if (gwState.sessionId) return gwState.sessionId;
-    /* Alleen hervatten als er nog geen lokale beurt is (niet mid-send wissen). */
-    if (!(gwState.messages && gwState.messages.length)) {
-      var resumed = await gwResumeLatestSession();
-      if (resumed) return resumed;
+    var resumed = await gwResumeLatestSession();
+    if (resumed) return resumed;
+    if (_gwResumePromise) return await _gwResumePromise;
+    _gwResumePromise = gwCreateSession(previewText);
+    try {
+      return await _gwResumePromise;
+    } finally {
+      _gwResumePromise = null;
     }
+  }
+  async function gwCreateSession(previewText) {
+    if (gwState.sessionId) return gwState.sessionId;
     var client = getClient();
     var uid = await ensureUid(client);
     if (!client || !uid) return null;
@@ -986,17 +1002,24 @@
     }
     return [];
   }
+  function gwDossierAlias(name) {
+    var display = typeof global.senseContactDossierDisplayName === 'function'
+      ? global.senseContactDossierDisplayName(name)
+      : String(name || '').trim().replace(/[\s_-]*sense$/i, '').trim();
+    return String(display || '').trim().toLowerCase();
+  }
   function gwResolveDossierName(domain, hint, proposalText) {
     var contacts = gwContactsForDomain(domain);
     if (!contacts.length) return '';
     var h = String(hint || '').trim();
     if (h) {
+      var hintAlias = gwDossierAlias(h);
       for (var i = 0; i < contacts.length; i++) {
         if (contacts[i].toLowerCase() === h.toLowerCase()) return contacts[i];
       }
       for (var j = 0; j < contacts.length; j++) {
         var c = contacts[j];
-        if (c.toLowerCase().indexOf(h.toLowerCase()) === 0 || h.toLowerCase().indexOf(c.toLowerCase()) === 0) return c;
+        if (hintAlias && gwDossierAlias(c) === hintAlias) return c;
       }
     }
     var blob = (' ' + String(proposalText || '') + ' ').toLowerCase();
@@ -1039,7 +1062,7 @@
     if (!isProfile && domain !== 'self' && !targetProfile) {
       suggestedNew = String(opts.suggestedNewName || '').trim()
         || gwDetectUnknownPersonName(text)
-        || gwDetectUnknownPersonName(gwRecentUserBlob());
+        || gwDetectUnknownPersonName(gwRecentUserBlob(1));
     }
     var box = document.getElementById('gatewayMessages');
     if (!box) return;
@@ -1848,7 +1871,7 @@
       if (!resolvedDos && gwNormDomain(parsed.proposal.domain) !== 'self') {
         suggestedNew = gwDetectUnknownPersonName(parsed.proposal.text)
           || gwDetectUnknownPersonName(parsed.proposal.dossier || '')
-          || gwDetectUnknownPersonName(gwRecentUserBlob());
+          || gwDetectUnknownPersonName(gwRecentUserBlob(1));
       }
       if (gwWasProposalTargetOffered(parsed.proposal.domain, trackDos || (suggestedNew ? ('new:' + suggestedNew) : ''))) {
         // Zelfde domein/dossier al aangeboden deze sessie: geen tweede voorstelkaart.
@@ -1990,9 +2013,9 @@
     var pendingProfile = gwState.pendingProfileQ;
     gwState.pendingProfileQ = null;
 
+    await gwEnsureSession(userText);
     gwAddUserBubble(userText);
     gwState.messages.push({ role: 'user', content: userText });
-    await gwEnsureSession(userText);
     await gwSaveMsg('user', userText);
 
     // Safety net direct na user-send: bij 2+ mentions niet wachten op het model.
