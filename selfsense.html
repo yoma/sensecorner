@@ -13,7 +13,7 @@
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=2007261245"></script>
+<script src="js/sense-common.js?v=1908261100"></script>
 <script src="js/selfsense-aandachtspunten-detect.js"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
@@ -12071,6 +12071,10 @@ async function runAdviceHubCompare(){
       if(st.question)userX+='\n\nFocusvraag: '+st.question;
       extraText=cleanCompareAiText(await callExpertiseAdviceAPI(sysX,[{role:'user',content:userX}],520,{purpose:'compare_expertise'}));
     }
+    var extraNotice='';
+    if((depthMode==='extra'||depthMode==='both')&&typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      extraNotice=senseDeepLimitedNoticeHtml();
+    }
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
         var conf=Math.max(0,Math.min(100,parseInt(item.confidence,10)||0));
@@ -12090,7 +12094,7 @@ async function runAdviceHubCompare(){
     var bodyHtml='';
     if(depthMode==='extra'){
       if(extraText){
-        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+extraNotice+formatAiCard(extraText)+'</div>';
       }else{
         bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en probeer opnieuw.</div>';
       }
@@ -12099,7 +12103,7 @@ async function runAdviceHubCompare(){
         bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Standaard</div>'+formatAiCard(coreText)+'</div>';
       }
       if((depthMode==='both')&&extraText){
-        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+extraNotice+formatAiCard(extraText)+'</div>';
       }else if((depthMode==='both')&&!extraText){
         bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Beide tegelijk</strong> of <strong>Met extra expertise</strong>.</div>';
       }
@@ -14382,6 +14386,9 @@ async function genAdviesOnderbouwd(name){
     var raw=await callExpertiseAdviceAPI(sys,[{role:'user',content:userContent}],480);
     var txt=String(raw||'').trim();
     var card=formatAiCard(txt);
+    if(typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      card=senseDeepLimitedNoticeHtml()+card;
+    }
     var wrap=document.getElementById('advExtraWrap');
     var hdr=document.getElementById('advExtraHdr');
     var box=document.getElementById('advExtraTxt');
@@ -15426,6 +15433,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
+    try{if(typeof S!=='undefined'&&S)S._lastSenseiDeepLimited=false;}catch(_dl0){}
     var webSearchAllowed=!(apiOpts&&apiOpts.disable_web_search);
     if(webSearchAllowed){
       try{
@@ -15513,6 +15521,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
     if(data&&data.error){
       throw new Error((typeof senseFormatSenseiApiError==='function')?senseFormatSenseiApiError(data,res.status):(data.error.message||String(data.error)));
     }
+    try{if(typeof S!=='undefined'&&S)S._lastSenseiDeepLimited=!!(data&&data.deep_limited);}catch(_dl){}
     await logSenseiWebSearchIfPresent(data,sessionUserId,'selfsense');
     var txt=extractSenseiChatAssistantText(data)||'';
     try{
@@ -17393,7 +17402,11 @@ async function sendMsg(){
     var crisisRes=typeof senseExtractCrisisFlag==='function'?senseExtractCrisisFlag(raw):{crisis:false,text:String(raw||'')};
     raw=crisisRes.text;
     var crisisBlockHtml=crisisRes.crisis?buildSelfSenseCrisisReferralHtml():'';
-    var vertelAiHtml=function(extra){return crisisBlockHtml+formatAiCard(raw)+(extra||'');};
+    var vertelDeepNotice='';
+    if(vertelExpertiseFollowUp&&typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      vertelDeepNotice=senseDeepLimitedNoticeHtml();
+    }
+    var vertelAiHtml=function(extra){return crisisBlockHtml+vertelDeepNotice+formatAiCard(raw)+(extra||'');};
     try{
       var _rawForCrossApp=String(raw||'');
       if(crossGoBarId&&window._crossAppGoData&&window._crossAppGoData[crossGoBarId]){

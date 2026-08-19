@@ -2160,4 +2160,16 @@
   global.senseDetectNewPersonName = senseDetectNewPersonName;
   global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
   global.senseCreateContactProfile = senseCreateContactProfile;
+
+  function senseDeepLimitedNoticeHtml() {
+    return '<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise draait tijdelijk op het standaardmodel, je uurlimiet voor Expertise is bereikt. Dit is geen volledige Expertise-analyse.</div>';
+  }
+  function senseConsumeDeepLimitedFlag() {
+    var st = global.S;
+    var on = !!(st && st._lastSenseiDeepLimited);
+    if (st) st._lastSenseiDeepLimited = false;
+    return on;
+  }
+  global.senseDeepLimitedNoticeHtml = senseDeepLimitedNoticeHtml;
+  global.senseConsumeDeepLimitedFlag = senseConsumeDeepLimitedFlag;
 })(typeof window !== 'undefined' ? window : this);

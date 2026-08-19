@@ -13,7 +13,7 @@
 <meta name="ds-build" content="19-08-2026 10:50">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=2007261245"></script>
+<script src="js/sense-common.js?v=1908261100"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -10405,6 +10405,10 @@ async function runAdviceHubCompare(){
     var coreText=advice.coreText;
     var extraText=advice.extraText;
     depthMode=advice.depthMode;
+    var extraNotice='';
+    if((depthMode==='extra'||depthMode==='both')&&typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      extraNotice=senseDeepLimitedNoticeHtml();
+    }
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
         var conf=Math.max(0,Math.min(100,parseInt(item.confidence,10)||0));
@@ -10424,7 +10428,7 @@ async function runAdviceHubCompare(){
     var bodyHtml='';
     if(depthMode==='extra'){
       if(extraText){
-        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+extraNotice+formatAiCard(extraText)+'</div>';
       }else{
         bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en probeer opnieuw.</div>';
       }
@@ -10433,7 +10437,7 @@ async function runAdviceHubCompare(){
         bodyHtml+='<div style="margin:0 0 14px;padding:12px;border:1px solid #E5E7EB;border-radius:12px;background:#fff"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Standaard</div>'+formatAiCard(coreText)+'</div>';
       }
       if((depthMode==='both')&&extraText){
-        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+formatAiCard(extraText)+'</div>';
+        bodyHtml+='<div style="padding:12px;border:1px solid #BFDBFE;border-radius:12px;background:#F8FAFC"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1E40AF;margin-bottom:8px">Expertise</div>'+extraNotice+formatAiCard(extraText)+'</div>';
       }else if((depthMode==='both')&&!extraText){
         bodyHtml+='<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise kon niet worden toegevoegd. Controleer je verbinding en tik opnieuw op <strong>Beide</strong> of <strong>Expertise</strong>.</div>';
       }
@@ -11621,6 +11625,9 @@ async function genAdviesOnderbouwd(name){
     var raw=await callExpertiseAdviceAPI(sys,[{role:'user',content:userContent}],480);
     var txt=String(raw||'').trim();
     var card=formatAiCard(txt);
+    if(typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      card=senseDeepLimitedNoticeHtml()+card;
+    }
     var wrap=document.getElementById('advExtraWrap');
     var hdr=document.getElementById('advExtraHdr');
     var box=document.getElementById('advExtraTxt');
@@ -12710,7 +12717,7 @@ async function cmpAdviesCurrent(){
   try{
     var depthMode=String(S.adviceHubDepthMode||'standard').trim().toLowerCase();
     if(depthMode!=='standard'&&depthMode!=='extra'&&depthMode!=='both')depthMode='standard';
-    var compareBudgetMs=(depthMode==='both')?72000:42000;
+    var compareBudgetMs=(depthMode==='both')?130000:100000;
     var payload=await loadCompareAdvicePayload(names);
     var advice=await withTimeout(
       generateCompareAdviceTexts(payload,depthMode,''),
@@ -12721,12 +12728,16 @@ async function cmpAdviesCurrent(){
     var coreText=advice.coreText;
     var extraText=advice.extraText;
     depthMode=advice.depthMode;
+    var extraNotice='';
+    if((depthMode==='extra'||depthMode==='both')&&typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      extraNotice=senseDeepLimitedNoticeHtml();
+    }
     if(box){
       var parts=[];
       if(depthMode==='extra'){
         if(extraText){
           parts.push('<div style="font-size:12px;font-weight:700;color:#1E40AF;margin-bottom:8px;letter-spacing:.5px">EXPERTISE</div>'
-            +'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(extraText)+'</div>');
+            +extraNotice+'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(extraText)+'</div>');
         }else{
           parts.push('<div style="font-size:12px;color:#64748b">Expertise kon niet worden geladen.</div>');
         }
@@ -12736,7 +12747,7 @@ async function cmpAdviesCurrent(){
         if((depthMode==='both')&&extraText){
           parts.push('<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #E5E7EB">'
             +'<div style="font-size:12px;font-weight:700;color:#1E40AF;margin-bottom:8px;letter-spacing:.5px">EXTRA EXPERTISE</div>'
-            +'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(extraText)+'</div></div>');
+            +extraNotice+'<div style="font-size:15px;color:#333;line-height:1.7">'+formatAiCard(extraText)+'</div></div>');
         }else if(depthMode==='both'){
           parts.push('<div style="margin-top:10px;font-size:12px;color:#64748b">Extra expertise kon niet worden geladen.</div>');
         }
@@ -13045,6 +13056,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
   var timeoutMs=customTimeoutMs||30000;
   var timer=setTimeout(function(){controller.abort();},timeoutMs);
   try{
+    try{if(typeof S!=='undefined'&&S)S._lastSenseiDeepLimited=false;}catch(_dl0){}
     var webSearchAllowed=!(apiOpts&&apiOpts.disable_web_search);
     if(webSearchAllowed){
       try{
@@ -13125,6 +13137,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
     if(data&&data.error){
       throw new Error((typeof senseFormatSenseiApiError==='function')?senseFormatSenseiApiError(data,res.status):(data.error.message||String(data.error)));
     }
+    try{if(typeof S!=='undefined'&&S)S._lastSenseiDeepLimited=!!(data&&data.deep_limited);}catch(_dl){}
     await logSenseiWebSearchIfPresent(data,sessionUserId,'datesense');
     var txt=extractSenseiChatAssistantText(data)||'';
     if(!txt.trim())throw new Error('Leeg AI antwoord ontvangen.');
@@ -14642,6 +14655,9 @@ async function sendMsg(){
     var vertelCrisis=typeof senseWrapAiCardWithCrisis==='function'?senseWrapAiCardWithCrisis(formatAiCard,raw):{html:formatAiCard(raw),text:String(raw||''),crisis:false};
     raw=vertelCrisis.text;
     var vertelAiBase=vertelCrisis.html;
+    if(vertelExpertiseFollowUp&&typeof senseConsumeDeepLimitedFlag==='function'&&senseConsumeDeepLimitedFlag()){
+      vertelAiBase=senseDeepLimitedNoticeHtml()+vertelAiBase;
+    }
     var segData=null;
     if(segPromise){
       try{segData=await segPromise;}catch(segE){segData=null;}

@@ -60,6 +60,7 @@ const RATE_LIMIT_MAX_OWNSENSE_HUB = 24;
 const RATE_LIMIT_MAX_GATEWAY = 30;
 // Samenvattingen bij openen: aparte pot, zodat bijpraten de chatlimiet niet opeet.
 const RATE_LIMIT_MAX_GATEWAY_SUMMARY = 8;
+const RATE_LIMIT_MAX_DEEP = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
 const OWNSENSE_HUB_PURPOSES = ["ownsense_hub", "ownsense_insight"] as const;
 
@@ -139,7 +140,7 @@ function pickFirstFromAuth(candidates: string[], emailLocal: string): string {
 async function countAiRateLog(
   userId: string,
   windowStart: string,
-  mode: "all" | "general" | "hub" | "gateway" | "gateway_summary",
+  mode: "all" | "general" | "hub" | "gateway" | "gateway_summary" | "deep",
 ): Promise<{ count: number | null; purposeSupported: boolean }> {
   let query = sb
     .from("ai_rate_log")
@@ -152,6 +153,8 @@ async function countAiRateLog(
     query = query.eq("purpose", "gateway");
   } else if (mode === "gateway_summary") {
     query = query.eq("purpose", "gateway_summary");
+  } else if (mode === "deep") {
+    query = query.eq("purpose", "deep");
   } else if (mode === "general") {
     query = query.or(
       "purpose.is.null,and(purpose.neq.ownsense_hub,purpose.neq.ownsense_insight,purpose.neq.gateway,purpose.neq.gateway_summary)",
@@ -661,7 +664,17 @@ Deno.serve(async (req: Request) => {
     // limits toe. Een gebruiker kan daardoor nooit een willekeurig Anthropic-model
     // selecteren en nooit de server-side kostenbeperkingen omzeilen.
     const purpose = parseAiPurpose(body?.purpose);
-    const model = selectAnthropicModel(purpose);
+    let model = selectAnthropicModel(purpose);
+    let deepLimited = false;
+    const wantsDeep = purpose === "expertise" || purpose === "compare_expertise";
+    if (wantsDeep && !isAdmin) {
+      const deepWindowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+      const deepCounted = await countAiRateLog(userId, deepWindowStart, "deep");
+      if (deepCounted.purposeSupported && deepCounted.count != null && deepCounted.count >= RATE_LIMIT_MAX_DEEP) {
+        model = AI_MODELS.STANDARD;
+        deepLimited = true;
+      }
+    }
     console.log(`AI route: ${purpose} -> ${model}`);
     const messagesRaw = Array.isArray(body?.messages) ? body.messages : [];
     if (!messagesRaw.length) return json({ error: "messages is required" }, 400);
@@ -754,9 +767,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const claudeAbort = new AbortController();
-    const claudeAbortMs = (purpose === "expertise" || purpose === "compare_expertise")
-      ? CLAUDE_ABORT_DEEP_MS
-      : CLAUDE_ABORT_MS;
+    const claudeAbortMs = model === AI_MODELS.DEEP ? CLAUDE_ABORT_DEEP_MS : CLAUDE_ABORT_MS;
     const claudeTimer = setTimeout(() => claudeAbort.abort(), claudeAbortMs);
     let claudeRes: Response;
     try {
@@ -780,8 +791,9 @@ Deno.serve(async (req: Request) => {
       const logRow: Record<string, unknown> = { user_id: userId };
       if (isGateway) logRow.purpose = "gateway";
       else if (isOwnsenseHub) logRow.purpose = "ownsense_hub";
+      else if (wantsDeep && !deepLimited) logRow.purpose = "deep";
       sb.from("ai_rate_log").insert(logRow).then(({ error: logError }) => {
-        if (logError && (isOwnsenseHub || isGateway) && /purpose/i.test(String(logError.message || ""))) {
+        if (logError && (isOwnsenseHub || isGateway || (wantsDeep && !deepLimited)) && /purpose/i.test(String(logError.message || ""))) {
           sb.from("ai_rate_log").insert({ user_id: userId }).then(({ error: logError2 }) => {
             if (logError2) console.warn("Loggen mislukt:", logError2.message);
           });
@@ -791,6 +803,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    if (deepLimited && claudeData && typeof claudeData === "object" && !Array.isArray(claudeData)) {
+      (claudeData as Record<string, unknown>).deep_limited = true;
+    }
     return json(claudeData, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
