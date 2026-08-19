@@ -20,7 +20,14 @@ const MAX_CONFIRMED_FACTS = 40;
 const MAX_PROFILE_TEXT_CHARS = 900;
 const MIN_EVIDENCE_PATTERN_OVERLAP = 0.06;
 const MIN_FACTS_ONLY_OVERLAP = 0.1;
-const OFFLINE_MODEL = "claude-opus-4-6";
+const AI_MODELS = {
+  FAST: "claude-haiku-4-5-20251001",
+  STANDARD: "claude-sonnet-5",
+  DEEP: "claude-opus-5",
+} as const;
+const OFFLINE_MODEL = AI_MODELS.DEEP;
+// Een Opus-5-call, zelfde 75s-budget als expertise in sensei-chat.
+const CLAUDE_ABORT_MS = 75000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
 const RATE_PURPOSE = "selfsense_aandachtspunten_detect";
@@ -577,7 +584,7 @@ Deno.serve(async (req: Request) => {
     const userContent = buildUserPromptContent(relevant, confirmedFacts, profileCtx, bevestigdeAandacht);
 
     const claudeAbort = new AbortController();
-    const claudeTimer = setTimeout(() => claudeAbort.abort(), 30000);
+    const claudeTimer = setTimeout(() => claudeAbort.abort(), CLAUDE_ABORT_MS);
     let claudeRes: Response;
     try {
       claudeRes = await fetch("https://api.anthropic.com/v1/messages", {

@@ -14,6 +14,12 @@ const TWILIO_FROM = Deno.env.get("TWILIO_WHATSAPP_FROM") || "whatsapp:+141552388
 const TWILIO_WEBHOOK_URL = Deno.env.get("TWILIO_WEBHOOK_URL") || "";
 const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
+const AI_MODELS = {
+  FAST: "claude-haiku-4-5-20251001",
+  STANDARD: "claude-sonnet-5",
+  DEEP: "claude-opus-5",
+} as const;
+const WHATSAPP_MODEL = AI_MODELS.STANDARD;
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -876,7 +882,7 @@ async function callClaude(system: string, messages: Array<{ role: "user" | "assi
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: WHATSAPP_MODEL,
       max_tokens: 512,
       system,
       messages,

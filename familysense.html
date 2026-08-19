@@ -2883,9 +2883,11 @@ function polishExpertisePlainText(txt){
   if(window.SenseiCore&&window.SenseiCore.sanitizeExpertiseOutput)return window.SenseiCore.sanitizeExpertiseOutput(txt);
   return String(txt||'').trim();
 }
-async function callExpertiseAdviceAPI(sys,msgs,maxTok){
+async function callExpertiseAdviceAPI(sys,msgs,maxTok,apiOpts){
   var domains=(window.SenseDepthUi&&window.SenseDepthUi.getExpertiseDomains)?window.SenseDepthUi.getExpertiseDomains():['standaardboekhandel.be','bol.com','apa.org','kindengezin.be'];
-  var raw=await callAPI(sys,msgs,maxTok||480,32000,null,{allowed_domains:domains});
+  var opts={allowed_domains:domains,purpose:'expertise'};
+  if(apiOpts&&apiOpts.purpose)opts.purpose=apiOpts.purpose;
+  var raw=await callAPI(sys,msgs,maxTok||480,80000,null,opts);
   return polishExpertisePlainText(raw);
 }
 function renderAdviceHubDepthCompact(help){
@@ -8311,7 +8313,7 @@ async function runAdviceHubCompare(){
     var sys=getPromptText('compare_core');
     if(usageLine)sys+=' CONTEXT GEBRUIKSMODE: '+usageLine;
     if(st.question)sys+=' EXTRA FOCUSVRAAG VAN GEBRUIKER: '+st.question;
-    coreText=await callAPI(sys,[{role:'user',content:userBase}],760,28000,null,{disable_web_search:true});
+    coreText=await callAPI(sys,[{role:'user',content:userBase}],760,28000,null,{disable_web_search:true,purpose:'compare'});
     coreText=cleanCompareAiText(coreText);
     if(depthMode==='extra'||depthMode==='both'){
       var sysX=(window.SenseDepthUi&&window.SenseDepthUi.buildCompareExpertiseSys)?window.SenseDepthUi.buildCompareExpertiseSys('FamilySensei'):getPromptText('compare_extra_followup');
@@ -8320,7 +8322,7 @@ async function runAdviceHubCompare(){
         +'\n\nBrondata (JSON):\n'+JSON.stringify(payload)
         +(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
       if(st.question)userX+='\n\nFocusvraag: '+st.question;
-      extraText=cleanCompareAiText(await callExpertiseAdviceAPI(sysX,[{role:'user',content:userX}],520));
+      extraText=cleanCompareAiText(await callExpertiseAdviceAPI(sysX,[{role:'user',content:userX}],520,{purpose:'compare_expertise'}));
     }
     var summaryHtml='<div style="display:grid;gap:8px;margin:0 0 10px">'
       +payload.map(function(item){
@@ -10487,7 +10489,7 @@ async function genAdvies(name,forced){
   }
   if(hubFocus)userContent+='\nSpecifieke focusvraag gebruiker: '+hubFocus;
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],900,22000);
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,22000,null,{purpose:'standard_advice'});
     if(_adviesReqByName[name]!==reqId)return;
     var crisisRes=typeof senseExtractCrisisFlag==='function'?senseExtractCrisisFlag(t):{crisis:false,text:String(t||'')};
     t=crisisRes.text;
@@ -11861,7 +11863,7 @@ async function callAPI(sys,msgs,maxTok,customTimeoutMs,apiKeyOverride,apiOpts){
         max_uses:3
       }
     ];
-    var payload={model:'claude-sonnet-4-6',max_tokens:maxTok||800,system:effectiveSys,messages:msgs};
+    var payload={max_tokens:maxTok||800,system:effectiveSys,messages:msgs,purpose:(apiOpts&&apiOpts.purpose)||'standard_task'};
     if(webSearchAllowed)payload.tools=toolCfg;
     var res=await fetch(SURL+'/functions/v1/sensei-chat',{
       method:'POST',
@@ -13464,7 +13466,7 @@ async function sendMsg(){
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
-    var raw=await callAPI(fullSys,messages,420,22000);
+    var raw=await callAPI(fullSys,messages,420,22000,null,{purpose:vertelExpertiseFollowUp?'expertise':'standard_chat'});
     if(vertelExpertiseFollowUp)raw=polishExpertisePlainText(raw);
     var vertelCrisis=typeof senseWrapAiCardWithCrisis==='function'?senseWrapAiCardWithCrisis(formatAiCard,raw):{html:formatAiCard(raw),text:String(raw||''),crisis:false};
     raw=vertelCrisis.text;

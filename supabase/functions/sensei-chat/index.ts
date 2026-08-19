@@ -11,6 +11,50 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
+const AI_MODELS = {
+  FAST: "claude-haiku-4-5-20251001",
+  STANDARD: "claude-sonnet-5",
+  DEEP: "claude-opus-5",
+} as const;
+
+type AiPurpose =
+  | "standard_chat"
+  | "gateway_chat"
+  | "standard_advice"
+  | "expertise"
+  | "compare"
+  | "compare_expertise"
+  | "summary"
+  | "standard_task";
+
+const AI_PURPOSE_WHITELIST: readonly AiPurpose[] = [
+  "standard_chat",
+  "gateway_chat",
+  "standard_advice",
+  "expertise",
+  "compare",
+  "compare_expertise",
+  "summary",
+  "standard_task",
+];
+
+function parseAiPurpose(raw: unknown): AiPurpose {
+  const purpose = typeof raw === "string" ? raw.trim() : "";
+  if (!purpose || !(AI_PURPOSE_WHITELIST as readonly string[]).includes(purpose)) {
+    return "standard_chat";
+  }
+  return purpose as AiPurpose;
+}
+
+function selectAnthropicModel(purpose: AiPurpose): string {
+  if (purpose === "expertise" || purpose === "compare_expertise") return AI_MODELS.DEEP;
+  if (purpose === "summary") return AI_MODELS.FAST;
+  return AI_MODELS.STANDARD;
+}
+
+const CLAUDE_ABORT_MS = 25000;
+const CLAUDE_ABORT_DEEP_MS = 75000;
+
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_MAX_OWNSENSE_HUB = 24;
 const RATE_LIMIT_MAX_GATEWAY = 30;
@@ -309,6 +353,9 @@ async function callAnthropicPlain(
   userText: string,
   maxTokens: number,
 ): Promise<string | null> {
+  const purpose: AiPurpose = "summary";
+  const model = selectAnthropicModel(purpose);
+  console.log(`AI route: ${purpose} -> ${model}`);
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 20000);
   try {
@@ -320,7 +367,7 @@ async function callAnthropicPlain(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: userText }],
@@ -608,7 +655,14 @@ Deno.serve(async (req: Request) => {
 
     let system = String(body?.system || "").trim();
     const maxTokens = Math.max(64, Math.min(2000, Number(body?.max_tokens || 800)));
-    const model = String(body?.model || "claude-sonnet-4-6");
+    // De frontend mag nooit een willekeurige modelnaam kiezen. De frontend mag
+    // uitsluitend een toegestane semantische purpose aanvragen. De backend
+    // valideert die purpose, bepaalt zelf het model en past server-side rate
+    // limits toe. Een gebruiker kan daardoor nooit een willekeurig Anthropic-model
+    // selecteren en nooit de server-side kostenbeperkingen omzeilen.
+    const purpose = parseAiPurpose(body?.purpose);
+    const model = selectAnthropicModel(purpose);
+    console.log(`AI route: ${purpose} -> ${model}`);
     const messagesRaw = Array.isArray(body?.messages) ? body.messages : [];
     if (!messagesRaw.length) return json({ error: "messages is required" }, 400);
     const messages: { role: string; content: unknown }[] = [];
@@ -700,7 +754,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const claudeAbort = new AbortController();
-    const claudeTimer = setTimeout(() => claudeAbort.abort(), 25000);
+    const claudeAbortMs = (purpose === "expertise" || purpose === "compare_expertise")
+      ? CLAUDE_ABORT_DEEP_MS
+      : CLAUDE_ABORT_MS;
+    const claudeTimer = setTimeout(() => claudeAbort.abort(), claudeAbortMs);
     let claudeRes: Response;
     try {
       claudeRes = await fetch("https://api.anthropic.com/v1/messages", {

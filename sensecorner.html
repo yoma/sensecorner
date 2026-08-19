@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="22-07-2026 08:30">
+<meta name="sc-build" content="19-08-2026 10:56">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -21,7 +21,7 @@
 <script src="js/sense-mirror-hub.js?v=2007261245"></script>
 <script src="js/sense-auth-client.js"></script>
 <script type="module" src="js/senseiCore-loader.js?v=2207260830"></script>
-<script src="js/gateway-chat.js?v=2207260830"></script>
+<script src="js/gateway-chat.js?v=1908261056"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/sense-theme.css">
 <style>
@@ -613,8 +613,8 @@ a.app-card{color:inherit;text-decoration:none}
   .section-label{margin:10px 0 8px 2px}
 }
 
-/* ── Gateway-Chat (praatbalk los bovenaan hub, buiten OwnSense-kader) ── */
-.gw-talkbar-host{margin:0 0 clamp(14px,3.5vw,20px);padding:0 2px}
+/* ── Gateway-Chat (praatbalk tijdelijk uit voor testers; praten gebeurt in de apps) ── */
+.gw-talkbar-host,#gatewayTalkbarHost{display:none!important}
 .gw-talkbar-host[hidden]{display:none!important}
 .gw-talkbar-label{
   font-size:11px;font-weight:700;letter-spacing:.02em;
@@ -1222,9 +1222,9 @@ a.app-card{color:inherit;text-decoration:none}
   <div class="hub-start-intro-modal" role="dialog" aria-modal="true" aria-labelledby="hubStartIntroTitle">
     <div class="hub-start-intro-kicker">Welkom op SenseCorner</div>
     <h2 class="hub-start-intro-title" id="hubStartIntroTitle">Klaar om te starten?</h2>
-    <p class="hub-start-intro-lead" id="hubStartIntroLead">SenseCorner is je startpunt. Praat met Sensei bovenaan, of open één app. Je hoeft niet alles tegelijk.</p>
+    <p class="hub-start-intro-lead" id="hubStartIntroLead">SenseCorner is je startpunt. Open de app die past bij waar je over wilt praten. Je hoeft niet alles tegelijk.</p>
     <div class="hub-start-intro-apps" id="hubStartIntroApps" aria-label="Overzicht van je apps"></div>
-    <p class="hub-start-intro-footnote">Tip: bovenaan praat je met Sensei. OWN Sense is jouw profiel. De apps eronder zijn spiegels voor verschillende levensdomeinen. Kennismakingsvragen kun je later per app inhalen.</p>
+    <p class="hub-start-intro-footnote">OWN Sense is jouw profiel. De apps eronder zijn spiegels voor verschillende levensdomeinen. In elke app praat je via Vertel met Sensei, meteen met de juiste context. Kennismakingsvragen kun je later per app inhalen.</p>
     <label class="hub-start-intro-check" for="hubStartIntroSuppress">
       <input type="checkbox" id="hubStartIntroSuppress" checked>
       <span>Niet meer automatisch tonen</span>
@@ -2494,7 +2494,7 @@ a.app-card{color:inherit;text-decoration:none}
       titleEl.textContent=nm?('We zijn er, '+nm+'. Hoe start je?'):'Klaar om te starten?';
     }
     if(leadEl){
-      leadEl.textContent='SenseCorner is je startpunt. Praat met Sensei bovenaan, of open één app. Je hoeft niet alles tegelijk.';
+      leadEl.textContent='SenseCorner is je startpunt. Open de app die past bij waar je over wilt praten. Je hoeft niet alles tegelijk.';
     }
     if(chk)chk.checked=true;
     scRenderHubStartIntroApps(_scMirrorStatuses);
@@ -4860,48 +4860,11 @@ a.app-card{color:inherit;text-decoration:none}
     }catch(e){console.warn('scGwSaveProfileAnswer',e);throw e;}
   }
   function scInitGatewayChat(){
-    if(!window.GatewayChat||typeof window.GatewayChat.init!=='function')return;
+    /* Hoofdchatbalk staat uit: testers praten in DateSense / FamilySense / FriendSense / SelfSense (Vertel). */
+    window.SC_SHOW_GATEWAY_TALKBAR=false;
     var host=document.getElementById('gatewayTalkbarHost');
-    if(host)host.hidden=!userSession;
-    window.GatewayChat.init({
-      getSupabase:function(){return sb;},
-      getUid:function(){return userSession&&userSession.id?String(userSession.id):'';},
-      ensureWriteAuth:async function(){
-        var uid=userSession&&userSession.id?String(userSession.id):'';
-        if(!uid){
-          var u=await getCurrentUser();
-          if(u&&u.id){userSession=u;uid=String(u.id);}
-        }
-        return{uid:uid};
-      },
-      getAccessToken:scGwGetAccessToken,
-      getEdgeBaseUrl:function(){return SURL;},
-      toast:scGwFlashToast,
-      formatError:scGwFormatError,
-      getDisplayName:function(){
-        if(userSession)return pickSenseCornerDisplayName(userSession)||'';
-        return hubProfile?scTrimName(hubProfile.display_name):'';
-      },
-      getOwnProfielBlock:scGwOwnProfielBlock,
-      refreshAandachtspunten:async function(){
-        if(typeof refreshOwnAandachtspuntenCoachContext==='function'&&userSession&&sb){
-          await refreshOwnAandachtspuntenCoachContext(sb,userSession.id);
-        }
-      },
-      getAandachtspuntenBlock:function(){return String(window._ownAandachtspuntenCoachContext||'');},
-      getCategorySlots:function(catId){
-        var cats=scServerCategories||(scOwnProfileProps&&scOwnProfileProps.categories)||{};
-        return cats[catId]||{};
-      },
-      saveProfileAnswer:scGwSaveProfileAnswer,
-      getContactsForDomain:scGwContactsForDomain,
-      loadProfileScopes:scGwLoadProfileScopes,
-      requireLogin:function(){
-        scGwFlashToast('Log eerst in om met Sensei te praten.',true);
-        goToIndexLogin('login','sensecorner.html?openGateway=1');
-      }
-    });
-    if(typeof window.GatewayChat.updatePlaceholder==='function')window.GatewayChat.updatePlaceholder();
+    if(host)host.hidden=true;
+    return;
   }
   scInitGatewayChat();
 
@@ -4938,24 +4901,11 @@ a.app-card{color:inherit;text-decoration:none}
     if(!guestFinal){
       var hx=String(window.location.hash||'');
       if(hx.indexOf('access_token')>=0||hx.indexOf('type=recovery')>=0)return;
-      window.location.replace(openGatewayRequested?'index.html?login=1&returnTo='+encodeURIComponent('sensecorner.html?openGateway=1'):'index.html?login=1');
+      window.location.replace('index.html?login=1');
       skipHubHelpIntro=true;
     }
   }
-  if(openGatewayRequested&&userSession&&window.GatewayChat){
-    skipHubHelpIntro=true;
-    setTimeout(function(){
-      try{
-        var host=document.getElementById('gatewayTalkbarHost');
-        if(host){host.hidden=false;host.scrollIntoView({behavior:'smooth',block:'center'});}
-        void window.GatewayChat.open('');
-      }catch(_og){}
-    },280);
-    setTimeout(function(){
-      try{
-        if(window.GatewayChat&&!window.GatewayChat.isOpen())void window.GatewayChat.open('');
-      }catch(_og2){}
-    },700);
+  if(openGatewayRequested){
     try{
       var clean=new URL(window.location.href);
       clean.searchParams.delete('openGateway');

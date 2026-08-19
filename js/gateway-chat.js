@@ -1901,13 +1901,13 @@
       try { controller.abort(); } catch (_e) {}
     }, timeoutMs);
     var reqBody = {
-      model: 'claude-sonnet-4-6',
       max_tokens: maxTokens || 700,
       system: systemPrompt || '',
       messages: (typeof senseSanitizeClaudeMessages === 'function'
         ? senseSanitizeClaudeMessages(apiMsgs)
         : apiMsgs),
-      gateway: true
+      gateway: true,
+      purpose: 'gateway_chat'
     };
     if (!reqBody.messages || !reqBody.messages.length) {
       throw new Error('Geen geldige berichten om naar Sensei te sturen.');
@@ -2178,7 +2178,7 @@
     gwBindUi();
     updateGatewayTalkbarPlaceholder();
     var host = document.getElementById('gatewayTalkbarHost');
-    if (host && getUidSync()) host.hidden = false;
+    if (host && getUidSync() && global.SC_SHOW_GATEWAY_TALKBAR !== false) host.hidden = false;
     return global.GatewayChat;
   }
 

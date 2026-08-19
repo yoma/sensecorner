@@ -24,7 +24,15 @@ const MAX_PROFILE_TEXT_CHARS = 800;
 const MIN_DISTINCT_CONTEXTS = 3;
 const MAX_PROPOSALS = 3;
 const MAX_EVIDENCE_PER_PROPOSAL = 5;
-const OFFLINE_MODEL = "claude-opus-4-6";
+const AI_MODELS = {
+  FAST: "claude-haiku-4-5-20251001",
+  STANDARD: "claude-sonnet-5",
+  DEEP: "claude-opus-5",
+} as const;
+const OFFLINE_MODEL = AI_MODELS.DEEP;
+// Twee sequentiele callClaude-calls in een invocatie. 75s per call (expertise)
+// zou 150s AI-only zijn; 60s laat ~30s over voor DB binnen de 150s-limiet.
+const CLAUDE_ABORT_MS = 60000;
 const RATE_LIMIT_MAX = 6;
 const RATE_LIMIT_WINDOW_SECONDS = 3600;
 const RATE_PURPOSE = "cross_app_pattern_detect";
@@ -386,7 +394,7 @@ function buildValidateUserPrompt(
 
 async function callClaude(system: string, userContent: string, maxTokens: number): Promise<string> {
   const abortCtrl = new AbortController();
-  const timer = setTimeout(() => abortCtrl.abort(), 35000);
+  const timer = setTimeout(() => abortCtrl.abort(), CLAUDE_ABORT_MS);
   let res: Response;
   try {
     res = await fetch("https://api.anthropic.com/v1/messages", {
