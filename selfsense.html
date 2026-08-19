@@ -1650,8 +1650,8 @@ button.ss-waar-ik-worked-cancel{border:1px solid transparent;background:transpar
   <div class="import-item" onclick="importFoto()">
     <div class="import-icon">📸</div>
     <div>
-      <div style="font-weight:600">Foto of screenshot</div>
-      <div style="font-size:12px;color:var(--m)">Foto van gesprek uploaden</div>
+      <div style="font-weight:600">Foto's of screenshots</div>
+      <div style="font-size:12px;color:var(--m)">Eén of meerdere screenshots van een gesprek</div>
     </div>
   </div>
   <div class="import-item" onclick="importTekst()">
@@ -1665,7 +1665,7 @@ button.ss-waar-ik-worked-cancel{border:1px solid transparent;background:transpar
 
 <!-- Verborgen file inputs -->
 <input type="file" id="fileInputTxt" accept=".txt" style="display:none" aria-label="Importeer tekstbestand" onchange="handleTxtFile(this)">
-<input type="file" id="fileInputImg" accept="image/*" style="display:none" aria-label="Importeer afbeelding" onchange="handleImgFile(this)">
+<input type="file" id="fileInputImg" accept="image/*" multiple style="display:none" aria-label="Importeer afbeeldingen" onchange="handleImgFile(this)">
 <input type="file" id="profilePhotoInput" accept="image/*" style="display:none" aria-label="Profielfoto uploaden" onchange="handleProfilePhotoInput(this)">
 <input type="file" id="analysisPhotoInput" accept="image/*" style="display:none" aria-label="Foto uploaden voor analyse" onchange="handleAnalysisPhotoInput(this)">
 
@@ -5208,13 +5208,14 @@ function loadImageFromBlob(blob){
     img.src=url;
   });
 }
-async function optimizeImageForAnalysis(blob){
-  var maxBytes=4.5*1024*1024;
-  if(blob.size<=maxBytes){
+async function optimizeImageForAnalysis(blob,opts){
+  opts=opts||{};
+  var maxBytes=opts.maxBytes||(4.5*1024*1024);
+  var maxDim=opts.maxDim||1600;
+  if(!opts.force&&blob.size<=maxBytes){
     return {blob:blob,mediaType:(blob.type||'image/jpeg')};
   }
   var img=await loadImageFromBlob(blob);
-  var maxDim=1600;
   var scale=Math.min(1,maxDim/Math.max(img.width||1,img.height||1));
   var width=Math.max(1,Math.round((img.width||1)*scale));
   var height=Math.max(1,Math.round((img.height||1)*scale));
@@ -18409,24 +18410,57 @@ function handleTxtFile(input){
 }
 
 async function handleImgFile(input){
-  var file=input.files[0];
-  if(!file)return;
-  toast('📸 Foto analyseren...');
-  var reader=new FileReader();
-  reader.onload=async function(e){
-    var base64=e.target.result.split(',')[1];
-    try{
-      var tekst=await callAPI('',[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
-        {type:'text',text:'Beschrijf de inhoud van dit gesprek of screenshot in gewone tekst, alsof je het navertelt. Geen namen van de afzender, alleen de inhoud. Max 300 woorden. Nederlands.'}
-      ]}],500,45000);
-      var inp=document.getElementById('msgInput');
-      if(inp&&tekst){inp.value=tekst;autoResize(inp);inp.focus();}
-      toast('✅ Foto gelezen - controleer en verstuur!');
-    }catch(x){toast('Fout bij foto-analyse: '+x.message);}
-  };
-  reader.readAsDataURL(file);
+  var list=input.files?Array.prototype.slice.call(input.files):[];
   input.value='';
+  if(!list.length)return;
+  var imageFiles=list.filter(function(f){
+    if(!f)return false;
+    if(/^image\//.test(f.type||''))return true;
+    return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name||'');
+  });
+  if(!imageFiles.length){toast('Geen afbeeldingen gevonden.');return;}
+  imageFiles.sort(function(a,b){
+    var am=a.lastModified||0,bm=b.lastModified||0;
+    if(am!==bm)return am-bm;
+    return String(a.name||'').localeCompare(String(b.name||''),'nl');
+  });
+  var MAX=12;
+  if(imageFiles.length>MAX){
+    toast('Max '+MAX+' screenshots per keer. De eerste '+MAX+' gaan mee.');
+    imageFiles=imageFiles.slice(0,MAX);
+  }
+  var n=imageFiles.length;
+  if(S.busy){toast('Even wachten tot de vorige stap klaar is.');return;}
+  S.busy=true;
+  toast(n===1?'📸 Foto analyseren...':'📸 '+n+' screenshots analyseren...');
+  try{
+    var content=[];
+    var optOpts=n>1?{maxBytes:900*1024,maxDim:1280,force:true}:null;
+    for(var i=0;i<n;i++){
+      var opt=await optimizeImageForAnalysis(imageFiles[i],optOpts);
+      var b64=await toBase64FromBlob(opt.blob);
+      content.push({type:'image',source:{type:'base64',media_type:opt.mediaType||'image/jpeg',data:b64}});
+    }
+    var prompt=n===1
+      ?'Beschrijf de inhoud van dit gesprek of screenshot in gewone tekst, alsof je het navertelt. Geen namen van de afzender, alleen de inhoud. Max 300 woorden. Nederlands.'
+      :('Dit zijn '+n+' screenshots van hetzelfde chatgesprek, in chronologische volgorde (beeld 1 is het begin). Schrijf het volledige gesprek uit als doorlopende, leesbare tekst in het Nederlands, alsof je het navertelt. Plak de stukken inhoudelijk aan elkaar; schrijf geen "screenshot 1". Geen namen van de afzender, alleen de inhoud. Wees volledig.');
+    content.push({type:'text',text:prompt});
+    var maxTok=n===1?800:1800;
+    var timeoutMs=n===1?45000:Math.min(150000,60000+n*10000);
+    var tekst=await callAPI('',[{role:'user',content:content}],maxTok,timeoutMs,null,{disable_web_search:true});
+    var inp=document.getElementById('msgInput');
+    if(inp&&tekst){
+      var prev=String(inp.value||'').trim();
+      inp.value=prev?(prev+'\n\n'+tekst):tekst;
+      autoResize(inp);
+      inp.focus();
+    }
+    toast(n===1?'✅ Foto gelezen - controleer en verstuur!':'✅ '+n+' screenshots gelezen - controleer en verstuur!');
+  }catch(x){
+    toast('Fout bij foto-analyse: '+(x&&x.message?x.message:String(x)));
+  }finally{
+    S.busy=false;
+  }
 }
 
 // ══ Auto-samenvatting per dossier (batch: elke N opslagen + merge met vorige) ══
