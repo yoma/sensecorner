@@ -409,6 +409,7 @@ async function callClaude(system: string, userContent: string, maxTokens: number
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: userContent }],
+        thinking: { type: "disabled" },
       }),
       signal: abortCtrl.signal,
     });

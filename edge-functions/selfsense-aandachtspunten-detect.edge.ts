@@ -599,6 +599,7 @@ Deno.serve(async (req: Request) => {
           max_tokens: 1200,
           system,
           messages: [{ role: "user", content: userContent }],
+          thinking: { type: "disabled" },
         }),
         signal: claudeAbort.signal,
       });

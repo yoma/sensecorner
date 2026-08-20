@@ -52,7 +52,7 @@ function selectAnthropicModel(purpose: AiPurpose): string {
   return AI_MODELS.STANDARD;
 }
 
-const CLAUDE_ABORT_MS = 25000;
+const CLAUDE_ABORT_MS = 40000;
 const CLAUDE_ABORT_DEEP_MS = 75000;
 
 const RATE_LIMIT_MAX = 30;
@@ -762,6 +762,11 @@ Deno.serve(async (req: Request) => {
       system: systemPayload,
       messages,
     };
+    // Sonnet 5 en Opus 5 denken standaard. Die tokens gaan van max_tokens af
+    // en maken Vertel traag of incompleet. Zet thinking uit, zoals bij Sonnet 4.6.
+    if (model === AI_MODELS.STANDARD || model === AI_MODELS.DEEP) {
+      anthropicPayload.thinking = { type: "disabled" };
+    }
     if (anthropicTools?.length) {
       anthropicPayload.tools = anthropicTools;
     }

@@ -11121,7 +11121,7 @@ async function fillSelfsenseSpiegelSlotsWithAi(baseSlots,durSec,patternKey){
   if(mood&&mood.label)usr+='Stemming vandaag: '+mood.label+'\n';
   usr+='\nTemplate (mag je licht herschrijven in eigen woorden):\na0: '+out.a0+'\na1: '+out.a1+'\na2: '+out.a2;
   try{
-    var raw=await callAPI(_SPIEGEL_OWN_AI_SYS,[{role:'user',content:usr}],380,22000,null,{disable_web_search:true});
+    var raw=await callAPI(_SPIEGEL_OWN_AI_SYS,[{role:'user',content:usr}],380,45000,null,{disable_web_search:true});
     var parsed=parseFirstJSONObject(String(raw||'').replace(/```json|```/g,''));
     if(parsed&&typeof parsed==='object'){
       ['a0','a1','a2'].forEach(function(k){
@@ -12138,7 +12138,7 @@ async function runAdviceHubOpenPrompt(){
     var ownLensLines=[];
     appendOwnHubMirrorCoachContext(ownLensLines,((((S.pdata||{})['OWN Sense']||{}).meta)||null));
     var ctx='Gebruikersinput: '+prompt+(ownLensLines.length?('\n\nOWN Sense-lens (jij):\n'+ownLensLines.join('\n')):'');
-    var t=await callAPI(sys,[{role:'user',content:ctx}],800,22000);
+    var t=await callAPI(sys,[{role:'user',content:ctx}],800,45000);
     st.resultHtml=applySelfSenseCrisisToAiHtml(t).html;
     st.resultTs='Gegenereerd op '+new Date().toLocaleDateString('nl-BE',{day:'2-digit',month:'2-digit',year:'numeric'})+' om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
     if(mc)rAdviceHub(mc);
@@ -14245,7 +14245,7 @@ async function genAdvies(name,forced){
   }
   if(hubFocus)userContent+='\nSpecifieke focusvraag gebruiker: '+hubFocus;
   try{
-    var t=await callAPI(sys,[{role:'user',content:userContent}],900,22000,null,{purpose:'standard_advice'});
+    var t=await callAPI(sys,[{role:'user',content:userContent}],900,45000,null,{purpose:'standard_advice'});
     if(_adviesReqByName[name]!==reqId)return;
     var crisisRes=typeof senseExtractCrisisFlag==='function'?senseExtractCrisisFlag(t):{crisis:false,text:String(t||'')};
     t=crisisRes.text;
@@ -17397,7 +17397,7 @@ async function sendMsg(){
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
     var whitelistTipBadge=buildWhitelistTipBadgeHtml(whitelistTipDomains);
-    var raw=await callAPI(fullSys,messages,1400,22000,null,{purpose:vertelExpertiseFollowUp?'expertise':'standard_chat'});
+    var raw=await callAPI(fullSys,messages,1400,vertelExpertiseFollowUp?80000:45000,null,{purpose:vertelExpertiseFollowUp?'expertise':'standard_chat'});
     if(vertelExpertiseFollowUp)raw=polishExpertisePlainText(raw);
     var crisisRes=typeof senseExtractCrisisFlag==='function'?senseExtractCrisisFlag(raw):{crisis:false,text:String(raw||'')};
     raw=crisisRes.text;

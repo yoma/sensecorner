@@ -886,6 +886,7 @@ async function callClaude(system: string, messages: Array<{ role: "user" | "assi
       max_tokens: 512,
       system,
       messages,
+      thinking: { type: "disabled" },
     }),
   });
 
