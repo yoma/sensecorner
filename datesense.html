@@ -13,7 +13,7 @@
 <meta name="ds-build" content="19-08-2026 10:50">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=2308261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -4541,8 +4541,16 @@ async function createNewDossierFromPick(){
     return;
   }
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
   if(S.pdata[dossier]&&getDossierLifecycle(dossier)==='closed'){
     toast(dn(dossier)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isDateSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
     return;
   }
   try{
@@ -6720,6 +6728,14 @@ async function newSenseFromDrawer(){
   var n=prompt('Naam van je eerste of nieuwe dossier (bv. "Lisa"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(n)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(nm,S.pdata,isDateSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(nm):(dn(nm)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(nm);
     toast('✅ '+nm+' aangemaakt!');
