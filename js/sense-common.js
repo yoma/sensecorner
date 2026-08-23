@@ -1979,6 +1979,24 @@
     return !!blocked[t];
   }
 
+  /**
+   * True when this name already belongs to a dossier that the current app
+   * hides (other app_scope / family-friend tags / system mirrors).
+   * Creating or ensureP-ing that name would silently reuse the hidden row.
+   */
+  function senseNewDossierHiddenCollision(dossier, pdata, isAppVisibleContact) {
+    var name = String(dossier || '').trim();
+    if (!name || /^own\s*sense$/i.test(name)) return false;
+    if (!pdata || !pdata[name]) return false;
+    if (typeof isAppVisibleContact !== 'function') return false;
+    return !isAppVisibleContact(name);
+  }
+
+  function senseNewDossierHiddenCollisionMessage(dossier) {
+    var label = senseContactDossierDisplayName(dossier) || String(dossier || '').trim();
+    return label + ' bestaat al in een andere Sense-app. Kies een andere naam.';
+  }
+
   /** Stopwoorden / niet-namen bij detectie van een nieuwe voornaam. */
   function senseNewPersonNameStopwords() {
     return {
@@ -2157,6 +2175,8 @@
   global.senseNormalizeContactDossierName = senseNormalizeContactDossierName;
   global.senseContactDossierDisplayName = senseContactDossierDisplayName;
   global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
+  global.senseNewDossierHiddenCollision = senseNewDossierHiddenCollision;
+  global.senseNewDossierHiddenCollisionMessage = senseNewDossierHiddenCollisionMessage;
   global.senseDetectNewPersonName = senseDetectNewPersonName;
   global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
   global.senseCreateContactProfile = senseCreateContactProfile;
