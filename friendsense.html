@@ -13860,9 +13860,24 @@ function confirmNewPersonWA(){
   if(!inp||!inp.value.trim())return;
   var naam=inp.value.trim();
   var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(naam)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dosName]&&getDossierLifecycle(dosName)==='closed'){
+    toast(dn(dosName)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dosName,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dosName):(dn(dosName)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   ensureP(dosName).then(function(){
     toast('✅ '+naam+' aangemaakt!');
     startWhatsAppImport(dosName,window._waCleaned);
+  }).catch(function(e){
+    console.error('confirmNewPersonWA',e);
+    toast(e&&e.message?String(e.message):'Dossier aanmaken mislukt.');
   });
 }
 
