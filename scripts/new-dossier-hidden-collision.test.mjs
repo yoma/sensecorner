@@ -77,7 +77,9 @@ const visibleFns = {
 for (const file of htmlFiles) {
   const html = readFileSync(join(root, file), 'utf8');
   const createCount = (html.match(/senseNewDossierHiddenCollision\(/g) || []).length;
-  assert.ok(createCount >= 2, file + ' must guard createNewDossierFromPick and newSenseFromDrawer');
+  assert.ok(createCount >= 3, file + ' must guard createNewDossierFromPick, newSenseFromDrawer, and confirmNewPersonWA');
+  assert.ok(html.includes('confirmNewPersonWA'), file + ' must keep WhatsApp new-person create');
+  assert.ok(/function confirmNewPersonWA\([\s\S]*?senseNewDossierHiddenCollision\(/.test(html), file + ' must guard confirmNewPersonWA');
   assert.ok(html.includes(visibleFns[file]), file + ' must use its own visibility helper');
 }
 
