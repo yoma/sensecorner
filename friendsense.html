@@ -15728,6 +15728,18 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dossier]&&getDossierLifecycle(dossier)==='closed'){
+    toast(dn(dossier)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
   }catch(e){

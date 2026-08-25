@@ -46,6 +46,11 @@ assert.equal(
   'reusing a visible same-app dossier is allowed'
 );
 assert.equal(
+  senseNewDossierHiddenCollision('LisaSense', dateLisa, visibleOnly([])),
+  true,
+  'FamilySense create Lisa must refuse hidden DateSense LisaSense'
+);
+assert.equal(
   senseNewDossierHiddenCollision('NoraSense', dateLisa, visibleOnly(['LisaSense'])),
   false,
   'a name that does not exist yet is allowed'
@@ -81,6 +86,12 @@ for (const file of htmlFiles) {
   assert.ok(html.includes('confirmNewPersonWA'), file + ' must keep WhatsApp new-person create');
   assert.ok(/function confirmNewPersonWA\([\s\S]*?senseNewDossierHiddenCollision\(/.test(html), file + ' must guard confirmNewPersonWA');
   assert.ok(html.includes(visibleFns[file]), file + ' must use its own visibility helper');
+  if (file === 'familysense.html' || file === 'friendsense.html') {
+    const promptCreate = html.match(/async function maakNieuwDossierEnOpslaan\([\s\S]*?\nasync function _doOpslaan/);
+    assert.ok(promptCreate, file + ' must keep Vertel prompt create-by-name');
+    assert.ok(promptCreate[0].includes('senseNewDossierHiddenCollision('), file + ' must guard maakNieuwDossierEnOpslaan before ensureP/_doOpslaan');
+    assert.ok(createCount >= 4, file + ' must also guard maakNieuwDossierEnOpslaan');
+  }
 }
 
 console.log('new-dossier-hidden-collision: ok');
