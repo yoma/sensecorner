@@ -13,7 +13,7 @@
 <meta name="fr-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=2308261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -4247,6 +4247,14 @@ async function createNewDossierFromPick(useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(dossier);
   }catch(e){
@@ -6373,6 +6381,14 @@ async function newSenseFromDrawer(){
   var n=prompt('Naam van het vriend(in) (bv. "Emma"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(n)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(nm,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(nm):(dn(nm)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(nm);
     toast('✅ '+nm+' aangemaakt!');
@@ -13844,9 +13860,24 @@ function confirmNewPersonWA(){
   if(!inp||!inp.value.trim())return;
   var naam=inp.value.trim();
   var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(naam)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dosName]&&getDossierLifecycle(dosName)==='closed'){
+    toast(dn(dosName)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dosName,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dosName):(dn(dosName)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   ensureP(dosName).then(function(){
     toast('✅ '+naam+' aangemaakt!');
     startWhatsAppImport(dosName,window._waCleaned);
+  }).catch(function(e){
+    console.error('confirmNewPersonWA',e);
+    toast(e&&e.message?String(e.message):'Dossier aanmaken mislukt.');
   });
 }
 
@@ -15697,6 +15728,18 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dossier]&&getDossierLifecycle(dossier)==='closed'){
+    toast(dn(dossier)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
   }catch(e){
