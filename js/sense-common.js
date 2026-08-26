@@ -1979,6 +1979,76 @@
     return !!blocked[t];
   }
 
+  /**
+   * True when this name already belongs to a dossier that the current app
+   * hides (other app_scope / family-friend tags / system mirrors).
+   * Creating or ensureP-ing that name would silently reuse the hidden row.
+   */
+  function senseNewDossierHiddenCollision(dossier, pdata, isAppVisibleContact) {
+    var name = String(dossier || '').trim();
+    if (!name || /^own\s*sense$/i.test(name)) return false;
+    if (!pdata || !pdata[name]) return false;
+    if (typeof isAppVisibleContact !== 'function') return false;
+    return !isAppVisibleContact(name);
+  }
+
+  function senseNewDossierHiddenCollisionMessage(dossier) {
+    var label = senseContactDossierDisplayName(dossier) || String(dossier || '').trim();
+    return label + ' bestaat al in een andere Sense-app. Kies een andere naam.';
+  }
+
+  /**
+   * Builds the WhatsApp-import button index. Callers must keep this array
+   * until click handlers run. Wiping it after render makes every existing-
+   * contact import call startWhatsAppImport(undefined), which crashes in dn().
+   */
+  function senseFillWhatsAppContactIndex(contacts) {
+    var list = [];
+    (contacts || []).forEach(function (p) {
+      if (p) list.push(p);
+    });
+    return list;
+  }
+
+  /**
+   * Match a detected WhatsApp participant name to a visible dossier.
+   * Empty suggestion must not match: String.prototype.includes('') is true
+   * for every name, which would mark the last profile as "herkend".
+   */
+  function senseMatchWhatsAppImportDossier(suggestion, profileNames, displayNameFn) {
+    var sug = String(suggestion || '').trim().toLowerCase();
+    if (!sug) return '';
+    var matched = '';
+    (profileNames || []).forEach(function (p) {
+      if (!p || /^own\s*sense$/i.test(String(p))) return;
+      var pName = typeof displayNameFn === 'function'
+        ? String(displayNameFn(p) || '').trim()
+        : String(p).replace(/[\s_-]*sense$/i, '').trim();
+      var low = pName.toLowerCase();
+      if (!low) return;
+      if (low === sug || low.indexOf(sug) >= 0 || sug.indexOf(low) >= 0) matched = p;
+    });
+    return matched;
+  }
+
+  function senseMatchWhatsAppImportDossierInText(cleaned, profileNames, displayNameFn) {
+    var text = String(cleaned || '');
+    if (!text) return '';
+    var matched = '';
+    (profileNames || []).forEach(function (p) {
+      if (!p || /^own\s*sense$/i.test(String(p))) return;
+      var pName = typeof displayNameFn === 'function'
+        ? String(displayNameFn(p) || '').trim()
+        : String(p).replace(/[\s_-]*sense$/i, '').trim();
+      if (!pName || pName.length < 2) return;
+      var escaped = pName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try {
+        if (new RegExp('\\b' + escaped + '\\b', 'i').test(text)) matched = p;
+      } catch (_e) {}
+    });
+    return matched;
+  }
+
   /** Stopwoorden / niet-namen bij detectie van een nieuwe voornaam. */
   function senseNewPersonNameStopwords() {
     return {
@@ -2157,6 +2227,11 @@
   global.senseNormalizeContactDossierName = senseNormalizeContactDossierName;
   global.senseContactDossierDisplayName = senseContactDossierDisplayName;
   global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
+  global.senseNewDossierHiddenCollision = senseNewDossierHiddenCollision;
+  global.senseNewDossierHiddenCollisionMessage = senseNewDossierHiddenCollisionMessage;
+  global.senseFillWhatsAppContactIndex = senseFillWhatsAppContactIndex;
+  global.senseMatchWhatsAppImportDossier = senseMatchWhatsAppImportDossier;
+  global.senseMatchWhatsAppImportDossierInText = senseMatchWhatsAppImportDossierInText;
   global.senseDetectNewPersonName = senseDetectNewPersonName;
   global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
   global.senseCreateContactProfile = senseCreateContactProfile;
