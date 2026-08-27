@@ -2287,19 +2287,18 @@ function isFriendSenseTaggedMeta(meta){
   var scopes=normalizeAppScopeList(meta||{});
   return scopes.indexOf('fr')>=0;
 }
-/** Voor fr-scope: per ongeluk met alleen `fs` en zonder vriendschapsvelden aangemaakt in FriendSense. */
+/**
+ * Legacy one-time helper: FriendSense used to create with `fs` before the split.
+ * Must stay false. Treating any fs-only row as FriendSense stole FamilySense
+ * dossiers that had no familie_rol yet (create-then-fill-role is the normal flow).
+ */
 function shouldMigrateFsOnlyToFriendScope(meta){
-  var m=meta||{};
-  if(getFriendRol(m))return false;
-  if(getFriendRelatie(m))return false;
-  var scopes=normalizeAppScopeList(m);
-  if(scopes.indexOf('fr')>=0)return false;
-  return scopes.indexOf('fs')>=0;
+  return false;
 }
 function isFriendSenseVisibleContact(name){
   if(!name||name==='OWN Sense')return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
-  return isFriendSenseTaggedMeta(m)||shouldMigrateFsOnlyToFriendScope(m);
+  return isFriendSenseTaggedMeta(m);
 }
 function getFriendSenseContactNames(){
   return (S.profiles||[]).filter(function(p){return isFriendSenseVisibleContact(p);});
@@ -5117,7 +5116,8 @@ async function normalizeLegacyFriendScopes(){
     var d=S.pdata[name];
     if(!d)continue;
     var meta=migrateFriendMetaFields(Object.assign({},d.meta||{}));
-    if(!isFriendSenseTaggedMeta(meta)&&!shouldMigrateFsOnlyToFriendScope(meta))continue;
+    // Alleen bestaande FriendSense-dossiers (`fr`) opschonen. fs-only is FamilySense.
+    if(!isFriendSenseTaggedMeta(meta))continue;
     var scopes=normalizeAppScopeList(meta);
     var next=scopes.filter(function(s){return s!=='ds'&&s!=='fs';});
     if(next.indexOf('fr')<0)next.push('fr');
@@ -5138,14 +5138,22 @@ async function ensureP(name){
     if(name!=='OWN Sense'){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
-      var exScopes=normalizeAppScopeList(existing.meta);
-      var nextScopes=exScopes.filter(function(s){return s!=='fs'&&s!=='ds';});
-      if(nextScopes.indexOf('fr')<0)nextScopes.push('fr');
-      var scopeSame=nextScopes.length===exScopes.length&&nextScopes.every(function(v,i){return v===exScopes[i];});
-      if(!scopeSame){
-        existing.meta.app_scope=nextScopes;
-        S.pdata[name]=existing;
-        await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+      if(!isFriendSenseTaggedMeta(existing.meta)){
+        if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(name,S.pdata,isFriendSenseVisibleContact)){
+          throw new Error(typeof senseNewDossierHiddenCollisionMessage==='function'
+            ?senseNewDossierHiddenCollisionMessage(name)
+            :(dn(name)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+        }
+      }else{
+        var exScopes=normalizeAppScopeList(existing.meta);
+        var nextScopes=exScopes.filter(function(s){return s!=='fs'&&s!=='ds';});
+        if(nextScopes.indexOf('fr')<0)nextScopes.push('fr');
+        var scopeSame=nextScopes.length===exScopes.length&&nextScopes.every(function(v,i){return v===exScopes[i];});
+        if(!scopeSame){
+          existing.meta.app_scope=nextScopes;
+          S.pdata[name]=existing;
+          await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+        }
       }
     }
     if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
