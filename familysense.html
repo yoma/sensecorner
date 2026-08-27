@@ -13,7 +13,7 @@
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=2308261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -4227,6 +4227,14 @@ async function createNewDossierFromPick(useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFamilySenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(dossier);
   }catch(e){
@@ -6351,6 +6359,14 @@ async function newSenseFromDrawer(){
   var n=prompt('Naam van het familielid (bv. "Emma"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(n)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(nm,S.pdata,isFamilySenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(nm):(dn(nm)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(nm);
     toast('✅ '+nm+' aangemaakt!');
@@ -13763,21 +13779,18 @@ function clearChat(){
 function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
 
-  // Bouw opties
+  // Bouw opties. Houd _waContacts tot na de klik; legen na render maakt idx undefined.
   var contacts=getActiveContactNames();
+  window._waContacts=(typeof senseFillWhatsAppContactIndex==='function')?senseFillWhatsAppContactIndex(contacts):contacts.slice();
   var optionsHtml='';
-  contacts.forEach(function(p){
+  window._waContacts.forEach(function(p,idx){
     var selected=matchedDossier===p?'style="border-color:var(--r);background:var(--rl)"':'';
-    var pi=window._waContacts=window._waContacts||[];
-    pi.push(p);
-    var idx=pi.length-1;
     optionsHtml+='<button class="seg-modal-btn" '+selected+' style="border-left-color:'+dossierColor(p)+';margin-bottom:8px" onclick="startWhatsAppImport(window._waContacts['+idx+'],window._waCleaned)">'
       +'<span style="flex:1">'+dn(p)+'</span>'+(matchedDossier===p?'<span style="color:var(--r);font-size:12px">herkend</span>':'')
       +'</button>';
   });
 
   window._waCleaned=cleaned;
-  window._waContacts=[];
   // Reset chat voor frisse import weergave
   S.vertelMsgs=[];
   var ca=document.getElementById('chatArea');
@@ -13816,13 +13829,31 @@ function confirmNewPersonWA(){
   if(!inp||!inp.value.trim())return;
   var naam=inp.value.trim();
   var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(naam)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dosName]&&getDossierLifecycle(dosName)==='closed'){
+    toast(dn(dosName)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dosName,S.pdata,isFamilySenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dosName):(dn(dosName)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   ensureP(dosName).then(function(){
     toast('✅ '+naam+' aangemaakt!');
     startWhatsAppImport(dosName,window._waCleaned);
+  }).catch(function(e){
+    console.error('confirmNewPersonWA',e);
+    toast(e&&e.message?String(e.message):'Dossier aanmaken mislukt.');
   });
 }
 
 function startWhatsAppImport(dosName,cleaned){
+  dosName=String(dosName||'').trim();
+  cleaned=String(cleaned==null?'':cleaned);
+  if(!dosName){toast('Kies eerst een dossier voor deze import.');return;}
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
   var MAX_CHARS=1800;
   var chunks=[];
@@ -14446,25 +14477,14 @@ function handleTxtFile(input){
     var nameMatch=cleaned.match(/\d{1,2}\/\d{1,2}\/\d{4},?\s*\d{1,2}:\d{2}[^-]*-\s*([^:]+):/);
     if(nameMatch)detectedName=nameMatch[1].trim();
 
-    // Toon bevestigingsdialoog - alles gaat naar één dossier
-    var contacts=getActiveContactNames().map(function(p){return dn(p);});
     var suggestion=detectedName||'';
-    // Check if detected name matches existing contact (case-insensitive, partial match)
+    var matchNames=getActiveContactNames();
     var matchedDossier='';
-    S.profiles.forEach(function(p){
-      if(p==='OWN Sense')return;
-      var pName=dn(p).toLowerCase();
-      var sug=suggestion.toLowerCase();
-      if(pName===sug||pName.includes(sug)||sug.includes(pName))matchedDossier=p;
-    });
-    // Also scan full text for any known contact name
-    if(!matchedDossier){
-      S.profiles.forEach(function(p){
-        if(p==='OWN Sense')return;
-        var pName=dn(p);
-        var regex=new RegExp('\\b'+pName+'\\b','i');
-        if(regex.test(cleaned))matchedDossier=p;
-      });
+    if(typeof senseMatchWhatsAppImportDossier==='function'){
+      matchedDossier=senseMatchWhatsAppImportDossier(suggestion,matchNames,dn);
+      if(!matchedDossier&&typeof senseMatchWhatsAppImportDossierInText==='function'){
+        matchedDossier=senseMatchWhatsAppImportDossierInText(cleaned,matchNames,dn);
+      }
     }
 
     showWhatsAppDialog(cleaned,suggestion,matchedDossier);
@@ -15646,6 +15666,18 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dossier]&&getDossierLifecycle(dossier)==='closed'){
+    toast(dn(dossier)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFamilySenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
   }catch(e){
