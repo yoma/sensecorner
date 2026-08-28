@@ -1979,6 +1979,132 @@
     return !!blocked[t];
   }
 
+  /**
+   * True when this name already belongs to a dossier that the current app
+   * hides (other app_scope / family-friend tags / system mirrors).
+   * Creating or ensureP-ing that name would silently reuse the hidden row.
+   */
+  function senseNewDossierHiddenCollision(dossier, pdata, isAppVisibleContact) {
+    var name = String(dossier || '').trim();
+    if (!name || /^own\s*sense$/i.test(name)) return false;
+    if (!pdata || !pdata[name]) return false;
+    if (typeof isAppVisibleContact !== 'function') return false;
+    return !isAppVisibleContact(name);
+  }
+
+  function senseNewDossierHiddenCollisionMessage(dossier) {
+    var label = senseContactDossierDisplayName(dossier) || String(dossier || '').trim();
+    return label + ' bestaat al in een andere Sense-app. Kies een andere naam.';
+  }
+
+  function senseForcedDossierStorageKey(appSlug) {
+    return String(appSlug || 'sense') + '_force_dossier';
+  }
+
+  /**
+   * "Altijd opslaan bij" must not follow a dossier this app hides.
+   * All apps used to share localStorage ds_force_dossier, so DateSense
+   * "Praat over Lisa" made FamilySense Vertel auto-save into LisaSense
+   * and stamp fs onto the dating row.
+   */
+  function senseForcedDossierAllowed(name, isAppVisibleContact) {
+    var n = String(name || '').trim();
+    if (!n || /^own\s*sense$/i.test(n)) return false;
+    if (typeof isAppVisibleContact !== 'function') return false;
+    return !!isAppVisibleContact(n);
+  }
+
+  function senseStorageOrLocal(storage) {
+    if (storage && typeof storage.getItem === 'function') return storage;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
+    } catch (_e) {}
+    return null;
+  }
+
+  function senseReadForcedDossier(appSlug, isAppVisibleContact, storage) {
+    var store = senseStorageOrLocal(storage);
+    var key = senseForcedDossierStorageKey(appSlug);
+    var v = '';
+    try { v = store ? (store.getItem(key) || '') : ''; } catch (_e) { v = ''; }
+    if (!v) {
+      var legacy = '';
+      try { legacy = store ? (store.getItem('ds_force_dossier') || '') : ''; } catch (_e2) { legacy = ''; }
+      if (legacy && senseForcedDossierAllowed(legacy, isAppVisibleContact)) {
+        v = legacy;
+        try { if (store) store.setItem(key, v); } catch (_e3) {}
+      }
+    }
+    if (senseForcedDossierAllowed(v, isAppVisibleContact)) return v;
+    if (v) {
+      try { if (store) store.removeItem(key); } catch (_e4) {}
+    }
+    return '';
+  }
+
+  function senseWriteForcedDossier(appSlug, name, storage) {
+    var store = senseStorageOrLocal(storage);
+    if (!store) return;
+    var key = senseForcedDossierStorageKey(appSlug);
+    var n = String(name || '').trim();
+    try {
+      if (n) store.setItem(key, n);
+      else store.removeItem(key);
+    } catch (_e) {}
+  }
+
+  /**
+   * Builds the WhatsApp-import button index. Callers must keep this array
+   * until click handlers run. Wiping it after render makes every existing-
+   * contact import call startWhatsAppImport(undefined), which crashes in dn().
+   */
+  function senseFillWhatsAppContactIndex(contacts) {
+    var list = [];
+    (contacts || []).forEach(function (p) {
+      if (p) list.push(p);
+    });
+    return list;
+  }
+
+  /**
+   * Match a detected WhatsApp participant name to a visible dossier.
+   * Empty suggestion must not match: String.prototype.includes('') is true
+   * for every name, which would mark the last profile as "herkend".
+   */
+  function senseMatchWhatsAppImportDossier(suggestion, profileNames, displayNameFn) {
+    var sug = String(suggestion || '').trim().toLowerCase();
+    if (!sug) return '';
+    var matched = '';
+    (profileNames || []).forEach(function (p) {
+      if (!p || /^own\s*sense$/i.test(String(p))) return;
+      var pName = typeof displayNameFn === 'function'
+        ? String(displayNameFn(p) || '').trim()
+        : String(p).replace(/[\s_-]*sense$/i, '').trim();
+      var low = pName.toLowerCase();
+      if (!low) return;
+      if (low === sug || low.indexOf(sug) >= 0 || sug.indexOf(low) >= 0) matched = p;
+    });
+    return matched;
+  }
+
+  function senseMatchWhatsAppImportDossierInText(cleaned, profileNames, displayNameFn) {
+    var text = String(cleaned || '');
+    if (!text) return '';
+    var matched = '';
+    (profileNames || []).forEach(function (p) {
+      if (!p || /^own\s*sense$/i.test(String(p))) return;
+      var pName = typeof displayNameFn === 'function'
+        ? String(displayNameFn(p) || '').trim()
+        : String(p).replace(/[\s_-]*sense$/i, '').trim();
+      if (!pName || pName.length < 2) return;
+      var escaped = pName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try {
+        if (new RegExp('\\b' + escaped + '\\b', 'i').test(text)) matched = p;
+      } catch (_e) {}
+    });
+    return matched;
+  }
+
   /** Stopwoorden / niet-namen bij detectie van een nieuwe voornaam. */
   function senseNewPersonNameStopwords() {
     return {
@@ -2157,6 +2283,15 @@
   global.senseNormalizeContactDossierName = senseNormalizeContactDossierName;
   global.senseContactDossierDisplayName = senseContactDossierDisplayName;
   global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
+  global.senseNewDossierHiddenCollision = senseNewDossierHiddenCollision;
+  global.senseNewDossierHiddenCollisionMessage = senseNewDossierHiddenCollisionMessage;
+  global.senseForcedDossierStorageKey = senseForcedDossierStorageKey;
+  global.senseForcedDossierAllowed = senseForcedDossierAllowed;
+  global.senseReadForcedDossier = senseReadForcedDossier;
+  global.senseWriteForcedDossier = senseWriteForcedDossier;
+  global.senseFillWhatsAppContactIndex = senseFillWhatsAppContactIndex;
+  global.senseMatchWhatsAppImportDossier = senseMatchWhatsAppImportDossier;
+  global.senseMatchWhatsAppImportDossierInText = senseMatchWhatsAppImportDossierInText;
   global.senseDetectNewPersonName = senseDetectNewPersonName;
   global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
   global.senseCreateContactProfile = senseCreateContactProfile;

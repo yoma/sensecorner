@@ -13,7 +13,7 @@
 <meta name="fr-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=2808261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -2287,19 +2287,18 @@ function isFriendSenseTaggedMeta(meta){
   var scopes=normalizeAppScopeList(meta||{});
   return scopes.indexOf('fr')>=0;
 }
-/** Voor fr-scope: per ongeluk met alleen `fs` en zonder vriendschapsvelden aangemaakt in FriendSense. */
+/**
+ * Legacy one-time helper: FriendSense used to create with `fs` before the split.
+ * Must stay false. Treating any fs-only row as FriendSense stole FamilySense
+ * dossiers that had no familie_rol yet (create-then-fill-role is the normal flow).
+ */
 function shouldMigrateFsOnlyToFriendScope(meta){
-  var m=meta||{};
-  if(getFriendRol(m))return false;
-  if(getFriendRelatie(m))return false;
-  var scopes=normalizeAppScopeList(m);
-  if(scopes.indexOf('fr')>=0)return false;
-  return scopes.indexOf('fs')>=0;
+  return false;
 }
 function isFriendSenseVisibleContact(name){
   if(!name||name==='OWN Sense')return false;
   var m=((S.pdata&&S.pdata[name])||{}).meta||{};
-  return isFriendSenseTaggedMeta(m)||shouldMigrateFsOnlyToFriendScope(m);
+  return isFriendSenseTaggedMeta(m);
 }
 function getFriendSenseContactNames(){
   return (S.profiles||[]).filter(function(p){return isFriendSenseVisibleContact(p);});
@@ -3986,15 +3985,13 @@ function buildSessionPreview(tekst){
 }
 
 function getForcedDossier(){
-  var v=localStorage.getItem('ds_force_dossier')||'';
-  if(!v)return'';
-  if(v!=='OWN Sense'&&S.profiles.includes(v))return v;
-  localStorage.removeItem('ds_force_dossier');
+  if(typeof senseReadForcedDossier==='function'){
+    return senseReadForcedDossier(VERTEL_APP_SLUG,isFriendSenseVisibleContact)||'';
+  }
   return'';
 }
 function setForcedDossier(v){
-  if(v)localStorage.setItem('ds_force_dossier',v);
-  else localStorage.removeItem('ds_force_dossier');
+  if(typeof senseWriteForcedDossier==='function')senseWriteForcedDossier(VERTEL_APP_SLUG,v||'');
   updateVertelSaveModeUI();
 }
 function updateVertelSaveModeUI(){
@@ -4247,6 +4244,14 @@ async function createNewDossierFromPick(useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(dossier);
   }catch(e){
@@ -5109,7 +5114,8 @@ async function normalizeLegacyFriendScopes(){
     var d=S.pdata[name];
     if(!d)continue;
     var meta=migrateFriendMetaFields(Object.assign({},d.meta||{}));
-    if(!isFriendSenseTaggedMeta(meta)&&!shouldMigrateFsOnlyToFriendScope(meta))continue;
+    // Alleen bestaande FriendSense-dossiers (`fr`) opschonen. fs-only is FamilySense.
+    if(!isFriendSenseTaggedMeta(meta))continue;
     var scopes=normalizeAppScopeList(meta);
     var next=scopes.filter(function(s){return s!=='ds'&&s!=='fs';});
     if(next.indexOf('fr')<0)next.push('fr');
@@ -5130,14 +5136,22 @@ async function ensureP(name){
     if(name!=='OWN Sense'){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
-      var exScopes=normalizeAppScopeList(existing.meta);
-      var nextScopes=exScopes.filter(function(s){return s!=='fs'&&s!=='ds';});
-      if(nextScopes.indexOf('fr')<0)nextScopes.push('fr');
-      var scopeSame=nextScopes.length===exScopes.length&&nextScopes.every(function(v,i){return v===exScopes[i];});
-      if(!scopeSame){
-        existing.meta.app_scope=nextScopes;
-        S.pdata[name]=existing;
-        await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+      if(!isFriendSenseTaggedMeta(existing.meta)){
+        if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(name,S.pdata,isFriendSenseVisibleContact)){
+          throw new Error(typeof senseNewDossierHiddenCollisionMessage==='function'
+            ?senseNewDossierHiddenCollisionMessage(name)
+            :(dn(name)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+        }
+      }else{
+        var exScopes=normalizeAppScopeList(existing.meta);
+        var nextScopes=exScopes.filter(function(s){return s!=='fs'&&s!=='ds';});
+        if(nextScopes.indexOf('fr')<0)nextScopes.push('fr');
+        var scopeSame=nextScopes.length===exScopes.length&&nextScopes.every(function(v,i){return v===exScopes[i];});
+        if(!scopeSame){
+          existing.meta.app_scope=nextScopes;
+          S.pdata[name]=existing;
+          await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+        }
       }
     }
     if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
@@ -5493,7 +5507,7 @@ async function seedFriendSenseTestDossiers(){
   try{
     try{await flushPendingAutosavesAsync();}catch(_f){}
     toast('Bezig met reset…');
-    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+    var contacts=getFriendSenseContactNames();
     for(var i=0;i<contacts.length;i++){
       await delP(contacts[i]);
     }
@@ -6373,6 +6387,14 @@ async function newSenseFromDrawer(){
   var n=prompt('Naam van het vriend(in) (bv. "Emma"):');
   if(!n||!n.trim())return;
   var nm=n.trim().endsWith('Sense')?n.trim():n.trim()+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(n)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(nm,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(nm):(dn(nm)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await ensureP(nm);
     toast('✅ '+nm+' aangemaakt!');
@@ -11428,11 +11450,11 @@ function settingsAction(action){
   if(action==='export'){exportAllData();return;}
   if(action==='own-import'){openOwnSenseEntryPoint();return;}
   if(action==='wipe-dossiers'){
-    var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+    var contacts=getFriendSenseContactNames();
     if(!contacts.length){toast('Geen dossiers om te verwijderen.');return;}
     if(!confirm('Alle '+contacts.length+' vriendschapsdossier(s) definitief verwijderen?\n\nDit kan niet ongedaan gemaakt worden.')){return;}
     (async function(){
-      for(var i=0;i<contacts.length;i++){await deleteSense(contacts[i]);}
+      for(var i=0;i<contacts.length;i++){await delP(contacts[i]);}
       toast('🗑️ Alle dossiers verwijderd.');
       goScreen('senses');
     })();
@@ -13791,21 +13813,18 @@ function clearChat(){
 function showWhatsAppDialog(cleaned,suggestion,matchedDossier){
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
 
-  // Bouw opties
+  // Bouw opties. Houd _waContacts tot na de klik; legen na render maakt idx undefined.
   var contacts=getActiveContactNames();
+  window._waContacts=(typeof senseFillWhatsAppContactIndex==='function')?senseFillWhatsAppContactIndex(contacts):contacts.slice();
   var optionsHtml='';
-  contacts.forEach(function(p){
+  window._waContacts.forEach(function(p,idx){
     var selected=matchedDossier===p?'style="border-color:var(--r);background:var(--rl)"':'';
-    var pi=window._waContacts=window._waContacts||[];
-    pi.push(p);
-    var idx=pi.length-1;
     optionsHtml+='<button class="seg-modal-btn" '+selected+' style="border-left-color:'+dossierColor(p)+';margin-bottom:8px" onclick="startWhatsAppImport(window._waContacts['+idx+'],window._waCleaned)">'
       +'<span style="flex:1">'+dn(p)+'</span>'+(matchedDossier===p?'<span style="color:var(--r);font-size:12px">herkend</span>':'')
       +'</button>';
   });
 
   window._waCleaned=cleaned;
-  window._waContacts=[];
   // Reset chat voor frisse import weergave
   S.vertelMsgs=[];
   var ca=document.getElementById('chatArea');
@@ -13844,13 +13863,31 @@ function confirmNewPersonWA(){
   if(!inp||!inp.value.trim())return;
   var naam=inp.value.trim();
   var dosName=naam.endsWith('Sense')?naam:naam+'Sense';
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(naam)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dosName]&&getDossierLifecycle(dosName)==='closed'){
+    toast(dn(dosName)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dosName,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dosName):(dn(dosName)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   ensureP(dosName).then(function(){
     toast('✅ '+naam+' aangemaakt!');
     startWhatsAppImport(dosName,window._waCleaned);
+  }).catch(function(e){
+    console.error('confirmNewPersonWA',e);
+    toast(e&&e.message?String(e.message):'Dossier aanmaken mislukt.');
   });
 }
 
 function startWhatsAppImport(dosName,cleaned){
+  dosName=String(dosName||'').trim();
+  cleaned=String(cleaned==null?'':cleaned);
+  if(!dosName){toast('Kies eerst een dossier voor deze import.');return;}
   var lines=cleaned.split('\n').filter(function(l){return l.trim().length>0;});
   var MAX_CHARS=1800;
   var chunks=[];
@@ -14474,25 +14511,14 @@ function handleTxtFile(input){
     var nameMatch=cleaned.match(/\d{1,2}\/\d{1,2}\/\d{4},?\s*\d{1,2}:\d{2}[^-]*-\s*([^:]+):/);
     if(nameMatch)detectedName=nameMatch[1].trim();
 
-    // Toon bevestigingsdialoog - alles gaat naar één dossier
-    var contacts=getActiveContactNames().map(function(p){return dn(p);});
     var suggestion=detectedName||'';
-    // Check if detected name matches existing contact (case-insensitive, partial match)
+    var matchNames=getActiveContactNames();
     var matchedDossier='';
-    S.profiles.forEach(function(p){
-      if(p==='OWN Sense')return;
-      var pName=dn(p).toLowerCase();
-      var sug=suggestion.toLowerCase();
-      if(pName===sug||pName.includes(sug)||sug.includes(pName))matchedDossier=p;
-    });
-    // Also scan full text for any known contact name
-    if(!matchedDossier){
-      S.profiles.forEach(function(p){
-        if(p==='OWN Sense')return;
-        var pName=dn(p);
-        var regex=new RegExp('\\b'+pName+'\\b','i');
-        if(regex.test(cleaned))matchedDossier=p;
-      });
+    if(typeof senseMatchWhatsAppImportDossier==='function'){
+      matchedDossier=senseMatchWhatsAppImportDossier(suggestion,matchNames,dn);
+      if(!matchedDossier&&typeof senseMatchWhatsAppImportDossierInText==='function'){
+        matchedDossier=senseMatchWhatsAppImportDossierInText(cleaned,matchNames,dn);
+      }
     }
 
     showWhatsAppDialog(cleaned,suggestion,matchedDossier);
@@ -15697,6 +15723,18 @@ async function maakNieuwDossierEnOpslaan(sid,useSuggested){
   var base=String(inputName||'').trim();
   if(!base){toast('Naam is leeg');return;}
   var dossier=base.endsWith('Sense')?base:(base+'Sense');
+  if(typeof senseIsBlockedNewDossierLabel==='function'&&senseIsBlockedNewDossierLabel(base)){
+    toast('Die naam is gereserveerd. Kies een andere naam.');
+    return;
+  }
+  if(typeof getDossierLifecycle==='function'&&S.pdata[dossier]&&getDossierLifecycle(dossier)==='closed'){
+    toast(dn(dossier)+' is afgesloten. Heropen dat dossier eerst, of kies een andere naam.');
+    return;
+  }
+  if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(dossier,S.pdata,isFriendSenseVisibleContact)){
+    toast(typeof senseNewDossierHiddenCollisionMessage==='function'?senseNewDossierHiddenCollisionMessage(dossier):(dn(dossier)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+    return;
+  }
   try{
     await _doOpslaan(sid,data.tekst,dossier,data.sessionUserMsgId);
   }catch(e){
