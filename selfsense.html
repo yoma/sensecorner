@@ -13,7 +13,7 @@
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=2808261115"></script>
 <script src="js/selfsense-aandachtspunten-detect.js"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
@@ -6335,15 +6335,13 @@ function buildSessionPreview(tekst){
 }
 
 function getForcedDossier(){
-  var v=localStorage.getItem('ds_force_dossier')||'';
-  if(!v)return'';
-  if(v!=='OWN Sense'&&S.profiles.includes(v))return v;
-  localStorage.removeItem('ds_force_dossier');
+  if(typeof senseReadForcedDossier==='function'){
+    return senseReadForcedDossier(VERTEL_APP_SLUG,isSelfSenseVisibleContact)||'';
+  }
   return'';
 }
 function setForcedDossier(v){
-  if(v)localStorage.setItem('ds_force_dossier',v);
-  else localStorage.removeItem('ds_force_dossier');
+  if(typeof senseWriteForcedDossier==='function')senseWriteForcedDossier(VERTEL_APP_SLUG,v||'');
   updateVertelSaveModeUI();
 }
 function updateVertelSaveModeUI(){
@@ -15137,11 +15135,11 @@ function settingsAction(action){
   if(action==='export'){exportAllData();return;}
   if(action==='own-import'){openOwnSenseEntryPoint();return;}
   if(action==='wipe-dossiers'){
-    var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+    var contacts=getSelfSenseContactNames();
     if(!contacts.length){toast('Geen dossiers om te verwijderen.');return;}
     if(!confirm('Alle '+contacts.length+' contextdossier(s) definitief verwijderen?\n\nDit kan niet ongedaan gemaakt worden.')){return;}
     (async function(){
-      for(var i=0;i<contacts.length;i++){await deleteSense(contacts[i]);}
+      for(var i=0;i<contacts.length;i++){await delP(contacts[i]);}
       toast('🗑️ Alle dossiers verwijderd.');
       goScreen('senses');
     })();

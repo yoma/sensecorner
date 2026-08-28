@@ -8,6 +8,7 @@ Hulpmiddelen voor ontwikkeling en onderhoud. Niet nodig op GitHub Pages.
 | `new-dossier-hidden-collision.test.mjs` | Weigert create-by-name als de naam al een verborgen ander-app dossier is |
 | `whatsapp-import-contact-index.test.mjs` | WhatsApp-import houdt contactindex tot na klik; lege naam is geen match |
 | `friendsense-fs-scope-steal.test.mjs` | FriendSense mag FamilySense `fs`-dossiers niet naar `fr` converteren |
+| `forced-dossier-cross-app.test.mjs` | Vertel "Altijd opslaan bij" blijft per app; geen stamp van fs/ds op een verborgen dossier |
 | `tmp-get-date.bat` | Schrijft build-timestamp naar `tmp-build-out.txt` (optioneel) |
 | `archive/` | Eenmalige migratie-/kopieerscripts (bewaard, niet dagelijks) |
 

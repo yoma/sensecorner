@@ -13,7 +13,7 @@
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=2308261115"></script>
+<script src="js/sense-common.js?v=2808261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -3966,15 +3966,13 @@ function buildSessionPreview(tekst){
 }
 
 function getForcedDossier(){
-  var v=localStorage.getItem('ds_force_dossier')||'';
-  if(!v)return'';
-  if(v!=='OWN Sense'&&S.profiles.includes(v))return v;
-  localStorage.removeItem('ds_force_dossier');
+  if(typeof senseReadForcedDossier==='function'){
+    return senseReadForcedDossier(VERTEL_APP_SLUG,isFamilySenseVisibleContact)||'';
+  }
   return'';
 }
 function setForcedDossier(v){
-  if(v)localStorage.setItem('ds_force_dossier',v);
-  else localStorage.removeItem('ds_force_dossier');
+  if(typeof senseWriteForcedDossier==='function')senseWriteForcedDossier(VERTEL_APP_SLUG,v||'');
   updateVertelSaveModeUI();
 }
 function updateVertelSaveModeUI(){
@@ -5118,12 +5116,20 @@ async function ensureP(name){
     if(name!=='OWN Sense'){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
-      var exScopes=normalizeAppScopeList(existing.meta);
-      if(exScopes.indexOf('fs')<0){
-        exScopes.push('fs');
-        existing.meta.app_scope=exScopes;
-        S.pdata[name]=existing;
-        await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+      if(!isFamilyTaggedMeta(existing.meta)){
+        if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(name,S.pdata,isFamilySenseVisibleContact)){
+          throw new Error(typeof senseNewDossierHiddenCollisionMessage==='function'
+            ?senseNewDossierHiddenCollisionMessage(name)
+            :(dn(name)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+        }
+      }else{
+        var exScopes=normalizeAppScopeList(existing.meta);
+        if(exScopes.indexOf('fs')<0){
+          exScopes.push('fs');
+          existing.meta.app_scope=exScopes;
+          S.pdata[name]=existing;
+          await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+        }
       }
     }
     if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
@@ -5478,7 +5484,7 @@ async function seedFamilySenseTestDossiers(){
   try{
     try{await flushPendingAutosavesAsync();}catch(_f){}
     toast('Bezig met reset…');
-    var contacts=S.profiles.filter(function(p){return p!=='OWN Sense';});
+    var contacts=getFamilySenseContactNames();
     for(var i=0;i<contacts.length;i++){
       await delP(contacts[i]);
     }
@@ -11416,11 +11422,11 @@ function settingsAction(action){
   if(action==='export'){exportAllData();return;}
   if(action==='own-import'){openOwnSenseEntryPoint();return;}
   if(action==='wipe-dossiers'){
-    var contacts=(S.profiles||[]).filter(function(p){return p!=='OWN Sense';});
+    var contacts=getFamilySenseContactNames();
     if(!contacts.length){toast('Geen dossiers om te verwijderen.');return;}
     if(!confirm('Alle '+contacts.length+' familiedossier(s) definitief verwijderen?\n\nDit kan niet ongedaan gemaakt worden.')){return;}
     (async function(){
-      for(var i=0;i<contacts.length;i++){await deleteSense(contacts[i]);}
+      for(var i=0;i<contacts.length;i++){await delP(contacts[i]);}
       toast('🗑️ Alle dossiers verwijderd.');
       goScreen('senses');
     })();

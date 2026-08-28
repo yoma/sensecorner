@@ -13,7 +13,7 @@
 <meta name="ds-build" content="19-08-2026 10:50">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=2308261115"></script>
+<script src="js/sense-common.js?v=2808261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -4043,21 +4043,21 @@ function clearVertelFocusIfUnlinkable(){
   var sticky=String(S.vertelSessionStickyDossier||'').trim();
   if(sticky&&!isVertelLinkableDossier(sticky))S.vertelSessionStickyDossier=null;
   try{
-    var forced=localStorage.getItem('ds_force_dossier')||'';
-    if(forced&&!isVertelLinkableDossier(forced))localStorage.removeItem('ds_force_dossier');
+    var forced=getForcedDossier();
+    if(forced&&!isVertelLinkableDossier(forced))setForcedDossier('');
   }catch(_e){}
 }
 
 function getForcedDossier(){
-  var v=localStorage.getItem('ds_force_dossier')||'';
-  if(!v)return'';
-  if(v!=='OWN Sense'&&S.profiles.includes(v)&&isVertelLinkableDossier(v))return v;
-  localStorage.removeItem('ds_force_dossier');
+  if(typeof senseReadForcedDossier==='function'){
+    return senseReadForcedDossier(VERTEL_APP_SLUG,function(n){
+      return isDateSenseVisibleContact(n)&&isVertelLinkableDossier(n);
+    })||'';
+  }
   return'';
 }
 function setForcedDossier(v){
-  if(v)localStorage.setItem('ds_force_dossier',v);
-  else localStorage.removeItem('ds_force_dossier');
+  if(typeof senseWriteForcedDossier==='function')senseWriteForcedDossier(VERTEL_APP_SLUG,v||'');
   updateVertelSaveModeUI();
 }
 function updateVertelSaveModeUI(){
@@ -5494,12 +5494,20 @@ async function ensureP(name){
     if(name!=='OWN Sense'){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
       existing.meta=Object.assign({},existing.meta||{});
-      var exScopes=normalizeAppScopeList(existing.meta);
-      if(exScopes.indexOf('ds')<0){
-        exScopes.push('ds');
-        existing.meta.app_scope=exScopes;
-        S.pdata[name]=existing;
-        await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+      if(!isDateSenseVisibleContact(name)){
+        if(typeof senseNewDossierHiddenCollision==='function'&&senseNewDossierHiddenCollision(name,S.pdata,isDateSenseVisibleContact)){
+          throw new Error(typeof senseNewDossierHiddenCollisionMessage==='function'
+            ?senseNewDossierHiddenCollisionMessage(name)
+            :(dn(name)+' bestaat al in een andere Sense-app. Kies een andere naam.'));
+        }
+      }else{
+        var exScopes=normalizeAppScopeList(existing.meta);
+        if(exScopes.indexOf('ds')<0){
+          exScopes.push('ds');
+          existing.meta.app_scope=exScopes;
+          S.pdata[name]=existing;
+          await saveP(name,existing.props||{...DP},existing.count||0,existing.categories||{},existing.summary,existing.meta);
+        }
       }
     }
     if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
@@ -7795,7 +7803,7 @@ async function closeDossier(name){
     if(String(S.vertelFrom||'')===name)S.vertelFrom=null;
     if(String(S.vertelSessionStickyDossier||'')===name)S.vertelSessionStickyDossier=null;
     try{
-      if((localStorage.getItem('ds_force_dossier')||'')===name)setForcedDossier('');
+      if(getForcedDossier()===name)setForcedDossier('');
     }catch(_eF){}
     clearVertelFocusIfUnlinkable();
     try{if(typeof updateVertelGesprekBanner==='function')updateVertelGesprekBanner();}catch(_eB){}

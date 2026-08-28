@@ -1997,6 +1997,62 @@
     return label + ' bestaat al in een andere Sense-app. Kies een andere naam.';
   }
 
+  function senseForcedDossierStorageKey(appSlug) {
+    return String(appSlug || 'sense') + '_force_dossier';
+  }
+
+  /**
+   * "Altijd opslaan bij" must not follow a dossier this app hides.
+   * All apps used to share localStorage ds_force_dossier, so DateSense
+   * "Praat over Lisa" made FamilySense Vertel auto-save into LisaSense
+   * and stamp fs onto the dating row.
+   */
+  function senseForcedDossierAllowed(name, isAppVisibleContact) {
+    var n = String(name || '').trim();
+    if (!n || /^own\s*sense$/i.test(n)) return false;
+    if (typeof isAppVisibleContact !== 'function') return false;
+    return !!isAppVisibleContact(n);
+  }
+
+  function senseStorageOrLocal(storage) {
+    if (storage && typeof storage.getItem === 'function') return storage;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
+    } catch (_e) {}
+    return null;
+  }
+
+  function senseReadForcedDossier(appSlug, isAppVisibleContact, storage) {
+    var store = senseStorageOrLocal(storage);
+    var key = senseForcedDossierStorageKey(appSlug);
+    var v = '';
+    try { v = store ? (store.getItem(key) || '') : ''; } catch (_e) { v = ''; }
+    if (!v) {
+      var legacy = '';
+      try { legacy = store ? (store.getItem('ds_force_dossier') || '') : ''; } catch (_e2) { legacy = ''; }
+      if (legacy && senseForcedDossierAllowed(legacy, isAppVisibleContact)) {
+        v = legacy;
+        try { if (store) store.setItem(key, v); } catch (_e3) {}
+      }
+    }
+    if (senseForcedDossierAllowed(v, isAppVisibleContact)) return v;
+    if (v) {
+      try { if (store) store.removeItem(key); } catch (_e4) {}
+    }
+    return '';
+  }
+
+  function senseWriteForcedDossier(appSlug, name, storage) {
+    var store = senseStorageOrLocal(storage);
+    if (!store) return;
+    var key = senseForcedDossierStorageKey(appSlug);
+    var n = String(name || '').trim();
+    try {
+      if (n) store.setItem(key, n);
+      else store.removeItem(key);
+    } catch (_e) {}
+  }
+
   /**
    * Builds the WhatsApp-import button index. Callers must keep this array
    * until click handlers run. Wiping it after render makes every existing-
@@ -2229,6 +2285,10 @@
   global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
   global.senseNewDossierHiddenCollision = senseNewDossierHiddenCollision;
   global.senseNewDossierHiddenCollisionMessage = senseNewDossierHiddenCollisionMessage;
+  global.senseForcedDossierStorageKey = senseForcedDossierStorageKey;
+  global.senseForcedDossierAllowed = senseForcedDossierAllowed;
+  global.senseReadForcedDossier = senseReadForcedDossier;
+  global.senseWriteForcedDossier = senseWriteForcedDossier;
   global.senseFillWhatsAppContactIndex = senseFillWhatsAppContactIndex;
   global.senseMatchWhatsAppImportDossier = senseMatchWhatsAppImportDossier;
   global.senseMatchWhatsAppImportDossierInText = senseMatchWhatsAppImportDossierInText;
