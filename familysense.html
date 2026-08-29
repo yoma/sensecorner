@@ -13,7 +13,7 @@
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=2808261115"></script>
+<script src="js/sense-common.js?v=2908261115"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -5112,6 +5112,9 @@ async function normalizeLegacyFamilyScopes(){
 
 async function ensureP(name){
   if(!S.user)return;
+  if(!S.pdata[name]&&typeof senseHydrateProfileIfMissing==='function'){
+    try{await senseHydrateProfileIfMissing(sb,S.user.id,name,S);}catch(e){console.warn('ensureP lookup',e);}
+  }
   if(S.pdata[name]){
     if(name!=='OWN Sense'){
       var existing=S.pdata[name]||{props:{...DP},count:0,categories:{},meta:{}};
@@ -5137,11 +5140,16 @@ async function ensureP(name){
   }
   var seedProps={...DP};
   if(name!=='OWN Sense')seedProps.meta={app_scope:['fs']};
-  var createRes=await sb.from('sense_profiles').upsert(
-    {user_id:S.user.id,name,props:seedProps,bericht_count:0},
-    {onConflict:'user_id,name'}
+  var createRes=await sb.from('sense_profiles').insert(
+    {user_id:S.user.id,name,props:seedProps,bericht_count:0}
   );
-  if(createRes&&createRes.error)throw new Error(createRes.error.message||'Dossier aanmaken mislukt');
+  if(createRes&&createRes.error){
+    if(typeof senseIsProfileUniqueConflict==='function'&&senseIsProfileUniqueConflict(createRes.error)){
+      try{await senseHydrateProfileIfMissing(sb,S.user.id,name,S);}catch(_h){}
+      if(S.pdata[name])return ensureP(name);
+    }
+    throw new Error(createRes.error.message||'Dossier aanmaken mislukt');
+  }
   var seedMeta=(name!=='OWN Sense')?{app_scope:['fs']}:{};
   S.pdata[name]={props:{...DP},count:0,lastActive:null,categories:{},meta:seedMeta};
   if(name!=='OWN Sense'&&!S.profiles.includes(name))S.profiles.push(name);
@@ -5178,9 +5186,12 @@ async function saveP(name,props,count,categories,summary,meta){
   if(meta!=null&&!argMeta)console.warn('[FamilySense][saveP] skip invalid meta payload for',name);
   if(name!=='OWN Sense'){
     safeMeta=Object.assign({},safeMeta||{});
-    var scopeList=Array.isArray(safeMeta.app_scope)?safeMeta.app_scope.slice():[];
-    if(scopeList.map(function(v){return String(v||'').toLowerCase();}).indexOf('fs')<0)scopeList.push('fs');
-    safeMeta.app_scope=scopeList;
+    var stampFs=typeof senseShouldStampContactScope!=='function'||senseShouldStampContactScope(name,S.pdata,isFamilySenseVisibleContact);
+    if(stampFs){
+      var scopeList=Array.isArray(safeMeta.app_scope)?safeMeta.app_scope.slice():[];
+      if(scopeList.map(function(v){return String(v||'').toLowerCase();}).indexOf('fs')<0)scopeList.push('fs');
+      safeMeta.app_scope=scopeList;
+    }
   }
   if(safeMeta&&Object.keys(safeMeta).length>0)propsToSave.meta=safeMeta;
   // Verwijder lege categories key

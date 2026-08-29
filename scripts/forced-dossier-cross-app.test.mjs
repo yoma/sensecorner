@@ -115,6 +115,7 @@ for (const file of ['datesense.html', 'familysense.html', 'friendsense.html']) {
   }
   const ensure = html.slice(start, end + 1);
   assert.ok(ensure.includes('senseNewDossierHiddenCollision'), file + ' ensureP must refuse hidden other-app rows');
+  assert.ok(ensure.includes('senseHydrateProfileIfMissing'), file + ' ensureP must hydrate from DB when pdata is empty');
 }
 
 const familyHtml = readFileSync(join(root, 'familysense.html'), 'utf8');

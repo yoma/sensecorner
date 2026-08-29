@@ -9,6 +9,7 @@ Hulpmiddelen voor ontwikkeling en onderhoud. Niet nodig op GitHub Pages.
 | `whatsapp-import-contact-index.test.mjs` | WhatsApp-import houdt contactindex tot na klik; lege naam is geen match |
 | `friendsense-fs-scope-steal.test.mjs` | FriendSense mag FamilySense `fs`-dossiers niet naar `fr` converteren |
 | `forced-dossier-cross-app.test.mjs` | Vertel "Altijd opslaan bij" blijft per app; geen stamp van fs/ds op een verborgen dossier |
+| `ensurep-hydrate-before-create.test.mjs` | ensureP hydrates from DB before create; insert not upsert so other-app rows are not wiped |
 | `tmp-get-date.bat` | Schrijft build-timestamp naar `tmp-build-out.txt` (optioneel) |
 | `archive/` | Eenmalige migratie-/kopieerscripts (bewaard, niet dagelijks) |
 

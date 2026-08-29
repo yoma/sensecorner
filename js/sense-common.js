@@ -1997,6 +1997,64 @@
     return label + ' bestaat al in een andere Sense-app. Kies een andere naam.';
   }
 
+  function senseProfileCellFromRow(row) {
+    var savedProps = (row && row.props && typeof row.props === 'object' && !Array.isArray(row.props))
+      ? Object.assign({}, row.props)
+      : {};
+    var loadedMeta = (savedProps.meta && typeof savedProps.meta === 'object')
+      ? Object.assign({}, savedProps.meta)
+      : {};
+    var loadedCats = (savedProps.categories && typeof savedProps.categories === 'object')
+      ? savedProps.categories
+      : {};
+    return {
+      props: savedProps,
+      count: (row && row.bericht_count) || 0,
+      lastActive: (row && row.last_active) || null,
+      categories: loadedCats,
+      summary: (row && row.summary) || '',
+      meta: loadedMeta
+    };
+  }
+
+  /**
+   * Fast-paint / empty cache leaves S.pdata incomplete. ensureP used to upsert
+   * a seed row on user_id+name and wipe the other app's props and count.
+   */
+  async function senseHydrateProfileIfMissing(sb, userId, name, state) {
+    var n = String(name || '').trim();
+    if (!sb || !userId || !n || !state) return false;
+    if (state.pdata && state.pdata[n]) return false;
+    var res = await sb.from('sense_profiles')
+      .select('name,props,bericht_count,summary,last_active')
+      .eq('user_id', userId)
+      .eq('name', n)
+      .maybeSingle();
+    if (res && res.error) throw res.error;
+    if (!res || !res.data || !res.data.name) return false;
+    if (!state.pdata) state.pdata = {};
+    state.pdata[n] = senseProfileCellFromRow(res.data);
+    if (state.profiles && n !== 'OWN Sense' && state.profiles.indexOf(n) < 0) {
+      state.profiles.push(n);
+    }
+    return true;
+  }
+
+  function senseIsProfileUniqueConflict(error) {
+    var code = String((error && error.code) || '');
+    var msg = String((error && error.message) || '').toLowerCase();
+    return code === '23505' || /duplicate|unique|conflict/i.test(msg);
+  }
+
+  /** Stamp this app's scope only on visible (or brand-new) rows, never on a hidden other-app dossier. */
+  function senseShouldStampContactScope(name, pdata, isAppVisibleContact) {
+    var n = String(name || '').trim();
+    if (!n || /^own\s*sense$/i.test(n)) return false;
+    if (!pdata || !pdata[n]) return true;
+    if (typeof isAppVisibleContact !== 'function') return true;
+    return !!isAppVisibleContact(n);
+  }
+
   function senseForcedDossierStorageKey(appSlug) {
     return String(appSlug || 'sense') + '_force_dossier';
   }
@@ -2285,6 +2343,10 @@
   global.senseIsBlockedNewDossierLabel = senseIsBlockedNewDossierLabel;
   global.senseNewDossierHiddenCollision = senseNewDossierHiddenCollision;
   global.senseNewDossierHiddenCollisionMessage = senseNewDossierHiddenCollisionMessage;
+  global.senseProfileCellFromRow = senseProfileCellFromRow;
+  global.senseHydrateProfileIfMissing = senseHydrateProfileIfMissing;
+  global.senseIsProfileUniqueConflict = senseIsProfileUniqueConflict;
+  global.senseShouldStampContactScope = senseShouldStampContactScope;
   global.senseForcedDossierStorageKey = senseForcedDossierStorageKey;
   global.senseForcedDossierAllowed = senseForcedDossierAllowed;
   global.senseReadForcedDossier = senseReadForcedDossier;
