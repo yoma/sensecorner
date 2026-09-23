@@ -591,48 +591,64 @@ function tokenizeWordsForProfileMatch(msg: string): string[] {
   return lowered.split(/[^a-zà-öø-ÿ0-9]+/).filter((w) => w.length >= 2);
 }
 
-/** Eén contactdossier uit bericht (bv. «pascale» / «pascal» → PascaleSense); bij twijfel null. */
-async function inferNamedContactDossierFromMessage(userId: string, msg: string): Promise<string | null> {
-  const res = await sb.from("sense_profiles").select("name").eq("user_id", userId);
-  if (res.error) return null;
-  const names = (res.data || []).map((r: { name?: string }) => norm(r.name)).filter(Boolean);
-  const block = new Set(["OWN Sense", "WhatsApp"]);
+function escapeProfileMatchToken(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Heel woord, geen stuk uit een langer woord («jan» zit in «januari», «eva» in «evaluatie»). */
+function messageHasProfileWord(lowered: string, word: string): boolean {
+  if (!word) return false;
+  const re = new RegExp(
+    `(^|[^a-z0-9à-öø-ÿ])${escapeProfileMatchToken(word)}([^a-z0-9à-öø-ÿ]|$)`,
+    "i",
+  );
+  return re.test(lowered);
+}
+
+/**
+ * Eén contactdossier uit een bericht.
+ * «pascal» mag PascaleSense zijn. «januari» mag JanSense niet zijn, «maart» mag MarcSense niet zijn.
+ * Bij nul of meerdere treffers: null.
+ */
+function matchWhatsappDossierName(dossierNames: string[], msg: string): string | null {
   const lowered = norm(msg).toLowerCase();
+  if (!lowered) return null;
   const words = tokenizeWordsForProfileMatch(msg);
   const matches: string[] = [];
-  for (const n of names) {
-    if (block.has(n)) continue;
+  for (const raw of dossierNames || []) {
+    const n = norm(raw);
+    if (!n || /^own\s*sense$/i.test(n) || /^whatsapp$/i.test(n)) continue;
     const nl = n.toLowerCase();
-    if (lowered.includes(nl)) {
+    if (messageHasProfileWord(lowered, nl)) {
       matches.push(n);
       continue;
     }
     const stem = nl.replace(/sense$/i, "").replace(/[^a-zà-öø-ÿ0-9]/gi, "");
     if (stem.length < 3) continue;
-    if (lowered.includes(stem)) {
+    if (messageHasProfileWord(lowered, stem)) {
       matches.push(n);
       continue;
     }
-    // Roep-/typfoutvarianten: «pascal» t.o.v. stem «pascale», korte voornaam vs langere stem, enz.
     for (const w of words) {
-      if (w.length < 4) continue;
-      if (w === stem) {
-        matches.push(n);
-        break;
-      }
-      if (stem.startsWith(w)) {
-        matches.push(n);
-        break;
-      }
-      if (w.startsWith(stem) && stem.length >= 4) {
+      if (w.length < 4 || w === stem) continue;
+      // Alleen een kortere roepnaam/typo («pascal» → «pascale»), niet een langer woord dat met de naam begint.
+      const extra = stem.length - w.length;
+      if (extra > 0 && extra <= 2 && stem.startsWith(w)) {
         matches.push(n);
         break;
       }
     }
   }
   const uniq = [...new Set(matches)];
-  if (uniq.length === 1) return uniq[0];
-  return null;
+  return uniq.length === 1 ? uniq[0] : null;
+}
+
+/** Eén contactdossier uit bericht (bv. «pascale» / «pascal» → PascaleSense); bij twijfel null. */
+async function inferNamedContactDossierFromMessage(userId: string, msg: string): Promise<string | null> {
+  const res = await sb.from("sense_profiles").select("name").eq("user_id", userId);
+  if (res.error) return null;
+  const names = (res.data || []).map((r: { name?: string }) => norm(r.name)).filter(Boolean);
+  return matchWhatsappDossierName(names, msg);
 }
 
 async function listContactDossierNames(userId: string): Promise<string[]> {
@@ -669,31 +685,7 @@ async function getLastAssistantAppContext(userPhone: string): Promise<string> {
 async function resolveDossierChoiceFromMessage(userId: string, msg: string): Promise<string | null> {
   const dossiers = await listContactDossierNames(userId);
   if (!dossiers.length) return null;
-  const lowered = norm(msg).toLowerCase();
-  const words = tokenizeWordsForProfileMatch(msg);
-  const hits: string[] = [];
-  for (const dn of dossiers) {
-    const nl = dn.toLowerCase();
-    if (lowered.includes(nl)) {
-      hits.push(dn);
-      continue;
-    }
-    const stem = nl.replace(/sense$/i, "").replace(/[^a-zà-öø-ÿ0-9]/gi, "");
-    if (stem.length >= 3 && lowered.includes(stem)) {
-      hits.push(dn);
-      continue;
-    }
-    for (const w of words) {
-      if (w.length < 4) continue;
-      if (w === stem || stem.startsWith(w) || w.startsWith(stem)) {
-        hits.push(dn);
-        break;
-      }
-    }
-  }
-  const uniq = [...new Set(hits)];
-  if (uniq.length === 1) return uniq[0];
-  return null;
+  return matchWhatsappDossierName(dossiers, msg);
 }
 
 async function getAccountPhoneMirrorRow(userId: string): Promise<AccountPhoneMirrorRow | null> {
