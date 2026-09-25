@@ -873,6 +873,40 @@ async function sendTwilio(to: string, body: string): Promise<TwilioSendResult> {
   }
 }
 
+type WaClaudeIn = { role?: string; content?: string };
+type WaClaudeTurn = { role: "user" | "assistant"; content: string };
+
+/**
+ * Claude Messages API weigert twee dezelfde rollen op een rij en een gesprek dat
+ * met assistant begint. De webhook slaat het huidige user-bericht al op vóór
+ * getHistory, en plakt het daarna opnieuw achteraan. Zonder deze sanitatie is
+ * elke callClaude 400, de webhook 500, en Twilio probeert opnieuw (dubbele spiegel).
+ */
+function sanitizeWhatsappClaudeMessages(messages: WaClaudeIn[]): WaClaudeTurn[] {
+  const deduped: WaClaudeTurn[] = [];
+  for (const m of messages) {
+    if (!m) continue;
+    const role = m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : "";
+    if (!role) continue;
+    const content = norm(m.content);
+    if (!content) continue;
+    const prev = deduped[deduped.length - 1];
+    if (prev && prev.role === role && prev.content === content) continue;
+    deduped.push({ role, content });
+  }
+  const out: WaClaudeTurn[] = [];
+  for (const m of deduped) {
+    const prev = out[out.length - 1];
+    if (prev && prev.role === m.role) {
+      prev.content = prev.content + "\n\n" + m.content;
+      continue;
+    }
+    out.push({ role: m.role, content: m.content });
+  }
+  while (out.length && out[0].role !== "user") out.shift();
+  return out;
+}
+
 async function callClaude(system: string, messages: Array<{ role: "user" | "assistant"; content: string }>) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -1132,7 +1166,10 @@ Deno.serve(async (req: Request) => {
         "en vraag om het optioneel te zetten in SenseCorner bij het account (WhatsApp), niet in het OWN Sense-dossier.";
     }
 
-    let reply = await callClaude(system, [...history, { role: "user", content: body }]);
+    const claudeMessages = sanitizeWhatsappClaudeMessages([...history, { role: "user", content: body }]);
+    let reply = claudeMessages.length
+      ? await callClaude(system, claudeMessages)
+      : "";
 
     if (displayName) {
       reply = forceNameGreeting(reply, displayName);
