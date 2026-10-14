@@ -2161,6 +2161,39 @@
   global.senseTextMentionsNamelessSomeone = senseTextMentionsNamelessSomeone;
   global.senseCreateContactProfile = senseCreateContactProfile;
 
+  /**
+   * Bewaar dossier-pick payload.
+   * Een sessie-index (number, ook 0) en een bulk-lijst (array) mogen geen
+   * Object.assign({}, payload) ondergaan: dat maakt er {} van, en Koppel
+   * schrijft dan niets naar het dossier.
+   * suggestedName hoort alleen op een plain object; bij index/array komt de
+   * suggestie los terug zodat de «maak aan»-knop hem nog kan tonen.
+   */
+  function sensePrepareDossierPickPayload(payload, allowSuggestedName, suggestName) {
+    var stored;
+    var suggested = '';
+    if (Array.isArray(payload)) {
+      stored = payload.slice();
+    } else if (payload && typeof payload === 'object') {
+      stored = Object.assign({}, payload);
+    } else if (payload == null || payload === '') {
+      stored = {};
+    } else {
+      stored = payload;
+    }
+    if (allowSuggestedName) {
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+        if (!String(stored.suggestedName || '').trim() && typeof suggestName === 'function') {
+          stored.suggestedName = suggestName() || '';
+        }
+        suggested = String(stored.suggestedName || '').trim();
+      } else if (typeof suggestName === 'function') {
+        suggested = String(suggestName() || '').trim();
+      }
+    }
+    return { payload: stored, suggestedName: suggested };
+  }
+
   function senseDeepLimitedNoticeHtml() {
     return '<div style="margin-top:8px;padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:#64748b;line-height:1.45">Expertise draait tijdelijk op het standaardmodel, je uurlimiet voor Expertise is bereikt. Dit is geen volledige Expertise-analyse.</div>';
   }
@@ -2170,6 +2203,7 @@
     if (st) st._lastSenseiDeepLimited = false;
     return on;
   }
+  global.sensePrepareDossierPickPayload = sensePrepareDossierPickPayload;
   global.senseDeepLimitedNoticeHtml = senseDeepLimitedNoticeHtml;
   global.senseConsumeDeepLimitedFlag = senseConsumeDeepLimitedFlag;
 })(typeof window !== 'undefined' ? window : this);

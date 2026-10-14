@@ -13,7 +13,7 @@
 <meta name="fr-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-common.js?v=1410261100"></script>
 <script src="js/sense-mirror-hub.js"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -4174,17 +4174,21 @@ function openDossierPickModal(title,sub,type,payload){
   if(!modal||!titleEl||!subEl||!opts)return;
   titleEl.textContent=title||'Kies dossier';
   subEl.textContent=sub||'Selecteer een dossier.';
-  payload=payload?Object.assign({},payload):{};
-  if(vertelPickAllowsNewDossier(type)&&!String(payload.suggestedName||'').trim()){
-    payload.suggestedName=suggestedNewDossierNameFromVertel();
+  var prepared=(typeof sensePrepareDossierPickPayload==='function')
+    ?sensePrepareDossierPickPayload(payload,vertelPickAllowsNewDossier(type),suggestedNewDossierNameFromVertel)
+    :{payload:(payload&&typeof payload==='object'&&!Array.isArray(payload))?Object.assign({},payload):(payload==null?{}:payload),suggestedName:''};
+  payload=prepared.payload;
+  var pickSuggestedName=String(prepared.suggestedName||'').trim();
+  if(!pickSuggestedName&&payload&&typeof payload==='object'&&!Array.isArray(payload)){
+    pickSuggestedName=String(payload.suggestedName||'').trim();
   }
-  window._dossierPickCtx={type:type,payload:payload};
+  window._dossierPickCtx={type:type,payload:payload,suggestedName:pickSuggestedName};
   var all=['OWN Sense'].concat(getFriendSenseContactNames());
   all=sortDossiersByVertelPriority(all);
   window._modalPickDossiers=all.slice();
   var html='';
   if(vertelPickAllowsNewDossier(type)){
-    var sug=payload.suggestedName||'';
+    var sug=pickSuggestedName||'';
     var newHint=type==='save'?'Nieuw dossier en meteen opslaan':'Nieuw dossier voor dit gesprek';
     if(sug){
       html+='<button type="button" class="save-modal-opt" onclick="createNewDossierFromPick(true)"><span class="save-modal-dot" style="background:#C8881F"></span><span style="flex:1"><strong>Maak '+String(sug).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+' aan</strong><br><span style="font-size:12px;color:#666">'+newHint+'</span></span></button>';
@@ -4242,6 +4246,7 @@ async function createNewDossierFromPick(useSuggested){
   var ctx=window._dossierPickCtx||{};
   if(!vertelPickAllowsNewDossier(ctx.type))return;
   var suggested=ctx.payload&&ctx.payload.suggestedName?ctx.payload.suggestedName:'';
+  if(!String(suggested||'').trim()&&ctx.suggestedName)suggested=ctx.suggestedName;
   var inputName=useSuggested&&suggested?suggested:prompt('Naam van het vriend(in) (bv. Emma):',suggested||'');
   if(inputName===null)return;
   var base=String(inputName||'').trim();
