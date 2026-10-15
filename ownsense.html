@@ -15,11 +15,13 @@ try{
   }
 }catch(_e){}
 </script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sense-theme.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/sense-theme.css?v=20261015a">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="js/sense-common.js?v=1908261100"></script>
+<script src="js/sense-jszip.js?v=20261015a"></script>
+<script src="js/sense-common.js?v=20261015a"></script>
 <style>
 :root{
   /* OWN: eigen semantiek + shell; kleuren uit css/sense-theme.css */
@@ -6522,8 +6524,9 @@ function extractChatGptUserMessages(data){
   return rows;
 }
 async function extractFromChatGptZipFile(file){
-  if(typeof JSZip==='undefined')throw new Error('ZIP-ondersteuning niet geladen. Herlaad de pagina.');
-  var zip=await JSZip.loadAsync(await file.arrayBuffer());
+  var JSZipLib=window.senseEnsureJSZip?await window.senseEnsureJSZip():(typeof JSZip!=='undefined'?JSZip:null);
+  if(!JSZipLib)throw new Error('ZIP-ondersteuning kon niet worden geladen. Controleer je netwerk en probeer opnieuw.');
+  var zip=await JSZipLib.loadAsync(await file.arrayBuffer());
   var target=null;
   zip.forEach(function(path,entry){
     if(entry.dir)return;
