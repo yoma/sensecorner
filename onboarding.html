@@ -12,7 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/sense-common.js"></script>
   <script src="js/sense-mirror-hub.js"></script>
-  <script src="js/sense-auth-client.js"></script>
+  <script src="js/sense-auth-client.js?v=20261015pw1"></script>
   <script src="js/selfsense-aandachtspunten-detect.js"></script>
   <style>
     :root {
@@ -1049,7 +1049,7 @@
         <p class="ob-sensei smaller" data-type="Zo kun je later ook inloggen op de landingspagina."></p>
         <div class="ob-input-wrap" id="obWrapPw">
           <div class="ob-pw-field">
-            <input type="password" class="ob-text-input" id="obPwInput" placeholder="Wachtwoord (min. 6)" autocomplete="new-password">
+            <input type="password" class="ob-text-input" id="obPwInput" placeholder="Wachtwoord (min. 8)" autocomplete="new-password">
             <button type="button" class="ob-pw-eye" id="obPwToggle" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
           </div>
           <div class="ob-pw-field">
@@ -3989,7 +3989,10 @@
   function obPasswordFormOk() {
     var pw = String((pwInput && pwInput.value) || "");
     var pw2 = String((pwConfirm && pwConfirm.value) || "");
-    return pw.length >= 6 && pw === pw2;
+    var minLen = (typeof window.SENSE_MIN_PASSWORD_LENGTH === 'number' && window.SENSE_MIN_PASSWORD_LENGTH > 0)
+      ? window.SENSE_MIN_PASSWORD_LENGTH
+      : 8;
+    return pw.length >= minLen && pw === pw2;
   }
   function obSyncPasswordBtn() {
     if (pwBtn) pwBtn.disabled = !obPasswordFormOk();
@@ -4020,8 +4023,15 @@
     if (errEl) errEl.textContent = "";
     var pw = String((pwInput && pwInput.value) || "");
     var pw2 = String((pwConfirm && pwConfirm.value) || "");
-    if (pw.length < 6) {
-      if (errEl) errEl.textContent = "Wachtwoord moet minstens 6 tekens hebben.";
+    var minLen = (typeof window.SENSE_MIN_PASSWORD_LENGTH === 'number' && window.SENSE_MIN_PASSWORD_LENGTH > 0)
+      ? window.SENSE_MIN_PASSWORD_LENGTH
+      : 8;
+    if (pw.length < minLen) {
+      if (errEl) {
+        errEl.textContent = window.sensePasswordTooShortMessage
+          ? window.sensePasswordTooShortMessage()
+          : ("Wachtwoord moet minstens " + minLen + " tekens hebben.");
+      }
       return;
     }
     if (pw !== pw2) {

@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sense-common.js?v=1908261100"></script>
 <script src="js/sense-mirror-hub.js?v=2007261245"></script>
-<script src="js/sense-auth-client.js"></script>
+<script src="js/sense-auth-client.js?v=20261015pw1"></script>
 <script type="module" src="js/senseiCore-loader.js?v=2207260830"></script>
 <script src="js/gateway-chat.js?v=1908261056"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -1245,7 +1245,7 @@ a.app-card{color:inherit;text-decoration:none}
     <div id="authNameHint" class="auth-name-hint" style="display:none">Naam is verplicht bij account aanmaken.</div>
     <input id="authEmail" class="auth-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
     <div class="auth-pw-wrap">
-      <input id="authPassword" class="auth-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
+      <input id="authPassword" class="auth-input" type="password" placeholder="Wachtwoord" autocomplete="current-password">
       <button id="authPwToggleBtn" class="auth-eye-btn" type="button" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
     </div>
     <div class="auth-help-row">
@@ -3140,7 +3140,10 @@ a.app-card{color:inherit;text-decoration:none}
       if(!isRegister)authName.value='';
     }
     if(authNameHint)authNameHint.style.display=isRegister?'block':'none';
-    if(authPassword)authPassword.autocomplete=isRegister?'new-password':'current-password';
+    if(authPassword){
+      authPassword.autocomplete=isRegister?'new-password':'current-password';
+      authPassword.placeholder=isRegister?'Wachtwoord (min. 8)':'Wachtwoord';
+    }
     if(authOverlay){
       authOverlay.classList.add('show');
       authOverlay.setAttribute('aria-hidden','false');
@@ -4715,6 +4718,7 @@ a.app-card{color:inherit;text-decoration:none}
     if(!sb){setAuthMsg('Supabase niet beschikbaar.',true);return;}
     var email=String((authEmail&&authEmail.value)||'').trim();
     var pw=String((authPassword&&authPassword.value)||'');
+    /* Geen min-lengtecheck op login: bestaande wachtwoorden < 8 tekens blijven geldig. */
     if(!email||!pw){setAuthMsg('Vul email en wachtwoord in.',true);return;}
     setAuthMsg('Bezig met inloggen…');
     setAuthBusy(true);
@@ -4729,7 +4733,7 @@ a.app-card{color:inherit;text-decoration:none}
         return;
       }
       if(res&&res.error){
-        setAuthMsg(window.senseMapAuthError?window.senseMapAuthError(res.error):(res.error.message||'Inloggen mislukt.'),true);
+        setAuthMsg(window.senseMapAuthError?window.senseMapAuthError(res.error,{context:'login'}):(res.error.message||'Inloggen mislukt.'),true);
         return;
       }
       var session=(res.data&&res.data.session)||null;
@@ -4749,7 +4753,11 @@ a.app-card{color:inherit;text-decoration:none}
         setAuthMsg('Inloggen gelukt maar sessie kon niet worden bevestigd. Probeer opnieuw.',true);
         return;
       }
-      setAuthMsg('Welkom! Je bent aangemeld.');
+      if(window.senseSignInWeakPassword&&window.senseSignInWeakPassword(res)){
+        setAuthMsg(window.senseWeakPasswordLoginNudge?window.senseWeakPasswordLoginNudge():'Welkom! Je bent aangemeld.');
+      }else{
+        setAuthMsg('Welkom! Je bent aangemeld.');
+      }
       closeAuthModal();
       if(pendingReturnTo){
         window.location.href=window.senseNormalizeReturnTo?window.senseNormalizeReturnTo(pendingReturnTo,'sensecorner.html'):pendingReturnTo;
@@ -4767,6 +4775,10 @@ a.app-card{color:inherit;text-decoration:none}
     var pw=String((authPassword&&authPassword.value)||'');
     if(!name){setAuthMsg('Naam is verplicht bij account aanmaken.',true);if(authName)authName.focus();return;}
     if(!email||!pw){setAuthMsg('Vul naam, email en wachtwoord in.',true);return;}
+    if(!(window.sensePasswordMeetsPolicy?window.sensePasswordMeetsPolicy(pw):pw.length>=8)){
+      setAuthMsg(window.sensePasswordTooShortMessage?window.sensePasswordTooShortMessage():'Wachtwoord moet minstens 8 tekens hebben.',true);
+      return;
+    }
     setAuthMsg('Account aanmaken…');
     setAuthBusy(true);
     try{
@@ -4778,7 +4790,7 @@ a.app-card{color:inherit;text-decoration:none}
           data:{full_name:name,display_name:name,roepnaam:name}
         }
       });
-      if(signRes&&signRes.error){setAuthMsg(signRes.error.message||'Account maken mislukt.',true);return;}
+      if(signRes&&signRes.error){setAuthMsg((window.senseMapAuthError?window.senseMapAuthError(signRes.error,{context:'register'}):null)||signRes.error.message||'Account maken mislukt.',true);return;}
       try{
         var sid=(user&&user.id)?String(user.id):'';
         scOwnBridgeRemove('ownsense_hub_profile_v2',sid);

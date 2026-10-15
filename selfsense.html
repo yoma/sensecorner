@@ -12,6 +12,7 @@
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
 <meta name="fs-build" content="20-07-2026 12:45">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/sense-auth-client.js?v=20261015pw1"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sense-common.js?v=1908261100"></script>
 <script src="js/selfsense-aandachtspunten-detect.js"></script>
@@ -7160,6 +7161,7 @@ async function doLogin(){
   var err=document.getElementById('lErr');
   var e=eEl?eEl.value.trim():'';
   var p=pEl?pEl.value:'';
+  /* Geen min-lengtecheck op login: bestaande wachtwoorden < 8 tekens blijven geldig. */
   if(!e||!p){
     if(err){err.style.color='var(--r)';err.textContent='Vul email en wachtwoord in.';}
     _loginInFlight=false;
@@ -7175,7 +7177,8 @@ async function doLogin(){
       'Inloggen time-out. Probeer opnieuw.'
     );
     if(signRes&&signRes.error){
-      throw new Error(signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
+      var mappedLogin=window.senseMapAuthError?window.senseMapAuthError(signRes.error,{context:'login'}):'';
+      throw new Error(mappedLogin||signRes.error.message||'Inloggen mislukt. Probeer opnieuw.');
     }
     var session=await confirmSessionAfterSignIn(signRes,{attempts:16});
     if(!session||!session.user){
@@ -7183,16 +7186,26 @@ async function doLogin(){
     }
     var ok=await enterAuthenticatedApp(session,{screen:getPostAuthTargetScreen(),forceResync:true,fullSync:true});
     if(!ok)throw new Error('Kon je account niet laden. Probeer opnieuw.');
-    if(err){err.style.color='#2E7D32';err.textContent='Welkom! Je bent aangemeld.';}
+    if(err){
+      if(window.senseSignInWeakPassword&&window.senseSignInWeakPassword(signRes)){
+        err.style.color='#8A6015';
+        err.textContent=window.senseWeakPasswordLoginNudge?window.senseWeakPasswordLoginNudge():'Welkom! Je bent aangemeld.';
+      }else{
+        err.style.color='#2E7D32';
+        err.textContent='Welkom! Je bent aangemeld.';
+      }
+    }
   }catch(x){
     if(token!==_loginAttemptId)return;
-    var msg=(x&&x.message?String(x.message):'').toLowerCase();
+    var rawMsg=String((x&&x.message)||'');
+    var msg=rawMsg.toLowerCase();
     var friendly='Inloggen mislukt. Probeer opnieuw.';
-    if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
+    if(msg.indexOf('beveiligingseisen')>=0||msg.indexOf('wachtwoord vergeten')>=0)friendly=rawMsg;
+    else if(msg.includes('invalid login credentials')||msg.includes('invalid_credentials'))friendly='Fout wachtwoord of emailadres.';
     else if(msg.includes('email not confirmed'))friendly='Email nog niet bevestigd. Controleer je mailbox.';
     else if(msg.includes('too many requests'))friendly='Te veel pogingen. Wacht even en probeer opnieuw.';
     else if(msg.includes('time-out')||msg.includes('timeout'))friendly='Inloggen time-out. Probeer opnieuw.';
-    else if(msg.includes('sessie'))friendly=String(x.message||friendly);
+    else if(msg.includes('sessie'))friendly=rawMsg||friendly;
     var e3=document.getElementById('lErr')||err;
     if(e3){e3.style.color='var(--r)';e3.textContent=friendly;}
   }finally{
@@ -7248,7 +7261,7 @@ async function doRegister(){
   var p=pwEl?pwEl.value:'';
   var p2=pw2El?pw2El.value:'';
   if(!e||!p||!p2){err.style.color='var(--r)';err.textContent='Vul email, wachtwoord en herhaal wachtwoord in.';return;}
-  if(p.length<6){err.style.color='var(--r)';err.textContent='Wachtwoord moet minstens 6 tekens hebben.';return;}
+  if(!(window.sensePasswordMeetsPolicy?window.sensePasswordMeetsPolicy(p):p.length>=8)){err.style.color='var(--r)';err.textContent=window.sensePasswordTooShortMessage?window.sensePasswordTooShortMessage():'Wachtwoord moet minstens 8 tekens hebben.';return;}
   if(p!==p2){err.style.color='var(--r)';err.textContent='Wachtwoorden komen niet overeen.';return;}
   setButtonSaveBusy(btn,true,{busyLabel:'Account aanmaken…'});
   err.textContent='Account wordt aangemaakt...';err.style.color='#888';
@@ -8769,7 +8782,7 @@ async function newSenseFromDrawer(){
 
 // ══ Login / Register ══════════════════════════════════════════════
 function rLogin(el){el.innerHTML=`<div style="padding:36px 20px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Welkom terug</div><p style="font-size:15px;color:#666;margin-bottom:22px;line-height:1.6">Log in om je dossiers te openen - overal, op elk apparaat.</p><form class="ds-auth-form" onsubmit="event.preventDefault();doLogin();return false;" autocomplete="on"><input class="form-input" id="lEmail" name="email" type="email" autocomplete="username" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="lPw" name="password" type="password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/><button type="button" id="pwToggleBtn" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="togglePwVis()">👁</button></div><button type="submit" id="lLoginBtn" class="form-btn">Inloggen</button></form><div style="text-align:center;margin-top:8px"><button type="button" class="coach-save-other" style="font-size:12px" onclick="forgotPassword()">Wachtwoord vergeten?</button></div><div id="lErr" style="font-size:14px;text-align:center;margin-top:10px;line-height:1.5"></div><div style="margin-top:18px;padding-top:16px;border-top:1px solid #F1E4E4"><div style="font-size:12px;font-weight:800;color:#8B4B24;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">Eerste keer hier?</div><button type="button" class="form-btn sec" style="margin-bottom:0" onclick="goScreen('register')">Gratis account aanmaken</button></div></div>`;}
-function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in SelfSense.</div><form class="ds-auth-form" onsubmit="event.preventDefault();doRegister();return false;" autocomplete="on"><input class="form-input" id="rEmail" name="email" type="email" autocomplete="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" name="new-password" type="password" placeholder="Wachtwoord (min. 6 tekens)" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button type="submit" id="rRegisterBtn" class="form-btn">Maak mijn account aan</button></form><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button type="button" class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
+function rRegister(el){el.innerHTML=`<div style="padding:28px 20px 36px"><div style="font-size:26px;font-weight:800;color:var(--t);margin-bottom:6px">Account aanmaken</div><p style="font-size:15px;color:#666;margin-bottom:18px;line-height:1.6">Maak je account aan, bevestig je email en werk daarna stap voor stap je eerste profiel en dossier af.</p><div style="background:#FFF8F2;border:1px solid #F6D9C7;border-radius:12px;padding:12px 14px;font-size:13px;color:#8B4B24;line-height:1.55;margin-bottom:16px"><strong>Zo werkt het:</strong> 1. Maak je account aan. 2. Bevestig via je mailbox. 3. Log in en voltooi je eerste stappen in SelfSense.</div><form class="ds-auth-form" onsubmit="event.preventDefault();doRegister();return false;" autocomplete="on"><input class="form-input" id="rEmail" name="email" type="email" autocomplete="email" placeholder="jouw@email.com"/><div class="pw-input-wrap"><input class="form-input" id="rPw" name="new-password" type="password" placeholder="Wachtwoord (min. 8 tekens)" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw',this)">👁</button></div><div class="pw-input-wrap"><input class="form-input" id="rPw2" type="password" placeholder="Herhaal wachtwoord" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/><button type="button" class="pw-eye-btn" aria-label="Wachtwoord tonen/verbergen" onclick="toggleRegisterPw('rPw2',this)">👁</button></div><button type="submit" id="rRegisterBtn" class="form-btn">Maak mijn account aan</button></form><div id="rErr" style="font-size:14px;text-align:center;margin:10px 0 14px;line-height:1.5"></div><button type="button" class="form-btn sec" onclick="goScreen('login')">Ik heb al een account</button></div>`;}
 
 function getScopedStorageKey(base){
   var userPart='';

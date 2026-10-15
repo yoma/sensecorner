@@ -3,6 +3,39 @@
   var SKEY='sb_publishable_ShIeY18JCYiH8fyXm_anHw_Y1jP2skq';
   var STORAGE_KEY='sensecorner-auth-v1';
   var LOGIN_BOUNCE_KEY='sc_login_bounce';
+  /**
+   * Minimale lengte voor NIEUWE wachtwoorden (registratie / onboarding / reset / updateUser).
+   * NOOIT afdwingen op loginformulieren: bestaande users met kortere wachtwoorden moeten kunnen inloggen.
+   */
+  var SENSE_MIN_PASSWORD_LENGTH=8;
+
+  function sensePasswordMeetsPolicy(pw){
+    return String(pw||'').length>=SENSE_MIN_PASSWORD_LENGTH;
+  }
+
+  function sensePasswordTooShortMessage(){
+    return 'Wachtwoord moet minstens '+SENSE_MIN_PASSWORD_LENGTH+' tekens hebben.';
+  }
+
+  /** Soft warning na geslaagde login als Auth weakPassword meestuurt (sessie blijft geldig). */
+  function senseWeakPasswordLoginNudge(){
+    return 'Je bent ingelogd. Tip: kies via «Wachtwoord vergeten?» een sterker wachtwoord (min. '+SENSE_MIN_PASSWORD_LENGTH+' tekens).';
+  }
+
+  /**
+   * GoTrue password-grant: bij geldig maar te zwak wachtwoord → HTTP 200 + session + weak_password.
+   * Hard AuthWeakPasswordError hoort bij signup/updateUser, niet bij geslaagde login.
+   * @returns {null|{reasons:string[],message?:string}}
+   */
+  function senseSignInWeakPassword(signRes){
+    if(!signRes)return null;
+    var data=signRes.data||signRes;
+    var wp=data&&(data.weakPassword||data.weak_password);
+    if(!wp)return null;
+    var reasons=Array.isArray(wp.reasons)?wp.reasons:[];
+    if(!reasons.length&&!wp.message)return null;
+    return {reasons:reasons,message:wp.message||''};
+  }
 
   function senseReadPersistedSession(){
     try{
@@ -27,12 +60,54 @@
     }
   }
 
-  function senseMapAuthError(err){
+  function senseIsWeakPasswordError(err){
+    var msg=String((err&&err.message)||err||'').trim();
+    var code=String((err&&err.code)||(err&&err.error_code)||'').trim().toLowerCase();
+    var name=String((err&&err.name)||'').trim().toLowerCase();
+    var low=msg.toLowerCase();
+    var reasons=err&&err.reasons;
+    var reasonStr=Array.isArray(reasons)?reasons.join(' ').toLowerCase():'';
+    return (
+      code==='weak_password'||
+      name.indexOf('weakpassword')>=0||
+      low.indexOf('weak password')>=0||
+      low.indexOf('password is known')>=0||
+      low.indexOf('pwned')>=0||
+      low.indexOf('leaked')>=0||
+      reasonStr.indexOf('pwned')>=0||
+      reasonStr.indexOf('length')>=0||
+      reasonStr.indexOf('characters')>=0
+    );
+  }
+
+  /**
+   * @param {*} err
+   * @param {{context?: string}=} opts context: 'login' | 'register' | 'update' (default register/update tone)
+   */
+  function senseMapAuthError(err,opts){
+    opts=opts||{};
+    var ctx=String(opts.context||'').toLowerCase();
     var msg=String((err&&err.message)||err||'').trim();
     var code=String((err&&err.code)||(err&&err.error_code)||'').trim().toLowerCase();
     var low=msg.toLowerCase();
+    var reasons=err&&err.reasons;
+    var reasonStr=Array.isArray(reasons)?reasons.join(' ').toLowerCase():'';
     if(code==='invalid_credentials'||low.indexOf('invalid login credentials')>=0){
       return 'E-mail of wachtwoord klopt niet. Controleer je gegevens of gebruik «Wachtwoord vergeten?».';
+    }
+    if(senseIsWeakPasswordError(err)){
+      /* Login: nooit doen alsof het typed wachtwoord "te kort is om in te loggen" via clientregel.
+         Als Auth login hard weigert (zeldzaam), stuur naar reset. */
+      if(ctx==='login'){
+        return 'Je huidige wachtwoord voldoet niet meer aan de beveiligingseisen. Gebruik «Wachtwoord vergeten?» om een nieuw wachtwoord van minstens '+SENSE_MIN_PASSWORD_LENGTH+' tekens in te stellen. Je gegevens blijven bewaard.';
+      }
+      if(reasonStr.indexOf('pwned')>=0||low.indexOf('pwned')>=0||low.indexOf('leaked')>=0||low.indexOf('known to be weak')>=0){
+        return 'Dit wachtwoord is te zwak of bekend uit datalekken. Kies een langer, uniek wachtwoord.';
+      }
+      if(reasonStr.indexOf('length')>=0||low.indexOf('at least')>=0){
+        return sensePasswordTooShortMessage();
+      }
+      return 'Dit wachtwoord voldoet niet aan de eisen. Kies een sterker wachtwoord (min. '+SENSE_MIN_PASSWORD_LENGTH+' tekens).';
     }
     if(code==='email_not_confirmed'||low.indexOf('email not confirmed')>=0){
       return 'Bevestig eerst je e-mail via de link in je mailbox, en log daarna opnieuw in.';
@@ -168,6 +243,12 @@
   global.SENSE_AUTH_URL=SURL;
   global.SENSE_AUTH_KEY=SKEY;
   global.SENSE_AUTH_STORAGE_KEY=STORAGE_KEY;
+  global.SENSE_MIN_PASSWORD_LENGTH=SENSE_MIN_PASSWORD_LENGTH;
+  global.sensePasswordMeetsPolicy=sensePasswordMeetsPolicy;
+  global.sensePasswordTooShortMessage=sensePasswordTooShortMessage;
+  global.senseWeakPasswordLoginNudge=senseWeakPasswordLoginNudge;
+  global.senseSignInWeakPassword=senseSignInWeakPassword;
+  global.senseIsWeakPasswordError=senseIsWeakPasswordError;
   global.senseReadPersistedSession=senseReadPersistedSession;
   global.senseMapAuthError=senseMapAuthError;
   global.senseCreateAuthClient=senseCreateAuthClient;

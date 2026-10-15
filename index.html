@@ -783,7 +783,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     <div id="lpAuthNameHint" class="lp-login-name-hint">Naam is verplicht bij account aanmaken.</div>
     <input id="lpAuthEmail" class="lp-login-input" type="email" placeholder="jouw@email.com" autocomplete="username email">
     <div class="lp-login-pw-wrap">
-      <input id="lpAuthPassword" class="lp-login-input" type="password" placeholder="Wachtwoord (min. 6)" autocomplete="current-password">
+      <input id="lpAuthPassword" class="lp-login-input" type="password" placeholder="Wachtwoord" autocomplete="current-password">
       <button type="button" class="lp-login-eye" id="lpAuthPwToggle" aria-label="Toon wachtwoord" aria-pressed="false">Toon</button>
     </div>
     <div class="lp-login-help">
@@ -822,7 +822,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sc-mark.js" defer></script>
 <script src="js/sense-common.js"></script>
-<script src="js/sense-auth-client.js"></script>
+<script src="js/sense-auth-client.js?v=20261015pw1"></script>
 <script>
 (function(){
   if(window.senseCreateAuthClient)window.senseCreateAuthClient();
@@ -1222,7 +1222,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       if(loginSub)loginSub.textContent='Maak je account aan. Na bevestiging via e-mail log je in en werk je je profiel verder af.';
       if(elName)elName.style.display='block';
       if(elNameHint)elNameHint.style.display='block';
-      if(elPw)elPw.autocomplete='new-password';
+      if(elPw){elPw.autocomplete='new-password';elPw.placeholder='Wachtwoord (min. 8)';}
       if(btnReg)btnReg.textContent='Registratie versturen';
       if(btnLogin)btnLogin.textContent='Terug naar inloggen';
     }else{
@@ -1230,7 +1230,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
       if(loginSub)loginSub.textContent='Eén account voor OWN Sense, DateSense en FamilySense.';
       if(elName){elName.style.display='none';elName.value='';}
       if(elNameHint)elNameHint.style.display='none';
-      if(elPw)elPw.autocomplete='current-password';
+      if(elPw){elPw.autocomplete='current-password';elPw.placeholder='Wachtwoord';}
       if(btnReg)btnReg.textContent='Account maken';
       if(btnLogin)btnLogin.textContent='Inloggen';
     }
@@ -1393,6 +1393,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     }
     var email=String((elEmail&&elEmail.value)||'').trim();
     var pw=String((elPw&&elPw.value)||'');
+    /* Geen min-lengtecheck op login: bestaande wachtwoorden < 8 tekens blijven geldig. */
     if(!email||!pw){setMsg('Vul e-mail en wachtwoord in.',true);return;}
     var attemptId=++lpLoginAttemptId;
     setMsg('Bezig met inloggen…',false);
@@ -1417,7 +1418,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         return;
       }
       if(res&&res.error){
-        var mapped=window.senseMapAuthError?window.senseMapAuthError(res.error):'';
+        var mapped=window.senseMapAuthError?window.senseMapAuthError(res.error,{context:'login'}):'';
         setMsg(mapped||res.error.message||'Inloggen mislukt.',true);
         return;
       }
@@ -1439,7 +1440,11 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         return;
       }
       if(attemptId!==lpLoginAttemptId)return;
-      setMsg('Je bent aangemeld.',false);
+      if(window.senseSignInWeakPassword&&window.senseSignInWeakPassword(res)){
+        setMsg(window.senseWeakPasswordLoginNudge?window.senseWeakPasswordLoginNudge():'Je bent aangemeld.',false);
+      }else{
+        setMsg('Je bent aangemeld.',false);
+      }
       try{
         await afterAuthSuccess(res,session);
       }catch(_ae){
@@ -1447,7 +1452,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
         else setMsg('Kon inloggen niet afronden. Probeer opnieuw.',true);
       }
     }catch(_e7){
-      setMsg(window.senseMapAuthError?window.senseMapAuthError(_e7):'Inloggen mislukt. Probeer opnieuw.',true);
+      setMsg(window.senseMapAuthError?window.senseMapAuthError(_e7,{context:'login'}):'Inloggen mislukt. Probeer opnieuw.',true);
     }
     finally{
       if(attemptId===lpLoginAttemptId)lpSetAuthBusy(false);
@@ -1464,6 +1469,10 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
     var pw=String((elPw&&elPw.value)||'');
     if(!name){setMsg('Vul je naam in.',true);if(elName)elName.focus();return;}
     if(!email||!pw){setMsg('Vul e-mail en wachtwoord in.',true);return;}
+    if(!(window.sensePasswordMeetsPolicy?window.sensePasswordMeetsPolicy(pw):pw.length>=8)){
+      setMsg(window.sensePasswordTooShortMessage?window.sensePasswordTooShortMessage():'Wachtwoord moet minstens 8 tekens hebben.',true);
+      return;
+    }
     setMsg('Account aanmaken…',false);
     lpSetAuthBusy(true);
     try{
@@ -1475,7 +1484,7 @@ html.lp-auth-noscroll,body.lp-auth-noscroll{overflow:hidden;touch-action:none}
           data:{full_name:name,display_name:name,roepnaam:name}
         }
       });
-      if(signRes&&signRes.error){setMsg(signRes.error.message||'Account maken mislukt.',true);return;}
+      if(signRes&&signRes.error){setMsg((window.senseMapAuthError?window.senseMapAuthError(signRes.error,{context:'register'}):null)||signRes.error.message||'Account maken mislukt.',true);return;}
       try{
         localStorage.removeItem('ownsense_hub_profile_v2');
         localStorage.removeItem('ownsense_profile_v1');
