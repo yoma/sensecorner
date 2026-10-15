@@ -17,6 +17,132 @@
     return 'Wachtwoord moet minstens '+SENSE_MIN_PASSWORD_LENGTH+' tekens hebben.';
   }
 
+  /**
+   * Live feedback voor NIEUWE wachtwoorden (niet voor login).
+   * @returns {{ok:boolean,need:number,level:number,label:string,hint:string,pct:number}}
+   */
+  function sensePasswordStrength(pw){
+    pw=String(pw||'');
+    var len=pw.length;
+    var min=SENSE_MIN_PASSWORD_LENGTH;
+    var need=Math.max(0,min-len);
+    var variety=0;
+    if(/[a-z]/.test(pw))variety++;
+    if(/[A-Z]/.test(pw))variety++;
+    if(/\d/.test(pw))variety++;
+    if(/[^A-Za-z0-9]/.test(pw))variety++;
+    if(!len){
+      return {ok:false,need:min,level:0,label:'',hint:'Minstens '+min+' tekens',pct:0};
+    }
+    if(need>0){
+      return {
+        ok:false,
+        need:need,
+        level:1,
+        label:'Te kort',
+        hint:need===1?'Nog 1 teken':'Nog '+need+' tekens',
+        pct:Math.max(8,Math.round((len/min)*40))
+      };
+    }
+    if(len<min+2||variety<2){
+      return {ok:true,need:0,level:2,label:'Zwak',hint:'Mag al, sterker mag ook',pct:55};
+    }
+    if(variety>=3&&len>=min+4){
+      return {ok:true,need:0,level:4,label:'Sterk',hint:'Goed zo',pct:100};
+    }
+    return {ok:true,need:0,level:3,label:'Oké',hint:'Voldoet aan de eis',pct:78};
+  }
+
+  function senseEnsurePasswordMeterStyles(){
+    if(typeof document==='undefined')return;
+    if(document.getElementById('sense-pw-meter-css'))return;
+    var s=document.createElement('style');
+    s.id='sense-pw-meter-css';
+    s.textContent=
+      '.sense-pw-meter{margin:8px 0 2px;padding:0 2px;transition:opacity .2s ease}'+
+      '.sense-pw-meter[hidden]{display:none!important}'+
+      '.sense-pw-meter-track{height:6px;border-radius:999px;background:rgba(61,47,31,.08);overflow:hidden}'+
+      '.sense-pw-meter-fill{height:100%;width:0;border-radius:inherit;transition:width .22s ease,background-color .22s ease;background:#C4A484}'+
+      '.sense-pw-meter[data-level="1"] .sense-pw-meter-fill{background:#C47A5A}'+
+      '.sense-pw-meter[data-level="2"] .sense-pw-meter-fill{background:#C4A035}'+
+      '.sense-pw-meter[data-level="3"] .sense-pw-meter-fill{background:#7A9A6A}'+
+      '.sense-pw-meter[data-level="4"] .sense-pw-meter-fill{background:#5A7A52}'+
+      '.sense-pw-meter-text{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:6px;font-size:12px;line-height:1.35;color:#8A7560}'+
+      '.sense-pw-meter-label{font-weight:800;letter-spacing:.02em}'+
+      '.sense-pw-meter[data-level="1"] .sense-pw-meter-label{color:#A85A3A}'+
+      '.sense-pw-meter[data-level="2"] .sense-pw-meter-label{color:#9A7A18}'+
+      '.sense-pw-meter[data-level="3"] .sense-pw-meter-label,.sense-pw-meter[data-level="4"] .sense-pw-meter-label{color:#4A6A42}'+
+      '.sense-pw-meter-hint{font-weight:600;opacity:.92;text-align:right}';
+    (document.head||document.documentElement).appendChild(s);
+  }
+
+  /**
+   * Bind live meter onder een new-password veld. Nooit op login gebruiken.
+   * @returns {{refresh:Function,setActive:Function,el:HTMLElement}|null}
+   */
+  function senseAttachPasswordMeter(input,opts){
+    opts=opts||{};
+    if(!input||typeof document==='undefined')return null;
+    senseEnsurePasswordMeterStyles();
+    var existing=input._sensePwMeter;
+    if(existing&&existing.el&&existing.el.isConnected){
+      if(typeof opts.active==='boolean')existing.setActive(opts.active);
+      existing.refresh();
+      return existing;
+    }
+    var meter=opts.host||null;
+    if(!meter){
+      var wrap=input.closest('.pw-input-wrap,.lp-login-pw-wrap,.auth-pw-wrap,.ob-pw-field,.ob-input-wrap')||input.parentElement;
+      if(wrap&&wrap.parentElement){
+        meter=wrap.parentElement.querySelector(':scope > .sense-pw-meter');
+      }
+    }
+    if(!meter){
+      meter=document.createElement('div');
+      meter.className='sense-pw-meter';
+      meter.setAttribute('aria-live','polite');
+      meter.innerHTML=
+        '<div class="sense-pw-meter-track"><div class="sense-pw-meter-fill"></div></div>'+
+        '<div class="sense-pw-meter-text"><span class="sense-pw-meter-label"></span><span class="sense-pw-meter-hint"></span></div>';
+      var anchor=input.closest('.pw-input-wrap,.lp-login-pw-wrap,.auth-pw-wrap,.ob-pw-field')||input;
+      if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(meter,anchor.nextSibling);
+      else input.insertAdjacentElement('afterend',meter);
+    }
+    var fill=meter.querySelector('.sense-pw-meter-fill');
+    var labelEl=meter.querySelector('.sense-pw-meter-label');
+    var hintEl=meter.querySelector('.sense-pw-meter-hint');
+    var active=opts.active!==false;
+    function setActive(on){
+      active=!!on;
+      if(!active){
+        meter.hidden=true;
+        return;
+      }
+      refresh();
+    }
+    function refresh(){
+      if(!active){
+        meter.hidden=true;
+        return;
+      }
+      var st=sensePasswordStrength(input.value);
+      var show=opts.hideWhenEmpty===false?true:!!String(input.value||'').length;
+      meter.hidden=!show;
+      if(!show)return;
+      meter.dataset.level=String(st.level);
+      if(fill)fill.style.width=st.pct+'%';
+      if(labelEl)labelEl.textContent=st.label||'';
+      if(hintEl)hintEl.textContent=st.hint||'';
+    }
+    input.addEventListener('input',refresh);
+    input.addEventListener('change',refresh);
+    input.addEventListener('focus',refresh);
+    var api={refresh:refresh,setActive:setActive,el:meter};
+    input._sensePwMeter=api;
+    setActive(active);
+    return api;
+  }
+
   /** Soft warning na geslaagde login als Auth weakPassword meestuurt (sessie blijft geldig). */
   function senseWeakPasswordLoginNudge(){
     return 'Je bent ingelogd. Tip: kies via «Wachtwoord vergeten?» een sterker wachtwoord (min. '+SENSE_MIN_PASSWORD_LENGTH+' tekens).';
@@ -246,6 +372,8 @@
   global.SENSE_MIN_PASSWORD_LENGTH=SENSE_MIN_PASSWORD_LENGTH;
   global.sensePasswordMeetsPolicy=sensePasswordMeetsPolicy;
   global.sensePasswordTooShortMessage=sensePasswordTooShortMessage;
+  global.sensePasswordStrength=sensePasswordStrength;
+  global.senseAttachPasswordMeter=senseAttachPasswordMeter;
   global.senseWeakPasswordLoginNudge=senseWeakPasswordLoginNudge;
   global.senseSignInWeakPassword=senseSignInWeakPassword;
   global.senseIsWeakPasswordError=senseIsWeakPasswordError;
