@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sense-auth-client.js?v=20261015a"></script>
 <script src="js/sense-jszip.js?v=20261015a"></script>
-<script src="js/sense-common.js?v=20261015b"></script>
+<script src="js/sense-common.js?v=20261015c"></script>
 <script src="js/sense-mirror-hub.js?v=20261015a"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -3477,16 +3477,25 @@ function formatSavePDiag(diag){
   if(code)part+=' · code '+code;
   return part;
 }
+var _senseSignedUrlCache={};
 async function getStorageObjectUrl(bucket,path){
   if(!sb||!bucket||!path)return'';
+  var cacheKey=String(bucket)+'::'+String(path);
+  var hit=_senseSignedUrlCache[cacheKey];
+  if(hit&&hit.url&&hit.exp>Date.now())return hit.url;
   try{
     var sign=await sb.storage.from(bucket).createSignedUrl(path,60*60*24*30);
+    if(sign&&sign.error)return'';
     var signed=(sign&&sign.data&&sign.data.signedUrl)||'';
-    if(signed)return signed;
+    if(signed){
+      _senseSignedUrlCache[cacheKey]={url:signed,exp:Date.now()+1000*60*60*6};
+      return signed;
+    }
   }catch(_e){}
-  var pub=sb.storage.from(bucket).getPublicUrl(path);
-  return (pub&&pub.data&&pub.data.publicUrl)||'';
+  // Geen getPublicUrl-fallback: private buckets geven een https-URL die in <img> als blauw "?" crasht.
+  return'';
 }
+
 function isDirectlyLoadableImageUrl(u){
   return/^https?:\/\//i.test(String(u||'').trim())||/^data:/i.test(String(u||'').trim())||/^blob:/i.test(String(u||'').trim());
 }
@@ -3526,8 +3535,13 @@ async function refreshPhotoRef(v,bucketHints){
   if(!s)return'';
   var ref=parseStorageRef(s);
   if(ref&&ref.path){
-    if(ref.bucket)return await getStorageObjectUrl(ref.bucket,ref.path);
-    var fromFallback=await signWithFallbackBuckets(ref.path,bucketHints||[]);
+    if(ref.bucket){
+      var direct=await getStorageObjectUrl(ref.bucket,ref.path);
+      if(direct)return direct;
+    }
+    var hints=(bucketHints||[]).slice();
+    if(ref.bucket&&hints.indexOf(ref.bucket)<0)hints.unshift(ref.bucket);
+    var fromFallback=await signWithFallbackBuckets(ref.path,hints);
     if(fromFallback)return fromFallback;
   }
   if(isDirectlyLoadableImageUrl(s)&&!isLikelyExpiringStorageUrl(s)&&!senseIsUnsafePhotoUrl(s))return s;
@@ -5111,11 +5125,8 @@ async function loadAll(opts){
   try{await normalizeLegacyFriendScopes();}catch(e){console.warn('normalizeLegacyFriendScopes',e);}
   try{mirrorOwnSenseCatsToLocalStorage();}catch(_e){}
   frSaveProfilesCache();
-  if(opts.deferHeavy===false){
-    await frLoadAllDeferredWork();
-  }else{
-    void frLoadAllDeferredWork();
-  }
+  // Altijd awaiten: anders toont Home eerst verlopen signed URLs (blauw "?") tot een late refresh.
+  await frLoadAllDeferredWork();
 }
 
 /** Herstelt gemixte scope-data voor friend-dossiers (fr verplicht; fs/ds eruit). */
@@ -7426,12 +7437,14 @@ function renderHomeNotePerson(dossier){
   var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
   var avCol=avatarColors[(ci>=0?ci:0)%avatarColors.length];
   var avInit=escHTML((label.charAt(0)||'?').toUpperCase());
-  var avatar=meta.photo_url
-    ?('<span style="position:relative;display:inline-flex;width:26px;height:26px;flex-shrink:0">'
-      +'<img class="home-note-avatar" src="'+escHTML(meta.photo_url)+'" alt="'+escHTML(label)+'" onerror="this.style.display=\'none\';if(this.nextElementSibling)this.nextElementSibling.style.display=\'flex\';">'
-      +'<div class="home-note-avatar-fallback" style="display:none;background:'+avCol+'">'+avInit+'</div>'
-      +'</span>')
-    :'<div class="home-note-avatar-fallback" style="background:'+avCol+'">'+avInit+'</div>';
+  var photoSrc=String(meta.photo_url||'').trim();
+  if(photoSrc&&!(/^https?:\/\//i.test(photoSrc)||/^data:/i.test(photoSrc)||/^blob:/i.test(photoSrc)))photoSrc='';
+  if(photoSrc&&typeof senseIsUnsafePhotoUrl==='function'&&senseIsUnsafePhotoUrl(photoSrc))photoSrc='';
+  // Letter altijd onder de foto: bij 403/verlopen signed URL geen blauw browser-"?" meer.
+  var avatar='<span class="home-note-avatar-wrap" style="position:relative;display:inline-flex;width:26px;height:26px;flex-shrink:0">'
+    +(photoSrc?('<img class="home-note-avatar" src="'+escHTML(photoSrc)+'" alt="'+escHTML(label)+'" style="position:absolute;inset:0;z-index:1;width:26px;height:26px;border-radius:13px;object-fit:cover" onerror="this.remove()">'):'')
+    +'<div class="home-note-avatar-fallback" style="background:'+avCol+'">'+avInit+'</div>'
+    +'</span>';
   return '<div class="home-note-person">'+avatar+'<span class="home-note-badge">'+escHTML(label)+'</span></div>';
 }
 function getAdviceMessageHistory(name){

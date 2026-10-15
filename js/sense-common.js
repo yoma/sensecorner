@@ -399,7 +399,8 @@
         var direct = await signFn(ref.bucket, ref.path);
         if (direct) return direct;
       }
-      var buckets = Array.isArray(bucketHints) && bucketHints.length ? bucketHints : senseOwnPhotoBucketHints();
+      var buckets = Array.isArray(bucketHints) && bucketHints.length ? bucketHints.slice() : senseOwnPhotoBucketHints();
+      if (ref.bucket && buckets.indexOf(ref.bucket) < 0) buckets.unshift(ref.bucket);
       for (var i = 0; i < buckets.length; i++) {
         var fromBucket = await signFn(String(buckets[i] || '').trim(), ref.path);
         if (fromBucket) return fromBucket;
