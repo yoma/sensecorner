@@ -1909,7 +1909,9 @@ a.app-card{color:inherit;text-decoration:none}
           link.setAttribute('data-sc-know-bound','1');
           link.addEventListener('click',function(e){
             e.preventDefault();
-            openAppWithAuth('ownsense.html?tab=bron');
+            if(link.getAttribute('data-sc-nav')==='1')return;
+            scMarkElementNavLoading(link);
+            openAppWithAuth('ownsense.html?tab=bron').catch(function(){scClearElementNavLoading(link);});
           });
         }
       }else{
@@ -1984,11 +1986,17 @@ a.app-card{color:inherit;text-decoration:none}
         if(!target)return;
         el.setAttribute('role','button');
         el.setAttribute('tabindex','0');
-        el.onclick=function(){openAppWithAuth(target);};
+        el.onclick=function(){
+          if(el.getAttribute('data-sc-nav')==='1')return;
+          scMarkElementNavLoading(el);
+          openAppWithAuth(target).catch(function(){scClearElementNavLoading(el);});
+        };
         el.onkeydown=function(e){
           if(e.key==='Enter'||e.key===' '){
             e.preventDefault();
-            openAppWithAuth(target);
+            if(el.getAttribute('data-sc-nav')==='1')return;
+            scMarkElementNavLoading(el);
+            openAppWithAuth(target).catch(function(){scClearElementNavLoading(el);});
           }
         };
       });
@@ -3381,6 +3389,18 @@ a.app-card{color:inherit;text-decoration:none}
       if(href)window.location.href=href+(href.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
     }
   }
+  function scMarkElementNavLoading(el){
+    if(!el)return;
+    el.setAttribute('data-sc-nav','1');
+    el.classList.add('loading');
+    el.setAttribute('aria-busy','true');
+  }
+  function scClearElementNavLoading(el){
+    if(!el)return;
+    el.classList.remove('loading');
+    el.removeAttribute('aria-busy');
+    el.removeAttribute('data-sc-nav');
+  }
   async function scHandleMirrorAppCardClick(card,target,e){
     if(!scMirrorHubReady()||!userSession||!userSession.id)return false;
     var appKey=scAppKeyFromCard(card)||scAppKeyFromHref(target);
@@ -3388,34 +3408,56 @@ a.app-card{color:inherit;text-decoration:none}
     var status=_scMirrorStatuses[appKey]||'never_opened';
     if(status==='active'||status==='setting_up')return false;
     if(e){e.preventDefault();e.stopPropagation();}
-    try{scResetAppCardLoading();}catch(_rst){}
+    // Keep loading visible during first-open checks; clear on cancel/error/modal.
+    try{scMarkElementNavLoading(card);}catch(_mk){}
     if(status==='paused'){
-      if(confirm('Heractiveren? Je gegevens blijven bewaard; Sensei wordt weer actief in deze app.')){
-        await scResumeMirrorFromHub(appKey,true);
+      var ok=false;
+      try{ok=confirm('Heractiveren? Je gegevens blijven bewaard; Sensei wordt weer actief in deze app.');}catch(_c){ok=false;}
+      if(ok){
+        try{
+          await scResumeMirrorFromHub(appKey,true);
+        }catch(resumeErr){
+          try{scResetAppCardLoading();}catch(_r1){}
+          alert(String((resumeErr&&resumeErr.message)||'Heractiveren mislukt'));
+        }
+      }else{
+        try{scResetAppCardLoading();}catch(_r2){}
       }
       return true;
     }
     if(status==='never_opened'){
-      var mirrorId=SMH.APP_MIRROR_IDS[appKey];
-      var hasFacts=await SMH.mirrorHasOnboardingFacts(sb,userSession.id,mirrorId);
-      if(hasFacts){
-        await SMH.activateMirror(sb,userSession.id,mirrorId,'onboarding_facts');
-        await scRefreshMirrorStatuses(userSession);
-        window.location.href=target+(target.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
+      try{
+        var mirrorId=SMH.APP_MIRROR_IDS[appKey];
+        var hasFacts=await SMH.mirrorHasOnboardingFacts(sb,userSession.id,mirrorId);
+        if(hasFacts){
+          await SMH.activateMirror(sb,userSession.id,mirrorId,'onboarding_facts');
+          await scRefreshMirrorStatuses(userSession);
+          window.location.href=target+(target.indexOf('?')>=0?'&':'?')+'sc_mirror_ok='+encodeURIComponent(appKey);
+          return true;
+        }
+        try{scResetAppCardLoading();}catch(_r3){}
+        if(SMH.injectMirrorOverlayStyles)SMH.injectMirrorOverlayStyles();
+        var intakeOpened=SMH.showMirrorIntakeModal({
+          sb:sb,
+          userId:userSession.id,
+          appKey:appKey,
+          navigateTo:target,
+          via:'hub_card',
+          onError:function(err){
+            try{scResetAppCardLoading();}catch(_r4){}
+            alert(String((err&&err.message)||'Opslaan mislukt'));
+          }
+        });
+        if(intakeOpened)return true;
+        try{scResetAppCardLoading();}catch(_r5){}
+        return false;
+      }catch(openErr){
+        try{scResetAppCardLoading();}catch(_r6){}
+        alert(String((openErr&&openErr.message)||'Openen mislukt'));
         return true;
       }
-      if(SMH.injectMirrorOverlayStyles)SMH.injectMirrorOverlayStyles();
-      var intakeOpened=SMH.showMirrorIntakeModal({
-        sb:sb,
-        userId:userSession.id,
-        appKey:appKey,
-        navigateTo:target,
-        via:'hub_card',
-        onError:function(err){alert(String((err&&err.message)||'Opslaan mislukt'));}
-      });
-      if(intakeOpened)return true;
-      return false;
     }
+    try{scResetAppCardLoading();}catch(_r7){}
     return false;
   }
   function scBindMirrorCardLongPress(){
@@ -4341,20 +4383,26 @@ a.app-card{color:inherit;text-decoration:none}
   async function openAppWithAuth(target){
     var t=String(target||'').trim();
     if(!t)return;
-    var user=userSession;
-    if(!user){
-      user=await scTimeoutFallback(getCurrentUser(),2500,null);
-      if(user)userSession=user;
-    }
-    if(user){
-      var appKey=scAppKeyFromHref(t);
-      if(appKey){
-        try{scBumpAppVisit(user,appKey);}catch(_visit){}
+    try{
+      var user=userSession;
+      if(!user){
+        user=await scTimeoutFallback(getCurrentUser(),2500,null);
+        if(user)userSession=user;
       }
-      window.location.href=t;
-      return;
+      if(user){
+        var appKey=scAppKeyFromHref(t);
+        if(appKey){
+          try{scBumpAppVisit(user,appKey);}catch(_visit){}
+        }
+        window.location.href=t;
+        return;
+      }
+      try{scResetAppCardLoading();}catch(_clr){}
+      goToIndexLogin('login',t);
+    }catch(navErr){
+      try{scResetAppCardLoading();}catch(_clr2){}
+      throw navErr;
     }
-    goToIndexLogin('login',t);
   }
 
   if(userSession){
@@ -4446,11 +4494,19 @@ a.app-card{color:inherit;text-decoration:none}
     openAppWithAuth(target);
   }
   function scResetAppCardLoading(){
-    Array.prototype.slice.call(document.querySelectorAll('.app-card')).forEach(function(c){
+    Array.prototype.slice.call(document.querySelectorAll('.app-card,[data-app-link][data-sc-nav="1"]')).forEach(function(c){
       c.classList.remove('loading');
       c.removeAttribute('aria-busy');
       c.removeAttribute('data-sc-nav');
     });
+    var ownBtn=document.getElementById('hubOpenOwnBtn');
+    if(ownBtn){
+      ownBtn.disabled=false;
+      ownBtn.removeAttribute('aria-busy');
+      ownBtn.removeAttribute('data-sc-nav');
+      var idle=ownBtn.getAttribute('data-idle-label');
+      if(idle)ownBtn.textContent=idle;
+    }
   }
   var scAppGrid=document.querySelector('section.grid[aria-label="Beschikbare apps"]');
   async function scOnAppGridClick(e){
@@ -4489,15 +4545,17 @@ a.app-card{color:inherit;text-decoration:none}
     var target=el.getAttribute('data-app-link');
     if(!target)return;
     el.addEventListener('click',function(e){
-      if(userSession&&el.tagName==='A')return;
       e.preventDefault();
-      openAppWithAuth(target);
+      if(el.getAttribute('data-sc-nav')==='1')return;
+      scMarkElementNavLoading(el);
+      openAppWithAuth(target).catch(function(){scClearElementNavLoading(el);});
     });
     el.addEventListener('keydown',function(e){
       if(e.key==='Enter'||e.key===' '){
-        if(userSession&&el.tagName==='A')return;
         e.preventDefault();
-        openAppWithAuth(target);
+        if(el.getAttribute('data-sc-nav')==='1')return;
+        scMarkElementNavLoading(el);
+        openAppWithAuth(target).catch(function(){scClearElementNavLoading(el);});
       }
     });
   });
@@ -4699,7 +4757,20 @@ a.app-card{color:inherit;text-decoration:none}
     };
   }
   if(hubOpenOwnBtn){
-    hubOpenOwnBtn.onclick=function(){window.location.href='ownsense.html';};
+    if(!hubOpenOwnBtn.getAttribute('data-idle-label')){
+      hubOpenOwnBtn.setAttribute('data-idle-label',hubOpenOwnBtn.textContent||'OWN Sense openen');
+    }
+    hubOpenOwnBtn.onclick=function(){
+      if(hubOpenOwnBtn.getAttribute('data-sc-nav')==='1')return;
+      hubOpenOwnBtn.setAttribute('data-sc-nav','1');
+      hubOpenOwnBtn.disabled=true;
+      hubOpenOwnBtn.setAttribute('aria-busy','true');
+      hubOpenOwnBtn.textContent='OWN Sense openen…';
+      try{window.location.href='ownsense.html';}
+      catch(_nav){
+        scResetAppCardLoading();
+      }
+    };
   }
   if(authCloseBtn)authCloseBtn.onclick=function(){
     closeAuthModal();
