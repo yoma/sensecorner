@@ -1056,7 +1056,7 @@ body.os-accent-ss{--app-donker:var(--self-donker);--app-medium:var(--self-medium
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn btn-muted" onclick="openAiImportModal()">Context uit chat importeren</button>
-      <button type="button" class="btn btn-primary" onclick="submitOwnVertel()">Opslaan en verwerken</button>
+      <button type="button" class="btn btn-primary" id="ownVertelSubmitBtn" onclick="submitOwnVertel()">Opslaan en verwerken</button>
       <button type="button" class="btn btn-muted" onclick="closeOwnVertelModal()">Sluiten</button>
     </div>
     <div id="ownVertelStatus" class="import-status"></div>
@@ -3183,12 +3183,29 @@ function closeOwnVertelModal(){
   m.setAttribute('aria-hidden','true');
 }
 
+var __ownVertelBusy=false;
+function setOwnVertelSubmitBusy(on){
+  __ownVertelBusy=!!on;
+  var btn=document.getElementById('ownVertelSubmitBtn');
+  if(!btn)return;
+  btn.disabled=!!on;
+  if(on){
+    btn.setAttribute('aria-busy','true');
+    if(!btn.getAttribute('data-idle-label'))btn.setAttribute('data-idle-label',btn.textContent||'Opslaan en verwerken');
+    btn.textContent='Verwerken…';
+  }else{
+    btn.removeAttribute('aria-busy');
+    btn.textContent=btn.getAttribute('data-idle-label')||'Opslaan en verwerken';
+  }
+}
 async function submitOwnVertel(){
+  if(__ownVertelBusy)return;
   osPttStopMic(true);
   var ta=document.getElementById('ownVertelInput');
   var st=document.getElementById('ownVertelStatus');
   var txt=String(ta&&ta.value||'').trim();
   if(!txt){if(st){st.textContent='Vertel eerst iets om op te slaan.';st.classList.add('err');}return;}
+  setOwnVertelSubmitBusy(true);
   if(st){st.classList.remove('err');st.textContent='Verwerken...';}
   try{
     await extractOwnFactsFromMessage(txt,{source_app:'ownsense',source_dossier:'OWN Sense',source_session_id:null});
@@ -3199,6 +3216,8 @@ async function submitOwnVertel(){
     renderMijTab();
   }catch(_e){
     if(st){st.classList.add('err');st.textContent='Verwerken mislukt. Probeer opnieuw.';}
+  }finally{
+    setOwnVertelSubmitBusy(false);
   }
 }
 
