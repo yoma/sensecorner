@@ -5564,6 +5564,8 @@ async function ssRunFullBootstrap(session,opts){
 }
 async function ssLoadAllDeferredWork(){
   try{await hydrateAllProfilePhotoMetaFromStorage();}catch(e){console.warn('hydrate foto-urls',e);}
+  try{ssSaveProfilesCache();}catch(_c){}
+  try{ssRefreshUiAfterBackgroundSync();}catch(_u){}
 }
 async function bootstrapAuthenticated(session,opts){
   opts=opts||{};
@@ -5877,35 +5879,37 @@ async function hydrateAllProfilePhotoMetaFromStorage(){
   var fallbackBuckets=['selfsense-photos','sense-photos','datesense-photos','own-photos'];
   try{
     var names=Object.keys(S.pdata||{});
-    for(var ni=0;ni<names.length;ni++){
-      var dossier=names[ni];
+    await Promise.all(names.map(function(dossier){
       var cell=S.pdata[dossier];
-      if(!cell||!cell.meta)continue;
+      if(!cell||!cell.meta)return Promise.resolve();
       var m=cell.meta;
       var preferred=dossier==='OWN Sense'?['own-photos'].concat(fallbackBuckets):fallbackBuckets.slice();
+      var chain=Promise.resolve();
       if(String(m.photo_url||'').trim()){
-        var one=await refreshPhotoRef(m.photo_url,preferred);
-        if(one)m.photo_url=one;
-        else delete m.photo_url;
+        chain=chain.then(function(){
+          return refreshPhotoRef(m.photo_url,preferred).then(function(one){
+            if(one)m.photo_url=one;
+            else delete m.photo_url;
+          });
+        });
       }
-      if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
-        var nextUrls=[];
-        for(var i=0;i<m.foto_urls.length;i++){
-          var u=await refreshPhotoRef(m.foto_urls[i],preferred);
-          if(u)nextUrls.push(u);
+      return chain.then(function(){
+        var jobs=[];
+        if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
+          jobs.push(Promise.all(m.foto_urls.map(function(u){return refreshPhotoRef(u,preferred);})).then(function(urls){
+            var nextUrls=(urls||[]).filter(Boolean);
+            m.foto_urls=nextUrls;
+            if(!String(m.photo_url||'').trim()&&nextUrls.length)m.photo_url=nextUrls[0];
+          }));
         }
-        m.foto_urls=nextUrls;
-        if(!String(m.photo_url||'').trim()&&nextUrls.length)m.photo_url=nextUrls[0];
-      }
-      if(Array.isArray(m.analysis_photos)&&m.analysis_photos.length){
-        var nextAn=[];
-        for(var j=0;j<m.analysis_photos.length;j++){
-          var au=await refreshPhotoRef(m.analysis_photos[j],preferred);
-          if(au)nextAn.push(au);
+        if(Array.isArray(m.analysis_photos)&&m.analysis_photos.length){
+          jobs.push(Promise.all(m.analysis_photos.map(function(u){return refreshPhotoRef(u,preferred);})).then(function(urls){
+            m.analysis_photos=(urls||[]).filter(Boolean);
+          }));
         }
-        m.analysis_photos=nextAn;
-      }
-    }
+        return Promise.all(jobs);
+      });
+    }));
   }catch(e){console.warn('hydrateAllProfilePhotoMetaFromStorage',e);}
 }
 
@@ -9884,9 +9888,14 @@ function renderHomeNotePerson(dossier){
   var label=dn(name);
   var ci=Math.max(0,getSelfSenseContactNames().indexOf(name));
   var avatarColors=['#3F51B5','#2E7D32','#E07800','#6A1B9A','#C62828'];
+  var avCol=avatarColors[ci%avatarColors.length];
+  var avInit=escHTML((label.charAt(0)||'?').toUpperCase());
   var avatar=meta.photo_url
-    ?'<img class="home-note-avatar" src="'+meta.photo_url+'" alt="'+escHTML(label)+'">'
-    :'<div class="home-note-avatar-fallback" style="background:'+avatarColors[ci%avatarColors.length]+'">'+escHTML(label.charAt(0).toUpperCase())+'</div>';
+    ?('<span style="position:relative;display:inline-flex;width:26px;height:26px;flex-shrink:0">'
+      +'<img class="home-note-avatar" src="'+escHTML(meta.photo_url)+'" alt="'+escHTML(label)+'" onerror="this.style.display=\'none\';if(this.nextElementSibling)this.nextElementSibling.style.display=\'flex\';">'
+      +'<div class="home-note-avatar-fallback" style="display:none;background:'+avCol+'">'+avInit+'</div>'
+      +'</span>')
+    :'<div class="home-note-avatar-fallback" style="background:'+avCol+'">'+avInit+'</div>';
   return '<div class="home-note-person">'+avatar+'<span class="home-note-badge">'+escHTML(label)+'</span></div>';
 }
 function getAdviceMessageHistory(name){
