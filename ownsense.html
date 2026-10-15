@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#6B8E6F">
 <!-- Bij handmatige upload: zet os-build op dezelfde waarde als na een wijziging (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm'). -->
-<meta name="os-build" content="17-07-2026 11:44">
+<meta name="os-build" content="31-08-2026 10:20">
 <title>OWN Sense · OWN Sensei</title>
 <script>
 /* Gateway leeft op SenseCorner; oude deep links hier doorsturen. */
@@ -1524,7 +1524,10 @@ function createEmptyHubState(){
     ai_summary_per_app:{},
     foto_patroon_text:'',
     profile_quote:'',
-    profile_quote_updated_at:''
+    profile_quote_author:'',
+    profile_quote_date:'',
+    profile_quote_updated_at:'',
+    profile_quote_recent:[]
   };
 }
 var hubState=createEmptyHubState();
@@ -1604,6 +1607,21 @@ function ownMergeBasisFromServer(pm,p){
   __ownSensePropsMetaCache=mergedMeta;
   ownSyncBasisMetaCacheFromHubState();
 }
+function ownApplyQuoteFromMeta(pm){
+  pm=(pm&&typeof pm==='object')?pm:{};
+  var sq=String(pm.profile_quote||'').trim();
+  if(!sq)return;
+  var sAt=Date.parse(String(pm.profile_quote_updated_at||''))||0;
+  var lAt=Date.parse(String(hubState.profile_quote_updated_at||''))||0;
+  if(lAt&&sAt&&lAt>sAt)return;
+  hubState.profile_quote=sq;
+  hubState.profile_quote_author=String(pm.profile_quote_author||hubState.profile_quote_author||'').trim();
+  hubState.profile_quote_date=String(pm.profile_quote_date||hubState.profile_quote_date||'').trim();
+  hubState.profile_quote_updated_at=String(pm.profile_quote_updated_at||hubState.profile_quote_updated_at||'').trim();
+  if(Array.isArray(pm.profile_quote_recent)&&pm.profile_quote_recent.length){
+    hubState.profile_quote_recent=pm.profile_quote_recent.map(function(x){return String(x||'').trim();}).filter(Boolean).slice(0,8);
+  }
+}
 function ownApplyLocalBasisFallback(user){
   if(!user||!user.id)return;
   var local=safeJsonParse(ownBridgeStorageGet(HUB_KEY,user.id)||'');
@@ -1658,6 +1676,7 @@ var activeInsightScope='all';
 var hasNewInsightBadge=false;
 var __quoteAutoBusy=false;
 var __quoteAutoLastAt=0;
+var __quoteGenBusy=false;
 
 PK.forEach(function(k){hubState.props[k]=0;});
 ALL_CATS.forEach(function(c){
@@ -2622,28 +2641,89 @@ function buildOwnQuoteSource(){
   }
   return parts.join('\n\n');
 }
-async function generateProfileQuote(){
-  var today=ownTodayIso();
-  var src=buildOwnQuoteSource();
-  var chosen=null;
-  if(src&&ownQuoteRichCount()>=2){
-    try{
-      var quotesListStr=OWN_REAL_QUOTES.map(function(x,i){return (i+1)+'. "'+x.q+'" - '+x.a;}).join('\n');
-      var sys='Je krijgt een profielsamenvatting en een genummerde lijst van echte citaten van bekende personen.'
-        +' Kies het nummer van het citaat dat het best aansluit bij dit profiel.'
-        +' Geef ALLEEN het getal terug (bijv. "3"), niets anders.';
-      var msg='Profiel:\n'+src+'\n\nCitaten:\n'+quotesListStr;
-      var out=String(await callAnthropicJson(sys,msg,5,15000)||'').trim();
-      var idx=parseInt(out,10)-1;
-      if(!isNaN(idx)&&idx>=0&&idx<OWN_REAL_QUOTES.length)chosen=OWN_REAL_QUOTES[idx];
-    }catch(_e){}
+function ownQuoteDaypart(){
+  var h=new Date().getHours();
+  if(h<12)return 'ochtend';
+  if(h<18)return 'middag';
+  return 'avond';
+}
+function ownQuoteBlockedSet(){
+  var blocked={};
+  function add(q){
+    q=String(q||'').trim();
+    if(!q)return;
+    for(var i=0;i<OWN_REAL_QUOTES.length;i++){
+      if(OWN_REAL_QUOTES[i].q===q)blocked[i]=true;
+    }
   }
-  if(!chosen)chosen=OWN_REAL_QUOTES[Math.floor(Math.random()*OWN_REAL_QUOTES.length)];
-  hubState.profile_quote=chosen.q;
-  hubState.profile_quote_author=chosen.a;
-  hubState.profile_quote_date=today;
-  hubState.profile_quote_updated_at=new Date().toISOString();
-  saveHubState();
+  add(hubState.profile_quote);
+  var rec=Array.isArray(hubState.profile_quote_recent)?hubState.profile_quote_recent:[];
+  rec.forEach(add);
+  return blocked;
+}
+function pickOwnQuoteAvoiding(blocked){
+  var pool=[];
+  for(var i=0;i<OWN_REAL_QUOTES.length;i++){
+    if(!blocked[i])pool.push(OWN_REAL_QUOTES[i]);
+  }
+  if(!pool.length)pool=OWN_REAL_QUOTES.slice();
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+function pickOwnQuoteFromAiText(out,blocked){
+  var nums=String(out||'').match(/\d+/g)||[];
+  var seen={};
+  var cands=[];
+  nums.forEach(function(n){
+    var idx=parseInt(n,10)-1;
+    if(isNaN(idx)||idx<0||idx>=OWN_REAL_QUOTES.length)return;
+    if(blocked[idx]||seen[idx])return;
+    seen[idx]=true;
+    cands.push(OWN_REAL_QUOTES[idx]);
+  });
+  if(!cands.length)return null;
+  return cands[Math.floor(Math.random()*cands.length)];
+}
+function ownRememberQuote(q){
+  q=String(q||'').trim();
+  var rec=Array.isArray(hubState.profile_quote_recent)?hubState.profile_quote_recent.slice():[];
+  rec=rec.filter(function(x){return String(x||'').trim()&&String(x).trim()!==q;});
+  if(q)rec.unshift(q);
+  hubState.profile_quote_recent=rec.slice(0,8);
+}
+async function generateProfileQuote(){
+  if(__quoteGenBusy)return;
+  __quoteGenBusy=true;
+  try{
+    var today=ownTodayIso();
+    var blocked=ownQuoteBlockedSet();
+    var chosen=null;
+    var src=buildOwnQuoteSource();
+    if(src&&ownQuoteRichCount()>=2){
+      try{
+        var avoidNums=Object.keys(blocked).map(function(k){return String(parseInt(k,10)+1);}).filter(Boolean);
+        var quotesListStr=OWN_REAL_QUOTES.map(function(x,i){return (i+1)+'. "'+x.q+'" - '+x.a;}).join('\n');
+        var dayNames=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+        var momentLine='Moment: '+dayNames[new Date().getDay()]+' '+today+', '+ownQuoteDaypart()+'.';
+        var sys='Je krijgt een profielschets en een genummerde lijst echte citaten van bekende personen.'
+          +' Kies 3 citaten die NU goed passen bij deze persoon: thema, stemming en wat er in het profiel speelt.'
+          +' Kies niet altijd dezelfde "beste" match; wissel af tussen passende citaten.'
+          +(avoidNums.length?' Vermijd deze nummers (recent getoond): '+avoidNums.join(', ')+'.':'')
+          +' Geef ALLEEN 3 nummers, komma-gescheiden, bv. 12,47,3. Niets anders.';
+        var msg=momentLine+'\n\nProfiel:\n'+src+'\n\nCitaten:\n'+quotesListStr;
+        var out=String(await callAnthropicJson(sys,msg,80,45000,{raw:true,ownsense_hub:true})||'').trim();
+        chosen=pickOwnQuoteFromAiText(out,blocked);
+      }catch(_e){}
+    }
+    if(!chosen)chosen=pickOwnQuoteAvoiding(blocked);
+    hubState.profile_quote=chosen.q;
+    hubState.profile_quote_author=chosen.a;
+    hubState.profile_quote_date=today;
+    hubState.profile_quote_updated_at=new Date().toISOString();
+    ownRememberQuote(chosen.q);
+    saveHubState();
+  }finally{
+    __quoteGenBusy=false;
+  }
   renderMijTab();
 }
 
@@ -2887,10 +2967,11 @@ function renderMijTab(){
   var q=String(hubState.profile_quote||'').trim();
   var qa=String(hubState.profile_quote_author||'').trim();
   var quoteDate=String(hubState.profile_quote_date||'').trim();
+  var rec=Array.isArray(hubState.profile_quote_recent)?hubState.profile_quote_recent:[];
   if(!q){
     q='Je dagelijkse quote wordt zo opgehaald...';
     maybeAutoGenerateProfileQuote();
-  } else if(quoteDate!==ownTodayIso()){
+  } else if(quoteDate!==ownTodayIso()||!rec.length){
     maybeAutoGenerateProfileQuote();
   }
   var qAt=String(hubState.profile_quote_updated_at||'').trim();
@@ -5772,6 +5853,7 @@ async function loadOwnFromSupabase(){
       hubState.ai_summary_per_app=(row.ai_summary_per_app&&typeof row.ai_summary_per_app==='object')?row.ai_summary_per_app:(hubState.ai_summary_per_app||{});
       hubState.foto_patroon_text=String(row.foto_patroon_text||hubState.foto_patroon_text||'');
       ownMergeBasisFromServer(pm,p);
+      ownApplyQuoteFromMeta(pm);
       ownApplyLocalBasisFallback(user);
       if(!restrictExternalCategorySources){
         try{
@@ -5813,13 +5895,22 @@ function buildOwnHubMirrorForMeta(){
     return{slot:parseInt(r.slot,10)||0,ai_analysis:String(r.ai_analysis||'').trim()};
   }).filter(function(x){return x.slot>=2&&x.slot<=5&&x.ai_analysis;});
   var per=hubState.ai_summary_per_app&&typeof hubState.ai_summary_per_app==='object'?hubState.ai_summary_per_app:{};
-  return{
+  var mirror={
     own_hub_photo_slots:slots,
     own_hub_foto_patroon:String(hubState.foto_patroon_text||'').substring(0,12000),
     own_hub_ai_summary_general:String(hubState.ai_summary_general||'').substring(0,12000),
     own_hub_ai_summary_per_app:per,
     own_hub_mirror_at:new Date().toISOString()
   };
+  var q=String(hubState.profile_quote||'').trim();
+  if(q){
+    mirror.profile_quote=q.substring(0,500);
+    mirror.profile_quote_author=String(hubState.profile_quote_author||'').substring(0,120);
+    mirror.profile_quote_date=String(hubState.profile_quote_date||'');
+    mirror.profile_quote_updated_at=String(hubState.profile_quote_updated_at||'');
+    mirror.profile_quote_recent=Array.isArray(hubState.profile_quote_recent)?hubState.profile_quote_recent.slice(0,8):[];
+  }
+  return mirror;
 }
 
 async function loadSenseProfileScopesForUser(userId){
@@ -6194,7 +6285,11 @@ function loadHubState(user,opts){
   if(!hubState.ai_summary_per_app||typeof hubState.ai_summary_per_app!=='object')hubState.ai_summary_per_app={};
   hubState.foto_patroon_text=String(hubState.foto_patroon_text||'');
   hubState.profile_quote=String(hubState.profile_quote||'');
+  hubState.profile_quote_author=String(hubState.profile_quote_author||'');
+  hubState.profile_quote_date=String(hubState.profile_quote_date||'');
   hubState.profile_quote_updated_at=String(hubState.profile_quote_updated_at||'');
+  if(!Array.isArray(hubState.profile_quote_recent))hubState.profile_quote_recent=[];
+  hubState.profile_quote_recent=hubState.profile_quote_recent.map(function(x){return String(x||'').trim();}).filter(Boolean).slice(0,8);
 }
 
 function saveHubState(opts){
@@ -7214,13 +7309,15 @@ function renderQuestions(){
   });
 }
 function maybeAutoGenerateProfileQuote(){
-  if(__quoteAutoBusy)return;
+  if(__quoteAutoBusy||__quoteGenBusy)return;
   var now=Date.now();
   if(now-__quoteAutoLastAt<12000)return;
   var today=ownTodayIso();
   var hasQuote=String(hubState.profile_quote||'').trim();
   var quoteDate=String(hubState.profile_quote_date||'').trim();
-  if(hasQuote&&quoteDate===today)return;
+  var rec=Array.isArray(hubState.profile_quote_recent)?hubState.profile_quote_recent:[];
+  /* Zonder recent-historie (oude vastzittende keuze) eenmalig opnieuw kiezen, ook als de datum vandaag is. */
+  if(hasQuote&&quoteDate===today&&rec.length)return;
   __quoteAutoBusy=true;
   __quoteAutoLastAt=now;
   generateProfileQuote().finally(function(){__quoteAutoBusy=false;});

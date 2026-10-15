@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3D2F1F">
 <!-- Laatste wijziging: zet hier je pc-klok (PowerShell: Get-Date -Format 'dd-MM-yyyy HH:mm') zodat je ziet of je de nieuwste versie hebt geüpload. -->
-<meta name="sc-build" content="19-08-2026 10:56">
+<meta name="sc-build" content="31-08-2026 10:35">
 <title>SenseCorner</title>
 <!-- PWA -->
 <link rel="manifest" href="/pwa/manifest.json">
@@ -2410,12 +2410,13 @@ a.app-card{color:inherit;text-decoration:none}
 
   var heroWelcome=document.getElementById('heroWelcome');
   var heroQuote=document.getElementById('heroQuote');
-  /* Vaste quotes in dit bestand (geen externe API). Keuze: kalenderdag + hash account + sessionStorage-spin;
-     spin bij eerste weergave als ingelogd; bij uitloggen spin wissen + vorige index in localStorage zodat
-     de volgende login (zelfde dag) een andere quote krijgt. */
+  /* Vaste quotes in dit bestand. SenseCorner kiest zelf (geen Own Sense-bezoek nodig):
+     kalenderdag + hash account + session-spin, bij voorkeur citaten die bij het lokale profiel passen.
+     De Own Sense-hubquote wordt niet meer 1-op-1 gekopieerd. */
   var SC_QUOTE_SPIN_KEY='sc_quote_spin';
   /** Laatst getoonde quote-index vóór uitloggen; alleen om volgende login een andere quote te forceren. */
   var SC_QUOTE_PREV_KEY='sc_quote_prev_idx';
+  var SC_QUOTE_DAY_KEY='sc_quote_day_pick_v1';
   var SC_HUB_START_INTRO_KEY='sc_hub_start_intro_v1::';
   function scHubStartIntroStorageKey(uid){
     return SC_HUB_START_INTRO_KEY+String(uid||'').trim();
@@ -2682,8 +2683,7 @@ a.app-card{color:inherit;text-decoration:none}
     {q:'In de angst wordt de mens zich bewust van zijn vrijheid.',a:'Jean-Paul Sartre'},
     {q:'Menselijke grootheid ligt niet in het bezit van rijkdom, maar in het vermogen anderen te dienen.',a:'Mahatma Gandhi'},
   ];
-  function senseCornerQuoteIndex(user){
-    var n=SC_SENSE_QUOTES.length;
+  function scQuoteSeed(user){
     var day=Math.floor(Date.now()/86400000);
     var h=0;
     if(user&&user.id){
@@ -2694,8 +2694,119 @@ a.app-card{color:inherit;text-decoration:none}
       var s=sessionStorage.getItem(SC_QUOTE_SPIN_KEY);
       if(s)spin=parseInt(s,10)>>>0;
     }catch(_e){}
+    return (day+h+spin)>>>0;
+  }
+  function senseCornerQuoteIndex(user){
+    var n=SC_SENSE_QUOTES.length;
+    if(!n)return 0;
     /* Haakjes nodig: % heeft hogere prioriteit dan >>> - zonder dit werd qi enorm en quotes 'undefined'. */
-    return ((day+h+spin)>>>0)%n;
+    return scQuoteSeed(user)%n;
+  }
+  function scTodayIso(){
+    var d=new Date();
+    var mm=String(d.getMonth()+1);
+    if(mm.length<2)mm='0'+mm;
+    var dd=String(d.getDate());
+    if(dd.length<2)dd='0'+dd;
+    return d.getFullYear()+'-'+mm+'-'+dd;
+  }
+  function scQuoteDayStorageKey(uid){
+    return SC_QUOTE_DAY_KEY+'::'+String(uid||'anon');
+  }
+  function scQuoteTokens(s){
+    return String(s||'').toLowerCase().split(/[^a-zà-ÿ0-9]+/i).filter(function(w){return w.length>=5;});
+  }
+  function scCollectProfileQuoteText(){
+    var parts=[];
+    try{
+      var cats=typeof scGetMergedStatsCategories==='function'?scGetMergedStatsCategories():null;
+      if(cats&&typeof cats==='object'){
+        Object.keys(cats).forEach(function(id){
+          var c=cats[id];
+          if(!c||typeof c!=='object')return;
+          Object.keys(c).forEach(function(k){
+            if(!/^a\d+$/.test(k))return;
+            var t=String(c[k]||'').trim();
+            if(t)parts.push(t);
+          });
+        });
+      }
+    }catch(_e){}
+    if(hubProfile&&typeof hubProfile==='object'){
+      parts.push(String(hubProfile.ai_summary_general||''));
+      parts.push(String(hubProfile.algemeen_text||''));
+    }
+    return parts.join('\n').toLowerCase();
+  }
+  function scScoreQuoteAgainstProfile(qobj,profileText){
+    if(!profileText)return 0;
+    var words=scQuoteTokens(qobj&&qobj.q);
+    var score=0;
+    var seen={};
+    words.forEach(function(w){
+      if(seen[w])return;
+      seen[w]=true;
+      if(profileText.indexOf(w)>=0)score++;
+    });
+    return score;
+  }
+  function scChooseQuoteForProfile(user,avoid){
+    avoid=avoid||{};
+    var n=SC_SENSE_QUOTES.length;
+    var profileText=scCollectProfileQuoteText();
+    var scored=[];
+    for(var i=0;i<n;i++){
+      var qobj=SC_SENSE_QUOTES[i];
+      var qt=qobj&&qobj.q?String(qobj.q).trim():'';
+      if(!qt||avoid[qt])continue;
+      scored.push({q:qobj,s:scScoreQuoteAgainstProfile(qobj,profileText)});
+    }
+    if(!scored.length){
+      for(var j=0;j<n;j++)scored.push({q:SC_SENSE_QUOTES[j],s:0});
+    }
+    scored.sort(function(a,b){return b.s-a.s;});
+    var pool=scored;
+    if(profileText){
+      var matched=scored.filter(function(x){return x.s>0;});
+      if(matched.length>=5)pool=matched;
+      else pool=scored.slice(0,Math.min(12,scored.length));
+    }
+    var pick=pool[scQuoteSeed(user)%pool.length];
+    return pick&&pick.q?pick.q:(SC_SENSE_QUOTES[0]||{q:'',a:''});
+  }
+  function scPickFreshQuote(user){
+    var uid=user&&user.id?String(user.id):'anon';
+    var today=scTodayIso();
+    try{
+      var raw=localStorage.getItem(scQuoteDayStorageKey(uid));
+      if(raw){
+        var stored=JSON.parse(raw);
+        if(stored&&stored.date===today&&String(stored.q||'').trim()){
+          return{q:String(stored.q).trim(),a:String(stored.a||'').trim()};
+        }
+      }
+    }catch(_e){}
+    var avoid={};
+    if(hubProfile){
+      var ownQ=String(hubProfile.profile_quote||'').trim();
+      if(ownQ)avoid[ownQ]=true;
+    }
+    try{
+      var prevRaw=localStorage.getItem(scQuoteDayStorageKey(uid));
+      if(prevRaw){
+        var prev=JSON.parse(prevRaw);
+        if(prev&&String(prev.q||'').trim())avoid[String(prev.q).trim()]=true;
+      }
+    }catch(_e2){}
+    var picked=scChooseQuoteForProfile(user,avoid);
+    try{
+      localStorage.setItem(scQuoteDayStorageKey(uid),JSON.stringify({
+        date:today,
+        q:picked&&picked.q?picked.q:'',
+        a:picked&&picked.a?picked.a:''
+      }));
+    }catch(_e3){}
+    return picked||{q:'',a:''};
   }
   function scTrimName(s){
     s=String(s==null?'':s).trim();
@@ -2899,11 +3010,10 @@ a.app-card{color:inherit;text-decoration:none}
     heroWelcome.hidden=false;
     if(heroQuote){
       var qtxt='',qaut='';
-      var pq=hubProfile&&String(hubProfile.profile_quote||'').trim();
-      if(pq){
-        qtxt=pq;
-        qaut=String(hubProfile.profile_quote_author||'').trim();
-      }else{
+      var picked=scPickFreshQuote(user);
+      qtxt=picked&&picked.q?picked.q:'';
+      qaut=picked&&picked.a?picked.a:'';
+      if(!qtxt){
         var qi=senseCornerQuoteIndex(user);
         var qobj=SC_SENSE_QUOTES[qi]||SC_SENSE_QUOTES[0];
         qtxt=qobj&&qobj.q?qobj.q:(qobj||'');
