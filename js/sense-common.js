@@ -2172,4 +2172,45 @@
   }
   global.senseDeepLimitedNoticeHtml = senseDeepLimitedNoticeHtml;
   global.senseConsumeDeepLimitedFlag = senseConsumeDeepLimitedFlag;
+
+  /** Disable Vertel send button while an AI turn is in flight (no toast spam). */
+  function senseSetVertelSendBusy(busy) {
+    var on = !!busy;
+    var btn = document.getElementById('vertelSendBtn');
+    if (!btn) return;
+    btn.disabled = on;
+    if (on) {
+      btn.setAttribute('aria-busy', 'true');
+      btn.setAttribute('aria-disabled', 'true');
+    } else {
+      btn.removeAttribute('aria-busy');
+      btn.removeAttribute('aria-disabled');
+    }
+    btn.classList.toggle('vertel-send-busy', on);
+  }
+
+  /**
+   * Optional status under typing dots. Only pass labels that match a real step
+   * (e.g. dossier context load, Sensei call). Pass '' to clear.
+   */
+  function senseSetTypingPhase(text) {
+    var wrap = document.querySelector('#typ .typing-wrap');
+    if (!wrap) return;
+    var el = wrap.querySelector('.typing-phase');
+    var t = String(text || '').trim();
+    if (!t) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'typing-phase';
+      el.setAttribute('aria-live', 'polite');
+      wrap.appendChild(el);
+    }
+    el.textContent = t;
+  }
+
+  global.senseSetVertelSendBusy = senseSetVertelSendBusy;
+  global.senseSetTypingPhase = senseSetTypingPhase;
 })(typeof window !== 'undefined' ? window : this);
