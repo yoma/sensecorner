@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sense-auth-client.js?v=20261015a"></script>
 <script src="js/sense-jszip.js?v=20261015a"></script>
-<script src="js/sense-common.js?v=20261015a"></script>
+<script src="js/sense-common.js?v=20261015b"></script>
 <script src="js/sense-mirror-hub.js?v=20261015a"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
 <script src="./js/sense-depth-ui.js"></script>
@@ -587,7 +587,9 @@ a:focus-visible,
 .cmp-v.t1{background:#FFF5F5} .cmp-v.t2{background:#F5F5FF;border-radius:0 10px 10px 0}
 
 /* Toast */
-.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;z-index:400;white-space:nowrap;pointer-events:none;animation:fup .3s ease}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;z-index:400;white-space:normal;max-width:min(92vw,360px);box-sizing:border-box;text-align:center;line-height:1.35;pointer-events:none;animation:fup .3s ease}
+#vertelSendBtn:disabled,#vertelSendBtn.vertel-send-busy{opacity:.55;cursor:wait}
+.typing-phase{font-size:12px;font-weight:600;color:var(--m,#6b7280);line-height:1.35;padding:0 2px;max-width:min(100%,340px)}
 @keyframes fup{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .hdate{font-size:11px;color:#bbb;text-align:center;margin:6px 0;font-weight:600}
 .sync-bar{font-size:11px;text-align:center;padding:2px;flex-shrink:0;min-height:16px;color:transparent}
@@ -1313,7 +1315,7 @@ button.app-depth-hint.app-depth-hint--open:focus-visible{outline:2px solid var(-
             <p class="vertel-mic-hint" id="micHint">Micro: indrukken = praten · loslaten = stoppen · rood = luisteren</p>
           </div>
           <span class="input-toolbar-spacer" aria-hidden="true"></span>
-          <button type="button" class="rnd rd rnd--vertel" onclick="sendMsg()" title="Verstuur bericht" aria-label="Verstuur">
+          <button type="button" class="rnd rd rnd--vertel" id="vertelSendBtn" onclick="sendMsg()" title="Verstuur bericht" aria-label="Verstuur">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
           </button>
         </div>
@@ -13938,6 +13940,13 @@ function startTypingSlowHints(){
   arm(9000,pair.first);
   arm(20000,pair.second);
 }
+function setVertelBusy(on){
+  S.busy=!!on;
+  if(typeof senseSetVertelSendBusy==='function')senseSetVertelSendBusy(!!on);
+}
+function setTypingPhase(text){
+  if(typeof senseSetTypingPhase==='function')senseSetTypingPhase(text);
+}
 function showT(){
   var ca=document.getElementById('chatArea');if(!ca)return;
   clearTypingSlowHintTimers();
@@ -13948,6 +13957,7 @@ function showT(){
 }
 function hideT(){
   clearTypingSlowHintTimers();
+  setTypingPhase('');
   var t=document.getElementById('typ');if(t)t.remove();
   refreshVertelResendButton();
 }
@@ -14488,7 +14498,7 @@ async function sendMsg(){
   if(txt.length>2800){
     toast('Lang bericht gedetecteerd: AI verwerkt een ingekorte context voor snelheid.');
   }
-  inp.value='';inp.style.height='auto';S.busy=true;
+  inp.value='';inp.style.height='auto';setVertelBusy(true);
 
   S.vertelOfferHerstuur=false;
   var userOpts=null;
@@ -14586,6 +14596,7 @@ async function sendMsg(){
     if(false&&!forcedDossier&&txtForAI.length>=180){
       segPromise=fetchVertelSegmentation(txtForAI);
     }
+    setTypingPhase('Dossiercontext laden…');
     var dossierCtx=await withTimeout(buildDossierContextForAI(aiContextDossier),12000,'Dossier-context laden duurde te lang.',{label:'buildDossierContextForAI',meta:{profile:aiContextDossier||null}});
     var dossierCtxSource='primary';
     if(hasStrongMentionFocus&&!String(dossierCtx||'').trim()){
@@ -14664,6 +14675,7 @@ async function sendMsg(){
     var adviceCtxBadge=pendingAdviceCtx
       ?'<div class="coach-save-bar" style="margin-top:8px"><span class="coach-save-lbl">🔗 Op basis van adviescontext</span></div>'
       :'';
+    setTypingPhase('Sensei denkt na…');
     var raw=await callAPI(fullSys,messages,900,vertelExpertiseFollowUp?80000:45000,null,{purpose:vertelExpertiseFollowUp?'expertise':'standard_chat'});
     if(vertelExpertiseFollowUp)raw=polishExpertisePlainText(raw);
     var vertelCrisis=typeof senseWrapAiCardWithCrisis==='function'?senseWrapAiCardWithCrisis(formatAiCard,raw):{html:formatAiCard(raw),text:String(raw||''),crisis:false};
@@ -14792,7 +14804,7 @@ async function sendMsg(){
     addMsg('ai','Er ging iets mis: '+errMsg+retryTip);
   }finally{
     hideT();
-    S.busy=false;
+    setVertelBusy(false);
     try{
       var _inp=document.getElementById('msgInput');
       if(_inp&&S.screen==='vertel')_inp.focus();
@@ -15038,7 +15050,7 @@ function startWhatsAppImport(dosName,cleaned){
 
 async function autoVerwerkChunksNaarDossier(chunks,dosName){
   if(!S.apiKey){toast('⚠️ Log opnieuw in via SenseCorner om Sensei te gebruiken.');return;}
-  S.busy=true;
+  setVertelBusy(true);
   var totalFragments=0;
 
   // Voortgangsbericht toevoegen
@@ -15091,7 +15103,7 @@ async function autoVerwerkChunksNaarDossier(chunks,dosName){
       +'De eigenschappen en invulvakjes worden nu bijgewerkt.';
   }
   rDrawer();
-  S.busy=false;
+  setVertelBusy(false);
 }
 
 // Auto-vul categories vanuit timeline als er nog niets ingevuld is. Retourneert true als er echt geüpdatet is (incl. herbereken in updateContactCategories).
@@ -15366,7 +15378,7 @@ async function updateEigenschappenAI(dossier,tekst){
 }
 
 async function askAdviceNow(){
-  if(!S.apiKey||S.busy)return;S.busy=true;
+  if(!S.apiKey||S.busy)return;setVertelBusy(true);
   showT();
   // Gebruik recent opgeslagen berichten als context
   var allCtx='';
@@ -15386,7 +15398,7 @@ async function askAdviceNow(){
     hideT();
     addMsg('ai',`<span style="font-size:11px;font-weight:700;color:var(--r);letter-spacing:.8px">ADVIES</span><br><br>${t.replace(/\n/g,'<br>')}`);
   }catch(x){hideT();addMsg('ai','Fout: '+x.message);}
-  S.busy=false;
+  setVertelBusy(false);
 }
 
 // ══ Microfoon (speech-to-text) - push-to-talk: ingedrukt houden = luisteren, loslaten = stop ══
@@ -15711,7 +15723,7 @@ async function handleImgFile(input){
   }
   var n=imageFiles.length;
   if(S.busy){toast('Even wachten tot de vorige stap klaar is.');return;}
-  S.busy=true;
+  setVertelBusy(true);
   toast(n===1?'📸 Foto analyseren...':'📸 '+n+' screenshots analyseren...');
   try{
     var content=[];
@@ -15739,7 +15751,7 @@ async function handleImgFile(input){
   }catch(x){
     toast('Fout bij foto-analyse: '+(x&&x.message?x.message:String(x)));
   }finally{
-    S.busy=false;
+    setVertelBusy(false);
   }
 }
 
