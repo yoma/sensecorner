@@ -14,6 +14,8 @@ Hulpmiddelen voor ontwikkeling en onderhoud. Niet nodig op GitHub Pages.
 BASE_URL=https://sensecorner.com ./scripts/smoke-public.sh
 ```
 
+**Handmatige regressie (incl. busy-guards Golf B):** zie `SENSECORNER_FASE1A.md` §2.1, checklist C–E (hub loading, Vertel send disabled, OWN Vertel busy).
+
 Vanaf de projectroot:
 
 ```powershell

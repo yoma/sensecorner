@@ -96,19 +96,24 @@ Gebruik uitsluitend een **dedicated testaccount** en neutrale testdata. Raak gee
 
 #### C. Navigatie hub ↔ Sense-apps
 
-- [ ] Hub → DateSense (of één app) → pagina laadt.
-- [ ] Terug naar hub.
-- [ ] Hub → OWN Sense → terug.
+- [ ] Hub → DateSense (of één app) → pagina laadt; card toont “Openen…”/loading tot navigatie.
+- [ ] Terug naar hub (loading hangt niet na bfcache/terug).
+- [ ] Hub → OWN Sense (hero of knop) → loading-feedback → terug.
+- [ ] Eerste opening mirror (indien van toepassing): loading blijft tijdens fact-check; bij annuleren/fout verdwijnt loading.
 
 #### D. Vertel-gesprekken
 
 - [ ] In Sense-app: Vertel → kort neutraal bericht (“Smoke test, negeer.”).
 - [ ] Antwoord of nette fout (geen JS white-screen).
+- [ ] **Busy:** tijdens typing-dots is de verzendknop disabled; na succes/fout/timeout weer klikbaar.
+- [ ] **Busy:** snelle dubbele tik op Verstuur veroorzaakt geen tweede AI-aanroep (geen spam-toasts nodig).
+- [ ] Typing-status toont alleen echte stappen (bijv. dossiercontext / Sensei), geen nep-voortgang.
 
 #### E. OWN Sense profielopslag
 
 - [ ] Eén onschuldig veld wijzigen → opslaan.
 - [ ] Herladen → waarde aanwezig.
+- [ ] **Busy:** OWN Vertel “Opslaan en verwerken” disabled tijdens verwerken; daarna weer beschikbaar; dubbele klik = één verwerking.
 
 #### F. Dossiers
 
