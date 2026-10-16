@@ -2214,4 +2214,29 @@
 
   global.senseSetVertelSendBusy = senseSetVertelSendBusy;
   global.senseSetTypingPhase = senseSetTypingPhase;
+
+  /**
+   * Keep the stored photo reference when a re-sign fails.
+   * A fresh signed URL replaces it; an empty refresh must not drop the path or previous URL,
+   * because the next dossier save persists meta and would otherwise delete the photo.
+   */
+  function senseMergeRefreshedPhotoRef(original, refreshed) {
+    var next = String(refreshed || '').trim();
+    if (next) return next;
+    return String(original || '').trim();
+  }
+
+  function senseMergeRefreshedPhotoList(originals, refreshed) {
+    var src = Array.isArray(originals) ? originals : [];
+    var next = Array.isArray(refreshed) ? refreshed : [];
+    var out = [];
+    for (var i = 0; i < src.length; i++) {
+      var kept = senseMergeRefreshedPhotoRef(src[i], next[i]);
+      if (kept) out.push(kept);
+    }
+    return out;
+  }
+
+  global.senseMergeRefreshedPhotoRef = senseMergeRefreshedPhotoRef;
+  global.senseMergeRefreshedPhotoList = senseMergeRefreshedPhotoList;
 })(typeof window !== 'undefined' ? window : this);

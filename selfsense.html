@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sense-auth-client.js?v=20261015a"></script>
 <script src="js/sense-jszip.js?v=20261015a"></script>
-<script src="js/sense-common.js?v=20261015c"></script>
+<script src="js/sense-common.js?v=20261016a"></script>
 <script src="js/selfsense-aandachtspunten-detect.js"></script>
 <script src="js/sense-mirror-hub.js?v=20261015a"></script>
 <script type="module" src="./js/senseiCore-loader.js"></script>
@@ -5902,7 +5902,10 @@ async function hydrateAllProfilePhotoMetaFromStorage(){
       if(String(m.photo_url||'').trim()){
         chain=chain.then(function(){
           return refreshPhotoRef(m.photo_url,preferred).then(function(one){
-            if(one)m.photo_url=one;
+            var kept=typeof senseMergeRefreshedPhotoRef==='function'
+              ?senseMergeRefreshedPhotoRef(m.photo_url,one)
+              :(String(one||'').trim()||String(m.photo_url||'').trim());
+            if(kept)m.photo_url=kept;
             else delete m.photo_url;
           });
         });
@@ -5911,14 +5914,20 @@ async function hydrateAllProfilePhotoMetaFromStorage(){
         var jobs=[];
         if(Array.isArray(m.foto_urls)&&m.foto_urls.length){
           jobs.push(Promise.all(m.foto_urls.map(function(u){return refreshPhotoRef(u,preferred);})).then(function(urls){
-            var nextUrls=(urls||[]).filter(Boolean);
+            var src=m.foto_urls.slice();
+            var nextUrls=typeof senseMergeRefreshedPhotoList==='function'
+              ?senseMergeRefreshedPhotoList(src,urls)
+              :src.map(function(u,i){return String((urls&&urls[i])||'').trim()||String(u||'').trim();}).filter(Boolean);
             m.foto_urls=nextUrls;
             if(!String(m.photo_url||'').trim()&&nextUrls.length)m.photo_url=nextUrls[0];
           }));
         }
         if(Array.isArray(m.analysis_photos)&&m.analysis_photos.length){
           jobs.push(Promise.all(m.analysis_photos.map(function(u){return refreshPhotoRef(u,preferred);})).then(function(urls){
-            m.analysis_photos=(urls||[]).filter(Boolean);
+            var src=m.analysis_photos.slice();
+            m.analysis_photos=typeof senseMergeRefreshedPhotoList==='function'
+              ?senseMergeRefreshedPhotoList(src,urls)
+              :src.map(function(u,i){return String((urls&&urls[i])||'').trim()||String(u||'').trim();}).filter(Boolean);
           }));
         }
         return Promise.all(jobs);
