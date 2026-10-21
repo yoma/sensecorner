@@ -1544,6 +1544,11 @@ var ownPhotos=[];
 /** Laatst bekende props.meta van sense_profiles (OWN Sense); voor merge bij save zonder veld te verliezen. */
 var __ownSensePropsMetaCache={};
 var __ownBasisRemotePending=true;
+/* False tot sense_profiles voor OWN Sense gelezen is. Eerder upserten wist categories en foto's. */
+var __ownProfileHydrated=false;
+function ownMayRemoteSaveProfile(){
+  return !!__ownProfileHydrated;
+}
 var OWN_BASIS_FIELDS=['birthdate','city','country','gender','gender_custom'];
 function ownBasisHasAnyCachedData(){
   return OWN_BASIS_FIELDS.some(function(k){
@@ -2722,7 +2727,8 @@ async function generateProfileQuote(){
     hubState.profile_quote_date=today;
     hubState.profile_quote_updated_at=new Date().toISOString();
     ownRememberQuote(chosen.q);
-    saveHubState();
+    if(ownMayRemoteSaveProfile())saveHubState();
+    else saveHubState({skipRemote:true});
   }finally{
     __quoteGenBusy=false;
   }
@@ -5890,6 +5896,10 @@ async function loadOwnFromSupabase(){
           }
         }catch(_eSlot){}
       }
+      __ownProfileHydrated=true;
+    }else if(res&&!res.error){
+      ownApplyLocalBasisFallback(user);
+      __ownProfileHydrated=true;
     }else{
       ownApplyLocalBasisFallback(user);
     }
@@ -7331,6 +7341,8 @@ function renderQuestions(){
   });
 }
 function maybeAutoGenerateProfileQuote(){
+  /* Eerste paint heeft nog geen server-categories. Niet opslaan tot die read klaar is. */
+  if(!ownMayRemoteSaveProfile())return;
   if(__quoteAutoBusy||__quoteGenBusy)return;
   var now=Date.now();
   if(now-__quoteAutoLastAt<12000)return;
