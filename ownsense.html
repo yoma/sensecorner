@@ -1287,6 +1287,8 @@ function applyOwnHubAppDepthV2Migration(){
   try{
     var pm=__ownSensePropsMetaCache&&typeof __ownSensePropsMetaCache==='object'?__ownSensePropsMetaCache:{};
     if(pm.own_hub_depth_v2)return;
+    /* Zonder gelukte profiel-select staan categorieën en foto's nog op de lege hub. Niet migreren en niet upserten. */
+    if(!__ownProfileRemoteReady)return;
     var migrated=false;
     var df=hubState.categories&&hubState.categories.datesense_focus;
     if(df&&typeof df==='object'){
@@ -1543,6 +1545,15 @@ var ownInsights=[];
 var ownPhotos=[];
 /** Laatst bekende props.meta van sense_profiles (OWN Sense); voor merge bij save zonder veld te verliezen. */
 var __ownSensePropsMetaCache={};
+/**
+ * Remote upsert van het hele OWN Sense-rij is pas veilig nadat de select
+ * klaar is: rij toegepast, of bevestigd afwezig. Timeout (null) en een
+ * PostgREST-fout laten de lokale hub leeg; die mag de serverrij niet overschrijven.
+ */
+var __ownProfileRemoteReady=false;
+function ownProfileReadAllowsRemoteSave(res){
+  return !!(res&&typeof res==='object'&&!res.error);
+}
 var __ownBasisRemotePending=true;
 var OWN_BASIS_FIELDS=['birthdate','city','country','gender','gender_custom'];
 function ownBasisHasAnyCachedData(){
@@ -5893,6 +5904,7 @@ async function loadOwnFromSupabase(){
     }else{
       ownApplyLocalBasisFallback(user);
     }
+    __ownProfileRemoteReady=ownProfileReadAllowsRemoteSave(res);
     void hydrateSelfsenseSpiegelFromMirrorSessions(client,user).then(function(){
       renderBronTab();
     }).catch(function(){});
@@ -5989,6 +6001,10 @@ async function loadOwnTimelineFromSupabase(){
 
 async function saveOwnToSupabaseCore(opts){
   opts=opts||{};
+  /* Eerste paint en een mislukte/trage select upserten anders de lege hub (geen categorieën, geen foto's) over de serverrij. */
+  if(!__ownProfileRemoteReady){
+    return {ok:false,synced:false,reason:'profile_not_loaded'};
+  }
   var throwOnFail=opts.throwOnFail!==false;
   var upsertMs=Math.max(4000,Math.min(22000,(opts.timeoutMs||(opts.basisSave?24000:18000))-6000));
   var client=initSupabase();
